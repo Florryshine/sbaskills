@@ -1,60 +1,119 @@
-import Link from 'next/link';
 import { requireAdmin } from '@/lib/auth';
-import { formatCurrency } from '@/lib/utils';
+import { supabase } from '@/lib/supabase';
 
-export default async function AdminDashboardPage() {
-  const { supabase } = await requireAdmin();
+export default async function AdminStudentsPage() {
+  await requireAdmin();
 
-  const [{ count: studentCount }, { count: courseCount }, { data: enrollments }, { count: publishedCourseCount }] = await Promise.all([
-    supabase.from('profiles').select('*', { count: 'exact', head: true }).eq('role', 'student'),
-    supabase.from('courses').select('*', { count: 'exact', head: true }),
-    supabase.from('enrollments').select('amount_paid'),
-    supabase.from('courses').select('*', { count: 'exact', head: true }).eq('is_published', true)
-  ]);
-
-  const totalRevenue = (enrollments || []).reduce((sum, item) => sum + Number(item.amount_paid || 0), 0);
+  const { data: students } = await supabase
+    .from('profiles')
+    .select(`
+      id,
+      full_name,
+      email,
+      phone,
+      created_at,
+      enrollments (id, amount_paid, courses (title))
+    `)
+    .order('created_at', { ascending: false });
 
   return (
-    <div className="space-y-8">
-      <section className="rounded-[2rem] bg-white p-6 shadow-soft sm:p-8">
-        <p className="text-sm font-semibold uppercase tracking-[0.3em] text-brand-yellow">Overview</p>
-        <h1 className="mt-3 text-3xl font-bold text-brand-blue">Admin Dashboard</h1>
-        <p className="mt-3 text-sm leading-6 text-slate-600">Monitor students, courses, revenue, and publishing activity from one place.</p>
-      </section>
+    <div className="space-y-6">
 
-      <section className="grid gap-6 md:grid-cols-2 xl:grid-cols-4">
-        {[
-          { label: 'Total Students', value: studentCount || 0 },
-          { label: 'Total Courses', value: courseCount || 0 },
-          { label: 'Published Courses', value: publishedCourseCount || 0 },
-          { label: 'Revenue', value: formatCurrency(totalRevenue) }
-        ].map((item) => (
-          <div key={item.label} className="rounded-[2rem] bg-white p-6 shadow-soft">
-            <p className="text-sm font-semibold uppercase tracking-[0.3em] text-slate-400">{item.label}</p>
-            <h2 className="mt-4 text-3xl font-extrabold text-brand-blue">{item.value}</h2>
-            <div className="mt-6 h-2 rounded-full bg-brand-yellow/20">
-              <div className="h-2 w-1/2 rounded-full bg-brand-yellow" />
-            </div>
-          </div>
-        ))}
-      </section>
-
-      <section className="rounded-[2rem] bg-white p-6 shadow-soft">
-        <div className="flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
+      {/* Header */}
+      <section className="rounded-2xl bg-white p-6 shadow-sm border border-slate-100">
+        <div className="flex items-center justify-between">
           <div>
-            <h2 className="text-2xl font-bold text-brand-blue">Quick Actions</h2>
-            <p className="mt-2 text-sm text-slate-600">Jump into course management and student monitoring.</p>
-          </div>
-          <div className="flex flex-wrap gap-3">
-            <Link href="/admin/courses/new" className="rounded-full bg-brand-yellow px-5 py-3 text-sm font-bold text-brand-dark">
-              Create New Course
-            </Link>
-            <Link href="/admin/students" className="rounded-full bg-brand-blue px-5 py-3 text-sm font-bold text-white">
-              View Students
-            </Link>
+            <p className="text-xs font-bold uppercase tracking-widest text-brand-yellow">Students</p>
+            <h1 className="mt-1 text-2xl font-extrabold text-brand-blue">Registered Students</h1>
+            <p className="mt-1 text-sm text-slate-500">{students?.length || 0} students registered</p>
           </div>
         </div>
+
+        {/* Search - client-side would need a Client Component; for now it's visual */}
+        <div className="mt-4 flex gap-3">
+          <input
+            type="text"
+            placeholder="Search by name or email..."
+            className="flex-1 rounded-full border border-slate-200 px-4 py-2.5 text-sm focus:border-brand-blue focus:outline-none focus:ring-2 focus:ring-brand-blue/20"
+          />
+          <button className="rounded-full bg-brand-yellow px-5 py-2.5 text-sm font-bold text-brand-dark hover:opacity-90 transition">
+            Search
+          </button>
+        </div>
       </section>
+
+      {/* Students Table */}
+      <section className="rounded-2xl bg-white shadow-sm border border-slate-100 overflow-hidden">
+
+        {/* Table Header */}
+        <div className="hidden grid-cols-4 gap-4 border-b border-slate-100 px-6 py-3 text-xs font-bold uppercase tracking-widest text-slate-400 sm:grid">
+          <span>Student</span>
+          <span>Contact</span>
+          <span>Enrolled Courses</span>
+          <span>Joined</span>
+        </div>
+
+        {students && students.length > 0 ? (
+          <div className="divide-y divide-slate-100">
+            {students.map((student) => (
+              <div key={student.id} className="grid gap-2 px-6 py-4 hover:bg-slate-50 transition sm:grid-cols-4 sm:gap-4 sm:items-center">
+
+                {/* Name */}
+                <div className="flex items-center gap-3">
+                  <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-brand-blue text-white text-sm font-extrabold">
+                    {(student.full_name || student.email || '?')[0].toUpperCase()}
+                  </div>
+                  <div>
+                    <p className="font-bold text-slate-800">{student.full_name || 'No name'}</p>
+                    <p className="text-xs text-slate-400 uppercase tracking-widest">Student</p>
+                  </div>
+                </div>
+
+                {/* Contact */}
+                <div>
+                  <p className="text-sm text-slate-600 break-all">{student.email}</p>
+                  {student.phone && <p className="text-xs text-slate-400 mt-0.5">{student.phone}</p>}
+                </div>
+
+                {/* Enrollments */}
+                <div>
+                  {student.enrollments && student.enrollments.length > 0 ? (
+                    <div className="space-y-1">
+                      {student.enrollments.slice(0, 2).map((e) => (
+                        <span key={e.id} className="block rounded-lg bg-blue-50 px-2 py-1 text-xs font-semibold text-brand-blue truncate">
+                          {e.courses?.title || 'Course'}
+                        </span>
+                      ))}
+                      {student.enrollments.length > 2 && (
+                        <span className="text-xs text-slate-400">+{student.enrollments.length - 2} more</span>
+                      )}
+                    </div>
+                  ) : (
+                    <span className="rounded-lg bg-slate-100 px-2 py-1 text-xs text-slate-400">No enrollments</span>
+                  )}
+                </div>
+
+                {/* Joined date */}
+                <div className="text-sm text-slate-500">
+                  {new Date(student.created_at).toLocaleDateString('en-NG', {
+                    day: 'numeric',
+                    month: 'short',
+                    year: 'numeric',
+                  })}
+                </div>
+
+              </div>
+            ))}
+          </div>
+        ) : (
+          <div className="py-16 text-center">
+            <p className="text-4xl">👥</p>
+            <h3 className="mt-4 text-lg font-bold text-slate-700">No students yet</h3>
+            <p className="mt-2 text-sm text-slate-400">Students will appear here after they register.</p>
+          </div>
+        )}
+      </section>
+
     </div>
   );
 }
