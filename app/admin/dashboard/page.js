@@ -1,5 +1,6 @@
 import Link from 'next/link';
 import { requireAdmin } from '@/lib/auth';
+import { supabase } from '@/lib/supabase';
 import { formatCurrency } from '@/lib/utils';
 
 export default async function AdminDashboardPage() {
