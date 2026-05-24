@@ -36,10 +36,48 @@ export default function StudentDashboard() {
   }
 
   return (
-    <div className="max-w-7xl mx-auto px-4 py-8">
-      <h1 className="text-3xl font-bold mb-2">
+  <div className="max-w-7xl mx-auto px-4 py-6">
+    
+    {/* Clean Top Navigation Bar */}
+    <header className="mb-8 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 bg-white p-4 rounded-2xl border border-slate-100 shadow-sm">
+      <div className="flex items-center gap-3">
+        <div className="h-10 w-10 bg-brand-blue rounded-xl flex items-center justify-center text-xl text-white font-bold">
+          🎓
+        </div>
+        <div>
+          <span className="text-[10px] font-black uppercase tracking-wider text-slate-400 block leading-tight">Student Portal</span>
+          <h2 className="text-sm font-black text-brand-blue">
+            Shiney Brain Academy
+          </h2>
+        </div>
+      </div>
+
+      <nav className="flex items-center gap-2">
+        <a 
+          href="/" 
+          className="inline-flex items-center gap-1.5 text-xs font-bold text-slate-600 hover:text-brand-blue bg-slate-50 hover:bg-slate-100 px-3 py-2 rounded-xl transition"
+        >
+          🏠 <span>Main Website</span>
+        </a>
+        <a 
+          href="/courses" 
+          className="inline-flex items-center gap-1.5 text-xs font-bold text-slate-600 hover:text-brand-blue bg-slate-50 hover:bg-slate-100 px-3 py-2 rounded-xl transition"
+        >
+          📚 <span>Browse Courses</span>
+        </a>
+      </nav>
+    </header>
+
+    {/* Welcome Section */}
+    <div className="mb-8 bg-gradient-to-br from-brand-blue to-blue-900 p-6 rounded-2xl text-white shadow-sm">
+      <span className="text-xs font-bold uppercase tracking-wider text-brand-yellow">Dashboard Overview</span>
+      <h1 className="text-2xl font-black mt-1">
         Welcome back, {user?.email?.split('@')[0]}! 👋
       </h1>
+      <p className="text-blue-100/80 text-xs font-medium mt-1">
+        Track your progress, launch your classes, and build real-world skills.
+      </p>
+    </div>
       <p className="text-gray-600 mb-8">Continue your learning journey</p>
 
       <div className="grid md:grid-cols-2 gap-6">
