@@ -72,7 +72,7 @@ export default function StudentDashboard() {
     <div className="mb-8 bg-gradient-to-br from-brand-blue to-blue-900 p-6 rounded-2xl text-white shadow-sm">
       <span className="text-xs font-bold uppercase tracking-wider text-brand-yellow">Dashboard Overview</span>
       <h1 className="text-2xl font-black mt-1">
-        Welcome back, {user?.email?.split('@')[0]}! 👋
+        Welcome back, {user?.email ? user.email.split('@')[0] : 'Student'}! 👋
       </h1>
       <p className="text-blue-100/80 text-xs font-medium mt-1">
         Track your progress, launch your classes, and build real-world skills.
