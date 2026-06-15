@@ -1,8 +1,7 @@
-'use client'
-import Link from 'next/link'
-import { useEffect, useState } from 'react'
-import { supabase } from '@/lib/supabase'
-
+'use client'; 
+import Link from 'next/link'; 
+import { useEffect, useState } from 'react';
+import { supabase } from '@/lib/supabase'; // 
 export default function AdminDashboard() {
   const [stats, setStats] = useState({ posts: 0, users: 0, audio: 0 })
 
