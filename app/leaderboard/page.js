@@ -3,25 +3,25 @@ import { cookies } from 'next/headers'
 
 export default async function LeaderboardPage() {
   const supabase = createServerComponentClient({ cookies })
-  const { data: leaderboard } = await supabase
+  
+  // Fetch points without admin call
+  const { data: points } = await supabase
     .from('user_points')
     .select('user_id, total_points, level, streak_days')
     .order('total_points', { ascending: false })
     .limit(20)
 
-  const { data: users } = await supabase.auth.admin.listUsers()
-  const userMap = Object.fromEntries(users?.users.map(u => [u.id, u.email]) || [])
-
+  // Get user emails separately (simple approach: just show user_id)
   return (
     <div className="max-w-4xl mx-auto px-4 py-12">
       <h1 className="text-4xl font-bold mb-8">🏆 Leaderboard</h1>
       <div className="space-y-2">
-        {leaderboard?.map((user, idx) => (
+        {points?.map((user, idx) => (
           <div key={user.user_id} className="flex items-center justify-between p-4 bg-gray-50 rounded-lg">
             <div className="flex items-center gap-4">
               <span className="text-2xl font-bold text-gray-400">#{idx + 1}</span>
               <div>
-                <p className="font-semibold">{userMap[user.user_id]?.split('@')[0] || 'Student'}</p>
+                <p className="font-semibold">Student {user.user_id.slice(0,8)}</p>
                 <p className="text-sm text-gray-500">Level {user.level} • 🔥 {user.streak_days} day streak</p>
               </div>
             </div>
