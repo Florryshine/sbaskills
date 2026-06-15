@@ -1,0 +1,54 @@
+[33m2aceb6b[m[33m ([m[1;36mHEAD[m[33m -> [m[1;32mmaster[m[33m, [m[1;31morigin/master[m[33m, [m[1;31morigin/HEAD[m[33m)[m rollback to original working version
+[33m6ee50ed[m disable all new features to test minimal build
+[33m2325147[m Fix: Added missing components and fixed syntax errors in new pages
+[33ma6cc332[m minimal homepage to fix build
+[33mff66abb[m fix leaderboard and gamification for build
+[33m37de6ec[m Update navbar with blog/audio/leaderboard links and add admin dashboard
+[33mff758da[m Add blog, audio, leaderboard, gamification
+[33m9bccd49[m Delete app/admin/blog/New
+[33m82e786a[m Create edit
+[33m2c38a67[m Create new
+[33m9b2dd31[m Create New
+[33mfbb0484[m Update page.js
+[33m26931cc[m Update page.js
+[33ma4682ff[m Update page.js
+[33mcda295b[m Update CourseCard.js
+[33m16c0518[m Update page.js
+[33m3aa158c[m Update page.js
+[33m726055b[m Rename dashboard-page.js to page.js
+[33mca71d34[m Delete app/admin/dashboard/page.js
+[33m27ca793[m Add files via upload
+[33m4cbcbe8[m Rename courses-page.js to page.js
+[33m8e38644[m Delete app/admin/courses/page.js
+[33m1f8c646[m Add files via upload
+[33m10f0b47[m Create page.js
+[33m60f672e[m Delete app/admin/dashboard-page.js
+[33mddccc43[m Add files via upload
+[33m6ba3341[m Delete app/admin/dashboard/page.js
+[33mbf45697[m Create page.js
+[33m18300bb[m Delete app/admin/dashboard/page.js
+[33m3ec75bd[m Add files via upload
+[33m4a16625[m Add files via upload
+[33m0be886a[m Add files via upload
+[33m0a2c590[m Delete app/admin/layout.js
+[33mceae0b6[m Rename admin-layout.js to layout.js
+[33m6d3b225[m Add files via upload
+[33m6d16d6b[m Delete app/admin/layout.js
+[33mb4b7375[m Update page.js
+[33md467bd1[m Update page.js
+[33me1cd733[m Update and rename admin-layout.js to layout.js
+[33mc021e18[m Add files via upload
+[33md25e6f9[m Delete app/admin/layout.js
+[33m2d2c7f1[m Create page.js
+[33m410e402[m Create page.js
+[33me0ba987[m Create page.js
+[33maa50de0[m Delete contact directory
+[33m26803af[m Create page.js
+[33m0832709[m Add files via upload
+[33m6251888[m Delete components/Footer.js
+[33mca5d947[m Add files via upload
+[33mb343f9d[m Delete components/Navbar.js
+[33m80ea469[m Add files via upload
+[33m7d77d49[m Delete app/page.js
+[33m7f66f8a[m Add files via upload
+[33m7e71c74[m first commit

@@ -161,5 +161,4 @@ export default async function AdminDashboardPage() {
       </div>
     </div>
   );
-     }
-    
+}
