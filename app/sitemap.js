@@ -1,18 +1,16 @@
 export default async function sitemap() {
   const baseUrl = 'https://sbaskills-mwzr.vercel.app';
   
-  // Static pages
-  const routes = ['', '/courses', '/blog', '/audio', '/leaderboard', '/library', '/about', '/contact', '/login', '/register'].map(route => ({
-    url: `${baseUrl}${route}`,
-    lastModified: new Date(),
-    changeFrequency: 'weekly',
-    priority: route === '' ? 1.0 : 0.8,
-  }));
-
-  // Optional: Fetch dynamic blog posts, courses, books from Supabase
-  // const supabase = createServerClient();
-  // const { data: posts } = await supabase.from('blog_posts').select('slug');
-  // const blogRoutes = posts.map(post => ({ url: `${baseUrl}/blog/${post.slug}`, ... }));
+  const routes = [
+    { url: baseUrl, lastModified: new Date(), priority: 1.0 },
+    { url: `${baseUrl}/courses`, lastModified: new Date(), priority: 0.8 },
+    { url: `${baseUrl}/blog`, lastModified: new Date(), priority: 0.8 },
+    { url: `${baseUrl}/audio`, lastModified: new Date(), priority: 0.8 },
+    { url: `${baseUrl}/leaderboard`, lastModified: new Date(), priority: 0.8 },
+    { url: `${baseUrl}/library`, lastModified: new Date(), priority: 0.8 },
+    { url: `${baseUrl}/about`, lastModified: new Date(), priority: 0.6 },
+    { url: `${baseUrl}/contact`, lastModified: new Date(), priority: 0.6 },
+  ];
 
   return routes;
 }
