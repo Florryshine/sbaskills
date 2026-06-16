@@ -37,6 +37,9 @@ export default function Navbar() {
           <Link href="/leaderboard" className="text-sm font-medium text-slate-600 transition hover:text-brand-blue">
             🏆 Board
           </Link>
+          <Link href="/library" className="text-sm font-medium text-slate-600 transition hover:text-brand-blue">
+            📚 Library
+          </Link>
           <Link href="/about" className="text-sm font-medium text-slate-600 transition hover:text-brand-blue">
             About
           </Link>
@@ -107,6 +110,13 @@ export default function Navbar() {
               className="text-sm font-semibold text-slate-700 hover:text-brand-blue"
             >
               🏆 Leaderboard
+            </Link>
+            <Link
+              href="/library"
+              onClick={() => setMenuOpen(false)}
+              className="text-sm font-semibold text-slate-700 hover:text-brand-blue"
+            >
+              📚 Library
             </Link>
             <Link
               href="/about"
