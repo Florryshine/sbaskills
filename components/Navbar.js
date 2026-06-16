@@ -28,6 +28,15 @@ export default function Navbar() {
           <Link href="/courses" className="text-sm font-medium text-slate-600 transition hover:text-brand-blue">
             Courses
           </Link>
+          <Link href="/blog" className="text-sm font-medium text-slate-600 transition hover:text-brand-blue">
+            Blog
+          </Link>
+          <Link href="/audio" className="text-sm font-medium text-slate-600 transition hover:text-brand-blue">
+            Audio
+          </Link>
+          <Link href="/leaderboard" className="text-sm font-medium text-slate-600 transition hover:text-brand-blue">
+            🏆 Board
+          </Link>
           <Link href="/about" className="text-sm font-medium text-slate-600 transition hover:text-brand-blue">
             About
           </Link>
@@ -77,6 +86,27 @@ export default function Navbar() {
               className="text-sm font-semibold text-slate-700 hover:text-brand-blue"
             >
               📚 Courses
+            </Link>
+            <Link
+              href="/blog"
+              onClick={() => setMenuOpen(false)}
+              className="text-sm font-semibold text-slate-700 hover:text-brand-blue"
+            >
+              📝 Blog
+            </Link>
+            <Link
+              href="/audio"
+              onClick={() => setMenuOpen(false)}
+              className="text-sm font-semibold text-slate-700 hover:text-brand-blue"
+            >
+              🎵 Audio
+            </Link>
+            <Link
+              href="/leaderboard"
+              onClick={() => setMenuOpen(false)}
+              className="text-sm font-semibold text-slate-700 hover:text-brand-blue"
+            >
+              🏆 Leaderboard
             </Link>
             <Link
               href="/about"
