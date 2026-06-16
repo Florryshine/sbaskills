@@ -1,44 +1,77 @@
-import { requireAdmin } from '@/lib/auth';
+'use client';
 
-export default async function AdminStudentsPage({ searchParams }) {
-  const { supabase } = await requireAdmin();
-  const search = searchParams?.search || '';
+import { useEffect, useState } from 'react';
+import { createBrowserClient } from '@/lib/supabase';
+import { useRouter } from 'next/navigation';
 
-  let query = supabase
-    .from('profiles')
-    .select('id, full_name, email, phone, role, created_at, enrollments(course_id, courses(title))')
-    .eq('role', 'student')
-    .order('created_at', { ascending: false });
+export default function AdminStudentsPage() {
+  const [students, setStudents] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [search, setSearch] = useState('');
+  const router = useRouter();
 
-  if (search) {
-    query = query.or(`full_name.ilike.%${search}%,email.ilike.%${search}%`);
-  }
+  useEffect(() => {
+    const supabase = createBrowserClient();
 
-  const { data: students } = await query;
+    async function load() {
+      const { data: { user } } = await supabase.auth.getUser();
+      if (!user) { router.push('/admin/login'); return; }
+
+      const { data: profile } = await supabase
+        .from('profiles').select('role').eq('id', user.id).single();
+      if (profile?.role !== 'admin') { router.push('/login'); return; }
+
+      const { data } = await supabase
+        .from('profiles')
+        .select(`
+          id, full_name, email, phone, role, created_at,
+          enrollments(course_id, courses(title))
+        `)
+        .eq('role', 'student')
+        .order('created_at', { ascending: false });
+
+      setStudents(data || []);
+      setLoading(false);
+    }
+    load();
+  }, [router]);
+
+  const filtered = students.filter(s =>
+    s.full_name?.toLowerCase().includes(search.toLowerCase()) ||
+    s.email?.toLowerCase().includes(search.toLowerCase())
+  );
+
+  if (loading) return (
+    <div className="flex items-center justify-center py-20">
+      <p className="text-gray-500">Loading students...</p>
+    </div>
+  );
 
   return (
-    <div className="space-y-8">
-      <section className="rounded-[2rem] bg-white p-6 shadow-soft sm:p-8">
-        <p className="text-sm font-semibold uppercase tracking-[0.3em] text-brand-yellow">Students</p>
-        <h1 className="mt-3 text-3xl font-bold text-brand-blue">Registered students</h1>
-        <form className="mt-6 max-w-xl">
-          <label className="mb-2 block text-sm font-semibold text-slate-700">Search by name or email</label>
-          <div className="flex flex-col gap-3 sm:flex-row">
-            <input
-              type="text"
-              name="search"
-              defaultValue={search}
-              className="w-full rounded-2xl border border-slate-200 px-4 py-3 outline-none transition focus:border-brand-blue"
-              placeholder="Search students"
-            />
-            <button type="submit" className="rounded-full bg-brand-yellow px-6 py-3 text-sm font-bold text-brand-dark">
-              Search
-            </button>
-          </div>
-        </form>
+    <div className="space-y-6">
+      <section className="rounded-2xl bg-white p-6 shadow-sm border border-slate-100">
+        <p className="text-xs font-bold uppercase tracking-widest text-brand-yellow">
+          Management
+        </p>
+        <h1 className="mt-1 text-2xl font-extrabold text-brand-blue">
+          All Students
+        </h1>
+        <p className="mt-1 text-sm text-slate-500">
+          {students.length} registered students
+        </p>
+        <div className="mt-4 flex gap-3">
+          <input
+            type="text"
+            value={search}
+            onChange={e => setSearch(e.target.value)}
+            placeholder="Search by name or email..."
+            className="w-full max-w-md rounded-2xl border border-slate-200 
+                       px-4 py-3 text-sm outline-none focus:border-brand-blue"
+          />
+        </div>
       </section>
 
-      <section className="overflow-hidden rounded-[2rem] bg-white shadow-soft">
+      <section className="rounded-2xl bg-white shadow-sm border border-slate-100 overflow-hidden">
         <div className="overflow-x-auto">
           <table className="min-w-full divide-y divide-slate-100 text-left text-sm">
             <thead className="bg-slate-50 text-slate-500">
@@ -50,39 +83,52 @@ export default async function AdminStudentsPage({ searchParams }) {
               </tr>
             </thead>
             <tbody className="divide-y divide-slate-100">
-              {(students || []).map((student) => (
-                <tr key={student.id}>
+              {filtered.length > 0 ? filtered.map((student) => (
+                <tr key={student.id} className="hover:bg-slate-50">
                   <td className="px-6 py-5">
-                    <p className="font-bold text-brand-blue">{student.full_name || 'Unnamed Student'}</p>
-                    <p className="mt-1 text-xs uppercase tracking-[0.2em] text-slate-400">{student.role}</p>
+                    <div className="flex items-center gap-3">
+                      <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-brand-blue text-white text-sm font-bold">
+                        {(student.full_name || student.email || '?')[0].toUpperCase()}
+                      </div>
+                      <div>
+                        <p className="font-bold text-brand-blue">
+                          {student.full_name || 'Unnamed Student'}
+                        </p>
+                        <p className="text-xs text-slate-400">{student.email}</p>
+                      </div>
+                    </div>
                   </td>
                   <td className="px-6 py-5 text-slate-600">
-                    <p>{student.email}</p>
                     <p>{student.phone || 'No phone'}</p>
                   </td>
-                  <td className="px-6 py-5 text-slate-600">
+                  <td className="px-6 py-5">
                     <div className="flex flex-wrap gap-2">
-                      {(student.enrollments || []).length ? (
+                      {(student.enrollments || []).length > 0 ? (
                         student.enrollments.map((enrollment, index) => (
-                          <span key={`${student.id}-${index}`} className="rounded-full bg-brand-yellow/20 px-3 py-1 text-xs font-bold text-brand-dark">
+                          <span key={index}
+                            className="rounded-full bg-brand-yellow/20 px-3 py-1 
+                                       text-xs font-bold text-brand-dark">
                             {enrollment.courses?.title || 'Course'}
                           </span>
                         ))
                       ) : (
-                        <span className="text-slate-400">No enrollments</span>
+                        <span className="text-slate-400 text-xs">No enrollments</span>
                       )}
                     </div>
                   </td>
-                  <td className="px-6 py-5 text-slate-600">{new Date(student.created_at).toLocaleDateString()}</td>
+                  <td className="px-6 py-5 text-slate-500 text-xs">
+                    {new Date(student.created_at).toLocaleDateString('en-NG', {
+                      day: 'numeric', month: 'short', year: 'numeric'
+                    })}
+                  </td>
                 </tr>
-              ))}
-              {!(students || []).length ? (
+              )) : (
                 <tr>
                   <td colSpan="4" className="px-6 py-10 text-center text-slate-500">
                     No students found.
                   </td>
                 </tr>
-              ) : null}
+              )}
             </tbody>
           </table>
         </div>
