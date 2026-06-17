@@ -6,12 +6,17 @@ import { useRouter } from 'next/navigation';
 import Link from 'next/link';
 import Navbar from '@/components/Navbar';
 import Footer from '@/components/Footer';
+import { addPoints, updateStreak, getUserPoints } from '@/lib/gamification';
 
 export default function StudentDashboard() {
   const [user, setUser] = useState(null);
   const [profile, setProfile] = useState(null);
   const [enrolledCourses, setEnrolledCourses] = useState([]);
   const [availableCourses, setAvailableCourses] = useState([]);
+  const [certificates, setCertificates] = useState([]);
+  const [userPoints, setUserPoints] = useState(0);
+  const [userStreak, setUserStreak] = useState(0);
+  const [lessonsDone, setLessonsDone] = useState(0);
   const [loading, setLoading] = useState(true);
   const router = useRouter();
 
@@ -26,6 +31,16 @@ export default function StudentDashboard() {
       }
       setUser(user);
 
+      // Update streak and add daily login bonus
+      await updateStreak(user.id);
+      await addPoints(user.id, 5, 'Daily login bonus', 'login');
+
+      // Get user points
+      const pointsData = await getUserPoints(user.id);
+      setUserPoints(pointsData.total_points || 0);
+      setUserStreak(pointsData.streak_days || 0);
+
+      // Get profile
       const { data: profileData } = await supabase
         .from('profiles')
         .select('*')
@@ -33,6 +48,7 @@ export default function StudentDashboard() {
         .single();
       setProfile(profileData);
 
+      // Get enrollments
       const { data: enrollments } = await supabase
         .from('enrollments')
         .select('*, courses(*)')
@@ -41,17 +57,33 @@ export default function StudentDashboard() {
       const enrolled = enrollments?.map(e => e.courses).filter(Boolean) || [];
       setEnrolledCourses(enrolled);
 
+      // Get available courses
       const enrolledIds = enrolled.map(c => c.id);
-
       const { data: allCourses } = await supabase
         .from('courses')
         .select('*')
         .eq('is_published', true);
-
       const available = (allCourses || []).filter(
         c => !enrolledIds.includes(c.id)
       );
       setAvailableCourses(available);
+
+      // Get certificates
+      const { data: certs } = await supabase
+        .from('certificates')
+        .select('*, courses(title)')
+        .eq('student_id', user.id)
+        .order('issued_at', { ascending: false });
+      setCertificates(certs || []);
+
+      // Count lessons completed
+      const { data: progress } = await supabase
+        .from('lesson_progress')
+        .select('id')
+        .eq('student_id', user.id)
+        .eq('completed', true);
+      setLessonsDone(progress?.length || 0);
+
       setLoading(false);
     }
 
@@ -83,6 +115,11 @@ export default function StudentDashboard() {
             <p className="text-blue-100 text-sm">
               Continue your learning journey — champions never stop growing.
             </p>
+            {userStreak > 0 && (
+              <div className="mt-3 bg-white/10 inline-block px-4 py-1 rounded-full">
+                <span className="text-sm font-bold">🔥 {userStreak} day streak</span>
+              </div>
+            )}
           </div>
 
           {/* Stats Row */}
@@ -90,8 +127,8 @@ export default function StudentDashboard() {
             {[
               { label: 'Enrolled Courses', value: enrolledCourses.length, emoji: '📚' },
               { label: 'Available Courses', value: availableCourses.length, emoji: '🎯' },
-              { label: 'Lessons Done', value: '0', emoji: '✅' },
-              { label: 'Points Earned', value: '0', emoji: '⭐' },
+              { label: 'Lessons Done', value: lessonsDone, emoji: '✅' },
+              { label: 'Points', value: userPoints, emoji: '⭐' },
             ].map((stat) => (
               <div key={stat.label}
                 className="bg-white rounded-2xl p-4 shadow-sm border border-gray-100 text-center">
@@ -194,6 +231,35 @@ export default function StudentDashboard() {
             </div>
           )}
 
+          {/* Certificates Section */}
+          {certificates.length > 0 && (
+            <div className="mb-10">
+              <h2 className="text-xl font-extrabold text-gray-800 mb-4">🎓 My Certificates</h2>
+              <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
+                {certificates.map((cert) => (
+                  <div key={cert.id} className="bg-white rounded-2xl border border-gray-100 shadow-sm p-4">
+                    <div className="text-3xl mb-2">🎓</div>
+                    <p className="font-bold text-gray-800">{cert.courses?.title}</p>
+                    <p className="text-xs text-gray-500 mt-1">
+                      Issued: {new Date(cert.issued_at).toLocaleDateString('en-NG', {
+                        day: 'numeric',
+                        month: 'long',
+                        year: 'numeric'
+                      })}
+                    </p>
+                    <a
+                      href={`/certificate/${cert.id}`}
+                      target="_blank"
+                      className="inline-block mt-3 text-brand-blue font-bold text-sm hover:underline"
+                    >
+                      View Certificate →
+                    </a>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
+
           {/* Quick Links */}
           <div className="bg-white rounded-2xl border border-gray-100 shadow-sm p-6">
             <h2 className="font-extrabold text-gray-800 mb-4">⚡ Quick Links</h2>
@@ -202,7 +268,9 @@ export default function StudentDashboard() {
                 { label: 'Browse Courses', href: '/courses', emoji: '📚' },
                 { label: 'Leaderboard', href: '/leaderboard', emoji: '🏆' },
                 { label: 'Blog', href: '/blog', emoji: '📝' },
-                { label: 'Audio Library', href: '/audio', emoji: '🎵' },
+                { label: 'Audio', href: '/audio', emoji: '🎵' },
+                { label: 'Library', href: '/library', emoji: '📖' },
+                { label: 'Rewards', href: '/rewards', emoji: '🎁' },
               ].map((link) => (
                 <Link key={link.href} href={link.href}
                   className="flex flex-col items-center gap-2 p-4 rounded-2xl 
