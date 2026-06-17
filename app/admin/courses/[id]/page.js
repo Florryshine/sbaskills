@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { useEffect, useState, useRef } from 'react';
 import { createBrowserClient } from '@/lib/supabase';
 import { useRouter, useParams } from 'next/navigation';
 import Link from 'next/link';
@@ -10,21 +10,16 @@ export default function AdminCourseEditorPage() {
   const [lessons, setLessons] = useState([]);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
-  const [formData, setFormData] = useState({
-    title: '',
-    description: '',
-    price: '',
-    thumbnail_url: '',
-    color: '#1a73e8',
-    is_published: false,
-  });
+  const [uploading, setUploading] = useState(false);
+  const [uploadProgress, setUploadProgress] = useState(0);
+  const fileInputRef = useRef(null);
+  const videoInputRefs = useRef({});
   const router = useRouter();
   const params = useParams();
   const courseId = params.id;
+  const supabase = createBrowserClient();
 
   useEffect(() => {
-    const supabase = createBrowserClient();
-
     async function load() {
       const { data: { user } } = await supabase.auth.getUser();
       if (!user) { router.push('/admin/login'); return; }
@@ -33,7 +28,6 @@ export default function AdminCourseEditorPage() {
         .from('profiles').select('role').eq('id', user.id).single();
       if (profile?.role !== 'admin') { router.push('/login'); return; }
 
-      // Load course details
       if (courseId && courseId !== 'new') {
         const { data: courseData } = await supabase
           .from('courses')
@@ -53,7 +47,6 @@ export default function AdminCourseEditorPage() {
           });
         }
 
-        // Load lessons
         const { data: lessonsData } = await supabase
           .from('lessons')
           .select('*')
@@ -62,7 +55,6 @@ export default function AdminCourseEditorPage() {
 
         setLessons(lessonsData || []);
       } else {
-        // New course mode
         setCourse({ id: 'new' });
         setFormData({
           title: '',
@@ -79,12 +71,98 @@ export default function AdminCourseEditorPage() {
     load();
   }, [courseId, router]);
 
+  const [formData, setFormData] = useState({
+    title: '',
+    description: '',
+    price: '',
+    thumbnail_url: '',
+    color: '#1a73e8',
+    is_published: false,
+  });
+
+  async function uploadImage(file) {
+    setUploading(true);
+    setUploadProgress(0);
+    const fileExt = file.name.split('.').pop();
+    const fileName = `${Date.now()}.${fileExt}`;
+    const filePath = `courses/${fileName}`;
+
+    const { error: uploadError } = await supabase.storage
+      .from('course-thumbnails')
+      .upload(filePath, file, {
+        cacheControl: '3600',
+        upsert: false,
+        onProgress: (progress) => {
+          setUploadProgress(Math.round((progress.loaded / progress.total) * 100));
+        }
+      });
+
+    if (uploadError) {
+      alert('Upload failed: ' + uploadError.message);
+      setUploading(false);
+      return;
+    }
+
+    const { data: urlData } = supabase.storage
+      .from('course-thumbnails')
+      .getPublicUrl(filePath);
+
+    setFormData({ ...formData, thumbnail_url: urlData.publicUrl });
+    setUploading(false);
+    setUploadProgress(0);
+    alert('Image uploaded successfully!');
+  }
+
+  async function uploadVideo(lessonId, file) {
+    setUploading(true);
+    setUploadProgress(0);
+    const fileExt = file.name.split('.').pop();
+    const fileName = `${Date.now()}.${fileExt}`;
+    const filePath = `lessons/${lessonId}/${fileName}`;
+
+    const { error: uploadError } = await supabase.storage
+      .from('lesson-videos')
+      .upload(filePath, file, {
+        cacheControl: '3600',
+        upsert: false,
+        onProgress: (progress) => {
+          setUploadProgress(Math.round((progress.loaded / progress.total) * 100));
+        }
+      });
+
+    if (uploadError) {
+      alert('Upload failed: ' + uploadError.message);
+      setUploading(false);
+      return;
+    }
+
+    const { data: urlData } = supabase.storage
+      .from('lesson-videos')
+      .getPublicUrl(filePath);
+
+    // Update lesson with video URL
+    const { error: updateError } = await supabase
+      .from('lessons')
+      .update({ video_url: urlData.publicUrl })
+      .eq('id', lessonId);
+
+    if (updateError) {
+      alert('Update failed: ' + updateError.message);
+    } else {
+      setLessons(lessons.map(l => 
+        l.id === lessonId ? { ...l, video_url: urlData.publicUrl } : l
+      ));
+      alert('Video uploaded successfully!');
+    }
+    setUploading(false);
+    setUploadProgress(0);
+  }
+
   async function handleSaveCourse() {
     setSaving(true);
     const supabase = createBrowserClient();
 
     if (courseId === 'new') {
-      // Create new course
       const { data, error } = await supabase
         .from('courses')
         .insert({
@@ -104,7 +182,6 @@ export default function AdminCourseEditorPage() {
         router.push(`/admin/courses/${data.id}`);
       }
     } else {
-      // Update existing
       await supabase
         .from('courses')
         .update({
@@ -211,15 +288,39 @@ export default function AdminCourseEditorPage() {
               className="w-full rounded-xl border border-slate-200 px-4 py-2"
             />
           </div>
-          <div>
-            <label className="block text-sm font-semibold text-slate-700 mb-1">Thumbnail URL</label>
-            <input
-              type="text"
-              value={formData.thumbnail_url}
-              onChange={e => setFormData({ ...formData, thumbnail_url: e.target.value })}
-              className="w-full rounded-xl border border-slate-200 px-4 py-2"
-              placeholder="https://..."
-            />
+          <div className="sm:col-span-2">
+            <label className="block text-sm font-semibold text-slate-700 mb-1">Thumbnail</label>
+            <div className="flex gap-3 items-center">
+              <input
+                type="text"
+                value={formData.thumbnail_url}
+                onChange={e => setFormData({ ...formData, thumbnail_url: e.target.value })}
+                className="flex-1 rounded-xl border border-slate-200 px-4 py-2"
+                placeholder="https://..."
+              />
+              <button
+                onClick={() => fileInputRef.current?.click()}
+                disabled={uploading}
+                className="rounded-full bg-brand-blue px-4 py-2 text-sm font-bold text-white hover:opacity-90"
+              >
+                {uploading ? `Uploading... ${uploadProgress}%` : '📁 Upload Image'}
+              </button>
+              <input
+                type="file"
+                ref={fileInputRef}
+                accept="image/*"
+                onChange={(e) => {
+                  if (e.target.files?.[0]) uploadImage(e.target.files[0]);
+                  e.target.value = '';
+                }}
+                className="hidden"
+              />
+            </div>
+            {formData.thumbnail_url && (
+              <div className="mt-2">
+                <img src={formData.thumbnail_url} alt="Thumbnail preview" className="h-24 rounded-lg object-cover" />
+              </div>
+            )}
           </div>
           <div>
             <label className="block text-sm font-semibold text-slate-700 mb-1">Card Color (hex)</label>
@@ -258,20 +359,59 @@ export default function AdminCourseEditorPage() {
         ) : (
           <div className="divide-y divide-slate-100">
             {lessons.map((lesson, idx) => (
-              <div key={lesson.id} className="flex items-center gap-4 py-3">
-                <div className="font-bold text-brand-blue w-8">{idx + 1}.</div>
-                <div className="flex-1">
-                  <p className="font-semibold text-slate-800">{lesson.title}</p>
-                  {!lesson.video_url && <p className="text-xs text-yellow-600">⚠️ No video yet</p>}
+              <div key={lesson.id} className="py-4">
+                <div className="flex items-center gap-4">
+                  <div className="font-bold text-brand-blue w-8">{idx + 1}.</div>
+                  <div className="flex-1">
+                    <p className="font-semibold text-slate-800">{lesson.title}</p>
+                    <div className="flex items-center gap-3 mt-1">
+                      {lesson.video_url ? (
+                        <span className="text-xs text-green-600">✅ Video uploaded</span>
+                      ) : (
+                        <span className="text-xs text-yellow-600">⚠️ No video yet</span>
+                      )}
+                    </div>
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <button
+                      onClick={() => videoInputRefs.current[lesson.id]?.click()}
+                      className="rounded-full bg-brand-blue px-3 py-1.5 text-xs font-bold text-white hover:opacity-90"
+                    >
+                      📹 Upload Video
+                    </button>
+                    <input
+                      type="file"
+                      ref={(el) => { if (el) videoInputRefs.current[lesson.id] = el; }}
+                      accept="video/*"
+                      onChange={(e) => {
+                        if (e.target.files?.[0]) uploadVideo(lesson.id, e.target.files[0]);
+                        e.target.value = '';
+                      }}
+                      className="hidden"
+                    />
+                    <button
+                      onClick={() => deleteLesson(lesson.id)}
+                      className="text-red-500 hover:text-red-700 text-sm"
+                    >
+                      Delete
+                    </button>
+                  </div>
                 </div>
-                <button
-                  onClick={() => deleteLesson(lesson.id)}
-                  className="text-red-500 hover:text-red-700 text-sm"
-                >
-                  Delete
-                </button>
+                {lesson.video_url && (
+                  <div className="mt-2 ml-12">
+                    <video src={lesson.video_url} controls className="h-24 rounded-lg" />
+                  </div>
+                )}
               </div>
             ))}
+          </div>
+        )}
+        {uploading && (
+          <div className="mt-4">
+            <div className="w-full bg-gray-200 rounded-full h-2.5">
+              <div className="bg-brand-yellow h-2.5 rounded-full transition-all" style={{ width: `${uploadProgress}%` }} />
+            </div>
+            <p className="text-xs text-gray-500 mt-1">Uploading... {uploadProgress}%</p>
           </div>
         )}
       </section>
