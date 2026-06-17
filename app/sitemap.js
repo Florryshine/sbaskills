@@ -1,5 +1,5 @@
 export default async function sitemap() {
-  const baseUrl = 'https://sbaskills-mwzr.vercel.app';
+  const baseUrl = 'https://sbaskills.vercel.app';
   
   const routes = [
     { url: baseUrl, lastModified: new Date(), priority: 1.0 },
