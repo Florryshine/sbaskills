@@ -12,8 +12,10 @@ export default function AdminCourseEditorPage() {
   const [saving, setSaving] = useState(false);
   const [uploading, setUploading] = useState(false);
   const [uploadProgress, setUploadProgress] = useState(0);
+  const [editingLesson, setEditingLesson] = useState(null); // for inline edit
   const fileInputRef = useRef(null);
   const videoInputRefs = useRef({});
+  const pdfInputRefs = useRef({});
   const router = useRouter();
   const params = useParams();
   const courseId = params.id;
@@ -113,15 +115,17 @@ export default function AdminCourseEditorPage() {
     alert('Image uploaded successfully!');
   }
 
-  async function uploadVideo(lessonId, file) {
+  async function uploadFile(lessonId, file, type) {
     setUploading(true);
     setUploadProgress(0);
     const fileExt = file.name.split('.').pop();
     const fileName = `${Date.now()}.${fileExt}`;
-    const filePath = `lessons/${lessonId}/${fileName}`;
+    const folder = type === 'video' ? 'videos' : 'pdfs';
+    const filePath = `lessons/${lessonId}/${folder}/${fileName}`;
+    const bucket = type === 'video' ? 'lesson-videos' : 'lesson-pdfs';
 
     const { error: uploadError } = await supabase.storage
-      .from('lesson-videos')
+      .from(bucket)
       .upload(filePath, file, {
         cacheControl: '3600',
         upsert: false,
@@ -137,25 +141,42 @@ export default function AdminCourseEditorPage() {
     }
 
     const { data: urlData } = supabase.storage
-      .from('lesson-videos')
+      .from(bucket)
       .getPublicUrl(filePath);
 
-    // Update lesson with video URL
+    // Update lesson with the URL
+    const updateField = type === 'video' ? { video_url: urlData.publicUrl } : { pdf_url: urlData.publicUrl };
     const { error: updateError } = await supabase
       .from('lessons')
-      .update({ video_url: urlData.publicUrl })
+      .update(updateField)
       .eq('id', lessonId);
 
     if (updateError) {
       alert('Update failed: ' + updateError.message);
     } else {
       setLessons(lessons.map(l => 
-        l.id === lessonId ? { ...l, video_url: urlData.publicUrl } : l
+        l.id === lessonId ? { ...l, ...updateField } : l
       ));
-      alert('Video uploaded successfully!');
+      alert(`${type === 'video' ? 'Video' : 'PDF'} uploaded successfully!`);
     }
     setUploading(false);
     setUploadProgress(0);
+  }
+
+  // NEW: Update lesson description
+  async function updateLessonDescription(lessonId, description) {
+    const { error } = await supabase
+      .from('lessons')
+      .update({ description })
+      .eq('id', lessonId);
+    if (error) {
+      alert(error.message);
+    } else {
+      setLessons(lessons.map(l => 
+        l.id === lessonId ? { ...l, description } : l
+      ));
+      setEditingLesson(null);
+    }
   }
 
   async function handleSaveCourse() {
@@ -257,7 +278,7 @@ export default function AdminCourseEditorPage() {
         </Link>
       </section>
 
-      {/* Course Details Form */}
+      {/* Course Details Form (unchanged) */}
       <section className="rounded-2xl bg-white p-6 shadow-sm border border-slate-100">
         <h2 className="text-base font-extrabold text-brand-blue mb-4">Course Details</h2>
         <div className="grid gap-4 sm:grid-cols-2">
@@ -343,7 +364,7 @@ export default function AdminCourseEditorPage() {
         </div>
       </section>
 
-      {/* Lessons Manager */}
+      {/* Lessons Manager - ENHANCED */}
       <section className="rounded-2xl bg-white p-6 shadow-sm border border-slate-100">
         <div className="flex items-center justify-between mb-4">
           <h2 className="text-base font-extrabold text-brand-blue">Lessons</h2>
@@ -364,27 +385,57 @@ export default function AdminCourseEditorPage() {
                   <div className="font-bold text-brand-blue w-8">{idx + 1}.</div>
                   <div className="flex-1">
                     <p className="font-semibold text-slate-800">{lesson.title}</p>
-                    <div className="flex items-center gap-3 mt-1">
+                    {lesson.description && (
+                      <p className="text-sm text-slate-500 mt-1">{lesson.description}</p>
+                    )}
+                    <div className="flex items-center gap-3 mt-1 flex-wrap">
                       {lesson.video_url ? (
                         <span className="text-xs text-green-600">✅ Video uploaded</span>
                       ) : (
-                        <span className="text-xs text-yellow-600">⚠️ No video yet</span>
+                        <span className="text-xs text-yellow-600">⚠️ No video</span>
+                      )}
+                      {lesson.pdf_url ? (
+                        <span className="text-xs text-green-600">✅ PDF uploaded</span>
+                      ) : (
+                        <span className="text-xs text-slate-400">📄 No PDF</span>
                       )}
                     </div>
                   </div>
-                  <div className="flex items-center gap-2">
+                  <div className="flex items-center gap-2 flex-wrap">
+                    <button
+                      onClick={() => setEditingLesson(lesson.id)}
+                      className="rounded-full bg-slate-200 px-3 py-1.5 text-xs font-bold text-slate-700 hover:bg-slate-300"
+                    >
+                      ✏️ Edit
+                    </button>
                     <button
                       onClick={() => videoInputRefs.current[lesson.id]?.click()}
                       className="rounded-full bg-brand-blue px-3 py-1.5 text-xs font-bold text-white hover:opacity-90"
                     >
-                      📹 Upload Video
+                      📹 Video
                     </button>
                     <input
                       type="file"
                       ref={(el) => { if (el) videoInputRefs.current[lesson.id] = el; }}
                       accept="video/*"
                       onChange={(e) => {
-                        if (e.target.files?.[0]) uploadVideo(lesson.id, e.target.files[0]);
+                        if (e.target.files?.[0]) uploadFile(lesson.id, e.target.files[0], 'video');
+                        e.target.value = '';
+                      }}
+                      className="hidden"
+                    />
+                    <button
+                      onClick={() => pdfInputRefs.current[lesson.id]?.click()}
+                      className="rounded-full bg-purple-600 px-3 py-1.5 text-xs font-bold text-white hover:opacity-90"
+                    >
+                      📄 PDF
+                    </button>
+                    <input
+                      type="file"
+                      ref={(el) => { if (el) pdfInputRefs.current[lesson.id] = el; }}
+                      accept=".pdf"
+                      onChange={(e) => {
+                        if (e.target.files?.[0]) uploadFile(lesson.id, e.target.files[0], 'pdf');
                         e.target.value = '';
                       }}
                       className="hidden"
@@ -397,9 +448,48 @@ export default function AdminCourseEditorPage() {
                     </button>
                   </div>
                 </div>
+
+                {/* Inline editor for description */}
+                {editingLesson === lesson.id && (
+                  <div className="mt-3 ml-12 p-4 bg-slate-50 rounded-xl border border-slate-200">
+                    <textarea
+                      className="w-full rounded-lg border border-slate-200 px-3 py-2 text-sm"
+                      rows="2"
+                      defaultValue={lesson.description || ''}
+                      placeholder="Lesson description (optional)"
+                      id={`desc-${lesson.id}`}
+                    />
+                    <div className="flex gap-2 mt-2">
+                      <button
+                        onClick={() => {
+                          const desc = document.getElementById(`desc-${lesson.id}`).value;
+                          updateLessonDescription(lesson.id, desc);
+                        }}
+                        className="bg-brand-blue text-white px-4 py-1 rounded-full text-sm font-bold hover:opacity-90"
+                      >
+                        Save Description
+                      </button>
+                      <button
+                        onClick={() => setEditingLesson(null)}
+                        className="bg-slate-200 px-4 py-1 rounded-full text-sm font-bold hover:bg-slate-300"
+                      >
+                        Cancel
+                      </button>
+                    </div>
+                  </div>
+                )}
+
+                {/* Preview uploaded video and PDF */}
                 {lesson.video_url && (
                   <div className="mt-2 ml-12">
                     <video src={lesson.video_url} controls className="h-24 rounded-lg" />
+                  </div>
+                )}
+                {lesson.pdf_url && (
+                  <div className="mt-2 ml-12">
+                    <a href={lesson.pdf_url} target="_blank" rel="noopener noreferrer" className="text-brand-blue underline text-sm">
+                      📄 View PDF
+                    </a>
                   </div>
                 )}
               </div>
