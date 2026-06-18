@@ -6,7 +6,23 @@ import { useRouter, useParams } from 'next/navigation';
 import Link from 'next/link';
 import Navbar from '@/components/Navbar';
 import Footer from '@/components/Footer';
-import { addPoints } from '@/lib/gamification';
+
+// Helper function to add points (simple version – if lib/gamification doesn't exist)
+async function addPoints(userId, points, reason, actionType, referenceId) {
+  const supabase = createBrowserClient();
+  try {
+    const { error } = await supabase.rpc('add_points', {
+      p_user_id: userId,
+      p_points: points,
+      p_reason: reason,
+      p_action_type: actionType,
+      p_reference_id: referenceId,
+    });
+    if (error) console.error('Error adding points:', error);
+  } catch (e) {
+    console.error('Points function not available:', e);
+  }
+}
 
 export default function LessonPlayerPage() {
   const [lesson, setLesson] = useState(null);
@@ -24,131 +40,146 @@ export default function LessonPlayerPage() {
 
   useEffect(() => {
     async function loadData() {
-      const { data: { user } } = await supabase.auth.getUser();
-      if (!user) {
-        router.push(`/login?next=/courses/${id}/lessons/${lessonId}`);
-        return;
+      try {
+        const { data: { user } } = await supabase.auth.getUser();
+        if (!user) {
+          router.push(`/login?next=/courses/${id}/lessons/${lessonId}`);
+          return;
+        }
+
+        // Check enrollment
+        const { data: enrollmentData } = await supabase
+          .from('enrollments')
+          .select('*')
+          .eq('student_id', user.id)
+          .eq('course_id', id)
+          .maybeSingle();
+
+        if (!enrollmentData || enrollmentData.status !== 'active') {
+          router.push(`/courses/${id}`);
+          return;
+        }
+        setEnrollment(enrollmentData);
+
+        // Get lesson
+        const { data: lessonData } = await supabase
+          .from('lessons')
+          .select('*')
+          .eq('id', lessonId)
+          .single();
+        if (!lessonData) {
+          router.push(`/courses/${id}`);
+          return;
+        }
+        setLesson(lessonData);
+
+        // Get course
+        const { data: courseData } = await supabase
+          .from('courses')
+          .select('*')
+          .eq('id', id)
+          .single();
+        setCourse(courseData);
+
+        // Get all lessons for this course
+        const { data: lessons } = await supabase
+          .from('lessons')
+          .select('*')
+          .eq('course_id', id)
+          .order('order_index', { ascending: true });
+        setAllLessons(lessons || []);
+
+        // Get completed lessons
+        const { data: completed } = await supabase
+          .from('lesson_progress')
+          .select('lesson_id')
+          .eq('student_id', user.id)
+          .eq('completed', true);
+        const completedIds = completed?.map(c => c.lesson_id) || [];
+        setCompletedLessons(completedIds);
+        setIsComplete(completedIds.includes(lessonId));
+
+        setLoading(false);
+      } catch (error) {
+        console.error('Error loading lesson:', error);
+        setLoading(false);
       }
-
-      // Check enrollment
-      const { data: enrollmentData } = await supabase
-        .from('enrollments')
-        .select('*')
-        .eq('student_id', user.id)
-        .eq('course_id', id)
-        .maybeSingle();
-
-      if (!enrollmentData || enrollmentData.status !== 'active') {
-        router.push(`/courses/${id}`);
-        return;
-      }
-      setEnrollment(enrollmentData);
-
-      // Get lesson
-      const { data: lessonData } = await supabase
-        .from('lessons')
-        .select('*')
-        .eq('id', lessonId)
-        .single();
-      setLesson(lessonData);
-
-      // Get course
-      const { data: courseData } = await supabase
-        .from('courses')
-        .select('*')
-        .eq('id', id)
-        .single();
-      setCourse(courseData);
-
-      // Get all lessons for this course
-      const { data: lessons } = await supabase
-        .from('lessons')
-        .select('*')
-        .eq('course_id', id)
-        .order('order_index', { ascending: true });
-      setAllLessons(lessons || []);
-
-      // Get completed lessons
-      const { data: completed } = await supabase
-        .from('lesson_progress')
-        .select('lesson_id')
-        .eq('student_id', user.id)
-        .eq('completed', true);
-      const completedIds = completed?.map(c => c.lesson_id) || [];
-      setCompletedLessons(completedIds);
-      setIsComplete(completedIds.includes(lessonId));
-
-      setLoading(false);
     }
 
     loadData();
-  }, [id, lessonId, router, supabase]);
+  }, [id, lessonId, router]);
 
   const handleMarkComplete = async () => {
     if (isComplete) return;
     setProcessing(true);
 
-    const { data: { user } } = await supabase.auth.getUser();
-    if (!user) {
-      alert('Please login first');
-      setProcessing(false);
-      return;
-    }
-
-    // Mark lesson as complete
-    const { error } = await supabase
-      .from('lesson_progress')
-      .insert({
-        student_id: user.id,
-        lesson_id: lessonId,
-        completed: true,
-        completed_at: new Date(),
-      });
-
-    if (error) {
-      alert('Error marking lesson as complete: ' + error.message);
-      setProcessing(false);
-      return;
-    }
-
-    // Add points for completing lesson
-    await addPoints(user.id, 20, 'Completed a lesson', 'lesson_complete', lessonId);
-
-    // Update local state
-    setIsComplete(true);
-    setCompletedLessons([...completedLessons, lessonId]);
-
-    // Check if all lessons are complete (course completion)
-    if (allLessons.every(l => [...completedLessons, lessonId].includes(l.id))) {
-      // Course completed! Add bonus points
-      await addPoints(user.id, 100, 'Completed full course', 'course_complete', id);
-
-      // Check if certificate already exists
-      const { data: existingCert } = await supabase
-        .from('certificates')
-        .select('id')
-        .eq('student_id', user.id)
-        .eq('course_id', id)
-        .maybeSingle();
-
-      if (!existingCert) {
-        // Generate certificate number
-        const certNumber = 'SBA-' + Math.random().toString(36).substring(2, 10).toUpperCase();
-        
-        await supabase
-          .from('certificates')
-          .insert({
-            student_id: user.id,
-            course_id: id,
-            certificate_number: certNumber,
-          });
-
-        alert('🎉 Congratulations! You completed the course! You\'ve earned a certificate!');
-      } else {
-        alert('🎉 Congratulations! You completed the course!');
+    try {
+      const { data: { user } } = await supabase.auth.getUser();
+      if (!user) {
+        alert('Please login first');
+        setProcessing(false);
+        return;
       }
-    }
 
+      // Mark lesson as complete
+      const { error } = await supabase
+        .from('lesson_progress')
+        .insert({
+          student_id: user.id,
+          lesson_id: lessonId,
+          completed: true,
+          completed_at: new Date(),
+        });
+
+      if (error) {
+        alert('Error marking lesson as complete: ' + error.message);
+        setProcessing(false);
+        return;
+      }
+
+      // Add points for completing lesson
+      await addPoints(user.id, 20, 'Completed a lesson', 'lesson_complete', lessonId);
+
+      // Update local state
+      setIsComplete(true);
+      const updatedCompleted = [...completedLessons, lessonId];
+      setCompletedLessons(updatedCompleted);
+
+      // Check if all lessons are complete
+      if (allLessons.every(l => updatedCompleted.includes(l.id))) {
+        // Course completed! Add bonus points
+        await addPoints(user.id, 100, 'Completed full course', 'course_complete', id);
+
+        // Check if certificate already exists
+        const { data: existingCert } = await supabase
+          .from('certificates')
+          .select('id')
+          .eq('student_id', user.id)
+          .eq('course_id', id)
+          .maybeSingle();
+
+        if (!existingCert) {
+          // Generate certificate number
+          const certNumber = 'SBA-' + Math.random().toString(36).substring(2, 10).toUpperCase();
+
+          await supabase
+            .from('certificates')
+            .insert({
+              student_id: user.id,
+              course_id: id,
+              certificate_number: certNumber,
+            });
+
+          alert('🎉 Congratulations! You completed the course! You\'ve earned a certificate!');
+        } else {
+          alert('🎉 Congratulations! You completed the course!');
+        }
+      }
+
+    } catch (error) {
+      console.error('Error marking complete:', error);
+      alert('An error occurred. Please try again.');
+    }
     setProcessing(false);
   };
 
@@ -161,7 +192,12 @@ export default function LessonPlayerPage() {
     return (
       <>
         <Navbar />
-        <div className="min-h-screen flex items-center justify-center">Loading lesson...</div>
+        <div className="min-h-screen flex items-center justify-center">
+          <div className="text-center">
+            <p className="text-2xl mb-2">⏳</p>
+            <p className="text-gray-500">Loading lesson...</p>
+          </div>
+        </div>
         <Footer />
       </>
     );
@@ -177,7 +213,7 @@ export default function LessonPlayerPage() {
     );
   }
 
-  const progress = ((completedLessons.length / allLessons.length) * 100).toFixed(0);
+  const progress = allLessons.length > 0 ? Math.round((completedLessons.length / allLessons.length) * 100) : 0;
 
   return (
     <>
