@@ -7,23 +7,6 @@ import Link from 'next/link';
 import Navbar from '@/components/Navbar';
 import Footer from '@/components/Footer';
 
-// Helper function to add points (simple version – if lib/gamification doesn't exist)
-async function addPoints(userId, points, reason, actionType, referenceId) {
-  const supabase = createBrowserClient();
-  try {
-    const { error } = await supabase.rpc('add_points', {
-      p_user_id: userId,
-      p_points: points,
-      p_reason: reason,
-      p_action_type: actionType,
-      p_reference_id: referenceId,
-    });
-    if (error) console.error('Error adding points:', error);
-  } catch (e) {
-    console.error('Points function not available:', e);
-  }
-}
-
 export default function LessonPlayerPage() {
   const [lesson, setLesson] = useState(null);
   const [course, setCourse] = useState(null);
@@ -47,7 +30,6 @@ export default function LessonPlayerPage() {
           return;
         }
 
-        // Check enrollment
         const { data: enrollmentData } = await supabase
           .from('enrollments')
           .select('*')
@@ -61,7 +43,6 @@ export default function LessonPlayerPage() {
         }
         setEnrollment(enrollmentData);
 
-        // Get lesson
         const { data: lessonData } = await supabase
           .from('lessons')
           .select('*')
@@ -73,7 +54,6 @@ export default function LessonPlayerPage() {
         }
         setLesson(lessonData);
 
-        // Get course
         const { data: courseData } = await supabase
           .from('courses')
           .select('*')
@@ -81,7 +61,6 @@ export default function LessonPlayerPage() {
           .single();
         setCourse(courseData);
 
-        // Get all lessons for this course
         const { data: lessons } = await supabase
           .from('lessons')
           .select('*')
@@ -89,7 +68,6 @@ export default function LessonPlayerPage() {
           .order('order_index', { ascending: true });
         setAllLessons(lessons || []);
 
-        // Get completed lessons
         const { data: completed } = await supabase
           .from('lesson_progress')
           .select('lesson_id')
@@ -121,7 +99,6 @@ export default function LessonPlayerPage() {
         return;
       }
 
-      // Mark lesson as complete
       const { error } = await supabase
         .from('lesson_progress')
         .insert({
@@ -137,43 +114,12 @@ export default function LessonPlayerPage() {
         return;
       }
 
-      // Add points for completing lesson
-      await addPoints(user.id, 20, 'Completed a lesson', 'lesson_complete', lessonId);
-
-      // Update local state
       setIsComplete(true);
       const updatedCompleted = [...completedLessons, lessonId];
       setCompletedLessons(updatedCompleted);
 
-      // Check if all lessons are complete
       if (allLessons.every(l => updatedCompleted.includes(l.id))) {
-        // Course completed! Add bonus points
-        await addPoints(user.id, 100, 'Completed full course', 'course_complete', id);
-
-        // Check if certificate already exists
-        const { data: existingCert } = await supabase
-          .from('certificates')
-          .select('id')
-          .eq('student_id', user.id)
-          .eq('course_id', id)
-          .maybeSingle();
-
-        if (!existingCert) {
-          // Generate certificate number
-          const certNumber = 'SBA-' + Math.random().toString(36).substring(2, 10).toUpperCase();
-
-          await supabase
-            .from('certificates')
-            .insert({
-              student_id: user.id,
-              course_id: id,
-              certificate_number: certNumber,
-            });
-
-          alert('🎉 Congratulations! You completed the course! You\'ve earned a certificate!');
-        } else {
-          alert('🎉 Congratulations! You completed the course!');
-        }
+        alert('🎉 Congratulations! You completed the course!');
       }
 
     } catch (error) {
@@ -183,7 +129,6 @@ export default function LessonPlayerPage() {
     setProcessing(false);
   };
 
-  // Find current lesson index
   const currentIndex = allLessons.findIndex(l => l.id === lessonId);
   const prevLesson = currentIndex > 0 ? allLessons[currentIndex - 1] : null;
   const nextLesson = currentIndex < allLessons.length - 1 ? allLessons[currentIndex + 1] : null;
@@ -220,8 +165,6 @@ export default function LessonPlayerPage() {
       <Navbar />
       <main className="min-h-screen bg-gray-50">
         <div className="max-w-4xl mx-auto px-4 py-8">
-
-          {/* Progress bar */}
           <div className="bg-white rounded-2xl p-4 shadow-sm border border-gray-100 mb-6">
             <div className="flex justify-between text-sm mb-2">
               <span className="font-bold text-gray-700">Progress</span>
@@ -232,7 +175,6 @@ export default function LessonPlayerPage() {
             </div>
           </div>
 
-          {/* Lesson content */}
           <div className="bg-white rounded-2xl shadow-sm border border-gray-100 overflow-hidden">
             <div className="p-6">
               <div className="flex items-center justify-between mb-4">
@@ -248,36 +190,24 @@ export default function LessonPlayerPage() {
 
               <h1 className="text-2xl font-extrabold text-gray-900 mb-4">{lesson.title}</h1>
 
-              {/* Video content */}
               {lesson.content_type === 'video' && lesson.video_url && (
                 <div className="rounded-xl overflow-hidden bg-black">
-                  <video
-                    src={lesson.video_url}
-                    controls
-                    className="w-full aspect-video"
-                    playsInline
-                  />
+                  <video src={lesson.video_url} controls className="w-full aspect-video" playsInline />
                 </div>
               )}
 
-              {/* Text content */}
               {lesson.content_type === 'text' && lesson.text_content && (
                 <div className="prose max-w-none bg-gray-50 p-6 rounded-xl">
                   <div dangerouslySetInnerHTML={{ __html: lesson.text_content }} />
                 </div>
               )}
 
-              {/* PDF content */}
               {lesson.content_type === 'pdf' && lesson.pdf_url && (
                 <div className="text-center py-8">
                   <p className="text-4xl mb-4">📄</p>
                   <p className="text-gray-600 mb-4">This lesson is a PDF document</p>
-                  <a
-                    href={lesson.pdf_url}
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    className="inline-block bg-brand-blue text-white px-6 py-3 rounded-full font-bold hover:opacity-90"
-                  >
+                  <a href={lesson.pdf_url} target="_blank" rel="noopener noreferrer"
+                    className="inline-block bg-brand-blue text-white px-6 py-3 rounded-full font-bold hover:opacity-90">
                     📥 Open PDF
                   </a>
                 </div>
@@ -292,14 +222,11 @@ export default function LessonPlayerPage() {
             </div>
           </div>
 
-          {/* Navigation buttons */}
           <div className="flex items-center justify-between mt-6">
             <div>
               {prevLesson && (
-                <Link
-                  href={`/courses/${id}/lessons/${prevLesson.id}`}
-                  className="inline-block bg-gray-200 text-gray-700 px-6 py-3 rounded-full font-bold hover:bg-gray-300 transition"
-                >
+                <Link href={`/courses/${id}/lessons/${prevLesson.id}`}
+                  className="inline-block bg-gray-200 text-gray-700 px-6 py-3 rounded-full font-bold hover:bg-gray-300 transition">
                   ← Previous
                 </Link>
               )}
@@ -309,38 +236,28 @@ export default function LessonPlayerPage() {
               onClick={handleMarkComplete}
               disabled={isComplete || processing}
               className={`px-6 py-3 rounded-full font-bold transition ${
-                isComplete
-                  ? 'bg-green-100 text-green-700 cursor-default'
-                  : processing
-                  ? 'bg-gray-400 text-white cursor-not-allowed'
-                  : 'bg-brand-yellow text-brand-dark hover:opacity-90'
-              }`}
-            >
+                isComplete ? 'bg-green-100 text-green-700 cursor-default' :
+                processing ? 'bg-gray-400 text-white cursor-not-allowed' :
+                'bg-brand-yellow text-brand-dark hover:opacity-90'
+              }`}>
               {isComplete ? '✅ Completed' : processing ? 'Processing...' : '✅ Mark as Complete'}
             </button>
 
             <div>
               {nextLesson && isComplete && (
-                <Link
-                  href={`/courses/${id}/lessons/${nextLesson.id}`}
-                  className="inline-block bg-brand-blue text-white px-6 py-3 rounded-full font-bold hover:opacity-90 transition"
-                >
+                <Link href={`/courses/${id}/lessons/${nextLesson.id}`}
+                  className="inline-block bg-brand-blue text-white px-6 py-3 rounded-full font-bold hover:opacity-90 transition">
                   Next →
                 </Link>
               )}
             </div>
           </div>
 
-          {/* Back to course */}
           <div className="mt-6 text-center">
-            <Link
-              href={`/courses/${id}`}
-              className="text-brand-blue hover:underline font-semibold text-sm"
-            >
+            <Link href={`/courses/${id}`} className="text-brand-blue hover:underline font-semibold text-sm">
               ← Back to Course
             </Link>
           </div>
-
         </div>
       </main>
       <Footer />
