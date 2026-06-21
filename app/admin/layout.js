@@ -8,6 +8,8 @@ const navItems = [
   { href: '/admin/courses', label: 'Courses', icon: '📚' },
   { href: '/admin/students', label: 'Students', icon: '👥' },
   { href: '/admin/courses/new', label: 'New Course', icon: '➕' },
+  { href: '/admin/blog', label: 'Blog', icon: '📝' },
+  { href: '/admin/audio', label: 'Audio', icon: '🎵' },
 ];
 
 function NavLink({ href, label, icon, mobile }) {
