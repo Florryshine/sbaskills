@@ -1,6 +1,6 @@
 ﻿'use client';
 
-import { useEffect, useState } from 'react';
+import { useEffect, useState, useRef } from 'react';
 import { createBrowserClient } from '@/lib/supabase';
 import { useRouter } from 'next/navigation';
 
@@ -8,6 +8,9 @@ export default function AdminAudioPage() {
   const [audios, setAudios] = useState([]);
   const [loading, setLoading] = useState(true);
   const [uploading, setUploading] = useState(false);
+  const [uploadingImage, setUploadingImage] = useState(false);
+  const fileInputRef = useRef(null);
+  const imageInputRef = useRef(null);
   const [formData, setFormData] = useState({
     title: '',
     description: '',
@@ -64,6 +67,31 @@ export default function AdminAudioPage() {
     alert('Audio uploaded!');
   }
 
+  async function uploadCoverImage(file) {
+    setUploadingImage(true);
+    const fileExt = file.name.split('.').pop();
+    const fileName = `${Date.now()}.${fileExt}`;
+    const filePath = `audio-covers/${fileName}`;
+
+    const { error: uploadError } = await supabase.storage
+      .from('audio-images')
+      .upload(filePath, file);
+
+    if (uploadError) {
+      alert('Upload failed: ' + uploadError.message);
+      setUploadingImage(false);
+      return;
+    }
+
+    const { data: urlData } = supabase.storage
+      .from('audio-images')
+      .getPublicUrl(filePath);
+
+    setFormData({ ...formData, cover_image: urlData.publicUrl });
+    setUploadingImage(false);
+    alert('Cover image uploaded!');
+  }
+
   async function handleSave(e) {
     e.preventDefault();
     if (!formData.title || !formData.audio_url) {
@@ -110,6 +138,7 @@ export default function AdminAudioPage() {
         <p className="text-sm text-slate-500">{audios.length} audio files</p>
       </section>
 
+      {/* Add Audio Form */}
       <section className="rounded-2xl bg-white p-6 shadow-sm border border-slate-100">
         <h2 className="font-bold text-lg mb-4">Add New Audio</h2>
         <form onSubmit={handleSave} className="space-y-4">
@@ -135,14 +164,39 @@ export default function AdminAudioPage() {
           </div>
 
           <div>
-            <label className="block text-sm font-semibold mb-1">Cover Image URL</label>
-            <input
-              type="url"
-              value={formData.cover_image}
-              onChange={e => setFormData({ ...formData, cover_image: e.target.value })}
-              className="w-full rounded-xl border border-slate-200 px-4 py-2"
-              placeholder="https://..."
-            />
+            <label className="block text-sm font-semibold mb-1">Cover Image</label>
+            <div className="flex gap-3 items-center">
+              <input
+                type="text"
+                value={formData.cover_image}
+                onChange={e => setFormData({ ...formData, cover_image: e.target.value })}
+                className="flex-1 rounded-xl border border-slate-200 px-4 py-2"
+                placeholder="https://..."
+              />
+              <button
+                type="button"
+                onClick={() => imageInputRef.current?.click()}
+                disabled={uploadingImage}
+                className="rounded-full bg-brand-blue px-4 py-2 text-sm font-bold text-white hover:opacity-90"
+              >
+                {uploadingImage ? 'Uploading...' : '📁 Upload Image'}
+              </button>
+              <input
+                type="file"
+                ref={imageInputRef}
+                accept="image/*"
+                onChange={(e) => {
+                  if (e.target.files?.[0]) uploadCoverImage(e.target.files[0]);
+                  e.target.value = '';
+                }}
+                className="hidden"
+              />
+            </div>
+            {formData.cover_image && (
+              <div className="mt-2">
+                <img src={formData.cover_image} alt="Cover preview" className="h-24 rounded-lg object-cover" />
+              </div>
+            )}
           </div>
 
           <div>
@@ -167,7 +221,7 @@ export default function AdminAudioPage() {
 
           <button
             type="submit"
-            disabled={uploading}
+            disabled={uploading || uploadingImage}
             className="rounded-full bg-brand-yellow px-6 py-2.5 font-bold text-brand-dark hover:opacity-90"
           >
             Add Audio
@@ -175,6 +229,7 @@ export default function AdminAudioPage() {
         </form>
       </section>
 
+      {/* Audio List */}
       <section className="rounded-2xl bg-white shadow-sm border border-slate-100 overflow-hidden">
         {audios.length === 0 ? (
           <div className="py-16 text-center">

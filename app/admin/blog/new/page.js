@@ -1,6 +1,6 @@
 ﻿'use client';
 
-import { useState } from 'react';
+import { useState, useRef } from 'react';
 import { createBrowserClient } from '@/lib/supabase';
 import { useRouter } from 'next/navigation';
 import Link from 'next/link';
@@ -15,6 +15,8 @@ export default function NewBlogPost() {
     published: false,
   });
   const [saving, setSaving] = useState(false);
+  const [uploading, setUploading] = useState(false);
+  const fileInputRef = useRef(null);
   const router = useRouter();
   const supabase = createBrowserClient();
 
@@ -24,6 +26,31 @@ export default function NewBlogPost() {
       .replace(/[^a-z0-9]+/g, '-')
       .replace(/(^-|-$)/g, '');
   };
+
+  async function uploadImage(file) {
+    setUploading(true);
+    const fileExt = file.name.split('.').pop();
+    const fileName = `${Date.now()}.${fileExt}`;
+    const filePath = `blog/${fileName}`;
+
+    const { error: uploadError } = await supabase.storage
+      .from('blog-images')
+      .upload(filePath, file);
+
+    if (uploadError) {
+      alert('Upload failed: ' + uploadError.message);
+      setUploading(false);
+      return;
+    }
+
+    const { data: urlData } = supabase.storage
+      .from('blog-images')
+      .getPublicUrl(filePath);
+
+    setFormData({ ...formData, cover_image: urlData.publicUrl });
+    setUploading(false);
+    alert('Image uploaded successfully!');
+  }
 
   const handleSubmit = async (e) => {
     e.preventDefault();
@@ -109,14 +136,39 @@ export default function NewBlogPost() {
         </div>
 
         <div>
-          <label className="block text-sm font-semibold mb-1">Cover Image URL</label>
-          <input
-            type="url"
-            value={formData.cover_image}
-            onChange={e => setFormData({ ...formData, cover_image: e.target.value })}
-            className="w-full rounded-xl border border-slate-200 px-4 py-2"
-            placeholder="https://..."
-          />
+          <label className="block text-sm font-semibold mb-1">Cover Image</label>
+          <div className="flex gap-3 items-center">
+            <input
+              type="text"
+              value={formData.cover_image}
+              onChange={e => setFormData({ ...formData, cover_image: e.target.value })}
+              className="flex-1 rounded-xl border border-slate-200 px-4 py-2"
+              placeholder="https://..."
+            />
+            <button
+              type="button"
+              onClick={() => fileInputRef.current?.click()}
+              disabled={uploading}
+              className="rounded-full bg-brand-blue px-4 py-2 text-sm font-bold text-white hover:opacity-90"
+            >
+              {uploading ? 'Uploading...' : '📁 Upload Image'}
+            </button>
+            <input
+              type="file"
+              ref={fileInputRef}
+              accept="image/*"
+              onChange={(e) => {
+                if (e.target.files?.[0]) uploadImage(e.target.files[0]);
+                e.target.value = '';
+              }}
+              className="hidden"
+            />
+          </div>
+          {formData.cover_image && (
+            <div className="mt-2">
+              <img src={formData.cover_image} alt="Cover preview" className="h-32 rounded-lg object-cover" />
+            </div>
+          )}
         </div>
 
         <div className="flex items-center gap-3">
