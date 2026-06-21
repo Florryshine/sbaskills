@@ -4,12 +4,12 @@ import Link from 'next/link';
 import { usePathname } from 'next/navigation';
 import LogoutButton from '@/components/LogoutButton';
 
-const links = [
-  { href: '/admin/dashboard', label: 'Overview' },
-  { href: '/admin/courses', label: 'Courses' },
-  { href: '/admin/students', label: 'Students' }
-  { href: '/admin/blog', label: 'Blog', icon: '📝' },
-  { href: '/admin/audio', label: 'Audio', icon: '🎵' },
+const navItems = [
+  { href: '/admin/dashboard', label: 'Overview', icon: '📊' },
+  { href: '/admin/courses', label: 'Courses', icon: '📚' },
+  { href: '/admin/blog', label: '📝 Blog', icon: '📝' },
+  { href: '/admin/audio', label: '🎵 Audio', icon: '🎵' },
+  { href: '/admin/students', label: 'Students', icon: '👨‍🎓' },
 ];
 
 export default function AdminSidebar() {
