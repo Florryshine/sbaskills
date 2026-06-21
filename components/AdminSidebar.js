@@ -22,9 +22,8 @@ export default function AdminSidebar() {
         <h2 className="mt-2 text-2xl font-bold">Shiney Brain Academy</h2>
       </div>
       <nav className="mt-10 space-y-2">
-        {links.map((link) => {
+        {navItems.map((link) => {
           const active = pathname === link.href || pathname.startsWith(`${link.href}/`);
-
           return (
             <Link
               key={link.href}
