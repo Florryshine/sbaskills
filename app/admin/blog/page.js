@@ -84,15 +84,15 @@ export default function AdminBlogPage() {
                 <div className="flex-1 min-w-0">
                   <p className="font-bold text-slate-800 truncate">{post.title}</p>
                   <p className="text-sm text-slate-500 truncate">{post.slug}</p>
-                  <span className={	ext-xs px-2 py-0.5 rounded-full }>
+                  <span className={`text-xs px-2 py-0.5 rounded-full ${post.published ? 'bg-green-100 text-green-700' : 'bg-gray-100 text-gray-500'}`}>
                     {post.published ? 'Published' : 'Draft'}
                   </span>
                 </div>
                 <div className="flex items-center gap-2 shrink-0">
-                  <Link href={/admin/blog/} className="text-brand-blue text-sm font-bold hover:underline">
+                  <Link href={`/admin/blog/${post.id}`} className="text-brand-blue text-sm font-bold hover:underline">
                     Edit
                   </Link>
-                  <button onClick={() => togglePublish(post)} className={	ext-sm font-bold  hover:underline}>
+                  <button onClick={() => togglePublish(post)} className={`text-sm font-bold ${post.published ? 'text-yellow-600' : 'text-green-600'} hover:underline`}>
                     {post.published ? 'Unpublish' : 'Publish'}
                   </button>
                   <button onClick={() => deletePost(post.id)} className="text-red-500 text-sm font-bold hover:underline">

@@ -3,7 +3,6 @@
 import { useEffect, useState } from 'react';
 import { createBrowserClient } from '@/lib/supabase';
 import { useRouter } from 'next/navigation';
-import Link from 'next/link';
 
 export default function AdminAudioPage() {
   const [audios, setAudios] = useState([]);
@@ -44,7 +43,7 @@ export default function AdminAudioPage() {
 
   async function uploadAudio(file) {
     setUploading(true);
-    const fileName = ${Date.now()}_;
+    const fileName = `${Date.now()}_${file.name}`;
     
     const { error: uploadError } = await supabase.storage
       .from('audio')
@@ -111,7 +110,6 @@ export default function AdminAudioPage() {
         <p className="text-sm text-slate-500">{audios.length} audio files</p>
       </section>
 
-      {/* Add Audio Form */}
       <section className="rounded-2xl bg-white p-6 shadow-sm border border-slate-100">
         <h2 className="font-bold text-lg mb-4">Add New Audio</h2>
         <form onSubmit={handleSave} className="space-y-4">
@@ -177,7 +175,6 @@ export default function AdminAudioPage() {
         </form>
       </section>
 
-      {/* Audio List */}
       <section className="rounded-2xl bg-white shadow-sm border border-slate-100 overflow-hidden">
         {audios.length === 0 ? (
           <div className="py-16 text-center">
