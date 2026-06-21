@@ -8,6 +8,8 @@ const links = [
   { href: '/admin/dashboard', label: 'Overview' },
   { href: '/admin/courses', label: 'Courses' },
   { href: '/admin/students', label: 'Students' }
+  { href: '/admin/blog', label: 'Blog', icon: '📝' },
+  { href: '/admin/audio', label: 'Audio', icon: '🎵' },
 ];
 
 export default function AdminSidebar() {
