@@ -1,21 +1,23 @@
-import Link from 'next/link';
 import { createServerClient } from '@/lib/supabase-server';
 import Navbar from '@/components/Navbar';
 import Footer from '@/components/Footer';
+import Link from 'next/link';
 
 export const metadata = {
   title: 'Blog | Shiney Brain Academy',
-  description: 'Tips, guides and insights for Nigerian students'
+  description: 'Tips, guides and insights for Nigerian students',
 };
 
 export default async function BlogPage() {
   const supabase = createServerClient();
-  
-  const { data: posts } = await supabase
+
+  const { data: posts, error } = await supabase
     .from('blog_posts')
-    .select('*')
-    .eq('is_published', true)
-    .order('created_at', { ascending: false });
+    .select('id, title, slug, excerpt, cover_image, published_at, created_at')
+    .eq('published', true)
+    .order('published_at', { ascending: false });
+
+  console.log('Blog posts fetched:', posts?.length || 0);
 
   return (
     <>
@@ -41,19 +43,21 @@ export default async function BlogPage() {
                 <Link
                   key={post.id}
                   href={`/blog/${post.slug}`}
-                  className="group bg-white rounded-2xl shadow-sm hover:shadow-md 
-                             transition overflow-hidden border border-gray-100"
+                  className="group bg-white rounded-2xl shadow-sm hover:shadow-md transition overflow-hidden border border-gray-100"
                 >
                   {post.cover_image ? (
-                    <img src={post.cover_image} alt={post.title}
-                      className="w-full h-48 object-cover" />
+                    <img
+                      src={post.cover_image}
+                      alt={post.title}
+                      className="w-full h-48 object-cover"
+                    />
                   ) : (
-                    <div className="w-full h-48 bg-brand-blue flex items-center 
-                                    justify-center text-5xl">📖</div>
+                    <div className="w-full h-48 bg-brand-blue flex items-center justify-center text-5xl">
+                      📖
+                    </div>
                   )}
                   <div className="p-5">
-                    <h2 className="text-lg font-bold text-gray-800 mb-2 
-                                   group-hover:text-brand-blue transition line-clamp-2">
+                    <h2 className="text-lg font-bold text-gray-800 mb-2 group-hover:text-brand-blue transition line-clamp-2">
                       {post.title}
                     </h2>
                     {post.excerpt && (
@@ -63,12 +67,14 @@ export default async function BlogPage() {
                     )}
                     <div className="flex items-center justify-between">
                       <span className="text-xs text-gray-400">
-                        {new Date(post.created_at).toLocaleDateString('en-NG', {
-                          day: 'numeric', month: 'short', year: 'numeric'
-                        })}
+                        {new Date(post.published_at || post.created_at).toLocaleDateString(
+                          'en-NG',
+                          { day: 'numeric', month: 'short', year: 'numeric' }
+                        )}
                       </span>
-                      <span className="text-xs font-bold text-brand-blue 
-                                       group-hover:underline">Read more →</span>
+                      <span className="text-xs font-bold text-brand-blue group-hover:underline">
+                        Read more →
+                      </span>
                     </div>
                   </div>
                 </Link>
