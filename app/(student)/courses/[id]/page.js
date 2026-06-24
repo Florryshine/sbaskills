@@ -20,15 +20,18 @@ export default function CoursePage() {
   useEffect(() => {
     async function loadCourse() {
       try {
-        // Get course details
         const { data: courseData } = await supabase
           .from('courses')
           .select('*')
           .eq('id', id)
           .single();
+
+        if (!courseData) {
+          router.push('/courses');
+          return;
+        }
         setCourse(courseData);
 
-        // Get lessons
         const { data: lessonsData } = await supabase
           .from('lessons')
           .select('*')
@@ -36,7 +39,6 @@ export default function CoursePage() {
           .order('order_index', { ascending: true });
         setLessons(lessonsData || []);
 
-        // Check if user is enrolled
         const { data: { user } } = await supabase.auth.getUser();
         if (user) {
           const { data: enrollmentData } = await supabase
@@ -56,7 +58,7 @@ export default function CoursePage() {
     }
 
     loadCourse();
-  }, [id, supabase]);
+  }, [id, supabase, router]);
 
   const handleEnroll = async () => {
     const { data: { user } } = await supabase.auth.getUser();
@@ -68,7 +70,6 @@ export default function CoursePage() {
     setProcessing(true);
 
     try {
-      // For free courses – instant enrollment
       if (course.price === 0 || course.price === '0') {
         const { error } = await supabase
           .from('enrollments')
@@ -85,7 +86,6 @@ export default function CoursePage() {
           alert('Error enrolling: ' + error.message);
         } else {
           alert('✅ You are now enrolled in this course!');
-          // Refresh enrollment status
           const { data: newEnrollment } = await supabase
             .from('enrollments')
             .select('*')
@@ -95,18 +95,14 @@ export default function CoursePage() {
           setEnrollment(newEnrollment);
           router.refresh();
         }
-        setProcessing(false);
-        return;
+      } else {
+        alert('💰 Paystack coming soon! Contact admin to enroll.');
       }
-
-      // For paid courses – show Paystack (coming soon)
-      alert('💰 Paystack integration coming soon! For now, contact admin to enroll.');
-      setProcessing(false);
     } catch (error) {
       console.error('Enrollment error:', error);
       alert('An error occurred. Please try again.');
-      setProcessing(false);
     }
+    setProcessing(false);
   };
 
   if (loading) {
@@ -135,7 +131,6 @@ export default function CoursePage() {
   }
 
   const isEnrolled = enrollment?.status === 'active';
-  const isPending = enrollment?.status === 'pending_approval';
   const lessonCount = lessons.length;
 
   return (
@@ -143,8 +138,6 @@ export default function CoursePage() {
       <Navbar />
       <main className="min-h-screen bg-gray-50">
         <div className="max-w-4xl mx-auto px-4 py-8">
-
-          {/* Course Header */}
           <div className="bg-white rounded-2xl shadow-sm border border-gray-100 overflow-hidden">
             <div className="h-48 flex items-center justify-center text-6xl"
               style={{ backgroundColor: course.color || '#1a73e8' }}>
@@ -160,31 +153,23 @@ export default function CoursePage() {
                 <span className="text-sm text-gray-500">{lessonCount} lessons</span>
               </div>
 
-              {/* Enrollment Button */}
               {isEnrolled ? (
                 <Link
                   href={`/courses/${id}/lessons/${lessons[0]?.id || '#'}`}
-                  className="mt-4 inline-block bg-green-600 text-white px-6 py-3 rounded-full font-bold hover:opacity-90"
-                >
+                  className="mt-4 inline-block bg-green-600 text-white px-6 py-3 rounded-full font-bold hover:opacity-90">
                   Continue Learning →
                 </Link>
-              ) : isPending ? (
-                <button disabled className="mt-4 bg-gray-400 text-white px-6 py-3 rounded-full font-bold">
-                  ⏳ Payment Under Review
-                </button>
               ) : (
                 <button
                   onClick={handleEnroll}
                   disabled={processing}
-                  className="mt-4 inline-block bg-brand-yellow text-brand-dark px-6 py-3 rounded-full font-bold hover:opacity-90 transition"
-                >
+                  className="mt-4 inline-block bg-brand-yellow text-brand-dark px-6 py-3 rounded-full font-bold hover:opacity-90 transition">
                   {processing ? 'Processing...' : (course.price === 0 || course.price === '0' ? 'Enroll for Free' : 'Enroll Now')}
                 </button>
               )}
             </div>
           </div>
 
-          {/* Lessons List */}
           <div className="mt-8 bg-white rounded-2xl shadow-sm border border-gray-100 p-6">
             <h2 className="text-xl font-extrabold mb-4">📖 Lessons</h2>
             {lessons.length === 0 ? (
@@ -196,15 +181,10 @@ export default function CoursePage() {
                     <span className="font-bold text-brand-blue w-8">{idx + 1}.</span>
                     <span className="flex-1 font-medium text-gray-800">{lesson.title}</span>
                     {isEnrolled && lesson.video_url && (
-                      <Link
-                        href={`/courses/${id}/lessons/${lesson.id}`}
-                        className="text-brand-blue font-bold text-sm hover:underline"
-                      >
+                      <Link href={`/courses/${id}/lessons/${lesson.id}`}
+                        className="text-brand-blue font-bold text-sm hover:underline">
                         Watch →
                       </Link>
-                    )}
-                    {isEnrolled && !lesson.video_url && !lesson.text_content && !lesson.pdf_url && (
-                      <span className="text-xs text-yellow-600">⏳ Coming Soon</span>
                     )}
                   </div>
                 ))}
@@ -212,13 +192,11 @@ export default function CoursePage() {
             )}
           </div>
 
-          {/* Back to Dashboard */}
           <div className="mt-6 text-center">
             <Link href="/dashboard" className="text-brand-blue hover:underline font-semibold text-sm">
               ← Back to Dashboard
             </Link>
           </div>
-
         </div>
       </main>
       <Footer />
