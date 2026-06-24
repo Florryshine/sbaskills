@@ -242,7 +242,7 @@ export default function AdminCourseEditorPage() {
         title: title,
         description: '',
         order_index: newOrder,
-        is_published: false,
+        is_published: true,
       })
       .select()
       .single();

@@ -3,6 +3,7 @@ import { notFound } from 'next/navigation';
 import Navbar from '@/components/Navbar';
 import Footer from '@/components/Footer';
 import Link from 'next/link';
+import ShareButtons from '@/components/ShareButtons';
 
 export default async function BlogPostPage({ params }) {
   const supabase = createServerClient();
@@ -61,8 +62,16 @@ export default async function BlogPostPage({ params }) {
             </p>
           )}
 
+          <ShareButtons 
+            title={post.title}
+            url={`/blog/${post.slug}`}
+            targetType="blog"
+            targetId={post.id}
+            description={post.excerpt || 'Read this blog post on Shiney Brain Academy!'}
+          />
+
           <div
-            className="prose prose-lg max-w-none text-gray-700 leading-relaxed"
+            className="prose prose-lg max-w-none text-gray-700 leading-relaxed mt-6"
             dangerouslySetInnerHTML={{ __html: post.content }}
           />
         </article>

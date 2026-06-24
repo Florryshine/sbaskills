@@ -3,6 +3,7 @@ import { useEffect, useState } from 'react';
 import { createClientComponentClient } from '@supabase/auth-helpers-nextjs';
 import Navbar from '@/components/Navbar';
 import Footer from '@/components/Footer';
+import ShareButtons from '@/components/ShareButtons';
 
 export default function AudioPage() {
   const [audios, setAudios] = useState([]);
@@ -59,7 +60,16 @@ export default function AudioPage() {
                     <div>
                       <h2 className="text-lg font-bold text-gray-800">{audio.title}</h2>
                       {audio.description && (
-                        <p className="text-sm text-gray-500 mt-1">{audio.description}</p>
+                        <p className="text-sm text-gray-500 mt-1">
+<ShareButtons 
+  title={`Check out this course: ${course.title}`}
+  url={`/courses/${course.id}`}
+  targetType="course"
+  targetId={course.id}
+  description={course.description}
+/>
+
+{audio.description}</p>
                       )}
                     </div>
                     <span className="text-xs text-gray-400 whitespace-nowrap ml-4">

@@ -1,12 +1,16 @@
 'use client';
 
 import Link from 'next/link';
-import { useState } from 'react';
-import { useRouter } from 'next/navigation';
+import { useState, useEffect } from 'react';
+import { useRouter, useSearchParams } from 'next/navigation';
 import { createBrowserClient } from '@/lib/supabase';
+import { addReferralPoints } from '@/lib/gamification';
 
 export default function RegisterPage() {
   const router = useRouter();
+  const searchParams = useSearchParams();
+  const referralCode = searchParams.get('ref');
+
   const [form, setForm] = useState({
     full_name: '',
     email: '',
@@ -16,9 +20,34 @@ export default function RegisterPage() {
   const [loading, setLoading] = useState(false);
   const [message, setMessage] = useState('');
   const [error, setError] = useState('');
+  const [referrerInfo, setReferrerInfo] = useState(null);
+
+  // Check if referral code is valid
+  useEffect(() => {
+    async function checkReferral() {
+      if (!referralCode) return;
+      const supabase = createBrowserClient();
+      const { data, error } = await supabase
+        .from('profiles')
+        .select('id, full_name')
+        .eq('referral_code', referralCode)
+        .maybeSingle();
+      if (data) {
+        setReferrerInfo(data);
+      } else {
+        // Invalid referral code – ignore
+        console.log('Invalid referral code');
+      }
+    }
+    checkReferral();
+  }, [referralCode]);
 
   const handleChange = (event) => {
     setForm((current) => ({ ...current, [event.target.name]: event.target.value }));
+  };
+
+  const generateReferralCode = () => {
+    return Math.random().toString(36).substring(2, 8).toUpperCase();
   };
 
   const handleSubmit = async (event) => {
@@ -31,7 +60,7 @@ export default function RegisterPage() {
       const supabase = createBrowserClient();
       const redirectTo = `${window.location.origin}/auth/callback`;
 
-      const { error } = await supabase.auth.signUp({
+      const { data, error } = await supabase.auth.signUp({
         email: form.email,
         password: form.password,
         options: {
@@ -44,12 +73,60 @@ export default function RegisterPage() {
         }
       });
 
-      if (error) {
-        throw error;
+      if (error) throw error;
+
+      const user = data.user;
+      if (!user) throw new Error('User creation failed');
+
+      // Generate referral code for new user
+      const newReferralCode = generateReferralCode();
+
+      // Prepare profile data
+      let referredById = null;
+      let referrerId = null;
+
+      // If a referral code was provided, find the referrer
+      if (referralCode) {
+        const { data: referrer } = await supabase
+          .from('profiles')
+          .select('id')
+          .eq('referral_code', referralCode)
+          .maybeSingle();
+
+        if (referrer) {
+          referredById = referrer.id;
+          referrerId = referrer.id;
+        }
       }
 
-      setMessage('Registration successful. Check your email to verify your account before logging in.');
-      setTimeout(() => router.push('/login'), 1800);
+      // Insert profile
+      const { error: profileError } = await supabase
+        .from('profiles')
+        .insert({
+          id: user.id,
+          full_name: form.full_name,
+          email: form.email,
+          phone: form.phone,
+          role: 'student',
+          referral_code: newReferralCode,
+          referred_by: referredById,
+        });
+
+      if (profileError) {
+        console.error('Profile creation error:', profileError);
+        // Still continue, but warn
+        setMessage('Account created but profile setup incomplete. Please contact support.');
+      }
+
+      // Award referral points if applicable
+      if (referrerId) {
+        await addReferralPoints(referrerId, user.id);
+        setMessage('Account created! You earned 30 bonus points, and your referrer earned 50 points!');
+      } else {
+        setMessage('Registration successful. Check your email to verify your account before logging in.');
+      }
+
+      setTimeout(() => router.push('/login'), 2000);
     } catch (submitError) {
       setError(submitError.message);
     } finally {
@@ -62,7 +139,14 @@ export default function RegisterPage() {
       <div className="w-full max-w-lg rounded-[2rem] bg-white p-8 shadow-soft">
         <p className="text-sm font-semibold uppercase tracking-[0.3em] text-brand-yellow">Student Registration</p>
         <h1 className="mt-3 text-3xl font-bold text-brand-blue">Create your account</h1>
-        <p className="mt-3 text-sm leading-6 text-slate-600">Join Shiney Brain Academy and begin your JAMB preparation journey.</p>
+        <p className="mt-3 text-sm leading-6 text-slate-600">
+          Join Shiney Brain Academy and begin your JAMB preparation journey.
+          {referralCode && referrerInfo && (
+            <span className="block mt-2 text-xs text-brand-blue font-semibold">
+              🎁 You were referred by {referrerInfo.full_name || 'a friend'}! You'll both get bonus points!
+            </span>
+          )}
+        </p>
 
         <form onSubmit={handleSubmit} className="mt-8 space-y-5">
           <div>
