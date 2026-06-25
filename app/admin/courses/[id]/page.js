@@ -188,10 +188,12 @@ export default function AdminCourseEditorPage() {
   }
 
   // ----- COURSE CRUD -----
-  async function handleSaveCourse() {
-    setSaving(true);
-    const supabase = createBrowserClient();
+  // ----- COURSE CRUD -----
+async function handleSaveCourse() {
+  setSaving(true);
+  const supabase = createBrowserClient();
 
+  try {
     if (courseId === 'new') {
       const { data, error } = await supabase
         .from('courses')
@@ -206,13 +208,12 @@ export default function AdminCourseEditorPage() {
         .select()
         .single();
 
-      if (error) {
-        alert(error.message);
-      } else {
-        router.push(`/admin/courses/${data.id}`);
-      }
+      if (error) throw new Error(error.message);
+      alert('✅ Course created successfully!');
+      router.push(`/admin/courses/${data.id}`);
     } else {
-      await supabase
+      // Update existing course
+      const { error } = await supabase
         .from('courses')
         .update({
           title: formData.title,
@@ -223,10 +224,37 @@ export default function AdminCourseEditorPage() {
           is_published: formData.is_published,
         })
         .eq('id', courseId);
-      alert('Course updated!');
+
+      if (error) throw new Error(error.message);
+
+      // Fetch updated course data
+      const { data: updatedCourse, error: fetchError } = await supabase
+        .from('courses')
+        .select('*')
+        .eq('id', courseId)
+        .single();
+
+      if (fetchError) throw new Error(fetchError.message);
+
+      // Update local state with fresh data
+      setCourse(updatedCourse);
+      setFormData({
+        title: updatedCourse.title || '',
+        description: updatedCourse.description || '',
+        price: updatedCourse.price?.toString() || '',
+        thumbnail_url: updatedCourse.thumbnail_url || '',
+        color: updatedCourse.color || '#1a73e8',
+        is_published: updatedCourse.is_published || false,
+      });
+
+      alert('✅ Course updated successfully!');
     }
+  } catch (error) {
+    alert('❌ Error: ' + error.message);
+  } finally {
     setSaving(false);
   }
+}
 
   // ----- LESSON CRUD -----
   async function addLesson() {
