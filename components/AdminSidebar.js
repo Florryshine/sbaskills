@@ -7,9 +7,11 @@ import LogoutButton from '@/components/LogoutButton';
 const navItems = [
   { href: '/admin/dashboard', label: 'Overview', icon: '📊' },
   { href: '/admin/courses', label: 'Courses', icon: '📚' },
-  { href: '/admin/blog', label: '📝 Blog', icon: '📝' },
-  { href: '/admin/audio', label: '🎵 Audio', icon: '🎵' },
+  { href: '/admin/blog', label: 'Blog', icon: '📝' },
+  { href: '/admin/audio', label: 'Audio', icon: '🎵' },
   { href: '/admin/students', label: 'Students', icon: '👨‍🎓' },
+  { href: '/admin/roles', label: 'Roles', icon: '🔑' },
+  { href: '/admin/testimonials', label: 'Testimonials', icon: '💬' },
 ];
 
 export default function AdminSidebar() {

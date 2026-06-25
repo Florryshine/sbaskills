@@ -4,7 +4,7 @@ import CourseCard from '@/components/CourseCard';
 import { createServerClient } from '@/lib/supabase-server';
 
 const stats = [
-  { number: '5,000+', label: 'Students' },
+  { number: '1,000+', label: 'Students' },
   { number: '20+', label: 'Courses' },
   { number: '6', label: 'Skill Categories' },
   { number: '100%', label: 'Flexible Learning' },
@@ -55,24 +55,31 @@ const categories = [
   },
 ];
 
-const testimonials = [
+// ✅ Fallback static testimonials (used when database has none)
+const fallbackTestimonials = [
   {
+    id: 'static-1',
     name: 'Amaka O.',
-    role: 'JAMB Student',
-    quote: 'The lesson flow kept me disciplined. I finally studied with clarity and confidence.',
-    score: '⭐⭐⭐⭐⭐',
+    course: 'JAMB Student',
+    testimonial: 'The lesson flow kept me disciplined. I finally studied with clarity and confidence.',
+    rating: 5,
+    is_verified: false,
   },
   {
+    id: 'static-2',
     name: 'David E.',
-    role: 'Tech Skills Student',
-    quote: 'I loved the structure. Seeing my progress motivated me to finish each topic.',
-    score: '⭐⭐⭐⭐⭐',
+    course: 'Tech Skills Student',
+    testimonial: 'I loved the structure. Seeing my progress motivated me to finish each topic.',
+    rating: 5,
+    is_verified: false,
   },
   {
+    id: 'static-3',
     name: 'Ruth A.',
-    role: 'Digital Marketing Student',
-    quote: 'The platform felt premium and easy to use on my phone, which mattered a lot.',
-    score: '⭐⭐⭐⭐⭐',
+    course: 'Digital Marketing Student',
+    testimonial: 'The platform felt premium and easy to use on my phone, which mattered a lot.',
+    rating: 5,
+    is_verified: false,
   },
 ];
 
@@ -96,6 +103,8 @@ const howItWorks = [
 
 export default async function HomePage() {
   const supabase = createServerClient();
+
+  // Fetch courses
   const { data: courses } = await supabase
     .from('courses')
     .select('*')
@@ -103,13 +112,25 @@ export default async function HomePage() {
     .order('created_at', { ascending: false })
     .limit(3);
 
+  // Fetch approved testimonials from database
+  const { data: dbTestimonials } = await supabase
+    .from('testimonials')
+    .select('*')
+    .eq('status', 'approved')
+    .order('created_at', { ascending: false })
+    .limit(3);
+
+  // ✅ Use database testimonials if available, otherwise fallback to static ones
+  const testimonials = dbTestimonials && dbTestimonials.length > 0
+    ? dbTestimonials
+    : fallbackTestimonials;
+
   return (
     <main className="overflow-x-hidden">
       <Navbar />
 
       {/* ── HERO ── */}
       <section className="relative bg-brand-blue text-white overflow-hidden">
-        {/* decorative circles */}
         <div className="pointer-events-none absolute -top-24 -right-24 h-96 w-96 rounded-full bg-white/5" />
         <div className="pointer-events-none absolute bottom-0 left-0 h-64 w-64 rounded-full bg-brand-yellow/10" />
 
@@ -144,7 +165,6 @@ export default async function HomePage() {
             </p>
           </div>
 
-          {/* stats cards */}
           <div className="grid grid-cols-2 gap-4">
             {stats.map((s) => (
               <div
@@ -316,16 +336,23 @@ export default async function HomePage() {
           <div className="mt-12 grid gap-8 lg:grid-cols-3">
             {testimonials.map((item) => (
               <blockquote
-                key={item.name}
+                key={item.id}
                 className="rounded-2xl bg-white border border-slate-100 p-8 shadow-sm"
               >
-                <p className="text-sm">{item.score}</p>
+                <p className="text-sm">{'⭐'.repeat(item.rating || 5)}</p>
                 <p className="mt-4 text-lg font-semibold leading-8 text-slate-700">
-                  "{item.quote}"
+                  "{item.testimonial}"
                 </p>
                 <footer className="mt-6">
                   <p className="font-bold text-brand-blue">{item.name}</p>
-                  <p className="text-xs text-slate-400">{item.role}</p>
+                  {item.course && (
+                    <p className="text-xs text-slate-400">{item.course}</p>
+                  )}
+                  {item.is_verified && (
+                    <span className="inline-block mt-1 text-xs bg-green-100 text-green-700 px-2 py-0.5 rounded-full font-bold">
+                      ✅ Verified
+                    </span>
+                  )}
                 </footer>
               </blockquote>
             ))}
