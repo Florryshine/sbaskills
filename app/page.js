@@ -55,7 +55,6 @@ const categories = [
   },
 ];
 
-// ✅ Fallback static testimonials (used when database has none)
 const fallbackTestimonials = [
   {
     id: 'static-1',
@@ -104,7 +103,6 @@ const howItWorks = [
 export default async function HomePage() {
   const supabase = createServerClient();
 
-  // Fetch courses
   const { data: courses } = await supabase
     .from('courses')
     .select('*')
@@ -112,7 +110,6 @@ export default async function HomePage() {
     .order('created_at', { ascending: false })
     .limit(3);
 
-  // Fetch approved testimonials from database
   const { data: dbTestimonials } = await supabase
     .from('testimonials')
     .select('*')
@@ -120,7 +117,6 @@ export default async function HomePage() {
     .order('created_at', { ascending: false })
     .limit(3);
 
-  // ✅ Use database testimonials if available, otherwise fallback to static ones
   const testimonials = dbTestimonials && dbTestimonials.length > 0
     ? dbTestimonials
     : fallbackTestimonials;
@@ -129,7 +125,7 @@ export default async function HomePage() {
     <main className="overflow-x-hidden">
       <Navbar />
 
-      {/* ── HERO ── */}
+      {/* HERO */}
       <section className="relative bg-brand-blue text-white overflow-hidden">
         <div className="pointer-events-none absolute -top-24 -right-24 h-96 w-96 rounded-full bg-white/5" />
         <div className="pointer-events-none absolute bottom-0 left-0 h-64 w-64 rounded-full bg-brand-yellow/10" />
@@ -160,7 +156,8 @@ export default async function HomePage() {
                 Browse Courses
               </a>
             </div>
-        
+          </div>
+
           <div className="grid grid-cols-2 gap-4">
             {stats.map((s) => (
               <div
@@ -175,7 +172,7 @@ export default async function HomePage() {
         </div>
       </section>
 
-      {/* ── CATEGORIES ── */}
+      {/* CATEGORIES */}
       <section className="bg-slate-50 py-20">
         <div className="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8">
           <div className="text-center">
@@ -208,7 +205,7 @@ export default async function HomePage() {
         </div>
       </section>
 
-      {/* ── FEATURED COURSES ── */}
+      {/* FEATURED COURSES */}
       <section id="courses" className="bg-white py-20">
         <div className="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8">
           <div className="flex flex-col gap-4 md:flex-row md:items-end md:justify-between">
@@ -247,7 +244,7 @@ export default async function HomePage() {
         </div>
       </section>
 
-      {/* ── HOW IT WORKS ── */}
+      {/* HOW IT WORKS */}
       <section className="bg-brand-blue py-20 text-white">
         <div className="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8">
           <div className="text-center">
@@ -275,7 +272,7 @@ export default async function HomePage() {
         </div>
       </section>
 
-      {/* ── WHY SHINEY BRAIN ── */}
+      {/* WHY SHINEY BRAIN */}
       <section className="bg-white py-20">
         <div className="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8">
           <div className="grid gap-12 lg:grid-cols-2 lg:items-center">
@@ -318,7 +315,7 @@ export default async function HomePage() {
         </div>
       </section>
 
-      {/* ── TESTIMONIALS ── */}
+      {/* TESTIMONIALS */}
       <section className="bg-slate-50 py-20">
         <div className="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8">
           <div className="text-center">
@@ -356,7 +353,7 @@ export default async function HomePage() {
         </div>
       </section>
 
-      {/* ── CTA BANNER ── */}
+      {/* CTA BANNER */}
       <section className="bg-brand-yellow py-16">
         <div className="mx-auto max-w-4xl px-4 text-center sm:px-6 lg:px-8">
           <h2 className="text-3xl font-extrabold text-brand-dark sm:text-4xl">
