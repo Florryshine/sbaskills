@@ -1,12 +1,13 @@
 'use client';
 
 import Link from 'next/link';
-import { useState, useEffect } from 'react';
+import { useState, useEffect, Suspense } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { createBrowserClient } from '@/lib/supabase';
 import { addReferralPoints } from '@/lib/gamification';
 
-export default function RegisterPage() {
+// Separate component that uses useSearchParams
+function RegisterForm() {
   const router = useRouter();
   const searchParams = useSearchParams();
   const referralCode = searchParams.get('ref');
@@ -22,7 +23,6 @@ export default function RegisterPage() {
   const [error, setError] = useState('');
   const [referrerInfo, setReferrerInfo] = useState(null);
 
-  // Check if referral code is valid
   useEffect(() => {
     async function checkReferral() {
       if (!referralCode) return;
@@ -34,9 +34,6 @@ export default function RegisterPage() {
         .maybeSingle();
       if (data) {
         setReferrerInfo(data);
-      } else {
-        // Invalid referral code – ignore
-        console.log('Invalid referral code');
       }
     }
     checkReferral();
@@ -78,14 +75,10 @@ export default function RegisterPage() {
       const user = data.user;
       if (!user) throw new Error('User creation failed');
 
-      // Generate referral code for new user
       const newReferralCode = generateReferralCode();
-
-      // Prepare profile data
       let referredById = null;
       let referrerId = null;
 
-      // If a referral code was provided, find the referrer
       if (referralCode) {
         const { data: referrer } = await supabase
           .from('profiles')
@@ -99,7 +92,6 @@ export default function RegisterPage() {
         }
       }
 
-      // Insert profile
       const { error: profileError } = await supabase
         .from('profiles')
         .insert({
@@ -114,16 +106,14 @@ export default function RegisterPage() {
 
       if (profileError) {
         console.error('Profile creation error:', profileError);
-        // Still continue, but warn
         setMessage('Account created but profile setup incomplete. Please contact support.');
       }
 
-      // Award referral points if applicable
       if (referrerId) {
         await addReferralPoints(referrerId, user.id);
-        setMessage('Account created! You earned 30 bonus points, and your referrer earned 50 points!');
+        setMessage('✅ Account created! You earned 30 bonus points, and your referrer earned 50 points!');
       } else {
-        setMessage('Registration successful. Check your email to verify your account before logging in.');
+        setMessage('✅ Registration successful. Check your email to verify your account before logging in.');
       }
 
       setTimeout(() => router.push('/login'), 2000);
@@ -213,5 +203,14 @@ export default function RegisterPage() {
         </p>
       </div>
     </main>
+  );
+}
+
+// Main page with Suspense boundary
+export default function RegisterPage() {
+  return (
+    <Suspense fallback={<div className="flex min-h-screen items-center justify-center">Loading...</div>}>
+      <RegisterForm />
+    </Suspense>
   );
 }
