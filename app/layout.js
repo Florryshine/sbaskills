@@ -1,4 +1,5 @@
 import './globals.css';
+import Script from 'next/script';
 
 export const metadata = {
   title: 'Shiney Brain Academy',
@@ -16,10 +17,15 @@ export default function RootLayout({ children }) {
         <link rel="icon" href="/favicon.ico" sizes="any" />
         <link rel="icon" href="/logo.png" type="image/png" />
         <link rel="apple-touch-icon" href="/logo.png" />
-        {/* Paystack script – required for payment popup */}
-        <script src="https://js.paystack.co/v1/inline.js"></script>
       </head>
-      <body>{children}</body>
+      <body>
+        {children}
+        {/* Load Paystack before the page becomes interactive */}
+        <Script
+          src="https://js.paystack.co/v1/inline.js"
+          strategy="beforeInteractive"
+        />
+      </body>
     </html>
   );
 }
