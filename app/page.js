@@ -160,11 +160,7 @@ export default async function HomePage() {
                 Browse Courses
               </a>
             </div>
-            <p className="mt-6 text-sm text-blue-200">
-              📞 08138082009 · 09053626207
-            </p>
-          </div>
-
+        
           <div className="grid grid-cols-2 gap-4">
             {stats.map((s) => (
               <div
