@@ -3,9 +3,10 @@
 import { useEffect, useState } from 'react';
 import { createBrowserClient } from '@/lib/supabase';
 import { useParams, useRouter } from 'next/navigation';
-import Link from 'next/link';
+import { initializePayment } from '@/lib/paystack';
 import Navbar from '@/components/Navbar';
 import Footer from '@/components/Footer';
+import Link from 'next/link';
 
 export default function CoursePage() {
   const [course, setCourse] = useState(null);
@@ -25,11 +26,6 @@ export default function CoursePage() {
           .select('*')
           .eq('id', id)
           .single();
-
-        if (!courseData) {
-          router.push('/courses');
-          return;
-        }
         setCourse(courseData);
 
         const { data: lessonsData } = await supabase
@@ -58,7 +54,7 @@ export default function CoursePage() {
     }
 
     loadCourse();
-  }, [id, supabase, router]);
+  }, [id, supabase]);
 
   const handleEnroll = async () => {
     const { data: { user } } = await supabase.auth.getUser();
@@ -70,6 +66,7 @@ export default function CoursePage() {
     setProcessing(true);
 
     try {
+      // Free course
       if (course.price === 0 || course.price === '0') {
         const { error } = await supabase
           .from('enrollments')
@@ -95,12 +92,52 @@ export default function CoursePage() {
           setEnrollment(newEnrollment);
           router.refresh();
         }
+        setProcessing(false);
+        return;
+      }
+
+      // Paid course – Paystack
+      const amount = parseInt(course.price);
+      if (isNaN(amount) || amount <= 0) {
+        alert('Invalid course price.');
+        setProcessing(false);
+        return;
+      }
+
+      const transaction = await initializePayment(user.email, amount, {
+        course_id: course.id,
+        student_id: user.id,
+      });
+
+      // Verify payment
+      const response = await fetch('/api/verify-payment', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          reference: transaction.reference,
+          course_id: course.id,
+          student_id: user.id,
+          amount: amount,
+        }),
+      });
+
+      const result = await response.json();
+      if (result.success) {
+        alert('✅ Payment successful! You are now enrolled.');
+        const { data: newEnrollment } = await supabase
+          .from('enrollments')
+          .select('*')
+          .eq('student_id', user.id)
+          .eq('course_id', id)
+          .single();
+        setEnrollment(newEnrollment);
+        router.refresh();
       } else {
-        alert('💰 Paystack coming soon! Contact admin to enroll.');
+        alert('Payment verification failed. Please contact admin.');
       }
     } catch (error) {
       console.error('Enrollment error:', error);
-      alert('An error occurred. Please try again.');
+      alert(error.message || 'Payment cancelled or failed.');
     }
     setProcessing(false);
   };
@@ -156,14 +193,16 @@ export default function CoursePage() {
               {isEnrolled ? (
                 <Link
                   href={`/courses/${id}/lessons/${lessons[0]?.id || '#'}`}
-                  className="mt-4 inline-block bg-green-600 text-white px-6 py-3 rounded-full font-bold hover:opacity-90">
+                  className="mt-4 inline-block bg-green-600 text-white px-6 py-3 rounded-full font-bold hover:opacity-90"
+                >
                   Continue Learning →
                 </Link>
               ) : (
                 <button
                   onClick={handleEnroll}
                   disabled={processing}
-                  className="mt-4 inline-block bg-brand-yellow text-brand-dark px-6 py-3 rounded-full font-bold hover:opacity-90 transition">
+                  className="mt-4 inline-block bg-brand-yellow text-brand-dark px-6 py-3 rounded-full font-bold hover:opacity-90 transition"
+                >
                   {processing ? 'Processing...' : (course.price === 0 || course.price === '0' ? 'Enroll for Free' : 'Enroll Now')}
                 </button>
               )}
