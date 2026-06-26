@@ -1,14 +1,15 @@
 'use client';
+
 import { useEffect, useState } from 'react';
-import { createClientComponentClient } from '@supabase/auth-helpers-nextjs';
+import { createBrowserClient } from '@/lib/supabase';
 import Navbar from '@/components/Navbar';
 import Footer from '@/components/Footer';
-import ShareButtons from '@/components/ShareButtons';
+import MarkDoneButton from '@/components/MarkDoneButton';
 
 export default function AudioPage() {
   const [audios, setAudios] = useState([]);
   const [loading, setLoading] = useState(true);
-  const supabase = createClientComponentClient();
+  const supabase = createBrowserClient();
 
   useEffect(() => {
     async function fetchAudio() {
@@ -28,8 +29,6 @@ export default function AudioPage() {
       .update({ plays: (currentPlays || 0) + 1 })
       .eq('id', id);
   }
-
-<MarkDoneButton activityType="audio" activityId={audio.id} points={10} label="✅ Mark as Listened" />
 
   return (
     <>
@@ -56,22 +55,12 @@ export default function AudioPage() {
           ) : (
             <div className="flex flex-col gap-6">
               {audios.map((audio) => (
-                <div key={audio.id}
-                  className="bg-white rounded-2xl shadow-sm border border-gray-100 p-6">
+                <div key={audio.id} className="bg-white rounded-2xl shadow-sm border border-gray-100 p-6">
                   <div className="flex items-start justify-between mb-3">
                     <div>
                       <h2 className="text-lg font-bold text-gray-800">{audio.title}</h2>
                       {audio.description && (
-                        <p className="text-sm text-gray-500 mt-1">
-<ShareButtons 
-  title={`Check out this course: ${course.title}`}
-  url={`/courses/${course.id}`}
-  targetType="course"
-  targetId={course.id}
-  description={course.description}
-/>
-
-{audio.description}</p>
+                        <p className="text-sm text-gray-500 mt-1">{audio.description}</p>
                       )}
                     </div>
                     <span className="text-xs text-gray-400 whitespace-nowrap ml-4">
@@ -86,6 +75,10 @@ export default function AudioPage() {
                     <source src={audio.audio_url} type="audio/mpeg" />
                     Your browser does not support the audio element.
                   </audio>
+                  {/* Mark as Done button */}
+                  <div className="mt-4">
+                    <MarkDoneButton activityType="audio" activityId={audio.id} points={10} label="🎵 Mark as Done" />
+                  </div>
                 </div>
               ))}
             </div>
