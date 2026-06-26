@@ -6,10 +6,13 @@ import { usePathname } from 'next/navigation';
 const navItems = [
   { href: '/admin/dashboard', label: 'Overview', icon: '📊' },
   { href: '/admin/courses', label: 'Courses', icon: '📚' },
-  { href: '/admin/students', label: 'Students', icon: '👥' },
-  { href: '/admin/courses/new', label: 'New Course', icon: '➕' },
+  { href: '/admin/students', label: 'Students', icon: '👨‍🎓' },
   { href: '/admin/blog', label: 'Blog', icon: '📝' },
   { href: '/admin/audio', label: 'Audio', icon: '🎵' },
+  { href: '/admin/roles', label: 'Roles', icon: '🔑' },
+  { href: '/admin/testimonials', label: 'Testimonials', icon: '💬' },
+  { href: '/admin/quizzes', label: 'Quizzes', icon: '🧠' },
+  { href: '/admin/submissions', label: 'Submissions', icon: '📋' },
 ];
 
 function NavLink({ href, label, icon, mobile }) {
