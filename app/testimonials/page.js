@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { createBrowserClient } from '@/lib/supabase';
 import { useRouter } from 'next/navigation';
 import Navbar from '@/components/Navbar';
@@ -16,31 +16,35 @@ export default function TestimonialsPage() {
     course: '',
     rating: 5,
     testimonial: '',
-    proof_url: '',
   });
+  const [photoFile, setPhotoFile] = useState(null);
+  const [photoPreview, setPhotoPreview] = useState(null);
+  const [uploading, setUploading] = useState(false);
   const [submitting, setSubmitting] = useState(false);
   const [submitted, setSubmitted] = useState(false);
+  const fileInputRef = useRef(null);
   const router = useRouter();
   const supabase = createBrowserClient();
 
   useEffect(() => {
     async function loadData() {
+      // Fetch approved testimonials
       const { data } = await supabase
         .from('testimonials')
         .select('*')
         .eq('status', 'approved')
         .order('created_at', { ascending: false });
-
       setApproved(data || []);
 
+      // Get current user
       const { data: { user } } = await supabase.auth.getUser();
       if (user) {
+        setUser(user);
         const { data: profile } = await supabase
           .from('profiles')
           .select('full_name')
           .eq('id', user.id)
           .single();
-        setUser(user);
         if (profile?.full_name) {
           setForm(prev => ({ ...prev, name: profile.full_name }));
         }
@@ -51,6 +55,38 @@ export default function TestimonialsPage() {
     loadData();
   }, []);
 
+  const handlePhotoChange = (e) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    setPhotoFile(file);
+    setPhotoPreview(URL.createObjectURL(file));
+  };
+
+  const uploadPhoto = async () => {
+    if (!photoFile) return null;
+    const fileExt = photoFile.name.split('.').pop();
+    const fileName = `${Date.now()}.${fileExt}`;
+    const filePath = `testimonials/${fileName}`;
+
+    const { error: uploadError } = await supabase.storage
+      .from('testimonial-photos')
+      .upload(filePath, photoFile, {
+        cacheControl: '3600',
+        upsert: false,
+      });
+
+    if (uploadError) {
+      alert('Photo upload failed: ' + uploadError.message);
+      return null;
+    }
+
+    const { data: urlData } = supabase.storage
+      .from('testimonial-photos')
+      .getPublicUrl(filePath);
+
+    return urlData.publicUrl;
+  };
+
   const handleSubmit = async (e) => {
     e.preventDefault();
     if (!form.testimonial) {
@@ -59,6 +95,15 @@ export default function TestimonialsPage() {
     }
 
     setSubmitting(true);
+    setUploading(true);
+
+    let photoUrl = null;
+    if (photoFile) {
+      photoUrl = await uploadPhoto();
+    }
+
+    setUploading(false);
+
     const studentId = user?.id || null;
 
     const { error } = await supabase
@@ -69,7 +114,7 @@ export default function TestimonialsPage() {
         course: form.course,
         rating: form.rating,
         testimonial: form.testimonial,
-        proof_url: form.proof_url,
+        photo: photoUrl,
         status: 'pending',
       });
 
@@ -163,15 +208,27 @@ export default function TestimonialsPage() {
               </div>
 
               <div>
-                <label className="block text-sm font-semibold mb-1">Proof URL (Optional)</label>
-                <input
-                  type="url"
-                  value={form.proof_url}
-                  onChange={e => setForm({ ...form, proof_url: e.target.value })}
-                  className="w-full rounded-xl border border-slate-200 px-4 py-2"
-                  placeholder="https://..."
-                />
-                <p className="text-xs text-gray-400 mt-1">Link to JAMB result, WAEC result, admission letter, etc.</p>
+                <label className="block text-sm font-semibold mb-1">Your Photo (optional)</label>
+                <div className="flex items-center gap-3">
+                  <button
+                    type="button"
+                    onClick={() => fileInputRef.current?.click()}
+                    className="bg-brand-blue text-white px-4 py-2 rounded-full text-sm font-bold hover:opacity-90"
+                  >
+                    📸 Upload Photo
+                  </button>
+                  <input
+                    type="file"
+                    ref={fileInputRef}
+                    accept="image/*"
+                    onChange={handlePhotoChange}
+                    className="hidden"
+                  />
+                  {photoPreview && (
+                    <img src={photoPreview} alt="Preview" className="h-12 w-12 rounded-full object-cover border" />
+                  )}
+                </div>
+                <p className="text-xs text-gray-400 mt-1">Upload a profile picture (optional)</p>
               </div>
 
               {!user && (
@@ -185,7 +242,7 @@ export default function TestimonialsPage() {
                 disabled={submitting || !user}
                 className="w-full bg-brand-yellow text-brand-dark px-6 py-3 rounded-full font-bold hover:opacity-90 disabled:opacity-50"
               >
-                {submitting ? 'Submitting...' : 'Submit Testimonial'}
+                {submitting ? (uploading ? 'Uploading photo...' : 'Submitting...') : 'Submit Testimonial'}
               </button>
             </form>
           </div>
@@ -208,7 +265,7 @@ export default function TestimonialsPage() {
                       {t.photo ? (
                         <img src={t.photo} alt={t.name} className="w-10 h-10 rounded-full object-cover" />
                       ) : (
-                        <div className="w-10 h-10 rounded-full bg-brand-blue flex items-center justify-center text-white font-bold">
+                        <div className="w-10 h-10 rounded-full bg-brand-blue flex items-center justify-center text-white font-bold text-sm">
                           {t.name?.charAt(0) || 'S'}
                         </div>
                       )}
