@@ -38,8 +38,7 @@ export default function TutorDashboard() {
 
       const { count: studentCount } = await supabase
         .from('assignment_submissions')
-        .select('student_id', { count: 'exact', head: true })
-        .eq('assignment_id', user.id);
+        .select('student_id', { count: 'exact', head: true });
 
       setStats({
         quizzes: quizCount || 0,
