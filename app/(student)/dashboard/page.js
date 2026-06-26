@@ -256,7 +256,7 @@ export default function StudentDashboard() {
           <div className="mb-10">
             <div className="flex items-center justify-between mb-4">
               <h2 className="text-xl font-extrabold text-gray-800">📝 Available Quizzes</h2>
-              <Link href="/quiz" className="text-sm font-bold text-brand-blue hover:underline">
+              <Link href="/dashboard" className="text-sm font-bold text-brand-blue hover:underline">
                 View All →
               </Link>
             </div>

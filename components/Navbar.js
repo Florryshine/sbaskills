@@ -8,6 +8,7 @@ import { useRouter } from 'next/navigation';
 export default function Navbar() {
   const [menuOpen, setMenuOpen] = useState(false);
   const [user, setUser] = useState(null);
+  const [role, setRole] = useState(null);
   const router = useRouter();
   const supabase = createBrowserClient();
 
@@ -15,11 +16,29 @@ export default function Navbar() {
     async function getUser() {
       const { data: { user } } = await supabase.auth.getUser();
       setUser(user);
+      if (user) {
+        const { data: profile } = await supabase
+          .from('profiles')
+          .select('role')
+          .eq('id', user.id)
+          .single();
+        setRole(profile?.role || 'student');
+      }
     }
     getUser();
 
-    const { data: listener } = supabase.auth.onAuthStateChange((event, session) => {
+    const { data: listener } = supabase.auth.onAuthStateChange(async (event, session) => {
       setUser(session?.user || null);
+      if (session?.user) {
+        const { data: profile } = await supabase
+          .from('profiles')
+          .select('role')
+          .eq('id', session.user.id)
+          .single();
+        setRole(profile?.role || 'student');
+      } else {
+        setRole(null);
+      }
     });
 
     return () => listener?.subscription.unsubscribe();
@@ -50,13 +69,23 @@ export default function Navbar() {
           <Link href="/courses" className="text-sm font-medium text-slate-600 transition hover:text-brand-blue">Courses</Link>
           <Link href="/blog" className="text-sm font-medium text-slate-600 transition hover:text-brand-blue">Blog</Link>
           <Link href="/audio" className="text-sm font-medium text-slate-600 transition hover:text-brand-blue">Audio</Link>
-          <Link href="/leaderboard" className="text-sm font-medium text-slate-600 transition hover:text-brand-blue">🏆 Board</Link>
+          <Link href="/leaderboard" className="text-sm font-medium text-slate-600 transition hover:text-brand-blue">🏅 Board</Link>
           <Link href="/library" className="text-sm font-medium text-slate-600 transition hover:text-brand-blue">📚 Library</Link>
           <Link href="/about" className="text-sm font-medium text-slate-600 transition hover:text-brand-blue">About</Link>
           <Link href="/contact" className="text-sm font-medium text-slate-600 transition hover:text-brand-blue">Contact</Link>
 
           {user ? (
             <>
+              {role === 'tutor' && (
+                <Link href="/tutor" className="text-sm font-bold text-green-600 hover:text-green-700">
+                  🎓 Tutor
+                </Link>
+              )}
+              {role === 'admin' && (
+                <Link href="/admin/dashboard" className="text-sm font-bold text-red-600 hover:text-red-700">
+                  ⚙️ Admin
+                </Link>
+              )}
               <Link href="/dashboard" className="text-sm font-medium text-slate-600 hover:text-brand-blue">
                 Dashboard
               </Link>
@@ -99,13 +128,23 @@ export default function Navbar() {
             <Link href="/courses" onClick={() => setMenuOpen(false)} className="text-sm font-semibold text-slate-700 hover:text-brand-blue">📚 Courses</Link>
             <Link href="/blog" onClick={() => setMenuOpen(false)} className="text-sm font-semibold text-slate-700 hover:text-brand-blue">📝 Blog</Link>
             <Link href="/audio" onClick={() => setMenuOpen(false)} className="text-sm font-semibold text-slate-700 hover:text-brand-blue">🎵 Audio</Link>
-            <Link href="/leaderboard" onClick={() => setMenuOpen(false)} className="text-sm font-semibold text-slate-700 hover:text-brand-blue">🏆 Leaderboard</Link>
+            <Link href="/leaderboard" onClick={() => setMenuOpen(false)} className="text-sm font-semibold text-slate-700 hover:text-brand-blue">🏅 Leaderboard</Link>
             <Link href="/library" onClick={() => setMenuOpen(false)} className="text-sm font-semibold text-slate-700 hover:text-brand-blue">📚 Library</Link>
-            <Link href="/about" onClick={() => setMenuOpen(false)} className="text-sm font-semibold text-slate-700 hover:text-brand-blue">ℹ️ About</Link>
+            <Link href="/about" onClick={() => setMenuOpen(false)} className="text-sm font-semibold text-slate-700 hover:text-brand-blue">About</Link>
             <Link href="/contact" onClick={() => setMenuOpen(false)} className="text-sm font-semibold text-slate-700 hover:text-brand-blue">📞 Contact</Link>
 
             {user ? (
               <>
+                {role === 'tutor' && (
+                  <Link href="/tutor" onClick={() => setMenuOpen(false)} className="text-sm font-bold text-green-600">
+                    🎓 Tutor Dashboard
+                  </Link>
+                )}
+                {role === 'admin' && (
+                  <Link href="/admin/dashboard" onClick={() => setMenuOpen(false)} className="text-sm font-bold text-red-600">
+                    ⚙️ Admin Panel
+                  </Link>
+                )}
                 <Link href="/dashboard" onClick={() => setMenuOpen(false)} className="text-sm font-semibold text-slate-700 hover:text-brand-blue">
                   📊 Dashboard
                 </Link>
