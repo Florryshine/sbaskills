@@ -12,6 +12,8 @@ const navItems = [
   { href: '/admin/students', label: 'Students', icon: '👨‍🎓' },
   { href: '/admin/roles', label: 'Roles', icon: '🔑' },
   { href: '/admin/testimonials', label: 'Testimonials', icon: '💬' },
+  { href: '/admin/quizzes', label: 'Quizzes', icon: '📝' },
+  { href: '/admin/submissions', label: 'Submissions', icon: '📊' },
 ];
 
 export default function AdminSidebar() {
