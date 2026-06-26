@@ -1,31 +1,63 @@
-import { createServerClient } from '@/lib/supabase-server';
-import { notFound } from 'next/navigation';
+'use client';
+
+import { useEffect, useState } from 'react';
+import { createBrowserClient } from '@/lib/supabase';
+import { notFound, useRouter } from 'next/navigation';
 import Navbar from '@/components/Navbar';
 import Footer from '@/components/Footer';
 import Link from 'next/link';
 import ShareButtons from '@/components/ShareButtons';
 import MarkDoneButton from '@/components/MarkDoneButton';
 
-export default async function BlogPostPage({ params }) {
-  const supabase = createServerClient();
-  const { slug } = params;
+export default function BlogPostPage({ params }) {
+  const [post, setPost] = useState(null);
+  const [loading, setLoading] = useState(true);
+  const router = useRouter();
+  const supabase = createBrowserClient();
 
-  const { data: post, error } = await supabase
-    .from('blog_posts')
-    .select('*')
-    .eq('slug', slug)
-    .eq('published', true)
-    .single();
+  useEffect(() => {
+    async function loadPost() {
+      const { data, error } = await supabase
+        .from('blog_posts')
+        .select('*')
+        .eq('slug', params.slug)
+        .eq('published', true)
+        .single();
 
-  if (!post || error) {
-    notFound();
+      if (!data || error) {
+        setLoading(false);
+        return;
+      }
+      setPost(data);
+      setLoading(false);
+    }
+    loadPost();
+  }, [params.slug]);
+
+  if (loading) {
+    return (
+      <>
+        <Navbar />
+        <div className="min-h-screen flex items-center justify-center">Loading...</div>
+        <Footer />
+      </>
+    );
+  }
+
+  if (!post) {
+    return (
+      <>
+        <Navbar />
+        <div className="min-h-screen flex items-center justify-center">Post not found</div>
+        <Footer />
+      </>
+    );
   }
 
   return (
     <>
       <Navbar />
       <main className="min-h-screen bg-gray-50">
-        {/* Cover image */}
         {post.cover_image && (
           <div className="w-full h-64 overflow-hidden">
             <img src={post.cover_image} alt={post.title} className="w-full h-full object-cover" />
@@ -67,7 +99,14 @@ export default async function BlogPostPage({ params }) {
           />
 
           {/* Mark as Done button */}
-          <MarkDoneButton activityType="blog" activityId={post.id} points={10} />
+          <div className="mt-8 pt-6 border-t border-gray-200">
+            <MarkDoneButton 
+              activityType="blog" 
+              activityId={post.id} 
+              points={10} 
+              label="📚 Mark as Read (Earn 10 Points)" 
+            />
+          </div>
         </article>
       </main>
       <Footer />
