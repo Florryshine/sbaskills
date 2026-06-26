@@ -28,7 +28,6 @@ export default function TestimonialsPage() {
 
   useEffect(() => {
     async function loadData() {
-      // Fetch approved testimonials
       const { data } = await supabase
         .from('testimonials')
         .select('*')
@@ -36,7 +35,6 @@ export default function TestimonialsPage() {
         .order('created_at', { ascending: false });
       setApproved(data || []);
 
-      // Get current user
       const { data: { user } } = await supabase.auth.getUser();
       if (user) {
         setUser(user);
@@ -70,10 +68,7 @@ export default function TestimonialsPage() {
 
     const { error: uploadError } = await supabase.storage
       .from('testimonial-photos')
-      .upload(filePath, photoFile, {
-        cacheControl: '3600',
-        upsert: false,
-      });
+      .upload(filePath, photoFile, { cacheControl: '3600', upsert: false });
 
     if (uploadError) {
       alert('Photo upload failed: ' + uploadError.message);
@@ -215,7 +210,7 @@ export default function TestimonialsPage() {
                     onClick={() => fileInputRef.current?.click()}
                     className="bg-brand-blue text-white px-4 py-2 rounded-full text-sm font-bold hover:opacity-90"
                   >
-                    📸 Upload Photo
+                    📸 Choose Photo
                   </button>
                   <input
                     type="file"
@@ -228,7 +223,7 @@ export default function TestimonialsPage() {
                     <img src={photoPreview} alt="Preview" className="h-12 w-12 rounded-full object-cover border" />
                   )}
                 </div>
-                <p className="text-xs text-gray-400 mt-1">Upload a profile picture (optional)</p>
+                <p className="text-xs text-gray-400 mt-1">Upload a profile picture (optional, from your device)</p>
               </div>
 
               {!user && (
