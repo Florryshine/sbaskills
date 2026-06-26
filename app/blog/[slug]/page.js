@@ -80,3 +80,23 @@ export default async function BlogPostPage({ params }) {
     </>
   );
 }
+
+{/* Mark as Done button */}
+{user && (
+  <button
+    onClick={async () => {
+      const { data: { user } } = await supabase.auth.getUser();
+      if (user) {
+        const result = await completeActivity(user.id, 'blog', post.id, 10);
+        if (result.success) {
+          alert('✅ You earned 10 points for reading this blog!');
+        } else {
+          alert(result.message);
+        }
+      }
+    }}
+    className="mt-6 bg-brand-yellow text-brand-dark px-6 py-3 rounded-full font-bold hover:opacity-90"
+  >
+    📚 Mark as Done (Earn 10 Points)
+  </button>
+)}

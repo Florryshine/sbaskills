@@ -29,6 +29,8 @@ export default function AudioPage() {
       .eq('id', id);
   }
 
+<MarkDoneButton activityType="audio" activityId={audio.id} points={10} label="✅ Mark as Listened" />
+
   return (
     <>
       <Navbar />

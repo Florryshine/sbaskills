@@ -14,11 +14,10 @@ export default function StudentDashboard() {
   const [enrolledCourses, setEnrolledCourses] = useState([]);
   const [availableCourses, setAvailableCourses] = useState([]);
   const [certificates, setCertificates] = useState([]);
-  const [recentPosts, setRecentPosts] = useState([]);
+  const [quizzes, setQuizzes] = useState([]);
   const [userPoints, setUserPoints] = useState(0);
   const [userStreak, setUserStreak] = useState(0);
   const [lessonsDone, setLessonsDone] = useState(0);
-  const [referralCount, setReferralCount] = useState(0);
   const [loading, setLoading] = useState(true);
   const router = useRouter();
   const supabase = createBrowserClient();
@@ -85,21 +84,14 @@ export default function StudentDashboard() {
         .eq('completed', true);
       setLessonsDone(progress?.length || 0);
 
-      // Fetch recent blog posts
-      const { data: posts } = await supabase
-        .from('blog_posts')
-        .select('id, title, slug, excerpt, cover_image, published_at')
-        .eq('published', true)
-        .order('published_at', { ascending: false })
-        .limit(3);
-      setRecentPosts(posts || []);
-
-      // Fetch referral count
-      const { count } = await supabase
-        .from('referrals')
-        .select('*', { count: 'exact', head: true })
-        .eq('referrer_id', user.id);
-      setReferralCount(count || 0);
+      // Fetch published quizzes
+      const { data: pubQuizzes } = await supabase
+        .from('quizzes')
+        .select('*')
+        .eq('is_published', true)
+        .order('created_at', { ascending: false })
+        .limit(5);
+      setQuizzes(pubQuizzes || []);
 
       setLoading(false);
     }
@@ -147,18 +139,15 @@ export default function StudentDashboard() {
                 <p className="text-blue-100 text-sm mt-1">
                   Share your referral link with friends. When they sign up, you both get points!
                 </p>
-                <p className="text-xs text-blue-200 mt-2">
-                  👥 {referralCount} friend{referralCount !== 1 ? 's' : ''} referred
-                </p>
                 <div className="mt-3 bg-white/20 rounded-xl px-4 py-2 text-sm font-mono truncate max-w-xs">
                   {profile?.referral_code ? 
-                    `${process.env.NEXT_PUBLIC_SITE_URL || 'https://sbaskills.vercel.app'}/register?ref=${profile.referral_code}` 
+                    `${process.env.NEXT_PUBLIC_SITE_URL || 'https://shineybrainacademy.vercel.app'}/register?ref=${profile.referral_code}` 
                     : 'Loading referral code...'}
                 </div>
               </div>
               <button
                 onClick={() => {
-                  const link = `${process.env.NEXT_PUBLIC_SITE_URL || 'https://sbaskills.vercel.app'}/register?ref=${profile?.referral_code}`;
+                  const link = `${process.env.NEXT_PUBLIC_SITE_URL || 'https://shineybrainacademy.vercel.app'}/register?ref=${profile?.referral_code}`;
                   navigator.clipboard.writeText(link).then(() => {
                     alert('✅ Referral link copied! Share it with your friends.');
                   }).catch(() => {
@@ -263,6 +252,39 @@ export default function StudentDashboard() {
             </div>
           )}
 
+          {/* Available Quizzes */}
+          <div className="mb-10">
+            <div className="flex items-center justify-between mb-4">
+              <h2 className="text-xl font-extrabold text-gray-800">📝 Available Quizzes</h2>
+              <Link href="/quiz" className="text-sm font-bold text-brand-blue hover:underline">
+                View All →
+              </Link>
+            </div>
+            {quizzes.length === 0 ? (
+              <div className="bg-white rounded-2xl border border-gray-100 shadow-sm p-6 text-center">
+                <p className="text-gray-500">No quizzes available right now. Check back soon!</p>
+              </div>
+            ) : (
+              <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
+                {quizzes.map((quiz) => (
+                  <div key={quiz.id} className="bg-white rounded-2xl border border-gray-100 shadow-sm p-4 hover:shadow-md transition">
+                    <h3 className="font-bold text-gray-800">{quiz.title}</h3>
+                    <p className="text-xs text-gray-500 mt-1 line-clamp-2">{quiz.description}</p>
+                    <div className="flex items-center justify-between mt-3">
+                      <span className="text-xs font-bold text-brand-blue">+{quiz.points_reward || 10} points</span>
+                      <Link
+                        href={`/quiz/${quiz.id}`}
+                        className="bg-brand-yellow text-brand-dark px-4 py-2 rounded-full text-xs font-bold hover:opacity-90 transition"
+                      >
+                        Take Quiz →
+                      </Link>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+
           {/* Certificates Section */}
           {certificates.length > 0 && (
             <div className="mb-10">
@@ -289,47 +311,6 @@ export default function StudentDashboard() {
             </div>
           )}
 
-          {/* Recent Blog Posts */}
-          <div className="mb-10">
-            <div className="flex items-center justify-between mb-4">
-              <h2 className="text-xl font-extrabold text-gray-800">📝 Recent Blog Posts</h2>
-              <Link href="/blog" className="text-sm font-bold text-brand-blue hover:underline">
-                View All →
-              </Link>
-            </div>
-            {recentPosts.length === 0 ? (
-              <div className="bg-white rounded-2xl border border-gray-100 shadow-sm p-6 text-center">
-                <p className="text-gray-500">No blog posts yet. Check back soon!</p>
-              </div>
-            ) : (
-              <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
-                {recentPosts.map((post) => (
-                  <Link key={post.id} href={`/blog/${post.slug}`}
-                    className="bg-white rounded-2xl border border-gray-100 shadow-sm overflow-hidden hover:shadow-md transition group">
-                    {post.cover_image && (
-                      <img src={post.cover_image} alt={post.title} className="w-full h-32 object-cover" />
-                    )}
-                    <div className="p-4">
-                      <h3 className="font-bold text-gray-800 group-hover:text-brand-blue transition line-clamp-2">
-                        {post.title}
-                      </h3>
-                      {post.excerpt && (
-                        <p className="text-sm text-gray-500 mt-1 line-clamp-2">{post.excerpt}</p>
-                      )}
-                      <p className="text-xs text-gray-400 mt-2">
-                        {new Date(post.published_at).toLocaleDateString('en-NG', {
-                          day: 'numeric',
-                          month: 'short',
-                          year: 'numeric'
-                        })}
-                      </p>
-                    </div>
-                  </Link>
-                ))}
-              </div>
-            )}
-          </div>
-
           {/* Quick Links */}
           <div className="bg-white rounded-2xl border border-gray-100 shadow-sm p-6">
             <h2 className="font-extrabold text-gray-800 mb-4">⚡ Quick Links</h2>
@@ -341,6 +322,7 @@ export default function StudentDashboard() {
                 { label: 'Audio', href: '/audio', emoji: '🎵' },
                 { label: 'Library', href: '/library', emoji: '📖' },
                 { label: 'Rewards', href: '/rewards', emoji: '🎁' },
+                { label: '📝 Testimonial', href: '/testimonials', emoji: '💬' },
               ].map((link) => (
                 <Link key={link.href} href={link.href}
                   className="flex flex-col items-center gap-2 p-4 rounded-2xl border border-gray-100 hover:border-brand-blue hover:shadow-sm transition text-center">

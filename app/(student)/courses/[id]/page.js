@@ -242,3 +242,5 @@ export default function CoursePage() {
     </>
   );
 }
+
+<MarkDoneButton activityType="course" activityId={course.id} points={20} label="✅ Mark as Completed" />
