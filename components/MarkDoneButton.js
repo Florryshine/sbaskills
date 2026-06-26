@@ -2,83 +2,69 @@
 
 import { useState, useEffect } from 'react';
 import { createBrowserClient } from '@/lib/supabase';
-import { addPoints } from '@/lib/gamification';
+import { completeActivity } from '@/lib/gamification';
 
-export default function MarkDoneButton({ 
-  activityType,  // 'blog', 'quiz', 'course', 'audio', 'lesson', 'assignment'
-  activityId,
-  label = 'Mark as Done',
-  points = 10,
-  className = ''
-}) {
-  const [completed, setCompleted] = useState(false);
-  const [loading, setLoading] = useState(false);
+export default function MarkDoneButton({ activityType, activityId, points = 10, label = 'Mark as Done' }) {
   const [user, setUser] = useState(null);
-  const supabase = createBrowserClient();
+  const [progress, setProgress] = useState(null);
+  const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    async function checkCompletion() {
+    async function checkProgress() {
+      const supabase = createBrowserClient();
       const { data: { user } } = await supabase.auth.getUser();
-      if (!user) return;
-      setUser(user);
-
-      const { data, error } = await supabase
-        .from('activity_completions')
-        .select('id')
-        .eq('user_id', user.id)
-        .eq('activity_type', activityType)
-        .eq('activity_id', activityId)
-        .maybeSingle();
-
-      if (data) setCompleted(true);
+      if (user) {
+        setUser(user);
+        const { data } = await supabase
+          .from('student_progress')
+          .select('id')
+          .eq('student_id', user.id)
+          .eq('activity_type', activityType)
+          .eq('activity_id', activityId)
+          .maybeSingle();
+        setProgress(data);
+      }
+      setLoading(false);
     }
-
-    checkCompletion();
+    checkProgress();
   }, [activityType, activityId]);
 
   const handleMarkDone = async () => {
-    if (completed) return;
-    setLoading(true);
-
-    try {
-      // Insert completion record
-      const { error: insertError } = await supabase
-        .from('activity_completions')
-        .insert({
-          user_id: user.id,
-          activity_type: activityType,
-          activity_id: activityId,
-        });
-
-      if (insertError) throw insertError;
-
-      // Add points
-      await addPoints(user.id, points, `Completed ${activityType}`, activityType, activityId);
-
-      setCompleted(true);
-      alert(`✅ You earned ${points} points!`);
-    } catch (error) {
-      console.error('Error marking done:', error);
-      alert('Something went wrong. Please try again.');
+    if (!user) {
+      alert('Please login to earn points');
+      return;
     }
-    setLoading(false);
+    const result = await completeActivity(user.id, activityType, activityId, points);
+    if (result.success) {
+      alert(`✅ You earned ${points} points!`);
+      setProgress({ id: 'completed' });
+    } else {
+      alert(result.message);
+    }
   };
 
-  if (completed) {
+  if (loading) return null;
+
+  if (!user) {
     return (
-      <span className={`inline-flex items-center gap-1 px-3 py-1.5 rounded-full bg-green-100 text-green-700 text-xs font-bold ${className}`}>
-        ✅ Done
-      </span>
+      <div className="mt-4 text-sm text-gray-500">
+        <a href="/login" className="text-brand-blue hover:underline">Login</a> to earn points for this activity.
+      </div>
+    );
+  }
+
+  if (progress) {
+    return (
+      <div className="mt-4 text-green-600 font-bold text-sm">✅ You already earned points for this activity.</div>
     );
   }
 
   return (
     <button
       onClick={handleMarkDone}
-      disabled={loading || !user}
-      className={`inline-flex items-center gap-1 px-4 py-2 rounded-full bg-brand-yellow text-brand-dark font-bold text-sm hover:opacity-90 transition ${className}`}
+      className="mt-4 bg-brand-yellow text-brand-dark px-6 py-3 rounded-full font-bold hover:opacity-90 transition"
     >
-      {loading ? '⏳...' : label}
+      {label} (Earn {points} Points)
     </button>
   );
 }
