@@ -4,50 +4,107 @@ import { useState } from 'react';
 import Navbar from '@/components/Navbar';
 import Footer from '@/components/Footer';
 
+// All common WAEC/JAMB subjects
+const allSubjects = [
+  'English Language',
+  'Mathematics',
+  'Biology',
+  'Chemistry',
+  'Physics',
+  'Economics',
+  'Commerce',
+  'Government',
+  'Literature-in-English',
+  'Christian Religious Studies (CRS)',
+  'Islamic Religious Studies (IRS)',
+  'Geography',
+  'History',
+  'Civic Education',
+  'Agricultural Science',
+  'Computer Studies / ICT',
+  'French',
+  'Music',
+  'Art',
+  'Further Mathematics',
+  'Accounting',
+  'Marketing',
+  'Insurance',
+  'Office Practice',
+  'Data Processing',
+  'Home Economics',
+  'Food and Nutrition',
+  'Technical Drawing',
+  'Building Construction',
+  'Woodwork',
+  'Metalwork',
+  'Electronics',
+  'Basic Electricity',
+  'Auto Mechanics',
+  'Catering Craft',
+  'Leatherwork',
+  'Sculpture',
+  'Painting',
+  'Civic Education',
+  'Social Studies',
+  'Physical Education',
+  'Arabic',
+  'Hausa',
+  'Igbo',
+  'Yoruba',
+];
+
+const gradePoints = {
+  'A1': 10,
+  'B2': 9,
+  'B3': 8,
+  'C4': 7,
+  'C5': 6,
+  'C6': 5,
+  'D7': 4,
+  'E8': 3,
+  'F9': 0,
+};
+
 export default function JAMBAggregateCalculator() {
   const [formData, setFormData] = useState({
     jambScore: '',
-    waecGrades: {
-      english: '',
-      maths: '',
-      biology: '',
-      chemistry: '',
-      physics: '',
-    },
+    subjects: [
+      { name: '', grade: '' },
+      { name: '', grade: '' },
+      { name: '', grade: '' },
+      { name: '', grade: '' },
+      { name: '', grade: '' },
+    ],
     school: '',
     course: '',
   });
   const [result, setResult] = useState(null);
   const [loading, setLoading] = useState(false);
 
-  const gradePoints = {
-    'A1': 10,
-    'B2': 9,
-    'B3': 8,
-    'C4': 7,
-    'C5': 6,
-    'C6': 5,
-    'D7': 4,
-    'E8': 3,
-    'F9': 0,
+  const handleSubjectChange = (index, field, value) => {
+    const updated = [...formData.subjects];
+    updated[index][field] = value;
+    setFormData({ ...formData, subjects: updated });
   };
 
   const calculateAggregate = () => {
     setLoading(true);
 
-    const grades = Object.values(formData.waecGrades).filter(g => g);
-    if (grades.length < 5) {
-      alert('Please enter grades for at least 5 subjects');
+    // Collect grades from subjects that have both name and grade selected
+    const selected = formData.subjects.filter(s => s.name && s.grade);
+    if (selected.length < 5) {
+      alert('Please select at least 5 subjects and their grades.');
       setLoading(false);
       return;
     }
 
-    const sortedGrades = grades
-      .map(g => gradePoints[g] || 0)
-      .sort((a, b) => b - a)
+    // Sort by grade points descending and take top 5
+    const sorted = selected
+      .map(s => ({ name: s.name, points: gradePoints[s.grade] || 0 }))
+      .sort((a, b) => b.points - a.points)
       .slice(0, 5);
 
-    const waecPoints = sortedGrades.reduce((sum, p) => sum + p, 0);
+    const waecPoints = sorted.reduce((sum, s) => sum + s.points, 0);
     const jambScore = parseInt(formData.jambScore) || 0;
     const aggregate = (jambScore / 8) + waecPoints;
 
@@ -55,8 +112,7 @@ export default function JAMBAggregateCalculator() {
     let chanceColor = 'text-gray-500';
 
     if (formData.school && formData.course) {
-      // Check against school_cutoffs table
-      // For now, show placeholder
+      // For now, we'll show a placeholder – we'll connect to the database later
       chance = 'Check with your institution';
       chanceColor = 'text-brand-blue';
     }
@@ -72,11 +128,10 @@ export default function JAMBAggregateCalculator() {
         'WAEC Points (Best 5)': waecPoints,
         'Total Aggregate': aggregate.toFixed(2),
       },
+      topSubjects: sorted,
     });
     setLoading(false);
   };
-
-  const subjectList = ['english', 'maths', 'biology', 'chemistry', 'physics'];
 
   return (
     <>
@@ -89,7 +144,7 @@ export default function JAMBAggregateCalculator() {
                 🎯 JAMB Aggregate Calculator
               </h1>
               <p className="text-gray-600 mt-2">
-                Calculate your JAMB aggregate score and check your admission chances.
+                Calculate your JAMB aggregate score based on your JAMB score and WAEC/O'Level grades.
               </p>
             </div>
 
@@ -119,31 +174,36 @@ export default function JAMBAggregateCalculator() {
                 />
               </div>
 
-              {/* WAEC Grades */}
+              {/* WAEC/O'Level Subjects (5 rows) */}
               <div>
                 <p className="text-sm font-semibold mb-2">
-                  WAEC/O'Level Grades (Enter best 5 subjects)
+                  WAEC/O'Level Subjects (Select 5 or more – best 5 will be used)
                 </p>
-                <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
-                  {subjectList.map((subject) => (
-                    <div key={subject}>
-                      <label className="block text-xs font-semibold text-gray-600 capitalize mb-1">
-                        {subject}
-                      </label>
+                <div className="space-y-3">
+                  {formData.subjects.map((subject, index) => (
+                    <div key={index} className="flex gap-3 items-center">
                       <select
-                        value={formData.waecGrades[subject]}
+                        value={subject.name}
                         onChange={(e) =>
-                          setFormData({
-                            ...formData,
-                            waecGrades: {
-                              ...formData.waecGrades,
-                              [subject]: e.target.value,
-                            },
-                          })
+                          handleSubjectChange(index, 'name', e.target.value)
                         }
-                        className="w-full rounded-xl border border-slate-200 px-3 py-2 text-sm"
+                        className="flex-1 rounded-xl border border-slate-200 px-3 py-2 text-sm"
                       >
-                        <option value="">Select</option>
+                        <option value="">Select Subject</option>
+                        {allSubjects.map((s) => (
+                          <option key={s} value={s}>
+                            {s}
+                          </option>
+                        ))}
+                      </select>
+                      <select
+                        value={subject.grade}
+                        onChange={(e) =>
+                          handleSubjectChange(index, 'grade', e.target.value)
+                        }
+                        className="w-28 rounded-xl border border-slate-200 px-3 py-2 text-sm"
+                      >
+                        <option value="">Grade</option>
                         {Object.keys(gradePoints).map((grade) => (
                           <option key={grade} value={grade}>
                             {grade}
@@ -203,12 +263,20 @@ export default function JAMBAggregateCalculator() {
                   📊 Your Results
                 </h2>
                 <div className="space-y-3">
-                  {Object.entries(result.breakdown).map(([key, value]) => (
-                    <div key={key} className="flex justify-between items-center border-b pb-2">
-                      <span className="font-semibold">{key}</span>
-                      <span>{value}</span>
-                    </div>
-                  ))}
+                  <div className="flex justify-between items-center border-b pb-2">
+                    <span className="font-semibold">JAMB Score</span>
+                    <span>{result.breakdown['JAMB Score']}</span>
+                  </div>
+                  <div className="flex justify-between items-center border-b pb-2">
+                    <span className="font-semibold">WAEC Points (Best 5)</span>
+                    <span>{result.waecPoints}</span>
+                  </div>
+                  <div className="flex justify-between items-center border-b pb-2">
+                    <span className="font-semibold">Subjects Used</span>
+                    <span className="text-sm">
+                      {result.topSubjects.map(s => `${s.name} (${s.points})`).join(', ')}
+                    </span>
+                  </div>
                   <div className="flex justify-between items-center pt-2 border-t-2">
                     <span className="font-bold text-lg">Aggregate</span>
                     <span className="text-2xl font-extrabold text-brand-blue">
