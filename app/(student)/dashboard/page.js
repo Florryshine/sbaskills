@@ -168,6 +168,7 @@ export default function StudentDashboard() {
               { label: 'Available Courses', value: availableCourses.length, emoji: '🎯' },
               { label: 'Lessons Done', value: lessonsDone, emoji: '✅' },
               { label: 'Points', value: userPoints, emoji: '⭐' },
+              { label: 'Tools', href: '/tools', emoji: '🛠️' },
             ].map((stat) => (
               <div key={stat.label}
                 className="bg-white rounded-2xl p-4 shadow-sm border border-gray-100 text-center">
