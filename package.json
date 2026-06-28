@@ -2,6 +2,9 @@
   "name": "shiney-brain-academy",
   "version": "1.0.0",
   "private": true,
+  "engines": {
+    "node": "20.x"
+  },
   "scripts": {
     "dev": "next dev",
     "build": "next build",
@@ -9,15 +12,15 @@
     "lint": "next lint"
   },
   "dependencies": {
-  "@supabase/auth-helpers-nextjs": "^0.8.7",
-  "@supabase/ssr": "^0.5.2",
-  "@supabase/supabase-js": "^2.49.8",
-  "@google/generative-ai": "^0.21.0",
-  "cloudinary": "^2.5.1",
-  "next": "14.2.30",
-  "next-pwa": "^5.6.0",
-  "react": "18.3.1",
-  "react-dom": "18.3.1",
+    "@supabase/auth-helpers-nextjs": "^0.8.7",
+    "@supabase/ssr": "^0.5.2",
+    "@supabase/supabase-js": "^2.49.8",
+    "@google/generative-ai": "^0.21.0",
+    "cloudinary": "^2.5.1",
+    "next": "14.2.30",
+    "next-pwa": "^5.6.0",
+    "react": "18.3.1",
+    "react-dom": "18.3.1"
   },
   "devDependencies": {
     "autoprefixer": "^10.4.20",
