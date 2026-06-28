@@ -13,6 +13,9 @@ const navItems = [
   { href: '/admin/testimonials', label: 'Testimonials', icon: '💬' },
   { href: '/admin/quizzes', label: 'Quizzes', icon: '🧠' },
   { href: '/admin/submissions', label: 'Submissions', icon: '📋' },
+  { href: '/admin/daily-challenge', label: 'Daily Challenge', icon: '📅' },
+  { href: '/admin/boss-battles', label: 'Boss Battles', icon: '👹' },
+  { href: '/admin/past-questions/upload', label: 'Upload Past Qs', icon: '📤' },
 ];
 
 function NavLink({ href, label, icon, mobile }) {
