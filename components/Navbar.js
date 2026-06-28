@@ -72,6 +72,7 @@ export default function Navbar() {
           <Link href="/leaderboard" className="text-sm font-medium text-slate-600 transition hover:text-brand-blue">🏅 Board</Link>
           <Link href="/library" className="text-sm font-medium text-slate-600 transition hover:text-brand-blue">📚 Library</Link>
           <Link href="/tools" className="text-sm font-medium text-slate-600 transition hover:text-brand-blue">🛠️ Tools</Link>
+          <Link href="/challenge" className="text-sm font-medium text-slate-600 transition hover:text-brand-blue">⚡ Challenge</Link>
           <Link href="/about" className="text-sm font-medium text-slate-600 transition hover:text-brand-blue">About</Link>
           <Link href="/contact" className="text-sm font-medium text-slate-600 transition hover:text-brand-blue">Contact</Link>
 
@@ -132,6 +133,7 @@ export default function Navbar() {
             <Link href="/leaderboard" onClick={() => setMenuOpen(false)} className="text-sm font-semibold text-slate-700 hover:text-brand-blue">🏅 Leaderboard</Link>
             <Link href="/library" onClick={() => setMenuOpen(false)} className="text-sm font-semibold text-slate-700 hover:text-brand-blue">📚 Library</Link>
             <Link href="/tools" onClick={() => setMenuOpen(false)} className="text-sm font-semibold text-slate-700 hover:text-brand-blue">🛠️ Tools</Link>
+            <Link href="/challenge" onClick={() => setMenuOpen(false)} className="text-sm font-semibold text-slate-700 hover:text-brand-blue">⚡ Daily Challenge</Link>
             <Link href="/about" onClick={() => setMenuOpen(false)} className="text-sm font-semibold text-slate-700 hover:text-brand-blue">About</Link>
             <Link href="/contact" onClick={() => setMenuOpen(false)} className="text-sm font-semibold text-slate-700 hover:text-brand-blue">📞 Contact</Link>
 
