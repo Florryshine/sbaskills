@@ -77,12 +77,17 @@ export default function AdminLayout({ children }) {
             >
               View Website
             </Link>
-            <Link
-              href="/admin/logout"
-              className="rounded-full bg-brand-yellow px-4 py-2 text-xs font-bold text-brand-dark hover:opacity-90 transition"
-            >
-              Sign out
-            </Link>
+            <button
+  onClick={async () => {
+    const { createBrowserClient } = await import('@/lib/supabase');
+    const supabase = createBrowserClient();
+    await supabase.auth.signOut();
+    window.location.href = '/admin/login';
+  }}
+  className="rounded-full bg-brand-yellow px-4 py-2 text-xs font-bold text-brand-dark hover:opacity-90 transition"
+>
+  Sign out
+</button>
           </div>
         </div>
       </header>

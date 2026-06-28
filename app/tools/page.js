@@ -3,12 +3,13 @@ import Footer from '@/components/Footer';
 import Link from 'next/link';
 
 const tools = [
+  // ── Academic Tools ──
   {
     name: 'JAMB Aggregate Calculator',
     description: 'Calculate your JAMB aggregate score from your JAMB and WAEC grades.',
     icon: '🎯',
     href: '/tools/jamb-aggregate',
-    category: 'Admission',
+    category: 'Academic',
     popular: true,
   },
   {
@@ -16,7 +17,7 @@ const tools = [
     description: 'Convert your WAEC grades to points and see your performance.',
     icon: '📊',
     href: '/tools/waec-grade-calculator',
-    category: 'Admission',
+    category: 'Academic',
     popular: true,
   },
   {
@@ -24,14 +25,14 @@ const tools = [
     description: 'Calculate your university CGPA semester by semester.',
     icon: '🎓',
     href: '/tools/cgpa-calculator',
-    category: 'University',
+    category: 'Academic',
   },
   {
     name: 'Subject Combination Checker',
     description: 'Check the correct JAMB subject combination for any course.',
     icon: '📚',
     href: '/tools/subject-combination',
-    category: 'Admission',
+    category: 'Academic',
     popular: true,
   },
   {
@@ -39,7 +40,7 @@ const tools = [
     description: 'Predict your admission chance based on your scores and school.',
     icon: '🔮',
     href: '/tools/admission-chance',
-    category: 'Admission',
+    category: 'Academic',
     popular: true,
   },
   {
@@ -47,16 +48,18 @@ const tools = [
     description: 'Search for cut-off marks of schools and courses.',
     icon: '📉',
     href: '/tools/cut-off-mark',
-    category: 'Admission',
+    category: 'Academic',
   },
   {
     name: 'Past Question Search',
     description: 'Search for past questions by subject, year, and exam type.',
     icon: '📝',
     href: '/tools/past-questions',
-    category: 'Practice',
+    category: 'Academic',
     popular: true,
   },
+
+  // ── Study & AI Tools ──
   {
     name: 'Study Timetable Generator',
     description: 'Get a personalized study timetable for your exam.',
@@ -71,12 +74,37 @@ const tools = [
     description: 'Start your day with motivation and a goal from Shine Mentor.',
     icon: '🌞',
     href: '/tools/daily-mentor',
-    category: 'Motivation',
+    category: 'Study',
     ai: true,
+  },
+
+  // ── Engagement / Games ──
+  {
+    name: 'Daily Challenge',
+    description: 'Test your knowledge with a new quiz every day. Earn XP and streak!',
+    icon: '⚡',
+    href: '/challenge',
+    category: 'Games',
+    popular: true,
+  },
+  {
+    name: 'Boss Battles',
+    description: 'Defeat exam-topic bosses by answering questions correctly.',
+    icon: '👹',
+    href: '/boss',
+    category: 'Games',
+    popular: true,
+  },
+  {
+    name: 'Achievements',
+    description: 'Collect badges by completing challenges and defeating bosses.',
+    icon: '🏆',
+    href: '/achievements',
+    category: 'Games',
   },
 ];
 
-const categories = ['Admission', 'University', 'Practice', 'Study', 'Motivation'];
+const categories = ['Academic', 'Study', 'Games'];
 
 export default function ToolsPage() {
   return (
@@ -89,7 +117,7 @@ export default function ToolsPage() {
               🛠️ Student Tools Hub
             </h1>
             <p className="text-gray-600 mt-2 max-w-2xl mx-auto">
-              Free tools to help you calculate, check, search, and plan your academic journey.
+              Free tools, calculators, and games to help you learn, practice, and stay motivated.
             </p>
           </div>
 
