@@ -8,9 +8,11 @@ import Footer from '@/components/Footer';
 import Link from 'next/link';
 import ShareButtons from '@/components/ShareButtons';
 import MarkDoneButton from '@/components/MarkDoneButton';
+import Comments from '@/components/Comments';
 
 export default function BlogPostPage({ params }) {
   const [post, setPost] = useState(null);
+  const [author, setAuthor] = useState(null);
   const [loading, setLoading] = useState(true);
   const router = useRouter();
   const supabase = createBrowserClient();
@@ -19,7 +21,7 @@ export default function BlogPostPage({ params }) {
     async function loadPost() {
       const { data, error } = await supabase
         .from('blog_posts')
-        .select('*')
+        .select('*, profiles:author_id (full_name, email)')
         .eq('slug', params.slug)
         .eq('published', true)
         .single();
@@ -29,6 +31,7 @@ export default function BlogPostPage({ params }) {
         return;
       }
       setPost(data);
+      setAuthor(data.profiles);
       setLoading(false);
     }
     loadPost();
@@ -58,29 +61,52 @@ export default function BlogPostPage({ params }) {
     <>
       <Navbar />
       <main className="min-h-screen bg-gray-50">
+        {/* Cover image */}
         {post.cover_image && (
-          <div className="w-full h-64 overflow-hidden">
-            <img src={post.cover_image} alt={post.title} className="w-full h-full object-cover" />
+          <div className="w-full h-64 md:h-96 overflow-hidden relative">
+            <img
+              src={post.cover_image}
+              alt={post.title}
+              className="w-full h-full object-cover"
+            />
+            <div className="absolute inset-0 bg-black/30" />
+            <div className="absolute bottom-0 left-0 right-0 p-8 text-white">
+              <h1 className="text-3xl md:text-4xl font-extrabold">{post.title}</h1>
+            </div>
           </div>
         )}
 
-        <article className="max-w-3xl mx-auto px-4 py-12">
-          <Link href="/blog" className="text-sm text-brand-blue hover:underline mb-6 inline-block">
-            ← Back to Blog
-          </Link>
+        <article className="max-w-4xl mx-auto px-4 py-8">
+          {!post.cover_image && (
+            <h1 className="text-3xl md:text-4xl font-extrabold text-gray-900 mb-4">
+              {post.title}
+            </h1>
+          )}
 
-          <h1 className="text-3xl font-extrabold text-gray-900 mb-3">{post.title}</h1>
-
-          <p className="text-sm text-gray-400 mb-8">
-            {new Date(post.published_at || post.created_at).toLocaleDateString('en-NG', {
-              day: 'numeric',
-              month: 'long',
-              year: 'numeric',
-            })}
-          </p>
+          {/* Author & Date */}
+          <div className="flex items-center gap-4 mb-6 text-sm text-gray-500 border-b pb-4">
+            <div className="flex items-center gap-2">
+              <div className="w-8 h-8 rounded-full bg-brand-blue flex items-center justify-center text-white font-bold text-xs">
+                {(author?.full_name || 'S')[0].toUpperCase()}
+              </div>
+              <span className="font-semibold text-gray-700">
+                {author?.full_name || 'Shiney Brain Academy'}
+              </span>
+            </div>
+            <span>•</span>
+            <span>
+              {new Date(post.published_at || post.created_at).toLocaleDateString('en-NG', {
+                day: 'numeric',
+                month: 'long',
+                year: 'numeric',
+              })}
+            </span>
+            <span>•</span>
+            <span>{Math.ceil((post.content?.split(/\s+/).length || 0) / 200)} min read</span>
+          </div>
 
           {post.excerpt && (
-            <p className="text-lg text-gray-600 font-medium mb-8 border-l-4 border-brand-yellow pl-4 italic">
+            <p className="text-lg text-gray-600 font-medium mb-6 border-l-4 border-brand-yellow pl-4 italic">
               {post.excerpt}
             </p>
           )}
@@ -98,15 +124,18 @@ export default function BlogPostPage({ params }) {
             dangerouslySetInnerHTML={{ __html: post.content }}
           />
 
-          {/* Mark as Done button */}
+          {/* Mark as Done */}
           <div className="mt-8 pt-6 border-t border-gray-200">
-            <MarkDoneButton 
-              activityType="blog" 
-              activityId={post.id} 
-              points={10} 
-              label="📚 Mark as Read (Earn 10 Points)" 
+            <MarkDoneButton
+              activityType="blog"
+              activityId={post.id}
+              points={10}
+              label="📚 Mark as Read (Earn 10 Points)"
             />
           </div>
+
+          {/* Comments */}
+          <Comments postId={post.id} />
         </article>
       </main>
       <Footer />
