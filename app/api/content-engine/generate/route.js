@@ -3,12 +3,12 @@ import { createRouteHandlerClient } from '@/lib/supabase-server';
 import { getGroqClient } from '@/lib/groqAPI';
 import { GoogleGenerativeAI } from '@google/generative-ai';
 
-// ---- TEMPORARY: Hardcoded Gemini key for testing ----
-// Replace with your actual key from .env.local
-const GEMINI_API_KEY = 'YOUR_GEMINI_KEY_HERE';
-// -------------------------------------------------
+// ---- TEMPORARY: Hardcoded Gemini key ----
+// Your new key
+const GEMINI_API_KEY = 'AQ.Ab8RN6LzFsFswEndjLmXQQnnkoQ8Wn_rdNU1_jjX7o1RWGH_pw';
+// -----------------------------------------
 
-// Knowledge base for the AI
+// Knowledge base (unchanged)
 const knowledgeBase = {
   brand: `Shiney Brain Academy – bright blue (#1a73e8), gold (#FFCC00), white. Bold, Africa-proud, modern.`,
   tone: `Conversational, Nigerian student-friendly, mentor-like. Use "you", be encouraging, practical.`,
@@ -31,12 +31,12 @@ const knowledgeBase = {
   ]
 };
 
-// ----- Gemini models (newest first) -----
+// Gemini models (unchanged)
 const GEMINI_MODELS = [
-  'gemini-3.5-flash',    // newest, most capable
-  'gemini-2.5-flash',    // good fallback
-  'gemini-1.5-flash',    // compatibility
-  'gemini-2.5-pro',      // complex reasoning
+  'gemini-3.5-flash',
+  'gemini-2.5-flash',
+  'gemini-1.5-flash',
+  'gemini-2.5-pro',
 ];
 
 export async function POST(request) {
@@ -55,7 +55,6 @@ export async function POST(request) {
       return NextResponse.json({ error: 'Queue item not found' }, { status: 404 });
     }
 
-    // Check if draft already exists
     if (item.draft_id) {
       const { data: existing } = await supabase
         .from('content_drafts')
@@ -67,13 +66,11 @@ export async function POST(request) {
       }
     }
 
-    // Update status to generating
     await supabase
       .from('content_queue')
       .update({ status: 'generating' })
       .eq('id', queueItemId);
 
-    // Build the prompt
     const prompt = `You are an expert content writer for Shiney Brain Academy (SBA), Nigeria's leading exam prep and skills platform.
 
     Write a complete, SEO-optimized blog article on the topic: "${item.keyword}"
@@ -114,12 +111,12 @@ export async function POST(request) {
       "cta": "..."
     }`;
 
-    // ----- GENERATE WITH HARDCODED GEMINI KEY -----
+    // ----- GENERATION -----
     let result = null;
     let usedProvider = '';
     const errors = [];
 
-    // 1. Try Gemini (hardcoded key, all models)
+    // 1. Gemini (hardcoded key)
     const client = new GoogleGenerativeAI(GEMINI_API_KEY);
     for (const modelName of GEMINI_MODELS) {
       try {
@@ -140,9 +137,9 @@ export async function POST(request) {
       }
     }
 
-    // 2. Fallback to Groq if all Gemini attempts failed
+    // 2. Fallback to Groq
     if (!result) {
-      const groqClient = getGroqClient(); // from groqAPI.js (handles multiple keys)
+      const groqClient = getGroqClient();
       if (groqClient) {
         try {
           const groqResponse = await groqClient.chat.completions.create({
@@ -176,7 +173,7 @@ export async function POST(request) {
       );
     }
 
-    // Save draft to database
+    // Save draft
     const { data: draft, error: draftError } = await supabase
       .from('content_drafts')
       .insert({
@@ -208,7 +205,6 @@ export async function POST(request) {
       return NextResponse.json({ error: draftError.message }, { status: 500 });
     }
 
-    // Update queue item
     await supabase
       .from('content_queue')
       .update({
