@@ -15,6 +15,7 @@ const navItems = [
   { href: '/admin/submissions', label: 'Submissions', icon: '📋' },
   { href: '/admin/daily-challenge', label: 'Daily Challenge', icon: '📅' },
   { href: '/admin/boss-battles', label: 'Boss Battles', icon: '👹' },
+  { href: '/admin/content-engine', label: 'Content Engine', icon: '⚡' },
   { href: '/admin/past-questions/upload', label: 'Upload Past Qs', icon: '📤' },
 ];
 
