@@ -1,11 +1,16 @@
+import { generateToolMetadata, toolsSEO } from '@/lib/seo';
+import Navbar from '@/components/Navbar';
+import Footer from '@/components/Footer';
+
+export const metadata = generateToolMetadata(toolsSEO['admission-chance']);
+
+// ─── Client Component ──────────────────────────────────────
 'use client';
 
 import { useState, useEffect } from 'react';
 import { createBrowserClient } from '@/lib/supabase';
-import Navbar from '@/components/Navbar';
-import Footer from '@/components/Footer';
 
-export default function AdmissionChanceChecker() {
+function AdmissionChanceChecker() {
   const [loading, setLoading] = useState(false);
   const [schools, setSchools] = useState([]);
   const [courses, setCourses] = useState([]);
@@ -174,213 +179,220 @@ export default function AdmissionChanceChecker() {
   };
 
   return (
-    <>
-      <Navbar />
-      <main className="min-h-screen bg-gray-50 py-8">
-        <div className="max-w-4xl mx-auto px-4">
-          <div className="bg-white rounded-2xl shadow-sm border p-6">
-            <div className="mb-6">
-              <h1 className="text-3xl font-extrabold text-brand-blue">
-                🔮 Admission Chance Checker
-              </h1>
-              <p className="text-gray-600 mt-2">
-                Predict your admission chance based on your JAMB score, WAEC grades, school, and course.
-              </p>
+    <main className="min-h-screen bg-gray-50 py-8">
+      <div className="max-w-4xl mx-auto px-4">
+        <div className="bg-white rounded-2xl shadow-sm border p-6">
+          <div className="mb-6">
+            <h1 className="text-3xl font-extrabold text-brand-blue">
+              🔮 Admission Chance Checker
+            </h1>
+            <p className="text-gray-600 mt-2">
+              Predict your admission chance based on your JAMB score, WAEC grades, school, and course.
+            </p>
+          </div>
+
+          <form
+            onSubmit={(e) => {
+              e.preventDefault();
+              calculateChance();
+            }}
+            className="space-y-6"
+          >
+            {/* JAMB Score */}
+            <div>
+              <label className="block text-sm font-semibold mb-1">
+                JAMB Score *
+              </label>
+              <input
+                type="number"
+                required
+                min="0"
+                max="400"
+                value={formData.jambScore}
+                onChange={(e) =>
+                  setFormData({ ...formData, jambScore: e.target.value })
+                }
+                className="w-full rounded-xl border border-slate-200 px-4 py-2"
+                placeholder="e.g., 250"
+              />
             </div>
 
-            <form
-              onSubmit={(e) => {
-                e.preventDefault();
-                calculateChance();
-              }}
-              className="space-y-6"
-            >
-              {/* JAMB Score */}
-              <div>
-                <label className="block text-sm font-semibold mb-1">
-                  JAMB Score *
-                </label>
-                <input
-                  type="number"
-                  required
-                  min="0"
-                  max="400"
-                  value={formData.jambScore}
-                  onChange={(e) =>
-                    setFormData({ ...formData, jambScore: e.target.value })
-                  }
-                  className="w-full rounded-xl border border-slate-200 px-4 py-2"
-                  placeholder="e.g., 250"
-                />
-              </div>
-
-              {/* School */}
-              <div>
-                <label className="block text-sm font-semibold mb-1">
-                  School *
-                </label>
-                <select
-                  required
-                  value={formData.school}
-                  onChange={(e) =>
-                    setFormData({ ...formData, school: e.target.value, course: '' })
-                  }
-                  className="w-full rounded-xl border border-slate-200 px-4 py-2"
-                >
-                  <option value="">Select your school...</option>
-                  {schools.map((school) => (
-                    <option key={school} value={school}>
-                      {school}
-                    </option>
-                  ))}
-                </select>
-              </div>
-
-              {/* Course */}
-              <div>
-                <label className="block text-sm font-semibold mb-1">
-                  Course *
-                </label>
-                <select
-                  required
-                  value={formData.course}
-                  onChange={(e) =>
-                    setFormData({ ...formData, course: e.target.value })
-                  }
-                  className="w-full rounded-xl border border-slate-200 px-4 py-2"
-                  disabled={!formData.school}
-                >
-                  <option value="">Select your course...</option>
-                  {filteredCourses.map((course) => (
-                    <option key={course} value={course}>
-                      {course}
-                    </option>
-                  ))}
-                </select>
-              </div>
-
-              {/* WAEC Grades (optional but recommended) */}
-              <div>
-                <p className="text-sm font-semibold mb-2">
-                  WAEC/O'Level Grades (Optional – improves accuracy)
-                </p>
-                <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
-                  {['english', 'maths', 'biology', 'chemistry', 'physics'].map((subject) => (
-                    <div key={subject}>
-                      <label className="block text-xs font-semibold text-gray-600 capitalize mb-1">
-                        {subject}
-                      </label>
-                      <select
-                        value={formData.waecGrades[subject]}
-                        onChange={(e) =>
-                          setFormData({
-                            ...formData,
-                            waecGrades: {
-                              ...formData.waecGrades,
-                              [subject]: e.target.value,
-                            },
-                          })
-                        }
-                        className="w-full rounded-xl border border-slate-200 px-3 py-2 text-sm"
-                      >
-                        <option value="">Select</option>
-                        {Object.keys(gradePoints).map((grade) => (
-                          <option key={grade} value={grade}>
-                            {grade}
-                          </option>
-                        ))}
-                      </select>
-                    </div>
-                  ))}
-                </div>
-              </div>
-
-              <button
-                type="submit"
-                disabled={loading}
-                className="w-full bg-brand-yellow text-brand-dark px-6 py-3 rounded-full font-bold hover:opacity-90 disabled:opacity-50"
+            {/* School */}
+            <div>
+              <label className="block text-sm font-semibold mb-1">
+                School *
+              </label>
+              <select
+                required
+                value={formData.school}
+                onChange={(e) =>
+                  setFormData({ ...formData, school: e.target.value, course: '' })
+                }
+                className="w-full rounded-xl border border-slate-200 px-4 py-2"
               >
-                {loading ? 'Checking...' : 'Check My Admission Chance'}
-              </button>
-            </form>
+                <option value="">Select your school...</option>
+                {schools.map((school) => (
+                  <option key={school} value={school}>
+                    {school}
+                  </option>
+                ))}
+              </select>
+            </div>
 
-            {/* Results */}
-            {result && (
-              <div className="mt-8 bg-brand-blue/5 rounded-2xl border border-brand-blue/20 p-6">
-                <h2 className="text-xl font-extrabold text-brand-blue mb-4">
-                  📊 Admission Chance Report
-                </h2>
+            {/* Course */}
+            <div>
+              <label className="block text-sm font-semibold mb-1">
+                Course *
+              </label>
+              <select
+                required
+                value={formData.course}
+                onChange={(e) =>
+                  setFormData({ ...formData, course: e.target.value })
+                }
+                className="w-full rounded-xl border border-slate-200 px-4 py-2"
+                disabled={!formData.school}
+              >
+                <option value="">Select your course...</option>
+                {filteredCourses.map((course) => (
+                  <option key={course} value={course}>
+                    {course}
+                  </option>
+                ))}
+              </select>
+            </div>
 
-                <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-6">
-                  <div className="bg-white rounded-xl p-4 text-center shadow-sm">
-                    <p className="text-sm text-gray-500">Aggregate</p>
-                    <p className="text-2xl font-extrabold text-brand-blue">
-                      {result.aggregate}
-                    </p>
+            {/* WAEC Grades (optional but recommended) */}
+            <div>
+              <p className="text-sm font-semibold mb-2">
+                WAEC/O'Level Grades (Optional – improves accuracy)
+              </p>
+              <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
+                {['english', 'maths', 'biology', 'chemistry', 'physics'].map((subject) => (
+                  <div key={subject}>
+                    <label className="block text-xs font-semibold text-gray-600 capitalize mb-1">
+                      {subject}
+                    </label>
+                    <select
+                      value={formData.waecGrades[subject]}
+                      onChange={(e) =>
+                        setFormData({
+                          ...formData,
+                          waecGrades: {
+                            ...formData.waecGrades,
+                            [subject]: e.target.value,
+                          },
+                        })
+                      }
+                      className="w-full rounded-xl border border-slate-200 px-3 py-2 text-sm"
+                    >
+                      <option value="">Select</option>
+                      {Object.keys(gradePoints).map((grade) => (
+                        <option key={grade} value={grade}>
+                          {grade}
+                        </option>
+                      ))}
+                    </select>
                   </div>
-                  <div className="bg-white rounded-xl p-4 text-center shadow-sm">
-                    <p className="text-sm text-gray-500">Cut-off Mark</p>
-                    <p className="text-2xl font-extrabold text-purple-600">
-                      {result.cutoff}
-                    </p>
-                  </div>
-                  <div className="bg-white rounded-xl p-4 text-center shadow-sm">
-                    <p className="text-sm text-gray-500">Chance</p>
-                    <p className={`text-xl font-extrabold ${result.chanceColor}`}>
-                      {result.chance}
-                    </p>
-                  </div>
-                  <div className="bg-white rounded-xl p-4 text-center shadow-sm">
-                    <p className="text-sm text-gray-500">JAMB Requirement</p>
-                    <p className={`text-lg font-extrabold ${result.jambColor}`}>
-                      {result.jambStatus}
-                    </p>
-                  </div>
-                </div>
-
-                <div className="space-y-3">
-                  <div className="flex justify-between items-center border-b pb-2">
-                    <span className="font-semibold">School</span>
-                    <span>{result.school}</span>
-                  </div>
-                  <div className="flex justify-between items-center border-b pb-2">
-                    <span className="font-semibold">Course</span>
-                    <span>{result.course}</span>
-                  </div>
-                  <div className="flex justify-between items-center border-b pb-2">
-                    <span className="font-semibold">JAMB Score</span>
-                    <span>{result.jambScore}</span>
-                  </div>
-                  <div className="flex justify-between items-center border-b pb-2">
-                    <span className="font-semibold">WAEC Points (Best 5)</span>
-                    <span>{result.waecPoints || 'Not provided'}</span>
-                  </div>
-                  <div className="flex justify-between items-center border-b pb-2">
-                    <span className="font-semibold">Aggregate Score</span>
-                    <span className="font-bold">{result.aggregate}</span>
-                  </div>
-                  <div className="flex justify-between items-center border-b pb-2">
-                    <span className="font-semibold">Cut-off Mark</span>
-                    <span>{result.cutoff}</span>
-                  </div>
-                </div>
-
-                <div className="mt-4 bg-yellow-50 rounded-xl p-4">
-                  <p className="text-sm text-gray-700">
-                    <span className="font-semibold">💡 Recommendation:</span> {result.recommendation}
-                  </p>
-                </div>
-
-                {!result.waecPoints && (
-                  <p className="text-sm text-gray-500 mt-4">
-                    💡 Enter your WAEC grades above for a more accurate prediction.
-                  </p>
-                )}
+                ))}
               </div>
-            )}
-          </div>
+            </div>
+
+            <button
+              type="submit"
+              disabled={loading}
+              className="w-full bg-brand-yellow text-brand-dark px-6 py-3 rounded-full font-bold hover:opacity-90 disabled:opacity-50"
+            >
+              {loading ? 'Checking...' : 'Check My Admission Chance'}
+            </button>
+          </form>
+
+          {/* Results */}
+          {result && (
+            <div className="mt-8 bg-brand-blue/5 rounded-2xl border border-brand-blue/20 p-6">
+              <h2 className="text-xl font-extrabold text-brand-blue mb-4">
+                📊 Admission Chance Report
+              </h2>
+
+              <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-6">
+                <div className="bg-white rounded-xl p-4 text-center shadow-sm">
+                  <p className="text-sm text-gray-500">Aggregate</p>
+                  <p className="text-2xl font-extrabold text-brand-blue">
+                    {result.aggregate}
+                  </p>
+                </div>
+                <div className="bg-white rounded-xl p-4 text-center shadow-sm">
+                  <p className="text-sm text-gray-500">Cut-off Mark</p>
+                  <p className="text-2xl font-extrabold text-purple-600">
+                    {result.cutoff}
+                  </p>
+                </div>
+                <div className="bg-white rounded-xl p-4 text-center shadow-sm">
+                  <p className="text-sm text-gray-500">Chance</p>
+                  <p className={`text-xl font-extrabold ${result.chanceColor}`}>
+                    {result.chance}
+                  </p>
+                </div>
+                <div className="bg-white rounded-xl p-4 text-center shadow-sm">
+                  <p className="text-sm text-gray-500">JAMB Requirement</p>
+                  <p className={`text-lg font-extrabold ${result.jambColor}`}>
+                    {result.jambStatus}
+                  </p>
+                </div>
+              </div>
+
+              <div className="space-y-3">
+                <div className="flex justify-between items-center border-b pb-2">
+                  <span className="font-semibold">School</span>
+                  <span>{result.school}</span>
+                </div>
+                <div className="flex justify-between items-center border-b pb-2">
+                  <span className="font-semibold">Course</span>
+                  <span>{result.course}</span>
+                </div>
+                <div className="flex justify-between items-center border-b pb-2">
+                  <span className="font-semibold">JAMB Score</span>
+                  <span>{result.jambScore}</span>
+                </div>
+                <div className="flex justify-between items-center border-b pb-2">
+                  <span className="font-semibold">WAEC Points (Best 5)</span>
+                  <span>{result.waecPoints || 'Not provided'}</span>
+                </div>
+                <div className="flex justify-between items-center border-b pb-2">
+                  <span className="font-semibold">Aggregate Score</span>
+                  <span className="font-bold">{result.aggregate}</span>
+                </div>
+                <div className="flex justify-between items-center border-b pb-2">
+                  <span className="font-semibold">Cut-off Mark</span>
+                  <span>{result.cutoff}</span>
+                </div>
+              </div>
+
+              <div className="mt-4 bg-yellow-50 rounded-xl p-4">
+                <p className="text-sm text-gray-700">
+                  <span className="font-semibold">💡 Recommendation:</span> {result.recommendation}
+                </p>
+              </div>
+
+              {!result.waecPoints && (
+                <p className="text-sm text-gray-500 mt-4">
+                  💡 Enter your WAEC grades above for a more accurate prediction.
+                </p>
+              )}
+            </div>
+          )}
         </div>
-      </main>
+      </div>
+    </main>
+  );
+}
+
+// ─── Server Component Page ────────────────────────────────
+export default function AdmissionChanceCheckerPage() {
+  return (
+    <>
+      <Navbar />
+      <AdmissionChanceChecker />
       <Footer />
     </>
   );

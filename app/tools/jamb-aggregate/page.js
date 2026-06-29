@@ -1,8 +1,13 @@
+import { generateToolMetadata, toolsSEO } from '@/lib/seo';
+import Navbar from '@/components/Navbar';
+import Footer from '@/components/Footer';
+
+export const metadata = generateToolMetadata(toolsSEO['jamb-aggregate']);
+
+// ─── Client Component ──────────────────────────────────────
 'use client';
 
 import { useState } from 'react';
-import Navbar from '@/components/Navbar';
-import Footer from '@/components/Footer';
 
 // All common WAEC/JAMB subjects
 const allSubjects = [
@@ -65,7 +70,7 @@ const gradePoints = {
   'F9': 0,
 };
 
-export default function JAMBAggregateCalculator() {
+function Calculator() {
   const [formData, setFormData] = useState({
     jambScore: '',
     subjects: [
@@ -90,7 +95,6 @@ export default function JAMBAggregateCalculator() {
   const calculateAggregate = () => {
     setLoading(true);
 
-    // Collect grades from subjects that have both name and grade selected
     const selected = formData.subjects.filter(s => s.name && s.grade);
     if (selected.length < 5) {
       alert('Please select at least 5 subjects and their grades.');
@@ -98,7 +102,6 @@ export default function JAMBAggregateCalculator() {
       return;
     }
 
-    // Sort by grade points descending and take top 5
     const sorted = selected
       .map(s => ({ name: s.name, points: gradePoints[s.grade] || 0 }))
       .sort((a, b) => b.points - a.points)
@@ -112,7 +115,6 @@ export default function JAMBAggregateCalculator() {
     let chanceColor = 'text-gray-500';
 
     if (formData.school && formData.course) {
-      // For now, we'll show a placeholder – we'll connect to the database later
       chance = 'Check with your institution';
       chanceColor = 'text-brand-blue';
     }
@@ -134,172 +136,179 @@ export default function JAMBAggregateCalculator() {
   };
 
   return (
-    <>
-      <Navbar />
-      <main className="min-h-screen bg-gray-50 py-8">
-        <div className="max-w-4xl mx-auto px-4">
-          <div className="bg-white rounded-2xl shadow-sm border p-6">
-            <div className="mb-6">
-              <h1 className="text-3xl font-extrabold text-brand-blue">
-                🎯 JAMB Aggregate Calculator
-              </h1>
-              <p className="text-gray-600 mt-2">
-                Calculate your JAMB aggregate score based on your JAMB score and WAEC/O'Level grades.
-              </p>
+    <main className="min-h-screen bg-gray-50 py-8">
+      <div className="max-w-4xl mx-auto px-4">
+        <div className="bg-white rounded-2xl shadow-sm border p-6">
+          <div className="mb-6">
+            <h1 className="text-3xl font-extrabold text-brand-blue">
+              🎯 JAMB Aggregate Calculator
+            </h1>
+            <p className="text-gray-600 mt-2">
+              Calculate your JAMB aggregate score based on your JAMB score and WAEC/O'Level grades.
+            </p>
+          </div>
+
+          <form
+            onSubmit={(e) => {
+              e.preventDefault();
+              calculateAggregate();
+            }}
+            className="space-y-6"
+          >
+            {/* JAMB Score */}
+            <div>
+              <label className="block text-sm font-semibold mb-1">
+                JAMB Score *
+              </label>
+              <input
+                type="number"
+                required
+                min="0"
+                max="400"
+                value={formData.jambScore}
+                onChange={(e) =>
+                  setFormData({ ...formData, jambScore: e.target.value })
+                }
+                className="w-full rounded-xl border border-slate-200 px-4 py-2"
+                placeholder="e.g., 250"
+              />
             </div>
 
-            <form
-              onSubmit={(e) => {
-                e.preventDefault();
-                calculateAggregate();
-              }}
-              className="space-y-6"
-            >
-              {/* JAMB Score */}
+            {/* WAEC/O'Level Subjects */}
+            <div>
+              <p className="text-sm font-semibold mb-2">
+                WAEC/O'Level Subjects (Select 5 or more – best 5 will be used)
+              </p>
+              <div className="space-y-3">
+                {formData.subjects.map((subject, index) => (
+                  <div key={index} className="flex gap-3 items-center">
+                    <select
+                      value={subject.name}
+                      onChange={(e) =>
+                        handleSubjectChange(index, 'name', e.target.value)
+                      }
+                      className="flex-1 rounded-xl border border-slate-200 px-3 py-2 text-sm"
+                    >
+                      <option value="">Select Subject</option>
+                      {allSubjects.map((s) => (
+                        <option key={s} value={s}>
+                          {s}
+                        </option>
+                      ))}
+                    </select>
+                    <select
+                      value={subject.grade}
+                      onChange={(e) =>
+                        handleSubjectChange(index, 'grade', e.target.value)
+                      }
+                      className="w-28 rounded-xl border border-slate-200 px-3 py-2 text-sm"
+                    >
+                      <option value="">Grade</option>
+                      {Object.keys(gradePoints).map((grade) => (
+                        <option key={grade} value={grade}>
+                          {grade}
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+                ))}
+              </div>
+            </div>
+
+            {/* School & Course */}
+            <div className="grid gap-4 sm:grid-cols-2">
               <div>
                 <label className="block text-sm font-semibold mb-1">
-                  JAMB Score *
+                  School (Optional)
                 </label>
                 <input
-                  type="number"
-                  required
-                  min="0"
-                  max="400"
-                  value={formData.jambScore}
+                  type="text"
+                  value={formData.school}
                   onChange={(e) =>
-                    setFormData({ ...formData, jambScore: e.target.value })
+                    setFormData({ ...formData, school: e.target.value })
                   }
                   className="w-full rounded-xl border border-slate-200 px-4 py-2"
-                  placeholder="e.g., 250"
+                  placeholder="e.g., UNILAG"
                 />
               </div>
-
-              {/* WAEC/O'Level Subjects (5 rows) */}
               <div>
-                <p className="text-sm font-semibold mb-2">
-                  WAEC/O'Level Subjects (Select 5 or more – best 5 will be used)
+                <label className="block text-sm font-semibold mb-1">
+                  Course (Optional)
+                </label>
+                <input
+                  type="text"
+                  value={formData.course}
+                  onChange={(e) =>
+                    setFormData({ ...formData, course: e.target.value })
+                  }
+                  className="w-full rounded-xl border border-slate-200 px-4 py-2"
+                  placeholder="e.g., Medicine"
+                />
+              </div>
+            </div>
+
+            <button
+              type="submit"
+              disabled={loading}
+              className="w-full bg-brand-yellow text-brand-dark px-6 py-3 rounded-full font-bold hover:opacity-90 disabled:opacity-50"
+            >
+              {loading ? 'Calculating...' : 'Calculate Aggregate'}
+            </button>
+          </form>
+
+          {/* Results */}
+          {result && (
+            <div className="mt-8 bg-brand-blue/5 rounded-2xl border border-brand-blue/20 p-6">
+              <h2 className="text-xl font-extrabold text-brand-blue mb-4">
+                📊 Your Results
+              </h2>
+              <div className="space-y-3">
+                <div className="flex justify-between items-center border-b pb-2">
+                  <span className="font-semibold">JAMB Score</span>
+                  <span>{result.breakdown['JAMB Score']}</span>
+                </div>
+                <div className="flex justify-between items-center border-b pb-2">
+                  <span className="font-semibold">WAEC Points (Best 5)</span>
+                  <span>{result.waecPoints}</span>
+                </div>
+                <div className="flex justify-between items-center border-b pb-2">
+                  <span className="font-semibold">Subjects Used</span>
+                  <span className="text-sm">
+                    {result.topSubjects.map(s => `${s.name} (${s.points})`).join(', ')}
+                  </span>
+                </div>
+                <div className="flex justify-between items-center pt-2 border-t-2">
+                  <span className="font-bold text-lg">Aggregate</span>
+                  <span className="text-2xl font-extrabold text-brand-blue">
+                    {result.aggregate}
+                  </span>
+                </div>
+                <div className="flex justify-between items-center">
+                  <span className="font-semibold">Admission Chance</span>
+                  <span className={`font-bold ${result.chanceColor}`}>
+                    {result.chance}
+                  </span>
+                </div>
+              </div>
+              {!formData.school && !formData.course && (
+                <p className="text-sm text-gray-500 mt-4">
+                  💡 Enter a school and course above to check your admission chance.
                 </p>
-                <div className="space-y-3">
-                  {formData.subjects.map((subject, index) => (
-                    <div key={index} className="flex gap-3 items-center">
-                      <select
-                        value={subject.name}
-                        onChange={(e) =>
-                          handleSubjectChange(index, 'name', e.target.value)
-                        }
-                        className="flex-1 rounded-xl border border-slate-200 px-3 py-2 text-sm"
-                      >
-                        <option value="">Select Subject</option>
-                        {allSubjects.map((s) => (
-                          <option key={s} value={s}>
-                            {s}
-                          </option>
-                        ))}
-                      </select>
-                      <select
-                        value={subject.grade}
-                        onChange={(e) =>
-                          handleSubjectChange(index, 'grade', e.target.value)
-                        }
-                        className="w-28 rounded-xl border border-slate-200 px-3 py-2 text-sm"
-                      >
-                        <option value="">Grade</option>
-                        {Object.keys(gradePoints).map((grade) => (
-                          <option key={grade} value={grade}>
-                            {grade}
-                          </option>
-                        ))}
-                      </select>
-                    </div>
-                  ))}
-                </div>
-              </div>
-
-              {/* School & Course */}
-              <div className="grid gap-4 sm:grid-cols-2">
-                <div>
-                  <label className="block text-sm font-semibold mb-1">
-                    School (Optional)
-                  </label>
-                  <input
-                    type="text"
-                    value={formData.school}
-                    onChange={(e) =>
-                      setFormData({ ...formData, school: e.target.value })
-                    }
-                    className="w-full rounded-xl border border-slate-200 px-4 py-2"
-                    placeholder="e.g., UNILAG"
-                  />
-                </div>
-                <div>
-                  <label className="block text-sm font-semibold mb-1">
-                    Course (Optional)
-                  </label>
-                  <input
-                    type="text"
-                    value={formData.course}
-                    onChange={(e) =>
-                      setFormData({ ...formData, course: e.target.value })
-                    }
-                    className="w-full rounded-xl border border-slate-200 px-4 py-2"
-                    placeholder="e.g., Medicine"
-                  />
-                </div>
-              </div>
-
-              <button
-                type="submit"
-                disabled={loading}
-                className="w-full bg-brand-yellow text-brand-dark px-6 py-3 rounded-full font-bold hover:opacity-90 disabled:opacity-50"
-              >
-                {loading ? 'Calculating...' : 'Calculate Aggregate'}
-              </button>
-            </form>
-
-            {/* Results */}
-            {result && (
-              <div className="mt-8 bg-brand-blue/5 rounded-2xl border border-brand-blue/20 p-6">
-                <h2 className="text-xl font-extrabold text-brand-blue mb-4">
-                  📊 Your Results
-                </h2>
-                <div className="space-y-3">
-                  <div className="flex justify-between items-center border-b pb-2">
-                    <span className="font-semibold">JAMB Score</span>
-                    <span>{result.breakdown['JAMB Score']}</span>
-                  </div>
-                  <div className="flex justify-between items-center border-b pb-2">
-                    <span className="font-semibold">WAEC Points (Best 5)</span>
-                    <span>{result.waecPoints}</span>
-                  </div>
-                  <div className="flex justify-between items-center border-b pb-2">
-                    <span className="font-semibold">Subjects Used</span>
-                    <span className="text-sm">
-                      {result.topSubjects.map(s => `${s.name} (${s.points})`).join(', ')}
-                    </span>
-                  </div>
-                  <div className="flex justify-between items-center pt-2 border-t-2">
-                    <span className="font-bold text-lg">Aggregate</span>
-                    <span className="text-2xl font-extrabold text-brand-blue">
-                      {result.aggregate}
-                    </span>
-                  </div>
-                  <div className="flex justify-between items-center">
-                    <span className="font-semibold">Admission Chance</span>
-                    <span className={`font-bold ${result.chanceColor}`}>
-                      {result.chance}
-                    </span>
-                  </div>
-                </div>
-                {!formData.school && !formData.course && (
-                  <p className="text-sm text-gray-500 mt-4">
-                    💡 Enter a school and course above to check your admission chance.
-                  </p>
-                )}
-              </div>
-            )}
-          </div>
+              )}
+            </div>
+          )}
         </div>
-      </main>
+      </div>
+    </main>
+  );
+}
+
+// ─── Server Component Page ────────────────────────────────
+export default function JAMBAggregateCalculatorPage() {
+  return (
+    <>
+      <Navbar />
+      <Calculator />
       <Footer />
     </>
   );

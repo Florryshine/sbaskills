@@ -1,12 +1,17 @@
-'use client';
-
-import { useState, useEffect } from 'react';
-import { createBrowserClient } from '@/lib/supabase';
+import { generateToolMetadata, toolsSEO } from '@/lib/seo';
 import Navbar from '@/components/Navbar';
 import Footer from '@/components/Footer';
 import Link from 'next/link';
 
-export default function DailyMentorPage() {
+export const metadata = generateToolMetadata(toolsSEO['daily-mentor']);
+
+// ─── Client Component ──────────────────────────────────────
+'use client';
+
+import { useState, useEffect } from 'react';
+import { createBrowserClient } from '@/lib/supabase';
+
+function DailyMentorContent() {
   const [loading, setLoading] = useState(true);
   const [message, setMessage] = useState('');
   const [goal, setGoal] = useState('');
@@ -52,68 +57,71 @@ export default function DailyMentorPage() {
 
   if (loading) {
     return (
-      <>
-        <Navbar />
-        <div className="min-h-screen flex items-center justify-center bg-gray-50">
-          <div className="text-center">
-            <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-brand-blue mx-auto"></div>
-            <p className="mt-4 text-gray-500">Loading today's message...</p>
-          </div>
+      <div className="min-h-screen flex items-center justify-center bg-gray-50">
+        <div className="text-center">
+          <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-brand-blue mx-auto"></div>
+          <p className="mt-4 text-gray-500">Loading today's message...</p>
         </div>
-        <Footer />
-      </>
+      </div>
     );
   }
 
   return (
-    <>
-      <Navbar />
-      <main className="min-h-screen bg-gray-50 py-8">
-        <div className="max-w-3xl mx-auto px-4">
-          <div className="bg-white rounded-2xl shadow-sm border p-6">
-            <div className="flex items-center gap-3 mb-2">
-              <span className="text-3xl">🌞</span>
-              <h1 className="text-2xl font-extrabold text-brand-blue">Daily Mentor</h1>
-            </div>
-            <p className="text-gray-500 text-sm mb-6">
-              Today's motivation from Mentor Florryshine
-            </p>
+    <main className="min-h-screen bg-gray-50 py-8">
+      <div className="max-w-3xl mx-auto px-4">
+        <div className="bg-white rounded-2xl shadow-sm border p-6">
+          <div className="flex items-center gap-3 mb-2">
+            <span className="text-3xl">🌞</span>
+            <h1 className="text-2xl font-extrabold text-brand-blue">Daily Mentor</h1>
+          </div>
+          <p className="text-gray-500 text-sm mb-6">
+            Today's motivation from Mentor Florryshine
+          </p>
 
-            {error ? (
-              <div className="bg-yellow-50 rounded-2xl border border-yellow-200 p-6 text-center">
-                <p className="text-yellow-700">Could not load today's message. Check back later!</p>
-                <Link href="/dashboard" className="mt-4 inline-block bg-brand-yellow px-6 py-2 rounded-full font-bold text-sm">
-                  Go to Dashboard
-                </Link>
-              </div>
-            ) : (
-              <div className="bg-brand-blue/5 rounded-2xl border border-brand-blue/20 p-6">
-                <div className="flex items-start gap-3">
-                  <span className="text-2xl">🧠</span>
-                  <div className="whitespace-pre-wrap text-gray-700 leading-relaxed">
-                    {message}
-                  </div>
-                </div>
-                {goal && (
-                  <div className="mt-4 bg-yellow-50 rounded-xl p-4">
-                    <p className="font-semibold text-brand-blue">🎯 Today's Goal:</p>
-                    <p className="text-gray-700">{goal}</p>
-                  </div>
-                )}
-                <div className="mt-4 text-sm text-gray-500">
-                  — Mentor Florryshine
-                </div>
-              </div>
-            )}
-
-            <div className="mt-6 text-center">
-              <Link href="/dashboard" className="text-brand-blue hover:underline text-sm font-semibold">
-                ← Back to Dashboard
+          {error ? (
+            <div className="bg-yellow-50 rounded-2xl border border-yellow-200 p-6 text-center">
+              <p className="text-yellow-700">Could not load today's message. Check back later!</p>
+              <Link href="/dashboard" className="mt-4 inline-block bg-brand-yellow px-6 py-2 rounded-full font-bold text-sm">
+                Go to Dashboard
               </Link>
             </div>
+          ) : (
+            <div className="bg-brand-blue/5 rounded-2xl border border-brand-blue/20 p-6">
+              <div className="flex items-start gap-3">
+                <span className="text-2xl">🧠</span>
+                <div className="whitespace-pre-wrap text-gray-700 leading-relaxed">
+                  {message}
+                </div>
+              </div>
+              {goal && (
+                <div className="mt-4 bg-yellow-50 rounded-xl p-4">
+                  <p className="font-semibold text-brand-blue">🎯 Today's Goal:</p>
+                  <p className="text-gray-700">{goal}</p>
+                </div>
+              )}
+              <div className="mt-4 text-sm text-gray-500">
+                — Mentor Florryshine
+              </div>
+            </div>
+          )}
+
+          <div className="mt-6 text-center">
+            <Link href="/dashboard" className="text-brand-blue hover:underline text-sm font-semibold">
+              ← Back to Dashboard
+            </Link>
           </div>
         </div>
-      </main>
+      </div>
+    </main>
+  );
+}
+
+// ─── Server Component Page ────────────────────────────────
+export default function DailyMentorPage() {
+  return (
+    <>
+      <Navbar />
+      <DailyMentorContent />
       <Footer />
     </>
   );

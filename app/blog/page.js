@@ -4,13 +4,53 @@ import Footer from '@/components/Footer';
 import Link from 'next/link';
 import Image from 'next/image';
 
-// Helper to calculate reading time
+// ─── Metadata ───────────────────────────────────────────────
+export async function generateMetadata({ searchParams }) {
+  const category = searchParams?.category || 'all';
+  const search = searchParams?.search || '';
+
+  let title = 'Blog | Shiney Brain Academy';
+  let description = 'Read the latest tips, study guides, and exam preparation advice for Nigerian students.';
+
+  if (category !== 'all') {
+    const categoryNames = {
+      jamb: 'JAMB',
+      waec: 'WAEC',
+      neco: 'NECO',
+      'post-utme': 'Post-UTME',
+      'digital-skills': 'Digital Skills',
+      'study-tips': 'Study Tips',
+      career: 'Career'
+    };
+    title = `${categoryNames[category] || category} Posts | Shiney Brain Academy`;
+    description = `Read ${categoryNames[category] || category} exam tips, study guides, and preparation advice.`;
+  }
+
+  if (search) {
+    title = `Search: ${search} | Shiney Brain Academy`;
+    description = `Search results for "${search}" on Shiney Brain Academy.`;
+  }
+
+  return {
+    title,
+    description,
+    openGraph: {
+      title,
+      description,
+      url: `https://shineybrainacademy.vercel.app/blog${searchParams?.category ? `?category=${searchParams.category}` : ''}`,
+      type: 'website',
+    },
+  };
+}
+
+// ─── Helper ─────────────────────────────────────────────────
 function getReadingTime(content) {
   const wordsPerMinute = 200;
   const wordCount = content?.split(/\s+/).length || 0;
   return Math.ceil(wordCount / wordsPerMinute);
 }
 
+// ─── Page Component ────────────────────────────────────────
 export default async function BlogPage({ searchParams }) {
   const supabase = createServerClient();
   

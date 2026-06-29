@@ -1,6 +1,14 @@
 import Navbar from '@/components/Navbar';
 import Footer from '@/components/Footer';
 import Link from 'next/link';
+import { generateToolMetadata } from '@/lib/seo';
+
+export const metadata = generateToolMetadata({
+  title: 'Student Tools Hub',
+  description: 'Free educational tools for Nigerian students: JAMB aggregate calculator, WAEC grade calculator, CGPA calculator, past question search, and AI study planner.',
+  path: '/tools',
+  keywords: ['student tools', 'JAMB tools', 'WAEC tools', 'calculator', 'study tools', 'Nigerian students'],
+});
 
 const tools = [
   // ── Academic Tools ──

@@ -1,8 +1,13 @@
+import { generateToolMetadata, toolsSEO } from '@/lib/seo';
+import Navbar from '@/components/Navbar';
+import Footer from '@/components/Footer';
+
+export const metadata = generateToolMetadata(toolsSEO['waec-grade-calculator']);
+
+// ─── Client Component ──────────────────────────────────────
 'use client';
 
 import { useState } from 'react';
-import Navbar from '@/components/Navbar';
-import Footer from '@/components/Footer';
 
 // All common WAEC/JAMB subjects
 const allSubjects = [
@@ -76,7 +81,7 @@ const gradeDescription = {
   'F9': 'Fail',
 };
 
-export default function WAECGradeCalculator() {
+function Calculator() {
   const [subjects, setSubjects] = useState([
     { name: '', grade: '' },
     { name: '', grade: '' },
@@ -159,169 +164,176 @@ export default function WAECGradeCalculator() {
   };
 
   return (
-    <>
-      <Navbar />
-      <main className="min-h-screen bg-gray-50 py-8">
-        <div className="max-w-5xl mx-auto px-4">
-          <div className="bg-white rounded-2xl shadow-sm border p-6">
-            <div className="mb-6">
-              <h1 className="text-3xl font-extrabold text-brand-blue">
-                📊 WAEC Grade Calculator
-              </h1>
-              <p className="text-gray-600 mt-2">
-                Calculate your WAEC grade points, total points, average, and aggregate.
+    <main className="min-h-screen bg-gray-50 py-8">
+      <div className="max-w-5xl mx-auto px-4">
+        <div className="bg-white rounded-2xl shadow-sm border p-6">
+          <div className="mb-6">
+            <h1 className="text-3xl font-extrabold text-brand-blue">
+              📊 WAEC Grade Calculator
+            </h1>
+            <p className="text-gray-600 mt-2">
+              Calculate your WAEC grade points, total points, average, and aggregate.
+            </p>
+          </div>
+
+          <form
+            onSubmit={(e) => {
+              e.preventDefault();
+              calculate();
+            }}
+            className="space-y-6"
+          >
+            <div>
+              <p className="text-sm font-semibold mb-2">
+                Enter your subjects and grades (minimum 5 subjects)
               </p>
-            </div>
-
-            <form
-              onSubmit={(e) => {
-                e.preventDefault();
-                calculate();
-              }}
-              className="space-y-6"
-            >
-              <div>
-                <p className="text-sm font-semibold mb-2">
-                  Enter your subjects and grades (minimum 5 subjects)
-                </p>
-                <div className="space-y-3">
-                  {subjects.map((subject, index) => (
-                    <div key={index} className="flex gap-3 items-center">
-                      <select
-                        value={subject.name}
-                        onChange={(e) =>
-                          handleSubjectChange(index, 'name', e.target.value)
-                        }
-                        className="flex-1 rounded-xl border border-slate-200 px-3 py-2 text-sm"
+              <div className="space-y-3">
+                {subjects.map((subject, index) => (
+                  <div key={index} className="flex gap-3 items-center">
+                    <select
+                      value={subject.name}
+                      onChange={(e) =>
+                        handleSubjectChange(index, 'name', e.target.value)
+                      }
+                      className="flex-1 rounded-xl border border-slate-200 px-3 py-2 text-sm"
+                    >
+                      <option value="">Select Subject</option>
+                      {allSubjects.map((s) => (
+                        <option key={s} value={s}>
+                          {s}
+                        </option>
+                      ))}
+                    </select>
+                    <select
+                      value={subject.grade}
+                      onChange={(e) =>
+                        handleSubjectChange(index, 'grade', e.target.value)
+                      }
+                      className="w-28 rounded-xl border border-slate-200 px-3 py-2 text-sm"
+                    >
+                      <option value="">Grade</option>
+                      {Object.keys(gradePoints).map((grade) => (
+                        <option key={grade} value={grade}>
+                          {grade}
+                        </option>
+                      ))}
+                    </select>
+                    {subjects.length > 5 && (
+                      <button
+                        type="button"
+                        onClick={() => removeSubject(index)}
+                        className="text-red-500 hover:text-red-700 text-sm"
                       >
-                        <option value="">Select Subject</option>
-                        {allSubjects.map((s) => (
-                          <option key={s} value={s}>
-                            {s}
-                          </option>
-                        ))}
-                      </select>
-                      <select
-                        value={subject.grade}
-                        onChange={(e) =>
-                          handleSubjectChange(index, 'grade', e.target.value)
-                        }
-                        className="w-28 rounded-xl border border-slate-200 px-3 py-2 text-sm"
-                      >
-                        <option value="">Grade</option>
-                        {Object.keys(gradePoints).map((grade) => (
-                          <option key={grade} value={grade}>
-                            {grade}
-                          </option>
-                        ))}
-                      </select>
-                      {subjects.length > 5 && (
-                        <button
-                          type="button"
-                          onClick={() => removeSubject(index)}
-                          className="text-red-500 hover:text-red-700 text-sm"
-                        >
-                          ✕
-                        </button>
-                      )}
-                    </div>
-                  ))}
-                </div>
-
-                <button
-                  type="button"
-                  onClick={addSubject}
-                  className="mt-3 text-brand-blue text-sm font-semibold hover:underline"
-                >
-                  + Add Subject
-                </button>
+                        ✕
+                      </button>
+                    )}
+                  </div>
+                ))}
               </div>
 
               <button
-                type="submit"
-                disabled={loading}
-                className="w-full bg-brand-yellow text-brand-dark px-6 py-3 rounded-full font-bold hover:opacity-90 disabled:opacity-50"
+                type="button"
+                onClick={addSubject}
+                className="mt-3 text-brand-blue text-sm font-semibold hover:underline"
               >
-                {loading ? 'Calculating...' : 'Calculate WAEC Points'}
+                + Add Subject
               </button>
-            </form>
+            </div>
 
-            {/* Results */}
-            {result && (
-              <div className="mt-8 bg-brand-blue/5 rounded-2xl border border-brand-blue/20 p-6">
-                <h2 className="text-xl font-extrabold text-brand-blue mb-4">
-                  📊 Your WAEC Results
-                </h2>
+            <button
+              type="submit"
+              disabled={loading}
+              className="w-full bg-brand-yellow text-brand-dark px-6 py-3 rounded-full font-bold hover:opacity-90 disabled:opacity-50"
+            >
+              {loading ? 'Calculating...' : 'Calculate WAEC Points'}
+            </button>
+          </form>
 
-                <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-6">
-                  <div className="bg-white rounded-xl p-4 text-center shadow-sm">
-                    <p className="text-sm text-gray-500">Total Points</p>
-                    <p className="text-2xl font-extrabold text-brand-blue">
-                      {result.totalPoints}
-                    </p>
-                  </div>
-                  <div className="bg-white rounded-xl p-4 text-center shadow-sm">
-                    <p className="text-sm text-gray-500">Average Points</p>
-                    <p className="text-2xl font-extrabold text-purple-600">
-                      {result.average}
-                    </p>
-                  </div>
-                  <div className="bg-white rounded-xl p-4 text-center shadow-sm">
-                    <p className="text-sm text-gray-500">Best 5 Points</p>
-                    <p className="text-2xl font-extrabold text-green-600">
-                      {result.top5Points}
-                    </p>
-                  </div>
-                  <div className="bg-white rounded-xl p-4 text-center shadow-sm">
-                    <p className="text-sm text-gray-500">Classification</p>
-                    <p className="text-sm font-bold text-brand-blue">
-                      {result.classification}
-                    </p>
-                  </div>
+          {/* Results */}
+          {result && (
+            <div className="mt-8 bg-brand-blue/5 rounded-2xl border border-brand-blue/20 p-6">
+              <h2 className="text-xl font-extrabold text-brand-blue mb-4">
+                📊 Your WAEC Results
+              </h2>
+
+              <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-6">
+                <div className="bg-white rounded-xl p-4 text-center shadow-sm">
+                  <p className="text-sm text-gray-500">Total Points</p>
+                  <p className="text-2xl font-extrabold text-brand-blue">
+                    {result.totalPoints}
+                  </p>
                 </div>
-
-                <h3 className="font-bold text-gray-800 mb-3">All Subjects</h3>
-                <div className="overflow-x-auto">
-                  <table className="min-w-full text-sm">
-                    <thead className="bg-slate-50">
-                      <tr>
-                        <th className="px-4 py-2 text-left font-semibold">#</th>
-                        <th className="px-4 py-2 text-left font-semibold">Subject</th>
-                        <th className="px-4 py-2 text-left font-semibold">Grade</th>
-                        <th className="px-4 py-2 text-left font-semibold">Points</th>
-                        <th className="px-4 py-2 text-left font-semibold">Description</th>
-                      </tr>
-                    </thead>
-                    <tbody className="divide-y">
-                      {result.graded.map((s, idx) => (
-                        <tr key={idx} className={idx < 5 ? 'bg-green-50' : ''}>
-                          <td className="px-4 py-2">{idx + 1}</td>
-                          <td className="px-4 py-2 font-medium">{s.name}</td>
-                          <td className="px-4 py-2 font-bold">{s.grade}</td>
-                          <td className="px-4 py-2">{s.points}</td>
-                          <td className="px-4 py-2 text-sm">{s.description}</td>
-                        </tr>
-                      ))}
-                    </tbody>
-                  </table>
+                <div className="bg-white rounded-xl p-4 text-center shadow-sm">
+                  <p className="text-sm text-gray-500">Average Points</p>
+                  <p className="text-2xl font-extrabold text-purple-600">
+                    {result.average}
+                  </p>
                 </div>
-
-                {result.top5.length > 0 && (
-                  <div className="mt-4 bg-yellow-50 rounded-xl p-4">
-                    <p className="text-sm font-semibold text-yellow-800">
-                      ⭐ Top 5 Subjects (used for JAMB aggregate):{' '}
-                      {result.top5.map(s => `${s.name} (${s.points}pts)`).join(', ')}
-                    </p>
-                    <p className="text-sm text-yellow-700 mt-1">
-                      JAMB Aggregate Points: <strong>{result.aggregate}</strong>
-                    </p>
-                  </div>
-                )}
+                <div className="bg-white rounded-xl p-4 text-center shadow-sm">
+                  <p className="text-sm text-gray-500">Best 5 Points</p>
+                  <p className="text-2xl font-extrabold text-green-600">
+                    {result.top5Points}
+                  </p>
+                </div>
+                <div className="bg-white rounded-xl p-4 text-center shadow-sm">
+                  <p className="text-sm text-gray-500">Classification</p>
+                  <p className="text-sm font-bold text-brand-blue">
+                    {result.classification}
+                  </p>
+                </div>
               </div>
-            )}
-          </div>
+
+              <h3 className="font-bold text-gray-800 mb-3">All Subjects</h3>
+              <div className="overflow-x-auto">
+                <table className="min-w-full text-sm">
+                  <thead className="bg-slate-50">
+                    <tr>
+                      <th className="px-4 py-2 text-left font-semibold">#</th>
+                      <th className="px-4 py-2 text-left font-semibold">Subject</th>
+                      <th className="px-4 py-2 text-left font-semibold">Grade</th>
+                      <th className="px-4 py-2 text-left font-semibold">Points</th>
+                      <th className="px-4 py-2 text-left font-semibold">Description</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y">
+                    {result.graded.map((s, idx) => (
+                      <tr key={idx} className={idx < 5 ? 'bg-green-50' : ''}>
+                        <td className="px-4 py-2">{idx + 1}</td>
+                        <td className="px-4 py-2 font-medium">{s.name}</td>
+                        <td className="px-4 py-2 font-bold">{s.grade}</td>
+                        <td className="px-4 py-2">{s.points}</td>
+                        <td className="px-4 py-2 text-sm">{s.description}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+
+              {result.top5.length > 0 && (
+                <div className="mt-4 bg-yellow-50 rounded-xl p-4">
+                  <p className="text-sm font-semibold text-yellow-800">
+                    ⭐ Top 5 Subjects (used for JAMB aggregate):{' '}
+                    {result.top5.map(s => `${s.name} (${s.points}pts)`).join(', ')}
+                  </p>
+                  <p className="text-sm text-yellow-700 mt-1">
+                    JAMB Aggregate Points: <strong>{result.aggregate}</strong>
+                  </p>
+                </div>
+              )}
+            </div>
+          )}
         </div>
-      </main>
+      </div>
+    </main>
+  );
+}
+
+// ─── Server Component Page ────────────────────────────────
+export default function WAECGradeCalculatorPage() {
+  return (
+    <>
+      <Navbar />
+      <Calculator />
       <Footer />
     </>
   );
