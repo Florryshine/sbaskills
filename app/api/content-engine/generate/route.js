@@ -1,8 +1,8 @@
 import { NextResponse } from 'next/server';
 import { createRouteHandlerClient } from '@/lib/supabase-server';
-import { GoogleGenerativeAI } from '@google/generative-ai';
+import { getGeminiClient, getGroqClient } from '@/lib/groqAPI';
 
-// Load knowledge base
+// Knowledge base for the AI
 const knowledgeBase = {
   brand: `Shiney Brain Academy – bright blue (#1a73e8), gold (#FFCC00), white. Bold, Africa-proud, modern.`,
   tone: `Conversational, Nigerian student-friendly, mentor-like. Use "you", be encouraging, practical.`,
@@ -24,6 +24,13 @@ const knowledgeBase = {
     'Certificates'
   ]
 };
+
+// ----- Correct Gemini models (2026) -----
+const GEMINI_MODELS = [
+  'gemini-2.5-flash',   // fast, cost‑effective
+  'gemini-2.5-pro',     // complex reasoning
+  'gemini-3.5-flash',   // newer, more capable
+];
 
 export async function POST(request) {
   try {
@@ -59,10 +66,7 @@ export async function POST(request) {
       .update({ status: 'generating' })
       .eq('id', queueItemId);
 
-    // Generate content with Gemini
-    const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY);
-    const model = genAI.getGenerativeModel({ model: 'gemini-1.5-flash' });
-
+    // Build the prompt
     const prompt = `You are an expert content writer for Shiney Brain Academy (SBA), Nigeria's leading exam prep and skills platform.
 
     Write a complete, SEO-optimized blog article on the topic: "${item.keyword}"
@@ -103,19 +107,70 @@ export async function POST(request) {
       "cta": "..."
     }`;
 
-    const result = await model.generateContent(prompt);
-    const text = result.response.text();
+    // ----- GENERATE WITH MULTI-KEY + MULTI-MODEL FALLBACK -----
+    let result = null;
+    let usedProvider = '';
 
-    // Parse JSON from response
-    let data;
-    try {
-      const cleaned = text.replace(/```json|```/g, '').trim();
-      data = JSON.parse(cleaned);
-    } catch (e) {
-      // Fallback: try to extract JSON
-      const match = text.match(/\{[\s\S]*\}/);
-      if (match) data = JSON.parse(match[0]);
-      else throw new Error('Failed to parse AI response');
+    // 1. Try Gemini models (each with key rotation)
+    for (const modelName of GEMINI_MODELS) {
+      try {
+        const geminiClient = getGeminiClient();
+        if (!geminiClient) {
+          console.warn(`No Gemini keys available, skipping ${modelName}`);
+          continue;
+        }
+
+        const model = geminiClient.getGenerativeModel({ model: modelName });
+        const genResult = await model.generateContent({
+          contents: [{ role: 'user', parts: [{ text: prompt }] }],
+        });
+        const text = genResult.response.text();
+        const cleaned = text.replace(/```json|```/g, '').trim();
+        const match = cleaned.match(/\{[\s\S]*\}/);
+        if (match) {
+          result = JSON.parse(match[0]);
+          usedProvider = `Gemini (${modelName})`;
+          break; // success – stop trying other models
+        }
+      } catch (e) {
+        console.warn(`Gemini ${modelName} failed:`, e.message);
+        // Continue to next model
+      }
+    }
+
+    // 2. Fallback to Groq if all Gemini attempts failed
+    if (!result) {
+      const groqClient = getGroqClient();
+      if (groqClient) {
+        try {
+          const groqResponse = await groqClient.chat.completions.create({
+            messages: [{ role: 'user', content: prompt }],
+            model: 'llama-3.3-70b-versatile',
+            max_tokens: 2048,
+            temperature: 0.7,
+          });
+          const text = groqResponse.choices[0].message.content.trim();
+          const cleaned = text.replace(/```json|```/g, '').trim();
+          const match = cleaned.match(/\{[\s\S]*\}/);
+          if (match) {
+            result = JSON.parse(match[0]);
+            usedProvider = 'Groq (llama-3.3-70b)';
+          }
+        } catch (groqError) {
+          console.warn('Groq failed:', groqError.message);
+        }
+      }
+    }
+
+    if (!result) {
+      await supabase
+        .from('content_queue')
+        .update({ status: 'failed' })
+        .eq('id', queueItemId);
+      return NextResponse.json(
+        { error: 'All AI providers failed. Please check your API keys.' },
+        { status: 500 }
+      );
     }
 
     // Save draft to database
@@ -124,20 +179,20 @@ export async function POST(request) {
       .insert({
         queue_id: queueItemId,
         keyword: item.keyword,
-        title: data.title,
-        slug: data.slug,
-        meta_description: data.meta_description,
-        tags: data.tags || [],
-        content: data.content,
-        faq: data.faq || [],
-        internal_links: data.internal_links || [],
-        images: data.images || [],
-        cta: data.cta || '',
-        word_count: data.content?.split(/\s+/).length || 0,
+        title: result.title,
+        url_slug: result.slug,
+        meta_description: result.meta_description,
+        tags: result.tags || [],
+        content: result.content,
+        schemas: JSON.stringify(result.faq || []),
+        internal_links: result.internal_links || [],
+        image_prompts: result.images || [],
+        cta: result.cta || '',
+        word_count: result.content?.split(/\s+/).length || 0,
         category: item.category,
         status: 'draft',
-        content_score: 85, // placeholder, will be improved later
-        readability_score: 80,
+        score_seo: 85,
+        score_readability: 80,
       })
       .select()
       .single();
@@ -163,7 +218,8 @@ export async function POST(request) {
     return NextResponse.json({
       success: true,
       draftId: draft.id,
-      title: data.title,
+      title: result.title,
+      usedProvider,
     });
 
   } catch (error) {
