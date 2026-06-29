@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server';
 import { createRouteHandlerClient } from '@/lib/supabase-server';
-import { getGeminiClient, getGroqClient } from '@/lib/groqAPI';
+import { getGroqClient } from '@/lib/groqAPI';
+import { GoogleGenerativeAI } from '@google/generative-ai';
 
 // Knowledge base for the AI
 const knowledgeBase = {
@@ -25,12 +26,19 @@ const knowledgeBase = {
   ]
 };
 
-// ----- Correct Gemini models (2026) -----
+// ----- Gemini models (newest first) -----
 const GEMINI_MODELS = [
-  'gemini-2.5-flash',   // fast, cost‑effective
-  'gemini-2.5-pro',     // complex reasoning
-  'gemini-3.5-flash',   // newer, more capable
+  'gemini-3.5-flash',    // newest, most capable
+  'gemini-2.5-flash',    // good fallback
+  'gemini-1.5-flash',    // compatibility
+  'gemini-2.5-pro',      // complex reasoning
 ];
+
+// ----- Helper to get Gemini keys from environment -----
+function getGeminiKeys() {
+  const keys = process.env.GEMINI_API_KEYS || process.env.GEMINI_API_KEY || '';
+  return keys.split(',').map(k => k.trim()).filter(Boolean);
+}
 
 export async function POST(request) {
   try {
@@ -110,37 +118,37 @@ export async function POST(request) {
     // ----- GENERATE WITH MULTI-KEY + MULTI-MODEL FALLBACK -----
     let result = null;
     let usedProvider = '';
+    const errors = [];
 
-    // 1. Try Gemini models (each with key rotation)
-    for (const modelName of GEMINI_MODELS) {
-      try {
-        const geminiClient = getGeminiClient();
-        if (!geminiClient) {
-          console.warn(`No Gemini keys available, skipping ${modelName}`);
-          continue;
+    // 1. Try Gemini (with key rotation and model fallback)
+    const geminiKeys = getGeminiKeys();
+    for (const key of geminiKeys) {
+      const client = new GoogleGenerativeAI(key);
+      for (const modelName of GEMINI_MODELS) {
+        try {
+          const model = client.getGenerativeModel({ model: modelName });
+          const genResult = await model.generateContent({
+            contents: [{ role: 'user', parts: [{ text: prompt }] }],
+          });
+          const text = genResult.response.text();
+          const cleaned = text.replace(/```json|```/g, '').trim();
+          const match = cleaned.match(/\{[\s\S]*\}/);
+          if (match) {
+            result = JSON.parse(match[0]);
+            usedProvider = `Gemini (${modelName})`;
+            break;
+          }
+        } catch (e) {
+          errors.push(`Gemini ${modelName} with key ${key.slice(0,6)}: ${e.message}`);
+          // Continue to next model/key
         }
-
-        const model = geminiClient.getGenerativeModel({ model: modelName });
-        const genResult = await model.generateContent({
-          contents: [{ role: 'user', parts: [{ text: prompt }] }],
-        });
-        const text = genResult.response.text();
-        const cleaned = text.replace(/```json|```/g, '').trim();
-        const match = cleaned.match(/\{[\s\S]*\}/);
-        if (match) {
-          result = JSON.parse(match[0]);
-          usedProvider = `Gemini (${modelName})`;
-          break; // success – stop trying other models
-        }
-      } catch (e) {
-        console.warn(`Gemini ${modelName} failed:`, e.message);
-        // Continue to next model
       }
+      if (result) break;
     }
 
     // 2. Fallback to Groq if all Gemini attempts failed
     if (!result) {
-      const groqClient = getGroqClient();
+      const groqClient = getGroqClient(); // from groqAPI.js (handles multiple keys)
       if (groqClient) {
         try {
           const groqResponse = await groqClient.chat.completions.create({
@@ -157,18 +165,19 @@ export async function POST(request) {
             usedProvider = 'Groq (llama-3.3-70b)';
           }
         } catch (groqError) {
-          console.warn('Groq failed:', groqError.message);
+          errors.push(`Groq: ${groqError.message}`);
         }
       }
     }
 
     if (!result) {
+      console.error('All generation attempts failed:', errors);
       await supabase
         .from('content_queue')
         .update({ status: 'failed' })
         .eq('id', queueItemId);
       return NextResponse.json(
-        { error: 'All AI providers failed. Please check your API keys.' },
+        { error: `All AI providers failed. Details: ${errors.join('; ')}` },
         { status: 500 }
       );
     }
