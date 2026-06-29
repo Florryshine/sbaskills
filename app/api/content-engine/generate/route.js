@@ -3,6 +3,11 @@ import { createRouteHandlerClient } from '@/lib/supabase-server';
 import { getGroqClient } from '@/lib/groqAPI';
 import { GoogleGenerativeAI } from '@google/generative-ai';
 
+// ---- TEMPORARY: Hardcoded Gemini key for testing ----
+// Replace with your actual key from .env.local
+const GEMINI_API_KEY = 'YOUR_GEMINI_KEY_HERE';
+// -------------------------------------------------
+
 // Knowledge base for the AI
 const knowledgeBase = {
   brand: `Shiney Brain Academy – bright blue (#1a73e8), gold (#FFCC00), white. Bold, Africa-proud, modern.`,
@@ -33,12 +38,6 @@ const GEMINI_MODELS = [
   'gemini-1.5-flash',    // compatibility
   'gemini-2.5-pro',      // complex reasoning
 ];
-
-// ----- Helper to get Gemini keys from environment -----
-function getGeminiKeys() {
-  const keys = process.env.GEMINI_API_KEYS || process.env.GEMINI_API_KEY || '';
-  return keys.split(',').map(k => k.trim()).filter(Boolean);
-}
 
 export async function POST(request) {
   try {
@@ -115,35 +114,30 @@ export async function POST(request) {
       "cta": "..."
     }`;
 
-    // ----- GENERATE WITH MULTI-KEY + MULTI-MODEL FALLBACK -----
+    // ----- GENERATE WITH HARDCODED GEMINI KEY -----
     let result = null;
     let usedProvider = '';
     const errors = [];
 
-    // 1. Try Gemini (with key rotation and model fallback)
-    const geminiKeys = getGeminiKeys();
-    for (const key of geminiKeys) {
-      const client = new GoogleGenerativeAI(key);
-      for (const modelName of GEMINI_MODELS) {
-        try {
-          const model = client.getGenerativeModel({ model: modelName });
-          const genResult = await model.generateContent({
-            contents: [{ role: 'user', parts: [{ text: prompt }] }],
-          });
-          const text = genResult.response.text();
-          const cleaned = text.replace(/```json|```/g, '').trim();
-          const match = cleaned.match(/\{[\s\S]*\}/);
-          if (match) {
-            result = JSON.parse(match[0]);
-            usedProvider = `Gemini (${modelName})`;
-            break;
-          }
-        } catch (e) {
-          errors.push(`Gemini ${modelName} with key ${key.slice(0,6)}: ${e.message}`);
-          // Continue to next model/key
+    // 1. Try Gemini (hardcoded key, all models)
+    const client = new GoogleGenerativeAI(GEMINI_API_KEY);
+    for (const modelName of GEMINI_MODELS) {
+      try {
+        const model = client.getGenerativeModel({ model: modelName });
+        const genResult = await model.generateContent({
+          contents: [{ role: 'user', parts: [{ text: prompt }] }],
+        });
+        const text = genResult.response.text();
+        const cleaned = text.replace(/```json|```/g, '').trim();
+        const match = cleaned.match(/\{[\s\S]*\}/);
+        if (match) {
+          result = JSON.parse(match[0]);
+          usedProvider = `Gemini (${modelName}) – hardcoded`;
+          break;
         }
+      } catch (e) {
+        errors.push(`Gemini ${modelName} (hardcoded): ${e.message}`);
       }
-      if (result) break;
     }
 
     // 2. Fallback to Groq if all Gemini attempts failed
