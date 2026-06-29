@@ -14,6 +14,7 @@ const navItems = [
   { href: '/admin/testimonials', label: 'Testimonials', icon: '💬' },
   { href: '/admin/quizzes', label: 'Quizzes', icon: '📝' },
   { href: '/admin/submissions', label: 'Submissions', icon: '📊' },
+  { href: '/admin/content-engine', label: 'Content Engine', icon: '📝' },
 ];
 
 export default function AdminSidebar() {
