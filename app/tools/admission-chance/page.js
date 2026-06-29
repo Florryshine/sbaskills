@@ -1,15 +1,15 @@
 import { generateToolMetadata, toolsSEO } from '@/lib/seo';
 import Navbar from '@/components/Navbar';
 import Footer from '@/components/Footer';
-import AdmissionChanceChecker from './AdmissionChanceChecker';
+import AdmissionChanceClient from './AdmissionChanceClient';
 
 export const metadata = generateToolMetadata(toolsSEO['admission-chance']);
 
-export default function AdmissionChanceCheckerPage() {
+export default function AdmissionChancePage() {
   return (
     <>
       <Navbar />
-      <AdmissionChanceChecker />
+      <AdmissionChanceClient />
       <Footer />
     </>
   );
