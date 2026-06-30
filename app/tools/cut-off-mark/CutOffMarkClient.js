@@ -14,10 +14,10 @@ export default function CutOffMarkClient() {
 
   useEffect(() => {
     async function fetchFilters() {
-      const { data: schoolData } = await supabase.from('school_cutoffs').select('school_name').distinct();
-      if (schoolData) setSchools(schoolData.map(s => s.school_name).filter(Boolean));
-      const { data: courseData } = await supabase.from('school_cutoffs').select('course_name').distinct();
-      if (courseData) setCourses(courseData.map(c => c.course_name).filter(Boolean));
+      const { data: schoolData } = await supabase.from('school_cutoffs').select('school_name');
+      if (schoolData) setSchools([...new Set(schoolData.map(s => s.school_name).filter(Boolean))]);
+      const { data: courseData } = await supabase.from('school_cutoffs').select('course_name');
+      if (courseData) setCourses([...new Set(courseData.map(c => c.course_name).filter(Boolean))]);
     }
     fetchFilters();
   }, []);

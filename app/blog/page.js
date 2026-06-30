@@ -63,21 +63,19 @@ export default async function BlogPage({ searchParams }) {
 
   // Build query
   let query = supabase
-    .from('blog_posts')
+    .from('content_drafts')
     .select(`
       id,
       title,
-      slug,
-      excerpt,
+      url_slug,
+      meta_description,
       cover_image,
       published_at,
       created_at,
       content,
-      category,
-      author_id,
-      profiles:author_id (full_name, email)
+      category
     `)
-    .eq('published', true);
+    .eq('status', 'published');
 
   // Category filter
   if (category && category !== 'all') {
@@ -107,9 +105,9 @@ export default async function BlogPage({ searchParams }) {
 
   // Get total count for pagination
   const { count: totalPosts } = await supabase
-    .from('blog_posts')
+    .from('content_drafts')
     .select('*', { count: 'exact', head: true })
-    .eq('published', true);
+    .eq('status', 'published');
 
   const { data: posts } = await query;
 
@@ -119,13 +117,12 @@ export default async function BlogPage({ searchParams }) {
   if (postIds.length > 0) {
     const { data: comments } = await supabase
       .from('blog_comments')
-      .select('post_id, count')
+      .select('post_id')
       .in('post_id', postIds)
-      .eq('is_approved', true)
-      .group('post_id');
+      .eq('is_approved', true);
     if (comments) {
       commentCounts = comments.reduce((acc, c) => {
-        acc[c.post_id] = parseInt(c.count) || 0;
+        acc[c.post_id] = (acc[c.post_id] || 0) + 1;
         return acc;
       }, {});
     }
@@ -232,12 +229,12 @@ export default async function BlogPage({ searchParams }) {
                 {posts.map((post) => {
                   const readingTime = getReadingTime(post.content || '');
                   const commentCount = commentCounts[post.id] || 0;
-                  const authorName = post.profiles?.full_name || 'SBA';
+                  const authorName = 'Shiney Brain Academy';
 
                   return (
                     <Link
                       key={post.id}
-                      href={`/blog/${post.slug}`}
+                      href={`/blog/${post.url_slug}`}
                       className="group bg-white rounded-2xl shadow-sm hover:shadow-lg transition-all overflow-hidden border border-gray-100"
                     >
                       {/* Cover Image */}
@@ -281,9 +278,9 @@ export default async function BlogPage({ searchParams }) {
                         </div>
 
                         {/* Excerpt */}
-                        {post.excerpt && (
+                        {post.meta_description && (
                           <p className="text-sm text-gray-500 line-clamp-2 mb-3">
-                            {post.excerpt}
+                            {post.meta_description}
                           </p>
                         )}
 

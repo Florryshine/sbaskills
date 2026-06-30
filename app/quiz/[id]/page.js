@@ -150,6 +150,27 @@ export default function TakeQuiz() {
   const question = questions[currentQuestion];
   const totalQuestions = questions.length;
 
+  if (totalQuestions === 0) {
+    return (
+      <>
+        <Navbar />
+        <main className="min-h-screen bg-gray-50 py-12">
+          <div className="max-w-2xl mx-auto px-4 text-center">
+            <div className="bg-white rounded-2xl shadow-sm border p-8">
+              <p className="text-5xl mb-4">📭</p>
+              <h1 className="text-2xl font-bold text-gray-800">This quiz has no questions yet</h1>
+              <p className="text-gray-500 mt-2">Please check back later.</p>
+              <button onClick={() => router.push('/courses')} className="mt-6 bg-brand-blue text-white px-6 py-3 rounded-full font-bold hover:opacity-90">
+                Browse Courses
+              </button>
+            </div>
+          </div>
+        </main>
+        <Footer />
+      </>
+    );
+  }
+
   return (
     <>
       <Navbar />

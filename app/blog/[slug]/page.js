@@ -105,18 +105,18 @@ export default function BlogPostPage({ params }) {
             <span>{Math.ceil((post.content?.split(/\s+/).length || 0) / 200)} min read</span>
           </div>
 
-          {post.excerpt && (
+          {post.meta_description && (
             <p className="text-lg text-gray-600 font-medium mb-6 border-l-4 border-brand-yellow pl-4 italic">
-              {post.excerpt}
+              {post.meta_description}
             </p>
           )}
 
           <ShareButtons
             title={post.title}
-            url={`/blog/${post.slug}`}
+            url={`/blog/${post.url_slug}`}
             targetType="blog"
             targetId={post.id}
-            description={post.excerpt || 'Read this blog post on Shiney Brain Academy!'}
+            description={post.meta_description || 'Read this blog post on Shiney Brain Academy!'}
           />
 
           <div

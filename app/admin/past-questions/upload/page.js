@@ -14,6 +14,33 @@ export default function UploadPastQuestions() {
   const router = useRouter();
   const supabase = createBrowserClient();
 
+  // Parses one CSV line, respecting quoted fields that may contain commas
+  // (e.g. "What is 2, 4, 6, 8 the next number in?"). A naive line.split(',')
+  // breaks on exactly this kind of question text.
+  const parseCsvLine = (line) => {
+    const result = [];
+    let current = '';
+    let inQuotes = false;
+    for (let i = 0; i < line.length; i++) {
+      const char = line[i];
+      if (char === '"') {
+        if (inQuotes && line[i + 1] === '"') {
+          current += '"';
+          i++;
+        } else {
+          inQuotes = !inQuotes;
+        }
+      } else if (char === ',' && !inQuotes) {
+        result.push(current.trim());
+        current = '';
+      } else {
+        current += char;
+      }
+    }
+    result.push(current.trim());
+    return result;
+  };
+
   const handleFileChange = (e) => {
     const selected = e.target.files?.[0];
     if (!selected) return;
@@ -25,8 +52,8 @@ export default function UploadPastQuestions() {
     reader.onload = (event) => {
       const text = event.target.result;
       const lines = text.split('\n').filter(line => line.trim());
-      const headers = lines[0].split(',').map(h => h.trim());
-      const rows = lines.slice(1, 6).map(line => line.split(',').map(c => c.trim()));
+      const headers = parseCsvLine(lines[0]);
+      const rows = lines.slice(1, 6).map(line => parseCsvLine(line));
       setPreview({ headers, rows: rows.filter(r => r.length === headers.length) });
     };
     reader.readAsText(selected);
@@ -45,21 +72,26 @@ export default function UploadPastQuestions() {
     reader.onload = async (event) => {
       const text = event.target.result;
       const lines = text.split('\n').filter(line => line.trim());
-      const headers = lines[0].split(',').map(h => h.trim());
-      
+      const headers = parseCsvLine(lines[0]);
+
       const questions = [];
+      const skipped = [];
       for (let i = 1; i < lines.length; i++) {
-        const values = lines[i].split(',').map(c => c.trim());
-        if (values.length < 10) continue;
+        const values = parseCsvLine(lines[i]);
+        if (values.length !== headers.length) {
+          skipped.push(i + 1);
+          continue;
+        }
         const obj = {};
         headers.forEach((h, idx) => {
           obj[h] = values[idx] || '';
         });
+        if (obj.year) obj.year = parseInt(obj.year) || null;
         questions.push(obj);
       }
 
       if (questions.length === 0) {
-        alert('No valid rows found.');
+        alert('No valid rows found. Check that every row has the same number of columns as the header.');
         setUploading(false);
         return;
       }
@@ -72,7 +104,11 @@ export default function UploadPastQuestions() {
       if (error) {
         alert('Error: ' + error.message);
       } else {
-        setMessage(`✅ Successfully uploaded ${questions.length} questions!`);
+        let msg = `✅ Successfully uploaded ${questions.length} questions!`;
+        if (skipped.length > 0) {
+          msg += ` (Skipped ${skipped.length} row(s) with a mismatched column count: line ${skipped.join(', ')})`;
+        }
+        setMessage(msg);
         setFile(null);
         setPreview([]);
         if (fileInputRef.current) fileInputRef.current.value = '';

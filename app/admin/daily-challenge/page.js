@@ -36,9 +36,8 @@ export default function AdminBossBattles() {
 
       const { data: subjectData } = await supabase
         .from('past_questions')
-        .select('subject')
-        .distinct();
-      setSubjects(subjectData?.map(s => s.subject).filter(Boolean) || []);
+        .select('subject');
+      setSubjects([...new Set((subjectData || []).map(s => s.subject).filter(Boolean))]);
 
       setLoading(false);
     }

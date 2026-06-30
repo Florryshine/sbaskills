@@ -21,22 +21,19 @@ export default function PastQuestionsClient() {
     async function fetchFilters() {
       const { data: subjectData } = await supabase
         .from('past_questions')
-        .select('subject')
-        .distinct();
-      if (subjectData) setSubjects(subjectData.map(s => s.subject).filter(Boolean));
+        .select('subject');
+      if (subjectData) setSubjects([...new Set(subjectData.map(s => s.subject).filter(Boolean))]);
 
       const { data: yearData } = await supabase
         .from('past_questions')
         .select('year')
-        .distinct()
         .order('year', { ascending: false });
-      if (yearData) setYears(yearData.map(y => y.year).filter(Boolean));
+      if (yearData) setYears([...new Set(yearData.map(y => y.year).filter(Boolean))]);
 
       const { data: examData } = await supabase
         .from('past_questions')
-        .select('exam_type')
-        .distinct();
-      if (examData) setExamTypes(examData.map(e => e.exam_type).filter(Boolean));
+        .select('exam_type');
+      if (examData) setExamTypes([...new Set(examData.map(e => e.exam_type).filter(Boolean))]);
     }
     fetchFilters();
   }, []);

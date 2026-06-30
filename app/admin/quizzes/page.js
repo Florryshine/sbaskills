@@ -28,7 +28,8 @@ export default function AdminQuizzesPage() {
         .from('quizzes')
         .select(`
           *,
-          profiles: tutor_id (full_name, email)
+          profiles: tutor_id (full_name, email),
+          quiz_questions (count)
         `)
         .order('created_at', { ascending: false });
 
@@ -107,7 +108,7 @@ export default function AdminQuizzesPage() {
               </thead>
               <tbody className="divide-y divide-slate-100">
                 {quizzes.map((quiz) => {
-                  const questionCount = quiz.questions?.length || 0;
+                  const questionCount = quiz.quiz_questions?.[0]?.count || 0;
                   return (
                     <tr key={quiz.id} className="hover:bg-slate-50">
                       <td className="px-6 py-4 font-semibold">{quiz.title}</td>
@@ -120,6 +121,12 @@ export default function AdminQuizzesPage() {
                         </span>
                       </td>
                       <td className="px-6 py-4 space-x-2">
+                        <Link
+                          href={`/admin/quizzes/${quiz.id}/upload`}
+                          className="text-purple-600 text-xs font-bold hover:underline"
+                        >
+                          Upload Questions
+                        </Link>
                         <button
                           onClick={() => togglePublish(quiz.id, quiz.is_published)}
                           className={`text-xs font-bold ${quiz.is_published ? 'text-yellow-600' : 'text-green-600'} hover:underline`}

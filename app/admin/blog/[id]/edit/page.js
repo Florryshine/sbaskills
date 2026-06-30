@@ -15,6 +15,7 @@ export default function EditBlogPost() {
     content: '',
     tags: [],
     category: '',
+    cover_image: '',
   });
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
@@ -56,6 +57,7 @@ export default function EditBlogPost() {
         content: form.content,
         tags: form.tags || [],
         category: form.category,
+        cover_image: form.cover_image || null,
         updated_at: new Date().toISOString(),
       })
       .eq('id', id);
@@ -123,6 +125,16 @@ export default function EditBlogPost() {
           value={form.category || ''}
           onChange={(e) => setForm({ ...form, category: e.target.value })}
         />
+        <input
+          type="text"
+          placeholder="Cover image URL (optional)"
+          className="w-full border p-2 rounded"
+          value={form.cover_image || ''}
+          onChange={(e) => setForm({ ...form, cover_image: e.target.value })}
+        />
+        {form.cover_image && (
+          <img src={form.cover_image} alt="Cover preview" className="h-32 rounded-lg object-cover" />
+        )}
         <button
           type="submit"
           disabled={saving}

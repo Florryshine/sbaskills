@@ -6,9 +6,9 @@ export default async function sitemap() {
 
   // Get all published blog posts
   const { data: posts } = await supabase
-    .from('blog_posts')
-    .select('slug, updated_at')
-    .eq('published', true);
+    .from('content_drafts')
+    .select('url_slug, updated_at, published_at')
+    .eq('status', 'published');
 
   // Static pages
   const staticPages = [
@@ -25,8 +25,8 @@ export default async function sitemap() {
 
   // Blog post pages
   const blogPages = (posts || []).map((post) => ({
-    url: `${baseUrl}/blog/${post.slug}`,
-    lastModified: post.updated_at || new Date(),
+    url: `${baseUrl}/blog/${post.url_slug}`,
+    lastModified: post.updated_at || post.published_at || new Date(),
     priority: 0.8,
   }));
 
