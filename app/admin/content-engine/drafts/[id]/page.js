@@ -4,7 +4,7 @@ import { useState, useEffect } from 'react';
 import { useParams, useRouter } from 'next/navigation';
 import Link from 'next/link';
 import { supabase } from '@/lib/supabase-client';
-import { ArrowLeft, Save, Eye, CheckCircle, RefreshCw } from 'lucide-react';
+import { ArrowLeft, Save, CheckCircle, RefreshCw } from 'lucide-react';
 
 export default function DraftPreviewPage() {
   const params = useParams();
@@ -24,7 +24,6 @@ export default function DraftPreviewPage() {
 
   async function fetchDraft() {
     setLoading(true);
-    console.log('Fetching draft with ID:', id);
     try {
       const { data, error } = await supabase
         .from('content_drafts')
@@ -32,21 +31,14 @@ export default function DraftPreviewPage() {
         .eq('id', id)
         .maybeSingle();
 
-      if (error) {
-        console.error('Supabase error:', error);
-        alert('Draft not found: ' + error.message);
-        router.push('/admin/content-engine/drafts');
-        return;
-      }
-      if (!data) {
-        alert('Draft not found (no data)');
+      if (error || !data) {
+        alert('Draft not found: ' + (error?.message || 'No data'));
         router.push('/admin/content-engine/drafts');
         return;
       }
       setDraft(data);
       setEditedContent(data.content || '');
     } catch (err) {
-      console.error('Unexpected error:', err);
       alert('Error: ' + err.message);
       router.push('/admin/content-engine/drafts');
     } finally {
@@ -79,11 +71,11 @@ export default function DraftPreviewPage() {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ draftId: id }),
       });
+      const data = await res.json();
       if (res.ok) {
         alert('Published successfully!');
         router.push('/admin/content-engine/drafts');
       } else {
-        const data = await res.json();
         alert('Publish failed: ' + (data.error || 'Unknown error'));
       }
     } catch (e) {
@@ -138,86 +130,31 @@ export default function DraftPreviewPage() {
         </div>
 
         <div className="bg-white rounded-2xl border border-gray-100 shadow-sm p-6 space-y-4">
-          {/* Title & meta */}
-          <div>
-            <h2 className="text-sm font-medium text-gray-500">Title</h2>
-            <p className="text-lg font-semibold">{draft.title}</p>
-          </div>
-          <div>
-            <h2 className="text-sm font-medium text-gray-500">Meta Description</h2>
-            <p>{draft.meta_description}</p>
-          </div>
-          <div>
-            <h2 className="text-sm font-medium text-gray-500">Slug</h2>
-            <p className="text-sm text-blue-600">/blog/{draft.url_slug}</p>
-          </div>
-          <div>
-            <h2 className="text-sm font-medium text-gray-500">Category</h2>
-            <p>{draft.category || 'Uncategorized'}</p>
-          </div>
-          <div>
-            <h2 className="text-sm font-medium text-gray-500">Tags</h2>
-            <div className="flex flex-wrap gap-2 mt-1">
-              {draft.tags?.map((tag, i) => (
-                <span key={i} className="bg-gray-100 text-gray-600 px-2 py-0.5 rounded-full text-xs">
-                  #{tag}
-                </span>
-              ))}
-            </div>
-          </div>
+          <div><h2 className="text-sm font-medium text-gray-500">Title</h2><p className="text-lg font-semibold">{draft.title}</p></div>
+          <div><h2 className="text-sm font-medium text-gray-500">Meta Description</h2><p>{draft.meta_description}</p></div>
+          <div><h2 className="text-sm font-medium text-gray-500">Slug</h2><p className="text-sm text-blue-600">/blog/{draft.url_slug}</p></div>
+          <div><h2 className="text-sm font-medium text-gray-500">Category</h2><p>{draft.category || 'Uncategorized'}</p></div>
+          <div><h2 className="text-sm font-medium text-gray-500">Tags</h2><div className="flex flex-wrap gap-2 mt-1">{draft.tags?.map((tag,i) => <span key={i} className="bg-gray-100 text-gray-600 px-2 py-0.5 rounded-full text-xs">#{tag}</span>)}</div></div>
 
-          {/* Content */}
           <div>
             <h2 className="text-sm font-medium text-gray-500 mb-2">Content</h2>
             {editMode ? (
-              <textarea
-                value={editedContent}
-                onChange={(e) => setEditedContent(e.target.value)}
-                className="w-full h-96 border rounded p-3 font-mono text-sm"
-              />
+              <textarea value={editedContent} onChange={(e) => setEditedContent(e.target.value)} className="w-full h-96 border rounded p-3 font-mono text-sm" />
             ) : (
-              <div
-                className="prose prose-sm max-w-none text-gray-700"
-                dangerouslySetInnerHTML={{ __html: draft.content || 'No content yet.' }}
-              />
+              <div className="prose prose-sm max-w-none text-gray-700" dangerouslySetInnerHTML={{ __html: draft.content || 'No content yet.' }} />
             )}
           </div>
 
-          {/* FAQ Section */}
           {draft.schemas && JSON.parse(draft.schemas).length > 0 && (
-            <div>
-              <h2 className="text-sm font-medium text-gray-500 mb-2">FAQ</h2>
-              {JSON.parse(draft.schemas).map((item, i) => (
-                <div key={i} className="mb-2 border-b pb-2">
-                  <p className="font-semibold text-sm">{item.question}</p>
-                  <p className="text-sm text-gray-600">{item.answer}</p>
-                </div>
-              ))}
-            </div>
+            <div><h2 className="text-sm font-medium text-gray-500 mb-2">FAQ</h2>{JSON.parse(draft.schemas).map((item,i) => <div key={i} className="mb-2 border-b pb-2"><p className="font-semibold text-sm">{item.question}</p><p className="text-sm text-gray-600">{item.answer}</p></div>)}</div>
           )}
 
-          {/* Internal Links */}
           {draft.internal_links?.length > 0 && (
-            <div>
-              <h2 className="text-sm font-medium text-gray-500">Internal Links</h2>
-              <ul className="list-disc pl-5 text-sm text-blue-600">
-                {draft.internal_links.map((link, i) => (
-                  <li key={i}>{link}</li>
-                ))}
-              </ul>
-            </div>
+            <div><h2 className="text-sm font-medium text-gray-500">Internal Links</h2><ul className="list-disc pl-5 text-sm text-blue-600">{draft.internal_links.map((link,i) => <li key={i}>{link}</li>)}</ul></div>
           )}
 
-          {/* Images */}
           {draft.image_prompts && JSON.parse(draft.image_prompts).length > 0 && (
-            <div>
-              <h2 className="text-sm font-medium text-gray-500">Image Suggestions</h2>
-              <ul className="list-disc pl-5 text-sm text-gray-600">
-                {JSON.parse(draft.image_prompts).map((img, i) => (
-                  <li key={i}>{img.type}: {img.description}</li>
-                ))}
-              </ul>
-            </div>
+            <div><h2 className="text-sm font-medium text-gray-500">Image Suggestions</h2><ul className="list-disc pl-5 text-sm text-gray-600">{JSON.parse(draft.image_prompts).map((img,i) => <li key={i}>{img.type}: {img.description}</li>)}</ul></div>
           )}
 
           <div className="text-xs text-gray-400 pt-4 border-t">

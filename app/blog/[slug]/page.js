@@ -20,11 +20,11 @@ export default function BlogPostPage({ params }) {
   useEffect(() => {
     async function loadPost() {
       const { data, error } = await supabase
-        .from('blog_posts')
-        .select('*, profiles:author_id (full_name, email)')
-        .eq('slug', params.slug)
-        .eq('published', true)
-        .single();
+  .from('content_drafts')
+  .select('*')
+  .eq('url_slug', params.slug)
+  .eq('status', 'published')
+  .maybeSingle();
 
       if (!data || error) {
         setLoading(false);
