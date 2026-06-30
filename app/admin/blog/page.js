@@ -2,11 +2,12 @@
 
 import { useState, useEffect } from 'react';
 import Link from 'next/link';
-import { supabase } from '@/lib/supabase-client';
+import { createBrowserClient } from '@/lib/supabase';
 import { useRouter } from 'next/navigation';
 
 export default function BlogAdminPage() {
   const router = useRouter();
+  const supabase = createBrowserClient();
   const [posts, setPosts] = useState([]);
   const [loading, setLoading] = useState(true);
 

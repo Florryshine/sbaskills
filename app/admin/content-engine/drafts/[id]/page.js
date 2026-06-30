@@ -3,13 +3,14 @@
 import { useState, useEffect } from 'react';
 import { useParams, useRouter } from 'next/navigation';
 import Link from 'next/link';
-import { supabase } from '@/lib/supabase-client';
+import { createBrowserClient } from '@/lib/supabase';
 import { ArrowLeft, Save, CheckCircle, RefreshCw } from 'lucide-react';
 
 export default function DraftPreviewPage() {
   const params = useParams();
   const router = useRouter();
   const id = params.id;
+  const supabase = createBrowserClient();
 
   const [draft, setDraft] = useState(null);
   const [loading, setLoading] = useState(true);

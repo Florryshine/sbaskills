@@ -1,10 +1,11 @@
 'use client';
 import { useState } from 'react';
 import { useRouter } from 'next/navigation';
-import { supabase } from '@/lib/supabase-client';
+import { createBrowserClient } from '@/lib/supabase';
 
 export default function AddBook() {
   const router = useRouter();
+  const supabase = createBrowserClient();
   const [form, setForm] = useState({
     title: '',
     author: '',

@@ -1,9 +1,10 @@
 'use client';
 import { useState, useEffect } from 'react';
 import Link from 'next/link';
-import { supabase } from '@/lib/supabase-client';
+import { createBrowserClient } from '@/lib/supabase';
 
 export default function LibraryPage() {
+  const supabase = createBrowserClient();
   const [books, setBooks] = useState([]);
   const [loading, setLoading] = useState(true);
 

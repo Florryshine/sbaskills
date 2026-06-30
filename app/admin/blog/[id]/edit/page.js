@@ -1,12 +1,13 @@
 'use client';
 import { useState, useEffect } from 'react';
 import { useRouter, useParams } from 'next/navigation';
-import { supabase } from '@/lib/supabase-client';
+import { createBrowserClient } from '@/lib/supabase';
 
 export default function EditBlogPost() {
   const router = useRouter();
   const params = useParams();
   const id = params.id;
+  const supabase = createBrowserClient();
 
   const [form, setForm] = useState({
     title: '',
