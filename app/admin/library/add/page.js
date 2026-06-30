@@ -1,59 +1,46 @@
-'use client';
-import { useState } from 'react';
-import { useRouter } from 'next/navigation';
+import { useState, useRef } from 'react';
 import { supabase } from '@/lib/supabase-client';
 
-export default function AddBook() {
-  const router = useRouter();
-  const [form, setForm] = useState({ title: '', author: '', description: '', price: 0 });
-  const [loading, setLoading] = useState(false);
+const [coverFile, setCoverFile] = useState(null);
+const [fileFile, setFileFile] = useState(null);
+const [uploading, setUploading] = useState(false);
 
-  const handleSubmit = async (e) => {
-    e.preventDefault();
-    setLoading(true);
-    const { error } = await supabase.from('books').insert([form]);
+const handleUpload = async (file, folder) => {
+  if (!file) return null;
+  const fileExt = file.name.split('.').pop();
+  const fileName = `${Date.now()}.${fileExt}`;
+  const path = `${folder}/${fileName}`;
+  const { data, error } = await supabase.storage
+    .from('books')
+    .upload(path, file);
+  if (error) throw error;
+  // get public URL
+  const { data: urlData } = supabase.storage
+    .from('books')
+    .getPublicUrl(path);
+  return urlData.publicUrl;
+};
+
+const handleSubmit = async (e) => {
+  e.preventDefault();
+  setUploading(true);
+  try {
+    let coverUrl = form.cover_image_url;
+    let fileUrl = form.file_url;
+    if (coverFile) coverUrl = await handleUpload(coverFile, 'covers');
+    if (fileFile) fileUrl = await handleUpload(fileFile, 'files');
+    const { error } = await supabase.from('books').insert([{
+      ...form,
+      cover_image_url: coverUrl,
+      file_url: fileUrl,
+    }]);
     if (!error) router.push('/admin/library');
-    setLoading(false);
-  };
+  } catch (err) {
+    alert(err.message);
+  }
+  setUploading(false);
+};
 
-  return (
-    <div className="p-6 max-w-xl mx-auto">
-      <h1 className="text-2xl font-bold mb-4">Add Book</h1>
-      <form onSubmit={handleSubmit} className="space-y-4">
-        <input
-          type="text"
-          placeholder="Title"
-          className="w-full border p-2 rounded"
-          value={form.title}
-          onChange={(e) => setForm({ ...form, title: e.target.value })}
-          required
-        />
-        <input
-          type="text"
-          placeholder="Author"
-          className="w-full border p-2 rounded"
-          value={form.author}
-          onChange={(e) => setForm({ ...form, author: e.target.value })}
-          required
-        />
-        <textarea
-          placeholder="Description"
-          className="w-full border p-2 rounded"
-          value={form.description}
-          onChange={(e) => setForm({ ...form, description: e.target.value })}
-        />
-        <input
-          type="number"
-          step="0.01"
-          placeholder="Price (₦)"
-          className="w-full border p-2 rounded"
-          value={form.price}
-          onChange={(e) => setForm({ ...form, price: parseFloat(e.target.value) || 0 })}
-        />
-        <button type="submit" className="btn-primary" disabled={loading}>
-          {loading ? 'Saving...' : 'Save Book'}
-        </button>
-      </form>
-    </div>
-  );
-}
+// In the form:
+<input type="file" accept="image/*" onChange={e => setCoverFile(e.target.files[0])} />
+<input type="file" accept=".pdf,.epub,.mobi" onChange={e => setFileFile(e.target.files[0])} />
