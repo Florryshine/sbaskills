@@ -142,7 +142,7 @@ export default function DraftsPage() {
                       Publish
                     </button>
                     <Link
-                      href={`/blog/${draft.slug}`}
+                      href={`/admin/content-engine/drafts/${draft.id}`}
                       target="_blank"
                       className="inline-flex items-center gap-1 text-sm text-[#1a73e8] hover:underline"
                     >
