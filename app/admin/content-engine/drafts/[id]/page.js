@@ -30,7 +30,7 @@ export default function DraftPreviewPage() {
         .from('content_drafts')
         .select('*')
         .eq('id', id)
-        .single();
+        .maybeSingle();
 
       if (error) {
         console.error('Supabase error:', error);
