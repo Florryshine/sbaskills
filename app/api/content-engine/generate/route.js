@@ -1,14 +1,13 @@
 import { NextResponse } from 'next/server';
 import { createRouteHandlerClient } from '@/lib/supabase-server';
 import { GoogleGenerativeAI } from '@google/generative-ai';
-import Groq from 'groq-sdk';   // npm install groq-sdk if not installed
+import Groq from 'groq-sdk';
 
 // ---- TEMPORARY: Hardcoded keys (remove after testing) ----
 const GEMINI_API_KEY = 'AQ.Ab8RN6LzFsFswEndjLmXQQnnkoQ8Wn_rdNU1_jjX7o1RWGH_pw';
 const GROQ_API_KEY = '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';
 // ----------------------------------------------------------
 
-// Knowledge base for the AI
 const knowledgeBase = {
   brand: `Shiney Brain Academy – bright blue (#1a73e8), gold (#FFCC00), white. Bold, Africa-proud, modern.`,
   tone: `Conversational, Nigerian student-friendly, mentor-like. Use "you", be encouraging, practical.`,
@@ -31,7 +30,6 @@ const knowledgeBase = {
   ]
 };
 
-// Gemini models (fallback list)
 const GEMINI_MODELS = [
   'gemini-3.5-flash',
   'gemini-2.5-flash',
@@ -45,13 +43,13 @@ export async function POST(request) {
     const supabase = createRouteHandlerClient();
 
     // 1. Get queue item
-    const { data: item } = await supabase
+    const { data: item, error: itemError } = await supabase
       .from('content_queue')
       .select('*')
       .eq('id', queueItemId)
       .single();
 
-    if (!item) {
+    if (itemError || !item) {
       return NextResponse.json({ error: 'Queue item not found' }, { status: 404 });
     }
 
@@ -114,12 +112,12 @@ export async function POST(request) {
       "cta": "..."
     }`;
 
-    // ----- GENERATION (Groq first, then Gemini fallback) -----
+    // ----- GENERATION (Groq primary, Gemini fallback) -----
     let result = null;
     let usedProvider = '';
     const errors = [];
 
-    // 1. Try Groq (primary)
+    // 1. Try Groq
     try {
       const groq = new Groq({ apiKey: GROQ_API_KEY });
       const groqResponse = await groq.chat.completions.create({
@@ -135,13 +133,13 @@ export async function POST(request) {
         result = JSON.parse(match[0]);
         usedProvider = 'Groq (llama-3.3-70b)';
       } else {
-        errors.push('Groq: Could not extract JSON from response');
+        errors.push('Groq: Could not extract JSON');
       }
     } catch (groqError) {
       errors.push(`Groq: ${groqError.message}`);
     }
 
-    // 2. Fallback to Gemini (if Groq fails)
+    // 2. Fallback to Gemini
     if (!result) {
       const client = new GoogleGenerativeAI(GEMINI_API_KEY);
       for (const modelName of GEMINI_MODELS) {
@@ -159,14 +157,12 @@ export async function POST(request) {
             break;
           }
         } catch (e) {
-          errors.push(`Gemini ${modelName} (fallback): ${e.message}`);
+          errors.push(`Gemini ${modelName}: ${e.message}`);
         }
       }
     }
 
-    // 3. If both failed, return error
     if (!result) {
-      console.error('All generation attempts failed:', errors);
       await supabase
         .from('content_queue')
         .update({ status: 'failed' })
@@ -177,7 +173,7 @@ export async function POST(request) {
       );
     }
 
-    // 4. Save draft to database
+    // 5. Save draft
     const { data: draft, error: draftError } = await supabase
       .from('content_drafts')
       .insert({
@@ -209,7 +205,7 @@ export async function POST(request) {
       return NextResponse.json({ error: draftError.message }, { status: 500 });
     }
 
-    // 5. Update queue item
+    // 6. Update queue item
     await supabase
       .from('content_queue')
       .update({
