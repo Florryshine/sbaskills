@@ -8,6 +8,7 @@ const navItems = [
   { href: '/admin/courses', label: 'Courses', icon: '📚' },
   { href: '/admin/students', label: 'Students', icon: '👨‍🎓' },
   { href: '/admin/blog', label: 'Blog', icon: '📝' },
+  { href: '/admin/library', label: 'Library', icon: '📖' },   // <-- Added
   { href: '/admin/audio', label: 'Audio', icon: '🎵' },
   { href: '/admin/roles', label: 'Roles', icon: '🔑' },
   { href: '/admin/testimonials', label: 'Testimonials', icon: '💬' },

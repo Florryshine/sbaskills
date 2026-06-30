@@ -7,14 +7,18 @@ import LogoutButton from '@/components/LogoutButton';
 const navItems = [
   { href: '/admin/dashboard', label: 'Overview', icon: '📊' },
   { href: '/admin/courses', label: 'Courses', icon: '📚' },
-  { href: '/admin/blog', label: 'Blog', icon: '📝' },
-  { href: '/admin/audio', label: 'Audio', icon: '🎵' },
   { href: '/admin/students', label: 'Students', icon: '👨‍🎓' },
+  { href: '/admin/blog', label: 'Blog', icon: '📝' },
+  { href: '/admin/library', label: 'Library', icon: '📖' },   // <-- Added
+  { href: '/admin/audio', label: 'Audio', icon: '🎵' },
   { href: '/admin/roles', label: 'Roles', icon: '🔑' },
   { href: '/admin/testimonials', label: 'Testimonials', icon: '💬' },
-  { href: '/admin/quizzes', label: 'Quizzes', icon: '📝' },
-  { href: '/admin/submissions', label: 'Submissions', icon: '📊' },
-  { href: '/admin/content-engine', label: 'Content Engine', icon: '📝' },
+  { href: '/admin/quizzes', label: 'Quizzes', icon: '🧠' },
+  { href: '/admin/submissions', label: 'Submissions', icon: '📋' },
+  { href: '/admin/daily-challenge', label: 'Daily Challenge', icon: '📅' },
+  { href: '/admin/boss-battles', label: 'Boss Battles', icon: '👹' },
+  { href: '/admin/content-engine', label: 'Content Engine', icon: '⚡' },
+  { href: '/admin/past-questions/upload', label: 'Upload Past Qs', icon: '📤' },
 ];
 
 export default function AdminSidebar() {

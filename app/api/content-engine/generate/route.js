@@ -1,14 +1,14 @@
 import { NextResponse } from 'next/server';
 import { createRouteHandlerClient } from '@/lib/supabase-server';
-import { getGroqClient } from '@/lib/groqAPI';
 import { GoogleGenerativeAI } from '@google/generative-ai';
+import Groq from 'groq-sdk';   // npm install groq-sdk if not installed
 
-// ---- TEMPORARY: Hardcoded Gemini key ----
-// Your new key
+// ---- TEMPORARY: Hardcoded keys (remove after testing) ----
 const GEMINI_API_KEY = 'AQ.Ab8RN6LzFsFswEndjLmXQQnnkoQ8Wn_rdNU1_jjX7o1RWGH_pw';
-// -----------------------------------------
+const GROQ_API_KEY = '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';
+// ----------------------------------------------------------
 
-// Knowledge base (unchanged)
+// Knowledge base for the AI
 const knowledgeBase = {
   brand: `Shiney Brain Academy – bright blue (#1a73e8), gold (#FFCC00), white. Bold, Africa-proud, modern.`,
   tone: `Conversational, Nigerian student-friendly, mentor-like. Use "you", be encouraging, practical.`,
@@ -31,7 +31,7 @@ const knowledgeBase = {
   ]
 };
 
-// Gemini models (unchanged)
+// Gemini models (fallback list)
 const GEMINI_MODELS = [
   'gemini-3.5-flash',
   'gemini-2.5-flash',
@@ -44,7 +44,7 @@ export async function POST(request) {
     const { queueItemId } = await request.json();
     const supabase = createRouteHandlerClient();
 
-    // Get queue item
+    // 1. Get queue item
     const { data: item } = await supabase
       .from('content_queue')
       .select('*')
@@ -55,6 +55,7 @@ export async function POST(request) {
       return NextResponse.json({ error: 'Queue item not found' }, { status: 404 });
     }
 
+    // 2. Check if draft already exists
     if (item.draft_id) {
       const { data: existing } = await supabase
         .from('content_drafts')
@@ -66,11 +67,13 @@ export async function POST(request) {
       }
     }
 
+    // 3. Update status to generating
     await supabase
       .from('content_queue')
       .update({ status: 'generating' })
       .eq('id', queueItemId);
 
+    // 4. Build prompt
     const prompt = `You are an expert content writer for Shiney Brain Academy (SBA), Nigeria's leading exam prep and skills platform.
 
     Write a complete, SEO-optimized blog article on the topic: "${item.keyword}"
@@ -111,56 +114,57 @@ export async function POST(request) {
       "cta": "..."
     }`;
 
-    // ----- GENERATION -----
+    // ----- GENERATION (Groq first, then Gemini fallback) -----
     let result = null;
     let usedProvider = '';
     const errors = [];
 
-    // 1. Gemini (hardcoded key)
-    const client = new GoogleGenerativeAI(GEMINI_API_KEY);
-    for (const modelName of GEMINI_MODELS) {
-      try {
-        const model = client.getGenerativeModel({ model: modelName });
-        const genResult = await model.generateContent({
-          contents: [{ role: 'user', parts: [{ text: prompt }] }],
-        });
-        const text = genResult.response.text();
-        const cleaned = text.replace(/```json|```/g, '').trim();
-        const match = cleaned.match(/\{[\s\S]*\}/);
-        if (match) {
-          result = JSON.parse(match[0]);
-          usedProvider = `Gemini (${modelName}) – hardcoded`;
-          break;
-        }
-      } catch (e) {
-        errors.push(`Gemini ${modelName} (hardcoded): ${e.message}`);
+    // 1. Try Groq (primary)
+    try {
+      const groq = new Groq({ apiKey: GROQ_API_KEY });
+      const groqResponse = await groq.chat.completions.create({
+        messages: [{ role: 'user', content: prompt }],
+        model: 'llama-3.3-70b-versatile',
+        max_tokens: 2048,
+        temperature: 0.7,
+      });
+      const text = groqResponse.choices[0].message.content.trim();
+      const cleaned = text.replace(/```json|```/g, '').trim();
+      const match = cleaned.match(/\{[\s\S]*\}/);
+      if (match) {
+        result = JSON.parse(match[0]);
+        usedProvider = 'Groq (llama-3.3-70b)';
+      } else {
+        errors.push('Groq: Could not extract JSON from response');
       }
+    } catch (groqError) {
+      errors.push(`Groq: ${groqError.message}`);
     }
 
-    // 2. Fallback to Groq
+    // 2. Fallback to Gemini (if Groq fails)
     if (!result) {
-      const groqClient = getGroqClient();
-      if (groqClient) {
+      const client = new GoogleGenerativeAI(GEMINI_API_KEY);
+      for (const modelName of GEMINI_MODELS) {
         try {
-          const groqResponse = await groqClient.chat.completions.create({
-            messages: [{ role: 'user', content: prompt }],
-            model: 'llama-3.3-70b-versatile',
-            max_tokens: 2048,
-            temperature: 0.7,
+          const model = client.getGenerativeModel({ model: modelName });
+          const genResult = await model.generateContent({
+            contents: [{ role: 'user', parts: [{ text: prompt }] }],
           });
-          const text = groqResponse.choices[0].message.content.trim();
+          const text = genResult.response.text();
           const cleaned = text.replace(/```json|```/g, '').trim();
           const match = cleaned.match(/\{[\s\S]*\}/);
           if (match) {
             result = JSON.parse(match[0]);
-            usedProvider = 'Groq (llama-3.3-70b)';
+            usedProvider = `Gemini (${modelName}) – fallback`;
+            break;
           }
-        } catch (groqError) {
-          errors.push(`Groq: ${groqError.message}`);
+        } catch (e) {
+          errors.push(`Gemini ${modelName} (fallback): ${e.message}`);
         }
       }
     }
 
+    // 3. If both failed, return error
     if (!result) {
       console.error('All generation attempts failed:', errors);
       await supabase
@@ -173,7 +177,7 @@ export async function POST(request) {
       );
     }
 
-    // Save draft
+    // 4. Save draft to database
     const { data: draft, error: draftError } = await supabase
       .from('content_drafts')
       .insert({
@@ -205,6 +209,7 @@ export async function POST(request) {
       return NextResponse.json({ error: draftError.message }, { status: 500 });
     }
 
+    // 5. Update queue item
     await supabase
       .from('content_queue')
       .update({

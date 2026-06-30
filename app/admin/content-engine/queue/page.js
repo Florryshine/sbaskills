@@ -64,6 +64,23 @@ export default function QueuePage() {
     }
   }
 
+const generateAll = async () => {
+  const pendingItems = queueItems.filter(item => item.status === 'pending');
+  for (const item of pendingItems) {
+    await fetch('/api/content-engine/generate', {
+      method: 'POST',
+      body: JSON.stringify({ queueItemId: item.id }),
+    });
+    // optionally wait 1-2 seconds between to avoid rate limits
+    await new Promise(resolve => setTimeout(resolve, 1000));
+  }
+  // refresh the list
+  fetchQueueItems();
+};
+
+// Add button:
+<button onClick={generateAll}>Generate All Pending</button>
+
   const getStatusBadge = (status) => {
     const map = {
       pending: { cls: 'bg-blue-50 text-blue-600', label: 'Pending' },
