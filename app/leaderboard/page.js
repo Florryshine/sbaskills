@@ -34,9 +34,12 @@ export default async function LeaderboardPage() {
   const userIds = leaders?.map(l => l.user_id) || [];
   let usersMap = {};
   if (userIds.length > 0) {
+    // Uses leaderboard_profiles (a view exposing only id + full_name)
+    // instead of profiles directly, since profiles' RLS is self-only
+    // and would silently hide every other student's name here.
     const { data: profiles } = await supabase
-      .from('profiles')
-      .select('id, full_name, email')
+      .from('leaderboard_profiles')
+      .select('id, full_name')
       .in('id', userIds);
     usersMap = Object.fromEntries((profiles || []).map(p => [p.id, p]));
   }
@@ -56,7 +59,6 @@ export default async function LeaderboardPage() {
       ...entry,
       rank: index + 1,
       full_name: profile.full_name || 'Student',
-      email: profile.email || '',
       levelName: level.name,
       levelEmoji: level.emoji,
       medal: index < 3 ? MEDAL[index] : null,
