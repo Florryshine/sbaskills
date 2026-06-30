@@ -13,6 +13,7 @@ export default function QueuePage() {
   const [filter, setFilter] = useState('all');
   const [search, setSearch] = useState('');
   const [generating, setGenerating] = useState(null);
+  const [batchGenerating, setBatchGenerating] = useState(false);
 
   useEffect(() => {
     fetchQueue();
@@ -64,22 +65,46 @@ export default function QueuePage() {
     }
   }
 
-const generateAll = async () => {
-  const pendingItems = queueItems.filter(item => item.status === 'pending');
-  for (const item of pendingItems) {
-    await fetch('/api/content-engine/generate', {
-      method: 'POST',
-      body: JSON.stringify({ queueItemId: item.id }),
-    });
-    // optionally wait 1-2 seconds between to avoid rate limits
-    await new Promise(resolve => setTimeout(resolve, 1000));
-  }
-  // refresh the list
-  fetchQueueItems();
-};
+  // ----- BATCH GENERATION (first 20 pending) -----
+  async function generateBatch() {
+    const pendingItems = items.filter(item => item.status === 'pending');
+    const batch = pendingItems.slice(0, 20);
 
-// Add button:
-<button onClick={generateAll}>Generate All Pending</button>
+    if (batch.length === 0) {
+      alert('No pending items to generate.');
+      return;
+    }
+
+    setBatchGenerating(true);
+    let successCount = 0;
+    let failCount = 0;
+
+    for (const item of batch) {
+      try {
+        const res = await fetch('/api/content-engine/generate', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ queueItemId: item.id }),
+        });
+        if (res.ok) {
+          successCount++;
+        } else {
+          failCount++;
+          const data = await res.json();
+          console.error(`Failed for ${item.keyword}:`, data.error);
+        }
+      } catch (e) {
+        failCount++;
+        console.error(`Error for ${item.keyword}:`, e.message);
+      }
+      // Delay 1.5 seconds to avoid rate limits
+      await new Promise(resolve => setTimeout(resolve, 1500));
+    }
+
+    setBatchGenerating(false);
+    alert(`Batch complete: ${successCount} succeeded, ${failCount} failed.`);
+    fetchQueue(); // refresh list
+  }
 
   const getStatusBadge = (status) => {
     const map = {
@@ -110,6 +135,18 @@ const generateAll = async () => {
               <p className="text-sm text-gray-500">{items.length} items in queue</p>
             </div>
             <div className="flex items-center gap-3">
+              <button
+                onClick={generateBatch}
+                disabled={batchGenerating}
+                className="inline-flex items-center gap-2 bg-purple-600 text-white px-4 py-2 rounded-xl text-sm font-medium hover:bg-purple-700 transition-colors disabled:opacity-50"
+              >
+                {batchGenerating ? (
+                  <RefreshCw className="w-4 h-4 animate-spin" />
+                ) : (
+                  <Zap className="w-4 h-4" />
+                )}
+                {batchGenerating ? 'Generating...' : 'Generate Batch (20)'}
+              </button>
               <button
                 onClick={fetchQueue}
                 className="inline-flex items-center gap-2 text-sm text-gray-500 hover:text-gray-700"
