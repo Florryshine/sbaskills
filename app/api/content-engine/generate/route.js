@@ -174,6 +174,7 @@ export async function POST(request) {
     }
 
     // 5. Save draft
+    const wordCount = result.content?.split(/\s+/).length || 0;
     const { data: draft, error: draftError } = await supabase
       .from('content_drafts')
       .insert({
@@ -188,11 +189,11 @@ export async function POST(request) {
         internal_links: result.internal_links || [],
         image_prompts: result.images || [],
         cta: result.cta || '',
-        word_count: result.content?.split(/\s+/).length || 0,
+        word_count: wordCount,
         category: item.category,
         status: 'draft',
-        score_seo: 85,
-        score_readability: 80,
+        content_score: 85,         // was score_seo
+        readability_score: 80,     // was score_readability
       })
       .select()
       .single();
