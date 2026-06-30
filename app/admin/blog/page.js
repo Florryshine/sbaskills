@@ -1,109 +1,123 @@
 ﻿'use client';
 
-import { useEffect, useState } from 'react';
-import { createBrowserClient } from '@/lib/supabase';
-import { useRouter } from 'next/navigation';
+import { useState, useEffect } from 'react';
 import Link from 'next/link';
+import { supabase } from '@/lib/supabase-client';
+import { useRouter } from 'next/navigation';
 
-export default function AdminBlogPage() {
+export default function BlogAdminPage() {
+  const router = useRouter();
   const [posts, setPosts] = useState([]);
   const [loading, setLoading] = useState(true);
-  const router = useRouter();
-  const supabase = createBrowserClient();
 
   useEffect(() => {
-    async function loadPosts() {
-      const { data: { user } } = await supabase.auth.getUser();
-      if (!user) { router.push('/admin/login'); return; }
+    fetchPosts();
+  }, []);
 
-      const { data: profile } = await supabase
-        .from('profiles')
-        .select('role')
-        .eq('id', user.id)
-        .single();
+  async function fetchPosts() {
+    setLoading(true);
+    const { data, error } = await supabase
+      .from('content_drafts')
+      .select('*')
+      .eq('status', 'published')
+      .order('published_at', { ascending: false });
 
-      if (profile?.role !== 'admin') { router.push('/login'); return; }
-
-      const { data } = await supabase
-        .from('blog_posts')
-        .select('*')
-        .order('created_at', { ascending: false });
-
+    if (error) {
+      console.error('Error fetching posts:', error);
+      alert('Error loading posts: ' + error.message);
+    } else {
       setPosts(data || []);
-      setLoading(false);
     }
-    loadPosts();
-  }, [router, supabase]);
+    setLoading(false);
+  }
 
   async function deletePost(id) {
-    if (!confirm('Delete this post?')) return;
-    await supabase.from('blog_posts').delete().eq('id', id);
-    setPosts(posts.filter(p => p.id !== id));
+    if (!confirm('Delete this post permanently?')) return;
+    const { error } = await supabase
+      .from('content_drafts')
+      .delete()
+      .eq('id', id);
+    if (error) {
+      alert('Delete failed: ' + error.message);
+    } else {
+      fetchPosts(); // refresh list
+    }
   }
-
-  async function togglePublish(post) {
-    await supabase
-      .from('blog_posts')
-      .update({ 
-        published: !post.published,
-        published_at: !post.published ? new Date() : null
-      })
-      .eq('id', post.id);
-    setPosts(posts.map(p => 
-      p.id === post.id ? { ...p, published: !p.published } : p
-    ));
-  }
-
-  if (loading) return <div className="p-8 text-center">Loading posts...</div>;
 
   return (
-    <div className="space-y-6">
-      <section className="rounded-2xl bg-white p-6 shadow-sm border border-slate-100">
-        <div className="flex justify-between items-center">
-          <div>
-            <p className="text-xs font-bold uppercase tracking-widest text-brand-yellow">Blog</p>
-            <h1 className="text-2xl font-extrabold text-brand-blue">Manage Blog Posts</h1>
-            <p className="text-sm text-slate-500">{posts.length} posts total</p>
-          </div>
-          <Link href="/admin/blog/new" className="rounded-full bg-brand-yellow px-5 py-2.5 text-sm font-bold text-brand-dark">
-            + New Post
-          </Link>
-        </div>
-      </section>
+    <div className="p-6 max-w-6xl mx-auto">
+      <div className="flex justify-between items-center mb-6">
+        <h1 className="text-2xl font-bold text-gray-900">📝 Blog Posts</h1>
+        <Link
+          href="/admin/blog/add"
+          className="bg-blue-600 text-white px-4 py-2 rounded-lg hover:bg-blue-700 transition-colors"
+        >
+          + Write New Post
+        </Link>
+      </div>
 
-      <section className="rounded-2xl bg-white shadow-sm border border-slate-100 overflow-hidden">
-        {posts.length === 0 ? (
-          <div className="py-16 text-center">
-            <p className="text-4xl mb-4">✍️</p>
-            <p className="text-gray-500">No blog posts yet. Create your first post!</p>
-          </div>
-        ) : (
-          <div className="divide-y divide-slate-100">
-            {posts.map((post) => (
-              <div key={post.id} className="flex items-center gap-4 p-4 hover:bg-slate-50 transition">
-                <div className="flex-1 min-w-0">
-                  <p className="font-bold text-slate-800 truncate">{post.title}</p>
-                  <p className="text-sm text-slate-500 truncate">{post.slug}</p>
-                  <span className={`text-xs px-2 py-0.5 rounded-full ${post.published ? 'bg-green-100 text-green-700' : 'bg-gray-100 text-gray-500'}`}>
-                    {post.published ? 'Published' : 'Draft'}
-                  </span>
-                </div>
-                <div className="flex items-center gap-2 shrink-0">
-                  <Link href={`/admin/blog/${post.id}`} className="text-brand-blue text-sm font-bold hover:underline">
-                    Edit
-                  </Link>
-                  <button onClick={() => togglePublish(post)} className={`text-sm font-bold ${post.published ? 'text-yellow-600' : 'text-green-600'} hover:underline`}>
-                    {post.published ? 'Unpublish' : 'Publish'}
-                  </button>
-                  <button onClick={() => deletePost(post.id)} className="text-red-500 text-sm font-bold hover:underline">
-                    Delete
-                  </button>
-                </div>
-              </div>
-            ))}
-          </div>
-        )}
-      </section>
+      {loading ? (
+        <div className="space-y-3">
+          {[1, 2, 3].map(i => (
+            <div key={i} className="h-16 bg-gray-100 rounded animate-pulse" />
+          ))}
+        </div>
+      ) : posts.length === 0 ? (
+        <div className="bg-white rounded-lg border border-gray-200 p-12 text-center">
+          <p className="text-gray-500">No published posts yet.</p>
+          <p className="text-sm text-gray-400 mt-2">Create your first post using the "Write New Post" button.</p>
+        </div>
+      ) : (
+        <div className="bg-white rounded-lg border border-gray-200 overflow-hidden">
+          <table className="w-full">
+            <thead className="bg-gray-50 border-b">
+              <tr>
+                <th className="text-left p-3 text-sm font-medium text-gray-500">Title</th>
+                <th className="text-left p-3 text-sm font-medium text-gray-500">Slug</th>
+                <th className="text-left p-3 text-sm font-medium text-gray-500">Category</th>
+                <th className="text-left p-3 text-sm font-medium text-gray-500">Published</th>
+                <th className="text-right p-3 text-sm font-medium text-gray-500">Actions</th>
+              </tr>
+            </thead>
+            <tbody className="divide-y divide-gray-100">
+              {posts.map((post) => (
+                <tr key={post.id} className="hover:bg-gray-50">
+                  <td className="p-3">
+                    <Link
+                      href={`/blog/${post.url_slug}`}
+                      target="_blank"
+                      className="text-blue-600 hover:underline font-medium"
+                    >
+                      {post.title}
+                    </Link>
+                  </td>
+                  <td className="p-3 text-sm text-gray-500">{post.url_slug}</td>
+                  <td className="p-3 text-sm text-gray-500">{post.category || 'Uncategorized'}</td>
+                  <td className="p-3 text-sm text-gray-500">
+                    {post.published_at ? new Date(post.published_at).toLocaleDateString() : '—'}
+                  </td>
+                  <td className="p-3 text-right">
+                    <div className="flex justify-end gap-2">
+                      <Link
+                        href={`/admin/blog/${post.id}/edit`}
+                        className="text-blue-600 hover:text-blue-800 text-sm font-medium"
+                      >
+                        Edit
+                      </Link>
+                      <button
+                        onClick={() => deletePost(post.id)}
+                        className="text-red-600 hover:text-red-800 text-sm font-medium"
+                      >
+                        Delete
+                      </button>
+                    </div>
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      )}
     </div>
   );
 }
