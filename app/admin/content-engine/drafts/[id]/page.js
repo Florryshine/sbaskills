@@ -19,26 +19,39 @@ export default function DraftPreviewPage() {
   const [editedContent, setEditedContent] = useState('');
 
   useEffect(() => {
-    fetchDraft();
+    if (id) fetchDraft();
   }, [id]);
 
   async function fetchDraft() {
     setLoading(true);
-    const { data, error } = await supabase
-      .from('content_drafts')
-      .select('*')
-      .eq('id', id)
-      .single();
+    console.log('Fetching draft with ID:', id);
+    try {
+      const { data, error } = await supabase
+        .from('content_drafts')
+        .select('*')
+        .eq('id', id)
+        .single();
 
-    if (error) {
-      console.error('Error fetching draft:', error);
-      alert('Draft not found');
-      router.push('/admin/content-engine/drafts');
-    } else {
+      if (error) {
+        console.error('Supabase error:', error);
+        alert('Draft not found: ' + error.message);
+        router.push('/admin/content-engine/drafts');
+        return;
+      }
+      if (!data) {
+        alert('Draft not found (no data)');
+        router.push('/admin/content-engine/drafts');
+        return;
+      }
       setDraft(data);
       setEditedContent(data.content || '');
+    } catch (err) {
+      console.error('Unexpected error:', err);
+      alert('Error: ' + err.message);
+      router.push('/admin/content-engine/drafts');
+    } finally {
+      setLoading(false);
     }
-    setLoading(false);
   }
 
   async function saveDraft() {
