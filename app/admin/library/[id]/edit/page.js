@@ -7,8 +7,19 @@ export default function EditBook() {
   const router = useRouter();
   const params = useParams();
   const id = params.id;
-  const [form, setForm] = useState({ title: '', author: '', description: '', price: 0 });
+
+  const [form, setForm] = useState({
+    title: '',
+    author: '',
+    description: '',
+    price: 0,
+    cover_image_url: '',
+    file_url: '',
+  });
+  const [coverFile, setCoverFile] = useState(null);
+  const [fileFile, setFileFile] = useState(null);
   const [loading, setLoading] = useState(true);
+  const [uploading, setUploading] = useState(false);
 
   useEffect(() => {
     if (id) {
@@ -24,13 +35,41 @@ export default function EditBook() {
     }
   }, [id]);
 
+  const handleUpload = async (file, folder) => {
+    if (!file) return null;
+    const fileExt = file.name.split('.').pop();
+    const fileName = `${Date.now()}.${fileExt}`;
+    const path = `${folder}/${fileName}`;
+    const { data, error } = await supabase.storage
+      .from('books')
+      .upload(path, file);
+    if (error) throw error;
+    const { data: urlData } = supabase.storage
+      .from('books')
+      .getPublicUrl(path);
+    return urlData.publicUrl;
+  };
+
   const handleSubmit = async (e) => {
     e.preventDefault();
-    const { error } = await supabase
-      .from('books')
-      .update(form)
-      .eq('id', id);
-    if (!error) router.push('/admin/library');
+    setUploading(true);
+    try {
+      let coverUrl = form.cover_image_url;
+      let fileUrl = form.file_url;
+      if (coverFile) coverUrl = await handleUpload(coverFile, 'covers');
+      if (fileFile) fileUrl = await handleUpload(fileFile, 'files');
+
+      const { error } = await supabase
+        .from('books')
+        .update({ ...form, cover_image_url: coverUrl, file_url: fileUrl })
+        .eq('id', id);
+      if (error) throw error;
+      router.push('/admin/library');
+    } catch (err) {
+      alert(err.message);
+    } finally {
+      setUploading(false);
+    }
   };
 
   if (loading) return <div>Loading...</div>;
@@ -67,9 +106,66 @@ export default function EditBook() {
           placeholder="Price (₦)"
           className="w-full border p-2 rounded"
           value={form.price}
-          onChange={(e) => setForm({ ...form, price: parseFloat(e.target.value) || 0 })}
+          onChange={(e) =>
+            setForm({ ...form, price: parseFloat(e.target.value) || 0 })
+          }
         />
-        <button type="submit" className="btn-primary">Update Book</button>
+
+        {/* Current Cover */}
+        {form.cover_image_url && (
+          <div>
+            <p className="text-sm font-medium">Current Cover</p>
+            <img
+              src={form.cover_image_url}
+              alt="Cover"
+              className="h-24 w-auto object-cover"
+            />
+          </div>
+        )}
+        <div>
+          <label className="block text-sm font-medium mb-1">
+            Replace Cover (optional)
+          </label>
+          <input
+            type="file"
+            accept="image/*"
+            onChange={(e) => setCoverFile(e.target.files[0])}
+            className="block w-full text-sm text-gray-500 file:mr-4 file:py-2 file:px-4 file:rounded file:border-0 file:text-sm file:font-semibold file:bg-blue-50 file:text-blue-700 hover:file:bg-blue-100"
+          />
+        </div>
+
+        {/* Current File */}
+        {form.file_url && (
+          <div>
+            <p className="text-sm font-medium">Current File</p>
+            <a
+              href={form.file_url}
+              target="_blank"
+              className="text-blue-600 underline text-sm"
+            >
+              Download
+            </a>
+          </div>
+        )}
+        <div>
+          <label className="block text-sm font-medium mb-1">
+            Replace PDF/eBook (optional)
+          </label>
+          <input
+            type="file"
+            accept=".pdf,.epub,.mobi"
+            onChange={(e) => setFileFile(e.target.files[0])}
+            className="block w-full text-sm text-gray-500 file:mr-4 file:py-2 file:px-4 file:rounded file:border-0 file:text-sm file:font-semibold file:bg-blue-50 file:text-blue-700 hover:file:bg-blue-100"
+          />
+        </div>
+
+        <button
+          type="submit"
+          className="btn-primary w-full"
+          disabled={uploading}
+        >
+          {uploading ? 'Updating...' : 'Update Book'}
+        </button>
       </form>
     </div>
   );
