@@ -3,10 +3,8 @@ import { createRouteHandlerClient } from '@/lib/supabase-server';
 import { GoogleGenerativeAI } from '@google/generative-ai';
 import Groq from 'groq-sdk';
 
-// ---- TEMPORARY: Hardcoded keys (remove after testing) ----
-const GEMINI_API_KEY = 'AQ.Ab8RN6LzFsFswEndjLmXQQnnkoQ8Wn_rdNU1_jjX7o1RWGH_pw';
-const GROQ_API_KEY = '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';
-// ----------------------------------------------------------
+const GEMINI_API_KEY = process.env.GEMINI_API_KEY;
+const GROQ_API_KEY = process.env.GROQ_API_KEY;
 
 const knowledgeBase = {
   brand: `Shiney Brain Academy – bright blue (#1a73e8), gold (#FFCC00), white. Bold, Africa-proud, modern.`,
