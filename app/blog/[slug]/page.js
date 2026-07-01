@@ -13,18 +13,35 @@ export default function BlogPostPage({ params }) {
   useEffect(() => {
     async function loadPost() {
       try {
+        console.log('🔍 Fetching post with slug:', params.slug);
         const supabase = createBrowserClient();
-        const { data, error } = await supabase
+        
+        // Add a timeout to catch hanging requests
+        const timeoutPromise = new Promise((_, reject) =>
+          setTimeout(() => reject(new Error('Request timed out after 10 seconds')), 10000)
+        );
+
+        const queryPromise = supabase
           .from('content_drafts')
           .select('*')
           .eq('url_slug', params.slug)
           .eq('status', 'published')
           .maybeSingle();
 
-        if (error) throw new Error(error.message);
-        if (!data) throw new Error('Post not found');
+        const { data, error } = await Promise.race([queryPromise, timeoutPromise]);
+
+        if (error) {
+          console.error('❌ Supabase error:', error);
+          throw new Error(error.message);
+        }
+        if (!data) {
+          console.warn('⚠️ No post found for slug:', params.slug);
+          throw new Error('Post not found');
+        }
+        console.log('✅ Post loaded:', data.title);
         setPost(data);
       } catch (err) {
+        console.error('🔥 Error loading post:', err);
         setError(err.message);
       } finally {
         setLoading(false);
@@ -50,7 +67,7 @@ export default function BlogPostPage({ params }) {
         <div className="min-h-screen flex items-center justify-center flex-col p-6">
           <h2 className="text-xl font-bold text-red-600">Error loading post</h2>
           <p className="text-gray-700 mt-2">{error}</p>
-          <p className="text-sm text-gray-500 mt-1">Please try again later.</p>
+          <p className="text-sm text-gray-500 mt-1">Check console for details.</p>
         </div>
         <Footer />
       </>
@@ -78,7 +95,13 @@ export default function BlogPostPage({ params }) {
           <div className="flex items-center gap-4 mb-6 text-sm text-gray-500 border-b pb-4">
             <span className="font-semibold text-gray-700">Shiney Brain Academy</span>
             <span>•</span>
-            <span>{new Date(post.published_at || post.created_at).toLocaleDateString()}</span>
+            <span>
+              {new Date(post.published_at || post.created_at).toLocaleDateString('en-NG', {
+                day: 'numeric',
+                month: 'long',
+                year: 'numeric',
+              })}
+            </span>
             <span>•</span>
             <span>{Math.ceil((post.content?.split(/\s+/).length || 0) / 200)} min read</span>
           </div>
@@ -91,11 +114,6 @@ export default function BlogPostPage({ params }) {
             className="prose prose-lg max-w-none text-gray-700 leading-relaxed mt-6"
             dangerouslySetInnerHTML={{ __html: post.content || 'No content yet.' }}
           />
-          {post.cta && (
-            <div className="mt-8 p-6 bg-brand-yellow/10 rounded-lg border border-brand-yellow">
-              <p className="text-lg font-medium">{post.cta}</p>
-            </div>
-          )}
         </article>
       </main>
       <Footer />
