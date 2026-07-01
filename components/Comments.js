@@ -2,212 +2,101 @@
 
 import { useState, useEffect } from 'react';
 import { createBrowserClient } from '@/lib/supabase';
-import { useRouter } from 'next/navigation';
 
 export default function Comments({ postId }) {
   const [comments, setComments] = useState([]);
   const [newComment, setNewComment] = useState('');
-  const [user, setUser] = useState(null);
+  const [sort, setSort] = useState('newest');
   const [loading, setLoading] = useState(true);
-  const [submitting, setSubmitting] = useState(false);
-  const [replyTo, setReplyTo] = useState(null);
-  const [replyContent, setReplyContent] = useState('');
-  const router = useRouter();
-  const supabase = createBrowserClient();
+  const [user, setUser] = useState(null);
 
   useEffect(() => {
-    async function loadComments() {
-      const { data: { user } } = await supabase.auth.getUser();
-      setUser(user);
+    const supabase = createBrowserClient();
+    supabase.auth.getUser().then(({ data }) => {
+      if (data?.user) setUser(data.user);
+    });
+    fetchComments();
+  }, [postId, sort]);
 
-      const { data } = await supabase
-        .from('blog_comments')
-        .select(`
-          *,
-          profiles:user_id (full_name, email)
-        `)
-        .eq('post_id', postId)
-        .eq('is_approved', true)
-        .order('created_at', { ascending: true });
+  async function fetchComments() {
+    setLoading(true);
+    const supabase = createBrowserClient();
+    const { data, error } = await supabase
+      .from('comments')
+      .select('*, profiles:user_id (full_name)')
+      .eq('post_id', postId)
+      .order('created_at', { ascending: sort === 'oldest' });
+    if (!error) setComments(data || []);
+    setLoading(false);
+  }
 
-      setComments(data || []);
-      setLoading(false);
-    }
-
-    loadComments();
-  }, [postId]);
-
-  const handleSubmit = async () => {
-    if (!user) {
-      router.push('/login');
-      return;
-    }
+  async function submitComment(e) {
+    e.preventDefault();
     if (!newComment.trim()) return;
-
-    setSubmitting(true);
-    const { data, error } = await supabase
-      .from('blog_comments')
-      .insert({
-        post_id: postId,
-        user_id: user.id,
-        content: newComment.trim(),
-        is_approved: true,
-      })
-      .select(`
-        *,
-        profiles:user_id (full_name, email)
-      `)
-      .single();
-
-    if (error) {
-      alert('Error posting comment: ' + error.message);
-    } else {
-      setComments([...comments, data]);
+    const supabase = createBrowserClient();
+    const { error } = await supabase.from('comments').insert({
+      post_id: postId,
+      user_id: user?.id,
+      content: newComment.trim(),
+    });
+    if (!error) {
       setNewComment('');
+      fetchComments();
     }
-    setSubmitting(false);
-  };
-
-  const handleReply = async (parentId) => {
-    if (!user) {
-      router.push('/login');
-      return;
-    }
-    if (!replyContent.trim()) return;
-
-    setSubmitting(true);
-    const { data, error } = await supabase
-      .from('blog_comments')
-      .insert({
-        post_id: postId,
-        user_id: user.id,
-        content: replyContent.trim(),
-        parent_id: parentId,
-        is_approved: true,
-      })
-      .select(`
-        *,
-        profiles:user_id (full_name, email)
-      `)
-      .single();
-
-    if (error) {
-      alert('Error posting reply: ' + error.message);
-    } else {
-      setComments([...comments, data]);
-      setReplyContent('');
-      setReplyTo(null);
-    }
-    setSubmitting(false);
-  };
-
-  const getNestedComments = (parentId = null) => {
-    return comments.filter(c => c.parent_id === parentId);
-  };
-
-  const renderComment = (comment, depth = 0) => {
-    const replies = getNestedComments(comment.id);
-    const isReply = replyTo === comment.id;
-
-    return (
-      <div key={comment.id} className={`${depth > 0 ? 'ml-8 border-l-2 border-gray-200 pl-4' : ''} mb-4`}>
-        <div className="bg-white rounded-xl border border-gray-100 p-4 shadow-sm">
-          <div className="flex items-center gap-3 mb-2">
-            <div className="w-8 h-8 rounded-full bg-brand-blue flex items-center justify-center text-white font-bold text-xs">
-              {(comment.profiles?.full_name || comment.profiles?.email || 'U')[0].toUpperCase()}
-            </div>
-            <div>
-              <p className="font-semibold text-sm text-gray-800">
-                {comment.profiles?.full_name || comment.profiles?.email?.split('@')[0] || 'Anonymous'}
-              </p>
-              <p className="text-xs text-gray-400">
-                {new Date(comment.created_at).toLocaleDateString('en-NG', {
-                  day: 'numeric',
-                  month: 'short',
-                  year: 'numeric',
-                })}
-              </p>
-            </div>
-          </div>
-          <p className="text-sm text-gray-700">{comment.content}</p>
-          {user && (
-            <button
-              onClick={() => setReplyTo(isReply ? null : comment.id)}
-              className="mt-2 text-xs text-brand-blue hover:underline"
-            >
-              {isReply ? 'Cancel' : 'Reply'}
-            </button>
-          )}
-        </div>
-
-        {/* Reply form */}
-        {isReply && (
-          <div className="mt-3 ml-4">
-            <div className="flex gap-2">
-              <input
-                type="text"
-                placeholder="Write a reply..."
-                value={replyContent}
-                onChange={(e) => setReplyContent(e.target.value)}
-                className="flex-1 rounded-xl border border-gray-200 px-4 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-300"
-              />
-              <button
-                onClick={() => handleReply(comment.id)}
-                disabled={submitting || !replyContent.trim()}
-                className="bg-brand-blue text-white px-4 py-2 rounded-xl text-sm font-bold hover:opacity-90 disabled:opacity-50"
-              >
-                Reply
-              </button>
-            </div>
-          </div>
-        )}
-
-        {/* Nested replies */}
-        {replies.map(reply => renderComment(reply, depth + 1))}
-      </div>
-    );
-  };
-
-  if (loading) return <div className="text-center py-8 text-gray-500">Loading comments...</div>;
+  }
 
   return (
-    <div className="mt-12 pt-8 border-t border-gray-200">
-      <h3 className="text-2xl font-bold text-gray-800 mb-6">
-        💬 Comments ({comments.filter(c => !c.parent_id).length})
-      </h3>
+    <div className="mt-8 border-t pt-6">
+      <h3 className="font-bold mb-4">Comments ({comments.length})</h3>
+      
+      <div className="flex items-center gap-4 mb-4">
+        <label className="text-sm text-gray-600">Sort by:</label>
+        <select
+          value={sort}
+          onChange={(e) => setSort(e.target.value)}
+          className="border rounded px-2 py-1 text-sm"
+        >
+          <option value="newest">Newest</option>
+          <option value="oldest">Oldest</option>
+        </select>
+      </div>
 
-      {/* Comment form */}
       {user ? (
-        <div className="flex gap-3 mb-6">
-          <input
-            type="text"
-            placeholder="Write a comment..."
+        <form onSubmit={submitComment} className="mb-4">
+          <textarea
             value={newComment}
             onChange={(e) => setNewComment(e.target.value)}
-            onKeyDown={(e) => e.key === 'Enter' && handleSubmit()}
-            className="flex-1 rounded-xl border border-gray-200 px-4 py-3 focus:outline-none focus:ring-2 focus:ring-blue-300"
+            placeholder="Write a comment..."
+            className="w-full border rounded p-2 text-sm"
+            rows="2"
           />
-          <button
-            onClick={handleSubmit}
-            disabled={submitting || !newComment.trim()}
-            className="bg-brand-yellow text-brand-dark px-6 py-3 rounded-xl font-bold hover:opacity-90 disabled:opacity-50"
-          >
+          <button type="submit" className="bg-blue-600 text-white px-4 py-1 rounded text-sm">
             Post
           </button>
-        </div>
+        </form>
       ) : (
-        <p className="text-sm text-gray-500 mb-6">
-          Please <a href="/login" className="text-brand-blue font-semibold hover:underline">login</a> to comment.
-        </p>
+        <p className="text-sm text-gray-500">Please log in to comment.</p>
       )}
 
-      {/* Comments list */}
-      <div className="space-y-2">
-        {getNestedComments().map(comment => renderComment(comment))}
-        {comments.filter(c => !c.parent_id).length === 0 && (
-          <p className="text-gray-400 text-sm py-4">No comments yet. Be the first!</p>
-        )}
-      </div>
+      {loading ? (
+        <p className="text-sm text-gray-400">Loading comments...</p>
+      ) : comments.length === 0 ? (
+        <p className="text-sm text-gray-400">No comments yet. Be the first!</p>
+      ) : (
+        <div className="space-y-3">
+          {comments.map((c) => (
+            <div key={c.id} className="border-b pb-2">
+              <div className="flex items-center gap-2 text-sm">
+                <span className="font-semibold">{c.profiles?.full_name || 'Anonymous'}</span>
+                <span className="text-gray-400 text-xs">
+                  {new Date(c.created_at).toLocaleDateString()}
+                </span>
+              </div>
+              <p className="text-sm">{c.content}</p>
+            </div>
+          ))}
+        </div>
+      )}
     </div>
   );
 }
