@@ -5,6 +5,8 @@ import Link from 'next/link';
 import { supabase } from '@/lib/supabase-client';
 import { useRouter } from 'next/navigation';
 
+export const dynamic = 'force-dynamic';
+
 export default function BlogAdminPage() {
   const router = useRouter();
   const [posts, setPosts] = useState([]);
