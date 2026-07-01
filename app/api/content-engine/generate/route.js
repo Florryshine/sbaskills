@@ -3,22 +3,21 @@ import { createRouteHandlerClient } from '@/lib/supabase-server';
 import { GoogleGenerativeAI } from '@google/generative-ai';
 import Groq from 'groq-sdk';
 
-// ── API Keys (all keys, with fallback rotation) ───────────────────────────
+// ── HARDCODED API KEYS (temporary) ──────────────────────────────────────
 const GROQ_KEYS = [
-  process.env.NEXT_PUBLIC_GROQ_API_KEY_1,
-  process.env.NEXT_PUBLIC_GROQ_API_KEY_2,
-].filter(Boolean);
+  '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',
+];
 
 const GEMINI_KEYS = [
-  process.env.NEXT_PUBLIC_GEMINI_API_KEY_1,
-  process.env.NEXT_PUBLIC_GEMINI_API_KEY_2,
-].filter(Boolean);
+  'AQ.Ab8RN6LzFsFswEndjLmXQQnnkoQ8Wn_rdNU1_jjX7o1RWGH_pw',
+];
 
-// ── Gemini model priority list ────────────────────────────────────────────
+// ── Gemini models – latest stable + fallbacks ──────────────────────────
 const GEMINI_MODELS = [
-  'gemini-2.5-flash',
-  'gemini-1.5-flash',
-  'gemini-2.5-pro',
+  'gemini-3.5-flash',   // newest, fastest
+  'gemini-3.5-pro',     // for complex reasoning
+  'gemini-2.5-flash',   // fallback
+  'gemini-2.0-flash',   // legacy fallback
 ];
 
 // ── Brand knowledge base ──────────────────────────────────────────────────
@@ -166,12 +165,12 @@ Return the response as a valid JSON object with this exact structure:
             const match = cleaned.match(/\{[\s\S]*\}/);
             if (match) {
               result = JSON.parse(match[0]);
-              usedProvider = `Gemini key ${GEMINI_KEYS.indexOf(geminiKey) + 1} (${modelName})`;
+              usedProvider = `Gemini (${modelName})`;
             } else {
-              errors.push(`Gemini key ${GEMINI_KEYS.indexOf(geminiKey) + 1} ${modelName}: Could not extract JSON`);
+              errors.push(`Gemini ${modelName}: Could not extract JSON`);
             }
           } catch (e) {
-            errors.push(`Gemini key ${GEMINI_KEYS.indexOf(geminiKey) + 1} ${modelName}: ${e.message}`);
+            errors.push(`Gemini ${modelName}: ${e.message}`);
           }
         }
       }
