@@ -3,24 +3,24 @@ import { createRouteHandlerClient } from '@/lib/supabase-server';
 import { GoogleGenerativeAI } from '@google/generative-ai';
 import Groq from 'groq-sdk';
 
-// ── HARDCODED API KEYS (temporary) ──────────────────────────────────────
+// ── YOUR NEW API KEYS (hardcoded for testing) ──────────────────────────
 const GROQ_KEYS = [
-  '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',
+  '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',
 ];
 
 const GEMINI_KEYS = [
-  'AQ.Ab8RN6LzFsFswEndjLmXQQnnkoQ8Wn_rdNU1_jjX7o1RWGH_pw',
+  'AQ.Ab8RN6KWHKpcsIv29h475pkAp-f1aASp-rBTFtTBrGt0V4Knsw',
 ];
 
-// ── Gemini models – latest stable + fallbacks ──────────────────────────
+// ── Gemini models – latest stable ──────────────────────────────────────
 const GEMINI_MODELS = [
-  'gemini-3.5-flash',   // newest, fastest
-  'gemini-3.5-pro',     // for complex reasoning
-  'gemini-2.5-flash',   // fallback
-  'gemini-2.0-flash',   // legacy fallback
+  'gemini-3.5-flash',
+  'gemini-3.5-pro',
+  'gemini-2.5-flash',
+  'gemini-2.0-flash',
 ];
 
-// ── Brand knowledge base ──────────────────────────────────────────────────
+// ── Brand knowledge base (unchanged) ────────────────────────────────────
 const knowledgeBase = {
   brand: `Shiney Brain Academy – bright blue (#1a73e8), gold (#FFCC00), white. Bold, Africa-proud, modern.`,
   tone: `Conversational, Nigerian student-friendly, mentor-like. Use "you", be encouraging, practical.`,
@@ -123,7 +123,7 @@ Return the response as a valid JSON object with this exact structure:
     let usedProvider = '';
     const errors = [];
 
-    // ── 5a. Try each Groq key ─────────────────────────────────────────────
+    // ── 5a. Groq ──────────────────────────────────────────────────────────
     for (const groqKey of GROQ_KEYS) {
       if (result) break;
       try {
@@ -141,14 +141,14 @@ Return the response as a valid JSON object with this exact structure:
           result = JSON.parse(match[0]);
           usedProvider = 'Groq (llama-3.3-70b)';
         } else {
-          errors.push(`Groq key ${GROQ_KEYS.indexOf(groqKey) + 1}: Could not extract JSON`);
+          errors.push('Groq: Could not extract JSON');
         }
       } catch (e) {
-        errors.push(`Groq key ${GROQ_KEYS.indexOf(groqKey) + 1}: ${e.message}`);
+        errors.push(`Groq: ${e.message}`);
       }
     }
 
-    // ── 5b. Fallback — try each Gemini key × each model ──────────────────
+    // ── 5b. Gemini (fallback) ────────────────────────────────────────────
     if (!result) {
       for (const geminiKey of GEMINI_KEYS) {
         if (result) break;
