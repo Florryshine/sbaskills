@@ -6,10 +6,10 @@ import Navbar from '@/components/Navbar';
 import Footer from '@/components/Footer';
 import dynamic from 'next/dynamic';
 
-// Load these components only on the client (skip SSR)
+// Dynamically load all interactive components (client-side only)
 const ShareButtons = dynamic(() => import('@/components/ShareButtons'), { ssr: false });
 const MarkDoneButton = dynamic(() => import('@/components/MarkDoneButton'), { ssr: false });
-// Comments removed temporarily until we fix it
+const Comments = dynamic(() => import('@/components/Comments'), { ssr: false });
 
 export default function BlogPostPage({ params }) {
   const [post, setPost] = useState(null);
@@ -17,10 +17,12 @@ export default function BlogPostPage({ params }) {
   const [error, setError] = useState(null);
   const [isClient, setIsClient] = useState(false);
 
+  // Mark when we're on the client (prevents hydration mismatches)
   useEffect(() => {
     setIsClient(true);
   }, []);
 
+  // Fetch the post data
   useEffect(() => {
     async function loadPost() {
       try {
@@ -36,6 +38,7 @@ export default function BlogPostPage({ params }) {
         if (!data) throw new Error('Post not found');
         setPost(data);
       } catch (err) {
+        console.error('Error loading post:', err);
         setError(err.message);
       } finally {
         setLoading(false);
@@ -44,6 +47,7 @@ export default function BlogPostPage({ params }) {
     loadPost();
   }, [params.slug]);
 
+  // --- Loading state ---
   if (loading) {
     return (
       <>
@@ -54,6 +58,7 @@ export default function BlogPostPage({ params }) {
     );
   }
 
+  // --- Error state ---
   if (error) {
     return (
       <>
@@ -68,6 +73,7 @@ export default function BlogPostPage({ params }) {
     );
   }
 
+  // --- Not found ---
   if (!post) {
     return (
       <>
@@ -78,6 +84,7 @@ export default function BlogPostPage({ params }) {
     );
   }
 
+  // --- Render the post ---
   return (
     <>
       <Navbar />
@@ -107,7 +114,7 @@ export default function BlogPostPage({ params }) {
             </p>
           )}
 
-          {/* Only render components on the client */}
+          {/* --- Interactive components (client-only) --- */}
           {isClient && (
             <>
               <ShareButtons
@@ -117,6 +124,7 @@ export default function BlogPostPage({ params }) {
                 targetId={post.id}
                 description={post.meta_description || 'Read this blog post on Shiney Brain Academy!'}
               />
+
               <div className="mt-8 pt-6 border-t border-gray-200">
                 <MarkDoneButton
                   activityType="blog"
@@ -125,7 +133,10 @@ export default function BlogPostPage({ params }) {
                   label="📚 Mark as Read (Earn 10 Points)"
                 />
               </div>
-              {/* Comments removed – fix the Comments component separately */}
+
+              <div className="mt-8 pt-6 border-t border-gray-200">
+                <Comments postId={post.id} />
+              </div>
             </>
           )}
         </article>
