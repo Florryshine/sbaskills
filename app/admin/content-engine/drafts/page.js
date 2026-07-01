@@ -8,6 +8,8 @@ import {
   XCircle, ExternalLink, RefreshCw
 } from 'lucide-react';
 
+export const dynamic = 'force-dynamic';
+
 export default function DraftsPage() {
   const [drafts, setDrafts] = useState([]);
   const [loading, setLoading] = useState(true);

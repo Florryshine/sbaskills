@@ -6,6 +6,8 @@ import Link from 'next/link';
 import { supabase } from '@/lib/supabase-client';
 import { ArrowLeft, Save, CheckCircle, RefreshCw } from 'lucide-react';
 
+export const dynamic = 'force-dynamic';
+
 export default function DraftPreviewPage() {
   const params = useParams();
   const router = useRouter();

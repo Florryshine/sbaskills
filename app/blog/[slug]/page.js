@@ -5,6 +5,8 @@ import { createBrowserClient } from '@/lib/supabase';
 import Navbar from '@/components/Navbar';
 import Footer from '@/components/Footer';
 
+export const dynamic = 'force-dynamic';
+
 export default function BlogPostPage({ params }) {
   const [post, setPost] = useState(null);
   const [loading, setLoading] = useState(true);
