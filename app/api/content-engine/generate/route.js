@@ -3,16 +3,20 @@ import { createRouteHandlerClient } from '@/lib/supabase-server';
 import { GoogleGenerativeAI } from '@google/generative-ai';
 import Groq from 'groq-sdk';
 
-// ── YOUR NEW API KEYS (hardcoded for testing) ──────────────────────────
-const GROQ_KEYS = [
-  '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',
-];
-
+// ── Load multiple API keys from environment variables ────────────────────
 const GEMINI_KEYS = [
-  'AQ.Ab8RN6KWHKpcsIv29h475pkAp-f1aASp-rBTFtTBrGt0V4Knsw',
-];
+  process.env.GEMINI_API_KEY_1,
+  process.env.GEMINI_API_KEY_2,
+  process.env.GEMINI_API_KEY, // fallback if single key is used
+].filter(Boolean);
 
-// ── Gemini models – latest stable ──────────────────────────────────────
+const GROQ_KEYS = [
+  process.env.GROQ_API_KEY_1,
+  process.env.GROQ_API_KEY_2,
+  process.env.GROQ_API_KEY, // fallback
+].filter(Boolean);
+
+// ── Gemini models ────────────────────────────────────────────────────────
 const GEMINI_MODELS = [
   'gemini-3.5-flash',
   'gemini-3.5-pro',
@@ -20,7 +24,7 @@ const GEMINI_MODELS = [
   'gemini-2.0-flash',
 ];
 
-// ── Brand knowledge base (unchanged) ────────────────────────────────────
+// ── Brand knowledge base ──────────────────────────────────────────────────
 const knowledgeBase = {
   brand: `Shiney Brain Academy – bright blue (#1a73e8), gold (#FFCC00), white. Bold, Africa-proud, modern.`,
   tone: `Conversational, Nigerian student-friendly, mentor-like. Use "you", be encouraging, practical.`,
@@ -118,12 +122,12 @@ Return the response as a valid JSON object with this exact structure:
   "cta": "..."
 }`;
 
-    // ── 5. Try all providers ──────────────────────────────────────────────
+    // ── 5. Try all providers (with key rotation) ──────────────────────────
     let result = null;
     let usedProvider = '';
     const errors = [];
 
-    // ── 5a. Groq ──────────────────────────────────────────────────────────
+    // ── 5a. Try each Groq key ─────────────────────────────────────────────
     for (const groqKey of GROQ_KEYS) {
       if (result) break;
       try {
@@ -139,23 +143,23 @@ Return the response as a valid JSON object with this exact structure:
         const match = cleaned.match(/\{[\s\S]*\}/);
         if (match) {
           result = JSON.parse(match[0]);
-          usedProvider = 'Groq (llama-3.3-70b)';
+          usedProvider = `Groq (${GROQ_KEYS.indexOf(groqKey) + 1})`;
         } else {
-          errors.push('Groq: Could not extract JSON');
+          errors.push(`Groq key ${GROQ_KEYS.indexOf(groqKey) + 1}: Could not extract JSON`);
         }
       } catch (e) {
-        errors.push(`Groq: ${e.message}`);
+        errors.push(`Groq key ${GROQ_KEYS.indexOf(groqKey) + 1}: ${e.message}`);
       }
     }
 
-    // ── 5b. Gemini (fallback) ────────────────────────────────────────────
+    // ── 5b. Fallback – try each Gemini key × each model ──────────────────
     if (!result) {
       for (const geminiKey of GEMINI_KEYS) {
         if (result) break;
+        const client = new GoogleGenerativeAI(geminiKey);
         for (const modelName of GEMINI_MODELS) {
           if (result) break;
           try {
-            const client = new GoogleGenerativeAI(geminiKey);
             const model = client.getGenerativeModel({ model: modelName });
             const genResult = await model.generateContent({
               contents: [{ role: 'user', parts: [{ text: prompt }] }],
@@ -165,12 +169,12 @@ Return the response as a valid JSON object with this exact structure:
             const match = cleaned.match(/\{[\s\S]*\}/);
             if (match) {
               result = JSON.parse(match[0]);
-              usedProvider = `Gemini (${modelName})`;
+              usedProvider = `Gemini (${modelName}) – key ${GEMINI_KEYS.indexOf(geminiKey) + 1}`;
             } else {
-              errors.push(`Gemini ${modelName}: Could not extract JSON`);
+              errors.push(`Gemini ${modelName} (key ${GEMINI_KEYS.indexOf(geminiKey) + 1}): Could not extract JSON`);
             }
           } catch (e) {
-            errors.push(`Gemini ${modelName}: ${e.message}`);
+            errors.push(`Gemini ${modelName} (key ${GEMINI_KEYS.indexOf(geminiKey) + 1}): ${e.message}`);
           }
         }
       }

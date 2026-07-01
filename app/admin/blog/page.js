@@ -2,12 +2,11 @@
 
 import { useState, useEffect } from 'react';
 import Link from 'next/link';
-import { createBrowserClient } from '@/lib/supabase';
+import { supabase } from '@/lib/supabase-client';
 import { useRouter } from 'next/navigation';
 
 export default function BlogAdminPage() {
   const router = useRouter();
-  const supabase = createBrowserClient();
   const [posts, setPosts] = useState([]);
   const [loading, setLoading] = useState(true);
 
@@ -41,7 +40,7 @@ export default function BlogAdminPage() {
     if (error) {
       alert('Delete failed: ' + error.message);
     } else {
-      fetchPosts(); // refresh list
+      fetchPosts();
     }
   }
 

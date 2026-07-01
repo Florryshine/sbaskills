@@ -3,14 +3,13 @@
 import { useState, useEffect } from 'react';
 import { useParams, useRouter } from 'next/navigation';
 import Link from 'next/link';
-import { createBrowserClient } from '@/lib/supabase';
+import { supabase } from '@/lib/supabase-client';
 import { ArrowLeft, Save, CheckCircle, RefreshCw } from 'lucide-react';
 
 export default function DraftPreviewPage() {
   const params = useParams();
   const router = useRouter();
   const id = params.id;
-  const supabase = createBrowserClient();
 
   const [draft, setDraft] = useState(null);
   const [loading, setLoading] = useState(true);
@@ -89,6 +88,11 @@ export default function DraftPreviewPage() {
   if (loading) return <div className="p-6">Loading draft...</div>;
   if (!draft) return <div className="p-6">Draft not found.</div>;
 
+  // Parse JSON fields
+  const faq = draft.schemas ? JSON.parse(draft.schemas) : [];
+  const images = draft.image_prompts ? JSON.parse(draft.image_prompts) : [];
+  const tags = draft.tags || [];
+
   return (
     <div className="min-h-screen bg-gray-50 p-6">
       <div className="max-w-4xl mx-auto">
@@ -131,31 +135,94 @@ export default function DraftPreviewPage() {
         </div>
 
         <div className="bg-white rounded-2xl border border-gray-100 shadow-sm p-6 space-y-4">
-          <div><h2 className="text-sm font-medium text-gray-500">Title</h2><p className="text-lg font-semibold">{draft.title}</p></div>
-          <div><h2 className="text-sm font-medium text-gray-500">Meta Description</h2><p>{draft.meta_description}</p></div>
-          <div><h2 className="text-sm font-medium text-gray-500">Slug</h2><p className="text-sm text-blue-600">/blog/{draft.url_slug}</p></div>
-          <div><h2 className="text-sm font-medium text-gray-500">Category</h2><p>{draft.category || 'Uncategorized'}</p></div>
-          <div><h2 className="text-sm font-medium text-gray-500">Tags</h2><div className="flex flex-wrap gap-2 mt-1">{draft.tags?.map((tag,i) => <span key={i} className="bg-gray-100 text-gray-600 px-2 py-0.5 rounded-full text-xs">#{tag}</span>)}</div></div>
+          {/* Title */}
+          <div>
+            <h2 className="text-sm font-medium text-gray-500">Title</h2>
+            <p className="text-lg font-semibold">{draft.title}</p>
+          </div>
 
+          {/* Meta Description */}
+          <div>
+            <h2 className="text-sm font-medium text-gray-500">Meta Description</h2>
+            <p>{draft.meta_description}</p>
+          </div>
+
+          {/* Slug */}
+          <div>
+            <h2 className="text-sm font-medium text-gray-500">Slug</h2>
+            <p className="text-sm text-blue-600">/blog/{draft.url_slug}</p>
+          </div>
+
+          {/* Category */}
+          <div>
+            <h2 className="text-sm font-medium text-gray-500">Category</h2>
+            <p>{draft.category || 'Uncategorized'}</p>
+          </div>
+
+          {/* Tags */}
+          <div>
+            <h2 className="text-sm font-medium text-gray-500">Tags</h2>
+            <div className="flex flex-wrap gap-2 mt-1">
+              {tags.map((tag, i) => (
+                <span key={i} className="bg-gray-100 text-gray-600 px-2 py-0.5 rounded-full text-xs">
+                  #{tag}
+                </span>
+              ))}
+            </div>
+          </div>
+
+          {/* Content */}
           <div>
             <h2 className="text-sm font-medium text-gray-500 mb-2">Content</h2>
             {editMode ? (
-              <textarea value={editedContent} onChange={(e) => setEditedContent(e.target.value)} className="w-full h-96 border rounded p-3 font-mono text-sm" />
+              <textarea
+                value={editedContent}
+                onChange={(e) => setEditedContent(e.target.value)}
+                className="w-full h-96 border rounded p-3 font-mono text-sm"
+              />
             ) : (
-              <div className="prose prose-sm max-w-none text-gray-700" dangerouslySetInnerHTML={{ __html: draft.content || 'No content yet.' }} />
+              <div
+                className="prose prose-sm max-w-none text-gray-700"
+                dangerouslySetInnerHTML={{ __html: draft.content || 'No content yet.' }}
+              />
             )}
           </div>
 
-          {draft.schemas && JSON.parse(draft.schemas).length > 0 && (
-            <div><h2 className="text-sm font-medium text-gray-500 mb-2">FAQ</h2>{JSON.parse(draft.schemas).map((item,i) => <div key={i} className="mb-2 border-b pb-2"><p className="font-semibold text-sm">{item.question}</p><p className="text-sm text-gray-600">{item.answer}</p></div>)}</div>
+          {/* FAQ Section */}
+          {faq.length > 0 && (
+            <div>
+              <h2 className="text-sm font-medium text-gray-500 mb-2">FAQ</h2>
+              {faq.map((item, i) => (
+                <div key={i} className="mb-2 border-b pb-2">
+                  <p className="font-semibold text-sm">{item.question}</p>
+                  <p className="text-sm text-gray-600">{item.answer}</p>
+                </div>
+              ))}
+            </div>
           )}
 
-          {draft.internal_links?.length > 0 && (
-            <div><h2 className="text-sm font-medium text-gray-500">Internal Links</h2><ul className="list-disc pl-5 text-sm text-blue-600">{draft.internal_links.map((link,i) => <li key={i}>{link}</li>)}</ul></div>
+          {/* Internal Links */}
+          {draft.internal_links && draft.internal_links.length > 0 && (
+            <div>
+              <h2 className="text-sm font-medium text-gray-500">Internal Links</h2>
+              <ul className="list-disc pl-5 text-sm text-blue-600">
+                {draft.internal_links.map((link, i) => (
+                  <li key={i}>{link}</li>
+                ))}
+              </ul>
+            </div>
           )}
 
-          {draft.image_prompts && JSON.parse(draft.image_prompts).length > 0 && (
-            <div><h2 className="text-sm font-medium text-gray-500">Image Suggestions</h2><ul className="list-disc pl-5 text-sm text-gray-600">{JSON.parse(draft.image_prompts).map((img,i) => <li key={i}>{img.type}: {img.description}</li>)}</ul></div>
+          {/* Images */}
+          {images.length > 0 && (
+            <div>
+              <h2 className="text-sm font-medium text-gray-500">Image Suggestions</h2>
+              <ul className="list-disc pl-5 text-sm text-gray-600">
+                {images.map((img, i) => (
+                  <li key={i}>{img.type}: {img.description}</li>
+                ))}
+              </ul>
+            </div>
           )}
 
           <div className="text-xs text-gray-400 pt-4 border-t">
