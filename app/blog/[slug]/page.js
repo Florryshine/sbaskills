@@ -9,7 +9,7 @@ import dynamic from 'next/dynamic';
 // Load these components only on the client (skip SSR)
 const ShareButtons = dynamic(() => import('@/components/ShareButtons'), { ssr: false });
 const MarkDoneButton = dynamic(() => import('@/components/MarkDoneButton'), { ssr: false });
-const Comments = dynamic(() => import('@/components/Comments'), { ssr: false });
+// Comments removed temporarily until we fix it
 
 export default function BlogPostPage({ params }) {
   const [post, setPost] = useState(null);
@@ -17,7 +17,6 @@ export default function BlogPostPage({ params }) {
   const [error, setError] = useState(null);
   const [isClient, setIsClient] = useState(false);
 
-  // Mark when we're on the client
   useEffect(() => {
     setIsClient(true);
   }, []);
@@ -108,7 +107,7 @@ export default function BlogPostPage({ params }) {
             </p>
           )}
 
-          {/* Only render interactive components on the client */}
+          {/* Only render components on the client */}
           {isClient && (
             <>
               <ShareButtons
@@ -126,7 +125,7 @@ export default function BlogPostPage({ params }) {
                   label="📚 Mark as Read (Earn 10 Points)"
                 />
               </div>
-              <Comments postId={post.id} />
+              {/* Comments removed – fix the Comments component separately */}
             </>
           )}
         </article>
