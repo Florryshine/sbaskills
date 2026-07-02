@@ -66,10 +66,11 @@ const knowledgeBase = {
 // STOCK IMAGE SEARCH — Pexels first, Pixabay fallback
 // ─────────────────────────────────────────────────────────────────────────
 
-// Strips exam jargon, years, and stopwords from the keyword so the stock
-// search gets clean, matchable terms. Always anchors with a generic phrase
-// so results never come back empty even for very jargon-heavy keywords.
-function buildSearchQuery(keyword, category) {
+// Fallback query builder — only used if the AI didn't return an
+// `image_search` phrase (e.g. older cached prompts, parsing edge cases).
+// The AI-generated phrase is preferred because the model already
+// understands the article's subject better than keyword-stripping can.
+function buildFallbackQuery(keyword, category) {
   const jargon = /\b(JAMB|WAEC|NECO|UTME|Post-?UTME|CBT|SBA)\b/gi;
   const stopwords = new Set([
     'the', 'a', 'an', 'to', 'for', 'of', 'and', 'in', 'on', 'your', 'you',
@@ -79,10 +80,9 @@ function buildSearchQuery(keyword, category) {
   ]);
 
   const source = keyword || category || 'education';
-
   const cleaned = source
     .replace(jargon, '')
-    .replace(/\b(19|20)\d{2}\b/g, '') // strip years like 2026
+    .replace(/\b(19|20)\d{2}\b/g, '')
     .toLowerCase()
     .replace(/[^a-z0-9\s]/g, ' ')
     .split(/\s+/)
@@ -90,9 +90,6 @@ function buildSearchQuery(keyword, category) {
     .slice(0, 4)
     .join(' ');
 
-  // Anchor with a broad, always-matchable phrase — this is what keeps the
-  // stock search from ever returning zero results, so the AI fallback
-  // tier below almost never has to fire.
   return `${cleaned} african student studying`.trim();
 }
 
@@ -107,7 +104,12 @@ async function searchPexels(query) {
     const data = await res.json();
     if (!data.photos?.length) return null;
     const pick = data.photos[Math.floor(Math.random() * Math.min(5, data.photos.length))];
-    return pick.src.large2x || pick.src.large || pick.src.original;
+    return {
+      url: pick.src.large2x || pick.src.large || pick.src.original,
+      provider: 'pexels',
+      photographer: pick.photographer || null,
+      sourceUrl: pick.url || null,
+    };
   } catch (e) {
     console.warn('Pexels search failed:', e.message);
     return null;
@@ -124,28 +126,30 @@ async function searchPixabay(query) {
     const data = await res.json();
     if (!data.hits?.length) return null;
     const pick = data.hits[Math.floor(Math.random() * Math.min(5, data.hits.length))];
-    return pick.largeImageURL || pick.fullHDURL || pick.webformatURL;
+    return {
+      url: pick.largeImageURL || pick.fullHDURL || pick.webformatURL,
+      provider: 'pixabay',
+      photographer: pick.user || null,
+      sourceUrl: pick.pageURL || null,
+    };
   } catch (e) {
     console.warn('Pixabay search failed:', e.message);
     return null;
   }
 }
 
-// Tries Pexels then Pixabay. Returns a raw image buffer, or null if both
-// libraries genuinely have nothing (rare, since the query is anchored).
+// Tries Pexels then Pixabay. Returns the raw image buffer plus metadata
+// (provider, photographer, source query) so it can be stored alongside
+// the draft for attribution/debugging/future provider swaps.
 async function fetchStockImage(query) {
-  let url = await searchPexels(query);
-  let source = 'pexels';
-  if (!url) {
-    url = await searchPixabay(query);
-    source = 'pixabay';
-  }
-  if (!url) return null;
+  let hit = await searchPexels(query);
+  if (!hit) hit = await searchPixabay(query);
+  if (!hit) return null;
 
-  const imgRes = await fetch(url);
+  const imgRes = await fetch(hit.url);
   if (!imgRes.ok) return null;
   const buffer = Buffer.from(await imgRes.arrayBuffer());
-  return { buffer, source };
+  return { buffer, ...hit };
 }
 
 // ─────────────────────────────────────────────────────────────────────────
@@ -163,8 +167,7 @@ function escapeXml(str = '') {
 }
 
 // Greedy word-wrap by character count, capped at 3 lines so long titles
-// never overflow the canvas — this replaces a naive "8-word slice" that
-// doesn't account for actual pixel width.
+// never overflow the canvas.
 function wrapText(text, maxCharsPerLine, maxLines = 3) {
   const words = text.split(' ');
   const lines = [];
@@ -182,7 +185,6 @@ function wrapText(text, maxCharsPerLine, maxLines = 3) {
   }
   if (current && lines.length < maxLines) lines.push(current);
 
-  // If we truncated mid-title, mark the last line with an ellipsis
   if (lines.length === maxLines) {
     const joinedSoFar = lines.join(' ');
     if (joinedSoFar.length < text.length) {
@@ -214,10 +216,8 @@ function buildOverlaySvg({ title, category }) {
     </linearGradient>
   </defs>
 
-  <!-- darken bottom two-thirds so white text stays readable over any photo -->
   <rect x="0" y="0" width="${CANVAS_WIDTH}" height="${CANVAS_HEIGHT}" fill="url(#fade)"/>
 
-  <!-- top-left brand chip -->
   <rect x="24" y="24" width="230" height="46" rx="8" fill="${BRAND.blue}"/>
   <text x="40" y="54" font-family="Arial, Helvetica, sans-serif" font-size="19" font-weight="700" fill="#FFFFFF">
     ${escapeXml(BRAND.name)}
@@ -232,12 +232,10 @@ function buildOverlaySvg({ title, category }) {
       : ''
   }
 
-  <!-- title -->
   <text y="${startY}" font-family="Arial, Helvetica, sans-serif" font-size="50" font-weight="800" fill="#FFFFFF" style="letter-spacing:0.4px">
     ${titleTspans}
   </text>
 
-  <!-- site url footer -->
   <text x="50" y="${CANVAS_HEIGHT - 24}" font-family="Arial, Helvetica, sans-serif" font-size="15" fill="rgba(255,255,255,0.7)">
     shineybrainacademy.com
   </text>
@@ -259,21 +257,28 @@ async function createBrandedThumbnail(imageBuffer, { title, category }) {
   return { buffer: final, ext: 'jpg', mimeType: 'image/jpeg' };
 }
 
-// Full cover-image pipeline:
-//   1. Search Pexels, then Pixabay, for a real matching photo.
-//   2. If (rarely) both come back empty, fall back to Pollinations with a
-//      strict no-text prompt — NOT Gemini's image model, since that's the
-//      exact source of the garbled-text problem this pipeline exists to
-//      avoid. Pollinations is only ever asked for a text-free illustration;
-//      the real title is always added afterward by createBrandedThumbnail.
-//   3. Brand every image (stock or fallback) with the same SVG overlay so
-//      output is visually consistent either way.
-async function generateCoverImage({ keyword, category, title }) {
-  const query = buildSearchQuery(keyword, category);
+// Full cover-image pipeline. Prefers the AI-generated `image_search`
+// phrase (the model already understands the article's subject); falls
+// back to keyword-stripping only if the AI didn't return one. If both
+// stock libraries come back empty, falls back to Pollinations with a
+// strict no-text prompt — never Gemini's image model, which is the exact
+// source of the garbled-text problem this pipeline replaces.
+// Returns the branded buffer plus metadata for storage on the draft.
+async function generateCoverImage({ keyword, category, title, aiSearchPhrase }) {
+  const query = aiSearchPhrase?.trim() || buildFallbackQuery(keyword, category);
 
   const stock = await fetchStockImage(query);
   if (stock) {
-    return createBrandedThumbnail(stock.buffer, { title, category });
+    const branded = await createBrandedThumbnail(stock.buffer, { title, category });
+    return {
+      ...branded,
+      meta: {
+        image_source: 'stock',
+        image_provider: stock.provider,
+        image_photographer: stock.photographer,
+        image_search_query: query,
+      },
+    };
   }
 
   console.warn(`No stock image found for "${query}", using text-free illustration fallback`);
@@ -285,7 +290,17 @@ async function generateCoverImage({ keyword, category, title }) {
   const res = await fetch(fallbackUrl);
   if (!res.ok) throw new Error(`Pollinations fallback failed: ${res.status}`);
   const buffer = Buffer.from(await res.arrayBuffer());
-  return createBrandedThumbnail(buffer, { title, category });
+  const branded = await createBrandedThumbnail(buffer, { title, category });
+
+  return {
+    ...branded,
+    meta: {
+      image_source: 'ai_fallback',
+      image_provider: 'pollinations',
+      image_photographer: null,
+      image_search_query: query,
+    },
+  };
 }
 
 // ─── Helper: Upload image to Supabase Storage ────────────────────────────
@@ -332,6 +347,9 @@ export async function POST(request) {
     await supabase.from('content_queue').update({ status: 'generating' }).eq('id', queueItemId);
 
     // ── 4. Build prompt ───────────────────────────────────────────────────
+    // NOTE: now asks the model for an `image_search` phrase — the model
+    // already understands the article's subject, so it can produce a
+    // better stock-photo search phrase than post-hoc keyword stripping.
     const prompt = `You are an expert content writer for Shiney Brain Academy (SBA), Nigeria's leading exam prep and skills platform.
 
 Write a complete, SEO-optimized blog article on the topic: "${item.keyword}"
@@ -353,6 +371,7 @@ Requirements:
 6. Internal Links: Reference at least 3 SBA tools naturally
 7. FAQ Section: 3-5 questions with answers
 8. CTA: End with a "Before You Leave" section linking to relevant SBA tools
+9. Image Search Phrase: A short (3-6 word) generic stock-photo search phrase that captures the VISUAL scene of this article — e.g. "african students studying library" or "graduation ceremony nigeria". Do NOT include exam acronyms (JAMB, WAEC, NECO), years, or brand names — stock photo libraries don't have those tagged. Just describe what a relevant, real photo would show.
 
 Return the response as a valid JSON object with this exact structure:
 {
@@ -363,6 +382,7 @@ Return the response as a valid JSON object with this exact structure:
   "content": "...",
   "faq": [{"question": "...", "answer": "..."}],
   "internal_links": ["tool1", "tool2"],
+  "image_search": "...",
   "cta": "..."
 }`;
 
@@ -475,13 +495,23 @@ Return the response as a valid JSON object with this exact structure:
     // ── 9. Generate branded cover image (stock photo first, safe fallback) ─
     let coverImageUrl = null;
     try {
-      const { buffer, ext } = await generateCoverImage({
+      const { buffer, ext, meta } = await generateCoverImage({
         keyword: item.keyword,
         category: item.category,
         title: result.title,
+        aiSearchPhrase: result.image_search,
       });
       coverImageUrl = await uploadImage(supabase, buffer, ext, 'blog-images');
-      await supabase.from('content_drafts').update({ cover_image: coverImageUrl }).eq('id', draft.id);
+      await supabase
+        .from('content_drafts')
+        .update({
+          cover_image: coverImageUrl,
+          image_source: meta.image_source,
+          image_provider: meta.image_provider,
+          image_photographer: meta.image_photographer,
+          image_search_query: meta.image_search_query,
+        })
+        .eq('id', draft.id);
     } catch (imgError) {
       console.warn('Cover image generation failed, article still saved:', imgError.message);
     }
