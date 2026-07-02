@@ -2,6 +2,7 @@ import { NextResponse } from 'next/server';
 import { createRouteHandlerClient } from '@/lib/supabase-server';
 import { GoogleGenerativeAI } from '@google/generative-ai';
 import Groq from 'groq-sdk';
+import sharp from 'sharp';
 
 // ── Load multiple API keys from environment variables ────────────────────
 const GEMINI_KEYS = [
@@ -16,6 +17,9 @@ const GROQ_KEYS = [
   process.env.GROQ_API_KEY,
 ].filter(Boolean);
 
+const PEXELS_API_KEY = process.env.PEXELS_API_KEY;
+const PIXABAY_API_KEY = process.env.PIXABAY_API_KEY;
+
 // ── Gemini models ────────────────────────────────────────────────────────
 const GEMINI_MODELS = [
   'gemini-3.5-flash',
@@ -24,7 +28,15 @@ const GEMINI_MODELS = [
   'gemini-2.0-flash',
 ];
 
-// ── Brand knowledge base ──────────────────────────────────────────────────
+// ── Brand config ───────────────────────────────────────────────────────
+const BRAND = {
+  name: 'Shiney Brain Academy',
+  blue: '#1a73e8',
+  gold: '#FFCC00',
+  navy: '#0B1220', // used for gradient/overlay
+};
+
+// ── Brand knowledge base (for article generation) ────────────────────────
 const knowledgeBase = {
   brand: `Shiney Brain Academy – bright blue (#1a73e8), gold (#FFCC00), white. Bold, Africa-proud, modern.`,
   tone: `Conversational, Nigerian student-friendly, mentor-like. Use "you", be encouraging, practical.`,
@@ -47,78 +59,206 @@ const knowledgeBase = {
   ],
 };
 
-// ─── Helper: Build a thumbnail-specific prompt (with title & brand) ────
-function buildThumbnailPrompt(originalPrompt, title) {
-  return `Create a high-quality thumbnail image for a blog post titled "${title}".
+// ─────────────────────────────────────────────────────────────────────────
+// STOCK IMAGE SEARCH — Pexels first, Pixabay fallback
+// ─────────────────────────────────────────────────────────────────────────
 
-${originalPrompt}
+// Turns "UNIBEN Cut-off Mark 2026: Your Ultimate Guide" into a clean search
+// query like "university students studying nigeria" — strips numbers/years,
+// stopwords, and brand-specific jargon that stock libraries won't match.
+function buildSearchQuery(keyword, category) {
+  const stopwords = new Set([
+    'the', 'a', 'an', 'to', 'for', 'of', 'and', 'in', 'on', 'your',
+    'ultimate', 'guide', 'complete', 'how', 'what', 'why', 'best',
+    '2025', '2026', '2027', 'jamb', 'waec', 'neco', 'utme', 'cbt',
+  ]);
 
-Style requirements:
-- Modern, clean, educational, and vibrant
-- Use bright blue (#1a73e8) and gold (#FFCC00) as primary brand colors
-- Include a subtle geometric background (e.g., dots, lines, or abstract shapes)
-- Leave space in the top-left or center for the title text overlay
-- Simple, uncluttered composition – not too detailed
-- High contrast and eye-catching
-- Suitable for social sharing (16:9 aspect ratio)
-- No complex scenes, just a focused illustration or icon
+  const cleaned = (keyword || category || 'education')
+    .toLowerCase()
+    .replace(/[^a-z0-9\s]/g, ' ')
+    .split(/\s+/)
+    .filter((w) => w.length > 2 && !stopwords.has(w))
+    .slice(0, 4)
+    .join(' ');
 
-Text to include on the image:
-- The blog post title: "${title}" – displayed prominently
-- A small "Shiney Brain Academy" watermark/logo in one corner
-
-Make it look like a professional YouTube thumbnail or blog cover image.`;
+  // Always anchor the search in something stock libraries will actually have
+  return `${cleaned} african student studying`.trim();
 }
 
-// ─── Helper: Generate an image ──────────────────────────────────────────
-async function generateImage(prompt, title) {
-  // Option 1: Try Gemini image generation (experimental, free)
-  for (const geminiKey of GEMINI_KEYS) {
-    try {
-      const client = new GoogleGenerativeAI(geminiKey);
-      const model = client.getGenerativeModel({ model: 'gemini-2.0-flash-exp-image-generation' });
-      const result = await model.generateContent({
-        contents: [{ role: 'user', parts: [{ text: prompt }] }],
-        generationConfig: {
-          responseModalities: ['image'],
-        },
-      });
-      const imagePart = result.response.candidates[0]?.content?.parts[0]?.inlineData;
-      if (imagePart) {
-        const imageData = imagePart.data;
-        const mimeType = imagePart.mimeType || 'image/png';
-        const ext = mimeType.split('/')[1];
-        const buffer = Buffer.from(imageData, 'base64');
-        return { buffer, ext, mimeType };
-      }
-    } catch (e) {
-      console.warn('Gemini image generation failed:', e.message);
-      // Continue to fallback
+async function searchPexels(query) {
+  if (!PEXELS_API_KEY) return null;
+  try {
+    const res = await fetch(
+      `https://api.pexels.com/v1/search?query=${encodeURIComponent(query)}&per_page=10&orientation=landscape`,
+      { headers: { Authorization: PEXELS_API_KEY } }
+    );
+    if (!res.ok) throw new Error(`Pexels ${res.status}`);
+    const data = await res.json();
+    if (!data.photos?.length) return null;
+    // Pick from top few results for variety across articles
+    const pick = data.photos[Math.floor(Math.random() * Math.min(5, data.photos.length))];
+    return { url: pick.src.large2x || pick.src.large, source: 'pexels' };
+  } catch (e) {
+    console.warn('Pexels search failed:', e.message);
+    return null;
+  }
+}
+
+async function searchPixabay(query) {
+  if (!PIXABAY_API_KEY) return null;
+  try {
+    const res = await fetch(
+      `https://pixabay.com/api/?key=${PIXABAY_API_KEY}&q=${encodeURIComponent(query)}&image_type=photo&orientation=horizontal&safesearch=true&per_page=10`
+    );
+    if (!res.ok) throw new Error(`Pixabay ${res.status}`);
+    const data = await res.json();
+    if (!data.hits?.length) return null;
+    const pick = data.hits[Math.floor(Math.random() * Math.min(5, data.hits.length))];
+    return { url: pick.largeImageURL, source: 'pixabay' };
+  } catch (e) {
+    console.warn('Pixabay search failed:', e.message);
+    return null;
+  }
+}
+
+async function fetchStockImage(query) {
+  let hit = await searchPexels(query);
+  if (!hit) hit = await searchPixabay(query);
+  if (!hit) throw new Error(`No stock image found for query: "${query}"`);
+
+  const imgRes = await fetch(hit.url);
+  if (!imgRes.ok) throw new Error(`Failed to download image from ${hit.source}`);
+  const buffer = Buffer.from(await imgRes.arrayBuffer());
+  return { buffer, source: hit.source };
+}
+
+// ─────────────────────────────────────────────────────────────────────────
+// TEXT OVERLAY — Sharp + SVG (no native canvas dependency, deploys cleanly)
+// ─────────────────────────────────────────────────────────────────────────
+
+// Escapes text for safe embedding inside SVG <text> nodes.
+function escapeXml(str = '') {
+  return str
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&apos;');
+}
+
+// Simple greedy word-wrap so long titles don't overflow the canvas.
+function wrapText(text, maxCharsPerLine) {
+  const words = text.split(' ');
+  const lines = [];
+  let current = '';
+  for (const word of words) {
+    const test = current ? `${current} ${word}` : word;
+    if (test.length > maxCharsPerLine && current) {
+      lines.push(current);
+      current = word;
+    } else {
+      current = test;
     }
   }
+  if (current) lines.push(current);
+  return lines;
+}
 
-  // Option 2: Pollinations.ai (free, no key) – with text overlay
-  const textOverlay = `${title} | Shiney Brain Academy`;
-  const fallbackUrl = `https://image.pollinations.ai/prompt/${encodeURIComponent(prompt)}?width=800&height=450&nologo=true&text=${encodeURIComponent(textOverlay)}`;
-  const response = await fetch(fallbackUrl);
-  if (!response.ok) {
-    throw new Error(`Pollinations.ai failed: ${response.status}`);
+const WIDTH = 1200;
+const HEIGHT = 675; // 16:9
+
+function buildOverlaySvg({ title, category }) {
+  const titleLines = wrapText(title.toUpperCase(), 22).slice(0, 3);
+  const lineHeight = 64;
+  const startY = HEIGHT - 60 - (titleLines.length - 1) * lineHeight;
+
+  const titleTspans = titleLines
+    .map(
+      (line, i) =>
+        `<tspan x="60" dy="${i === 0 ? 0 : lineHeight}">${escapeXml(line)}</tspan>`
+    )
+    .join('');
+
+  return `
+<svg width="${WIDTH}" height="${HEIGHT}" xmlns="http://www.w3.org/2000/svg">
+  <defs>
+    <linearGradient id="fade" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0%" stop-color="${BRAND.navy}" stop-opacity="0"/>
+      <stop offset="55%" stop-color="${BRAND.navy}" stop-opacity="0.55"/>
+      <stop offset="100%" stop-color="${BRAND.navy}" stop-opacity="0.92"/>
+    </linearGradient>
+  </defs>
+
+  <!-- darken bottom two-thirds so white text stays readable over any photo -->
+  <rect x="0" y="0" width="${WIDTH}" height="${HEIGHT}" fill="url(#fade)"/>
+
+  <!-- top-left brand chip -->
+  <rect x="30" y="30" width="230" height="46" rx="8" fill="${BRAND.navy}" fill-opacity="0.85"/>
+  <text x="48" y="60" font-family="Arial, Helvetica, sans-serif" font-size="20" font-weight="700" fill="${BRAND.gold}">
+    ${escapeXml(BRAND.name)}
+  </text>
+
+  ${
+    category
+      ? `<rect x="${WIDTH - 170}" y="30" width="140" height="42" rx="8" fill="${BRAND.gold}"/>
+         <text x="${WIDTH - 100}" y="58" font-family="Arial, Helvetica, sans-serif" font-size="18" font-weight="700" fill="${BRAND.navy}" text-anchor="middle">
+           ${escapeXml(category.toUpperCase())}
+         </text>`
+      : ''
   }
-  const buffer = Buffer.from(await response.arrayBuffer());
-  return { buffer, ext: 'png', mimeType: 'image/png' };
+
+  <!-- title -->
+  <text y="${startY}" font-family="Arial, Helvetica, sans-serif" font-size="52" font-weight="800" fill="#FFFFFF" style="letter-spacing:0.5px">
+    ${titleTspans}
+  </text>
+</svg>`;
+}
+
+async function createBrandedThumbnail(imageBuffer, { title, category }) {
+  // Normalize the stock photo to our fixed 16:9 canvas first
+  const base = await sharp(imageBuffer)
+    .resize(WIDTH, HEIGHT, { fit: 'cover', position: 'attention' })
+    .toBuffer();
+
+  const overlaySvg = Buffer.from(buildOverlaySvg({ title, category }));
+
+  const final = await sharp(base)
+    .composite([{ input: overlaySvg, top: 0, left: 0 }])
+    .jpeg({ quality: 88 })
+    .toBuffer();
+
+  return { buffer: final, ext: 'jpg', mimeType: 'image/jpeg' };
+}
+
+// Full pipeline: search stock photo -> brand it -> return buffer.
+// Falls back to Pollinations (text-free prompt) only if BOTH stock
+// libraries come up empty — keeps output looking clean either way.
+async function generateCoverImage({ keyword, category, title }) {
+  const query = buildSearchQuery(keyword, category);
+
+  try {
+    const { buffer } = await fetchStockImage(query);
+    return await createBrandedThumbnail(buffer, { title, category });
+  } catch (e) {
+    console.warn('Stock image pipeline failed, falling back to Pollinations:', e.message);
+    const fallbackPrompt = `Clean modern flat-design illustration related to: ${query}. No text, no words, no letters, no logos. Simple, high-contrast, vibrant colors.`;
+    const fallbackUrl = `https://image.pollinations.ai/prompt/${encodeURIComponent(fallbackPrompt)}?width=${WIDTH}&height=${HEIGHT}&nologo=true`;
+    const res = await fetch(fallbackUrl);
+    if (!res.ok) throw new Error(`Pollinations fallback failed: ${res.status}`);
+    const buffer = Buffer.from(await res.arrayBuffer());
+    return await createBrandedThumbnail(buffer, { title, category });
+  }
 }
 
 // ─── Helper: Upload image to Supabase Storage ────────────────────────────
 async function uploadImage(supabase, buffer, ext, folder = 'blog-images') {
   const fileName = `hero-${Date.now()}.${ext}`;
   const path = `${folder}/${fileName}`;
-  const { data, error } = await supabase.storage
+  const { error } = await supabase.storage
     .from('blog-images')
     .upload(path, buffer, { contentType: `image/${ext}` });
   if (error) throw error;
-  const { data: urlData } = supabase.storage
-    .from('blog-images')
-    .getPublicUrl(path);
+  const { data: urlData } = supabase.storage.from('blog-images').getPublicUrl(path);
   return urlData.publicUrl;
 }
 
@@ -151,10 +291,7 @@ export async function POST(request) {
     }
 
     // ── 3. Mark as generating ─────────────────────────────────────────────
-    await supabase
-      .from('content_queue')
-      .update({ status: 'generating' })
-      .eq('id', queueItemId);
+    await supabase.from('content_queue').update({ status: 'generating' }).eq('id', queueItemId);
 
     // ── 4. Build prompt ───────────────────────────────────────────────────
     const prompt = `You are an expert content writer for Shiney Brain Academy (SBA), Nigeria's leading exam prep and skills platform.
@@ -178,7 +315,6 @@ Requirements:
 6. Internal Links: Reference at least 3 SBA tools naturally
 7. FAQ Section: 3-5 questions with answers
 8. CTA: End with a "Before You Leave" section linking to relevant SBA tools
-9. Image Suggestions: 3 image descriptions (hero, infographic, social card)
 
 Return the response as a valid JSON object with this exact structure:
 {
@@ -189,11 +325,6 @@ Return the response as a valid JSON object with this exact structure:
   "content": "...",
   "faq": [{"question": "...", "answer": "..."}],
   "internal_links": ["tool1", "tool2"],
-  "images": [
-    {"type": "hero", "description": "..."},
-    {"type": "infographic", "description": "..."},
-    {"type": "social", "description": "..."}
-  ],
   "cta": "..."
 }`;
 
@@ -202,7 +333,6 @@ Return the response as a valid JSON object with this exact structure:
     let usedProvider = '';
     const errors = [];
 
-    // ── 5a. Try each Groq key ─────────────────────────────────────────────
     for (const groqKey of GROQ_KEYS) {
       if (result) break;
       try {
@@ -227,7 +357,6 @@ Return the response as a valid JSON object with this exact structure:
       }
     }
 
-    // ── 5b. Fallback – try each Gemini key × each model ──────────────────
     if (!result) {
       for (const geminiKey of GEMINI_KEYS) {
         if (result) break;
@@ -255,19 +384,15 @@ Return the response as a valid JSON object with this exact structure:
       }
     }
 
-    // ── 6. All providers failed ───────────────────────────────────────────
     if (!result) {
-      await supabase
-        .from('content_queue')
-        .update({ status: 'failed' })
-        .eq('id', queueItemId);
+      await supabase.from('content_queue').update({ status: 'failed' }).eq('id', queueItemId);
       return NextResponse.json(
         { error: `All AI providers failed. Details: ${errors.join('; ')}` },
         { status: 500 }
       );
     }
 
-    // ── 7. Always ensure slug exists ──────────────────────────────────────
+    // ── 6. Ensure slug exists ──────────────────────────────────────────────
     const slug =
       result.slug ||
       result.title
@@ -276,7 +401,7 @@ Return the response as a valid JSON object with this exact structure:
         .replace(/^-|-$/g, '') ||
       'untitled';
 
-    // ── 8. Save draft to Supabase ─────────────────────────────────────────
+    // ── 7. Save draft to Supabase (without cover_image yet) ──────────────
     const wordCount = result.content?.split(/\s+/).length || 0;
 
     const { data: draft, error: draftError } = await supabase
@@ -291,7 +416,6 @@ Return the response as a valid JSON object with this exact structure:
         content: result.content,
         schemas: JSON.stringify(result.faq || []),
         internal_links: result.internal_links || [],
-        image_prompts: JSON.stringify(result.images || []),
         cta: result.cta || '',
         word_count: wordCount,
         category: item.category,
@@ -303,39 +427,28 @@ Return the response as a valid JSON object with this exact structure:
       .single();
 
     if (draftError) {
-      await supabase
-        .from('content_queue')
-        .update({ status: 'failed' })
-        .eq('id', queueItemId);
+      await supabase.from('content_queue').update({ status: 'failed' }).eq('id', queueItemId);
       return NextResponse.json({ error: draftError.message }, { status: 500 });
     }
 
-    // ── 9. Generate and upload hero image (thumbnail style) ──────────────
+    // ── 8. Generate branded cover image (stock photo + text overlay) ─────
     let coverImageUrl = null;
-    const heroPrompt = result.images?.find(img => img.type === 'hero')?.description;
-    if (heroPrompt) {
-      try {
-        const thumbnailPrompt = buildThumbnailPrompt(heroPrompt, result.title);
-        console.log('🎨 Generating thumbnail with prompt:', thumbnailPrompt);
-        const { buffer, ext, mimeType } = await generateImage(thumbnailPrompt, result.title);
-        coverImageUrl = await uploadImage(supabase, buffer, ext, 'blog-images');
-        await supabase
-          .from('content_drafts')
-          .update({ cover_image: coverImageUrl })
-          .eq('id', draft.id);
-      } catch (imgError) {
-        console.warn('Image generation failed, but article was saved:', imgError.message);
-      }
+    try {
+      const { buffer, ext } = await generateCoverImage({
+        keyword: item.keyword,
+        category: item.category,
+        title: result.title,
+      });
+      coverImageUrl = await uploadImage(supabase, buffer, ext, 'blog-images');
+      await supabase.from('content_drafts').update({ cover_image: coverImageUrl }).eq('id', draft.id);
+    } catch (imgError) {
+      console.warn('Cover image generation failed, article still saved:', imgError.message);
     }
 
-    // ── 10. Update queue item status ──────────────────────────────────────
+    // ── 9. Update queue item status ────────────────────────────────────────
     await supabase
       .from('content_queue')
-      .update({
-        status: 'draft',
-        draft_id: draft.id,
-        generated_at: new Date().toISOString(),
-      })
+      .update({ status: 'draft', draft_id: draft.id, generated_at: new Date().toISOString() })
       .eq('id', queueItemId);
 
     return NextResponse.json({
@@ -345,7 +458,6 @@ Return the response as a valid JSON object with this exact structure:
       usedProvider,
       coverImage: coverImageUrl,
     });
-
   } catch (error) {
     console.error('Generation error:', error);
     return NextResponse.json({ error: error.message }, { status: 500 });
