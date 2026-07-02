@@ -13,6 +13,20 @@ const Comments = nextDynamic(() => import('@/components/Comments'), { ssr: false
 
 export const dynamic = 'force-dynamic';
 
+// ─── Tool URL Mapping (fixes internal 404s) ────────────────────────────
+const toolUrlMap = {
+  'JAMB Aggregate Calculator': '/tools/jamb-aggregate',
+  'Cut-off Mark Checker': '/tools/cut-off-mark',
+  'Cutoff Mark Checker': '/tools/cut-off-mark',
+  'Past Question Search': '/tools/past-questions',
+  'Subject Combination Checker': '/tools/subject-combination',
+  'Admission Chance Checker': '/tools/admission-chance',
+  'WAEC Grade Calculator': '/tools/waec-grade-calculator',
+  'Study Timetable Generator': '/tools/timetable-generator',
+  'Daily Mentor': '/tools/daily-mentor',
+  'Shine AI': '/tools/shine-ai',
+};
+
 export default async function BlogPostPage({ params }) {
   try {
     const supabase = createServerClient();
@@ -36,14 +50,12 @@ export default async function BlogPostPage({ params }) {
     const faq = post.schemas ? JSON.parse(post.schemas) : [];
     const internalLinks = post.internal_links || [];
 
-    // ─── Convert markdown → HTML (safe, version-agnostic) ──────────────
+    // ─── Convert markdown → HTML ────────────────────────────────────────
     let htmlContent = post.content || '';
     try {
-      if (typeof marked.parse === 'function') {
-        htmlContent = marked.parse(post.content || '');
-      } else if (typeof marked === 'function') {
-        htmlContent = marked(post.content || '');
-      }
+      // Configure marked for GitHub-flavored markdown with line breaks
+      marked.setOptions({ breaks: true, gfm: true });
+      htmlContent = marked.parse(post.content || '');
     } catch (e) {
       console.warn('Markdown parsing failed, using raw content:', e);
       // Keep raw content as fallback
@@ -107,7 +119,7 @@ export default async function BlogPostPage({ params }) {
               />
             </div>
 
-            {/* ─── Main Content ─── */}
+            {/* ─── Main Content (rendered from markdown) ─── */}
             <div
               className="prose prose-lg max-w-none text-gray-700 leading-relaxed"
               dangerouslySetInnerHTML={{ __html: htmlContent }}
@@ -134,11 +146,12 @@ export default async function BlogPostPage({ params }) {
                 <h3 className="text-xl font-bold text-gray-900 mb-4">🔗 Related Tools & Resources</h3>
                 <ul className="list-disc pl-5 space-y-1">
                   {internalLinks.map((link, i) => {
-                    const slug = link.toLowerCase().replace(/\s+/g, '-');
+                    // Use mapping if available, otherwise fallback to slug generation
+                    const href = toolUrlMap[link] || `/tools/${link.toLowerCase().replace(/\s+/g, '-')}`;
                     return (
                       <li key={i}>
                         <Link
-                          href={`/tools/${slug}`}
+                          href={href}
                           className="text-blue-600 hover:underline"
                           target="_blank"
                         >
@@ -151,7 +164,7 @@ export default async function BlogPostPage({ params }) {
               </div>
             )}
 
-            {/* ─── CTA ─── */}
+            {/* ─── CTA / Before You Leave ─── */}
             {post.cta && (
               <div className="mt-8 p-6 bg-brand-yellow/10 rounded-lg border border-brand-yellow">
                 <p className="text-lg font-medium text-gray-900">{post.cta}</p>
