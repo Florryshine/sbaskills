@@ -47,8 +47,31 @@ const knowledgeBase = {
   ],
 };
 
-// ─── Helper: Generate an image from a prompt ─────────────────────────────
-async function generateImage(prompt) {
+// ─── Helper: Build a thumbnail-specific prompt (with title & brand) ────
+function buildThumbnailPrompt(originalPrompt, title) {
+  return `Create a high-quality thumbnail image for a blog post titled "${title}".
+
+${originalPrompt}
+
+Style requirements:
+- Modern, clean, educational, and vibrant
+- Use bright blue (#1a73e8) and gold (#FFCC00) as primary brand colors
+- Include a subtle geometric background (e.g., dots, lines, or abstract shapes)
+- Leave space in the top-left or center for the title text overlay
+- Simple, uncluttered composition – not too detailed
+- High contrast and eye-catching
+- Suitable for social sharing (16:9 aspect ratio)
+- No complex scenes, just a focused illustration or icon
+
+Text to include on the image:
+- The blog post title: "${title}" – displayed prominently
+- A small "Shiney Brain Academy" watermark/logo in one corner
+
+Make it look like a professional YouTube thumbnail or blog cover image.`;
+}
+
+// ─── Helper: Generate an image ──────────────────────────────────────────
+async function generateImage(prompt, title) {
   // Option 1: Try Gemini image generation (experimental, free)
   for (const geminiKey of GEMINI_KEYS) {
     try {
@@ -62,7 +85,6 @@ async function generateImage(prompt) {
       });
       const imagePart = result.response.candidates[0]?.content?.parts[0]?.inlineData;
       if (imagePart) {
-        // Base64 image data
         const imageData = imagePart.data;
         const mimeType = imagePart.mimeType || 'image/png';
         const ext = mimeType.split('/')[1];
@@ -75,8 +97,9 @@ async function generateImage(prompt) {
     }
   }
 
-  // Option 2: Fallback to Pollinations.ai (completely free, no key)
-  const fallbackUrl = `https://image.pollinations.ai/prompt/${encodeURIComponent(prompt)}?width=800&height=400&nologo=true`;
+  // Option 2: Pollinations.ai (free, no key) – with text overlay
+  const textOverlay = `${title} | Shiney Brain Academy`;
+  const fallbackUrl = `https://image.pollinations.ai/prompt/${encodeURIComponent(prompt)}?width=800&height=450&nologo=true&text=${encodeURIComponent(textOverlay)}`;
   const response = await fetch(fallbackUrl);
   if (!response.ok) {
     throw new Error(`Pollinations.ai failed: ${response.status}`);
@@ -253,7 +276,7 @@ Return the response as a valid JSON object with this exact structure:
         .replace(/^-|-$/g, '') ||
       'untitled';
 
-    // ── 8. Save draft to Supabase (without cover_image yet) ──────────────
+    // ── 8. Save draft to Supabase ─────────────────────────────────────────
     const wordCount = result.content?.split(/\s+/).length || 0;
 
     const { data: draft, error: draftError } = await supabase
@@ -275,7 +298,6 @@ Return the response as a valid JSON object with this exact structure:
         status: 'draft',
         content_score: 85,
         readability_score: 80,
-        // cover_image will be set after image generation
       })
       .select()
       .single();
@@ -288,23 +310,21 @@ Return the response as a valid JSON object with this exact structure:
       return NextResponse.json({ error: draftError.message }, { status: 500 });
     }
 
-    // ── 9. Generate and upload hero image ──────────────────────────────────
+    // ── 9. Generate and upload hero image (thumbnail style) ──────────────
     let coverImageUrl = null;
     const heroPrompt = result.images?.find(img => img.type === 'hero')?.description;
     if (heroPrompt) {
       try {
-        // Enhance prompt with brand style
-        const imagePrompt = `Shiney Brain Academy style: ${heroPrompt}. Bright blue (#1a73e8) and gold (#FFCC00) colors, modern, clean, Nigerian student-focused.`;
-        const { buffer, ext, mimeType } = await generateImage(imagePrompt);
+        const thumbnailPrompt = buildThumbnailPrompt(heroPrompt, result.title);
+        console.log('🎨 Generating thumbnail with prompt:', thumbnailPrompt);
+        const { buffer, ext, mimeType } = await generateImage(thumbnailPrompt, result.title);
         coverImageUrl = await uploadImage(supabase, buffer, ext, 'blog-images');
-        // Update the draft with the cover image URL
         await supabase
           .from('content_drafts')
           .update({ cover_image: coverImageUrl })
           .eq('id', draft.id);
       } catch (imgError) {
         console.warn('Image generation failed, but article was saved:', imgError.message);
-        // Continue – the post will still exist without an image
       }
     }
 
