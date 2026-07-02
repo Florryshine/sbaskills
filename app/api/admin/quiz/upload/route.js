@@ -1,6 +1,8 @@
 import { NextResponse } from 'next/server';
 import { createRouteHandlerClient } from '@/lib/supabase-server';
 
+export const dynamic = 'force-dynamic';
+
 // Parses one CSV line, respecting quoted fields that may contain commas.
 function parseCsvLine(line) {
   const result = [];
