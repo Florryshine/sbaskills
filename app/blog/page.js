@@ -2,7 +2,7 @@ import { createServerClient } from '@/lib/supabase-server';
 import Navbar from '@/components/Navbar';
 import Footer from '@/components/Footer';
 import Link from 'next/link';
-import Image from 'next/image';
+import SortSelect from '@/components/SortSelect';
 
 // ─── Metadata ───────────────────────────────────────────────
 export async function generateMetadata({ searchParams }) {
@@ -53,7 +53,7 @@ function getReadingTime(content) {
 // ─── Page Component ────────────────────────────────────────
 export default async function BlogPage({ searchParams }) {
   const supabase = createServerClient();
-  
+
   // Get filter params
   const category = searchParams?.category || 'all';
   const search = searchParams?.search || '';
@@ -139,9 +139,6 @@ export default async function BlogPage({ searchParams }) {
     { slug: 'digital-skills', label: 'Digital Skills', count: 0 },
   ];
 
-  // Count posts per category (simplified)
-  // In production, you'd query this from the database
-
   const totalPages = Math.ceil((totalPosts || 0) / pageSize);
 
   return (
@@ -197,20 +194,7 @@ export default async function BlogPage({ searchParams }) {
                   Search
                 </button>
               </form>
-              <select
-                name="sort"
-                defaultValue={sort}
-                className="rounded-xl border border-gray-200 px-4 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-300"
-                onChange={(e) => {
-                  const url = new URL(window.location.href);
-                  url.searchParams.set('sort', e.target.value);
-                  window.location.href = url.toString();
-                }}
-              >
-                <option value="newest">Newest</option>
-                <option value="oldest">Oldest</option>
-                <option value="popular">Most Comments</option>
-              </select>
+              <SortSelect sort={sort} />
             </div>
           </div>
         </section>
@@ -263,7 +247,7 @@ export default async function BlogPage({ searchParams }) {
                         <h2 className="text-lg font-bold text-gray-800 mb-1 group-hover:text-brand-blue transition line-clamp-2">
                           {post.title}
                         </h2>
-                        
+
                         {/* Author & Date */}
                         <div className="flex items-center gap-2 text-xs text-gray-400 mb-2">
                           <span className="font-medium text-gray-600">{authorName}</span>
