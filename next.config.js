@@ -5,13 +5,14 @@ const withPWA = require('next-pwa')({
   skipWaiting: true,
   disable: process.env.NODE_ENV === 'development',
 })
-
 const nextConfig = withPWA({
   reactStrictMode: true,
   swcMinify: true,
   images: {
     domains: ['res.cloudinary.com', 'supabase.co'],
   },
+  experimental: {
+    serverComponentsExternalPackages: ['@napi-rs/canvas'],
+  },
 })
-
 module.exports = nextConfig
