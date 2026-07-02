@@ -20,7 +20,7 @@ const GROQ_KEYS = [
 const PEXELS_API_KEY = process.env.PEXELS_API_KEY;
 const PIXABAY_API_KEY = process.env.PIXABAY_API_KEY;
 
-// ── Gemini models ────────────────────────────────────────────────────────
+// ── Gemini models (text generation only — no image model used) ──────────
 const GEMINI_MODELS = [
   'gemini-3.5-flash',
   'gemini-3.5-pro',
@@ -28,7 +28,18 @@ const GEMINI_MODELS = [
   'gemini-2.0-flash',
 ];
 
-// ── Brand knowledge base ──────────────────────────────────────────────────
+// ── Brand config ───────────────────────────────────────────────────────
+const BRAND = {
+  name: 'Shiney Brain Academy',
+  blue: '#1a73e8',
+  gold: '#FFCC00',
+  navy: '#0B1220',
+};
+
+const CANVAS_WIDTH = 1200;
+const CANVAS_HEIGHT = 675; // 16:9
+
+// ── Brand knowledge base (for article generation) ────────────────────────
 const knowledgeBase = {
   brand: `Shiney Brain Academy – bright blue (#1a73e8), gold (#FFCC00), white. Bold, Africa-proud, modern.`,
   tone: `Conversational, Nigerian student-friendly, mentor-like. Use "you", be encouraging, practical.`,
@@ -51,152 +62,241 @@ const knowledgeBase = {
   ],
 };
 
-// ─── Helper: Build search query from keyword ─────────────────────────────
-function buildSearchQuery(keyword) {
-  // Remove common stopwords and exam jargon
-  const clean = keyword
-    .replace(/\b(JAMB|WAEC|NECO|UTME|Post-UTME|2026|2027|2028|2029|2030)\b/gi, '')
-    .replace(/\b(how to|guide for|tips for|score|pass|exam|test|study|prepare|admission)\b/gi, '')
-    .trim();
-  // If clean is too short, fallback to original
-  return clean.length > 2 ? clean : keyword;
+// ─────────────────────────────────────────────────────────────────────────
+// STOCK IMAGE SEARCH — Pexels first, Pixabay fallback
+// ─────────────────────────────────────────────────────────────────────────
+
+// Strips exam jargon, years, and stopwords from the keyword so the stock
+// search gets clean, matchable terms. Always anchors with a generic phrase
+// so results never come back empty even for very jargon-heavy keywords.
+function buildSearchQuery(keyword, category) {
+  const jargon = /\b(JAMB|WAEC|NECO|UTME|Post-?UTME|CBT|SBA)\b/gi;
+  const stopwords = new Set([
+    'the', 'a', 'an', 'to', 'for', 'of', 'and', 'in', 'on', 'your', 'you',
+    'is', 'are', 'how', 'what', 'why', 'best', 'complete', 'ultimate',
+    'guide', 'step', 'steps', 'score', 'pass', 'exam', 'test', 'study',
+    'prepare', 'admission', 'result', 'results',
+  ]);
+
+  const source = keyword || category || 'education';
+
+  const cleaned = source
+    .replace(jargon, '')
+    .replace(/\b(19|20)\d{2}\b/g, '') // strip years like 2026
+    .toLowerCase()
+    .replace(/[^a-z0-9\s]/g, ' ')
+    .split(/\s+/)
+    .filter((w) => w.length > 2 && !stopwords.has(w))
+    .slice(0, 4)
+    .join(' ');
+
+  // Anchor with a broad, always-matchable phrase — this is what keeps the
+  // stock search from ever returning zero results, so the AI fallback
+  // tier below almost never has to fire.
+  return `${cleaned} african student studying`.trim();
 }
 
-// ─── Helper: Search Pexels ──────────────────────────────────────────────
 async function searchPexels(query) {
   if (!PEXELS_API_KEY) return null;
-  const url = `https://api.pexels.com/v1/search?query=${encodeURIComponent(query)}&orientation=landscape&per_page=5`;
-  const response = await fetch(url, {
-    headers: { Authorization: PEXELS_API_KEY },
-  });
-  if (!response.ok) return null;
-  const data = await response.json();
-  if (!data.photos || data.photos.length === 0) return null;
-  // Randomize selection from top 5
-  const photo = data.photos[Math.floor(Math.random() * Math.min(data.photos.length, 5))];
-  return photo.src.large2x || photo.src.large || photo.src.original;
+  try {
+    const res = await fetch(
+      `https://api.pexels.com/v1/search?query=${encodeURIComponent(query)}&per_page=10&orientation=landscape`,
+      { headers: { Authorization: PEXELS_API_KEY } }
+    );
+    if (!res.ok) throw new Error(`Pexels ${res.status}`);
+    const data = await res.json();
+    if (!data.photos?.length) return null;
+    const pick = data.photos[Math.floor(Math.random() * Math.min(5, data.photos.length))];
+    return pick.src.large2x || pick.src.large || pick.src.original;
+  } catch (e) {
+    console.warn('Pexels search failed:', e.message);
+    return null;
+  }
 }
 
-// ─── Helper: Search Pixabay ──────────────────────────────────────────────
 async function searchPixabay(query) {
   if (!PIXABAY_API_KEY) return null;
-  const url = `https://pixabay.com/api/?key=${PIXABAY_API_KEY}&q=${encodeURIComponent(query)}&image_type=photo&orientation=horizontal&safesearch=true&per_page=5`;
-  const response = await fetch(url);
-  if (!response.ok) return null;
-  const data = await response.json();
-  if (!data.hits || data.hits.length === 0) return null;
-  const hit = data.hits[Math.floor(Math.random() * Math.min(data.hits.length, 5))];
-  return hit.largeImageURL || hit.fullHDURL || hit.webformatURL;
-}
-
-// ─── Helper: Fetch stock image ───────────────────────────────────────────
-async function fetchStockImage(keyword) {
-  const query = buildSearchQuery(keyword);
-  let url = await searchPexels(query);
-  if (!url) url = await searchPixabay(query);
-  if (!url) return null;
-  const response = await fetch(url);
-  if (!response.ok) return null;
-  const buffer = Buffer.from(await response.arrayBuffer());
-  return { buffer, ext: 'jpg', mimeType: 'image/jpeg', source: 'stock' };
-}
-
-// ─── Helper: Build overlay SVG ──────────────────────────────────────────
-function buildOverlaySvg(title, category) {
-  const lines = title.length > 50 ? title.split(' ', 8).join(' ') + '…' : title;
-  const categoryBadge = category || 'General';
-  const brandColor = '#1a73e8';
-  const accentColor = '#FFCC00';
-
-  return `
-    <svg width="1200" height="675" xmlns="http://www.w3.org/2000/svg">
-      <!-- Dark gradient overlay at bottom -->
-      <defs>
-        <linearGradient id="fade" x1="0" y1="0.6" x2="0" y2="1">
-          <stop offset="0%" stop-color="black" stop-opacity="0" />
-          <stop offset="100%" stop-color="black" stop-opacity="0.75" />
-        </linearGradient>
-      </defs>
-      <!-- Brand top-left -->
-      <rect x="24" y="24" rx="8" width="220" height="48" fill="${brandColor}" />
-      <text x="40" y="55" font-family="Inter, Arial, sans-serif" font-size="22" font-weight="700" fill="white">Shiney Brain Academy</text>
-      <!-- Category badge top-right -->
-      <rect x="1056" y="24" rx="20" width="120" height="40" fill="${accentColor}" />
-      <text x="1080" y="51" font-family="Inter, Arial, sans-serif" font-size="16" font-weight="700" fill="#1a1a1a" text-anchor="start">${categoryBadge}</text>
-      <!-- Title bottom -->
-      <rect x="0" y="540" width="1200" height="135" fill="url(#fade)" />
-      <text x="40" y="610" font-family="Inter, Arial, sans-serif" font-size="48" font-weight="800" fill="white" letter-spacing="-1">${lines}</text>
-      <text x="40" y="650" font-family="Inter, Arial, sans-serif" font-size="16" fill="rgba(255,255,255,0.7)">shineybrainacademy.com</text>
-    </svg>
-  `;
-}
-
-// ─── Helper: Create branded thumbnail ──────────────────────────────────
-async function createBrandedThumbnail(imageBuffer, title, category) {
-  const svgBuffer = Buffer.from(buildOverlaySvg(title, category));
-  return await sharp(imageBuffer)
-    .resize(1200, 675, { fit: 'cover' })
-    .composite([
-      {
-        input: svgBuffer,
-        top: 0,
-        left: 0,
-      },
-    ])
-    .jpeg({ quality: 85 })
-    .toBuffer();
-}
-
-// ─── Helper: Generate cover image (stock first, AI fallback) ────────────
-async function generateCoverImage(keyword, title, category, heroPrompt) {
-  // 1. Try stock photo
-  const stockResult = await fetchStockImage(keyword);
-  if (stockResult) {
-    const brandedBuffer = await createBrandedThumbnail(stockResult.buffer, title, category);
-    return { buffer: brandedBuffer, ext: 'jpg', mimeType: 'image/jpeg' };
+  try {
+    const res = await fetch(
+      `https://pixabay.com/api/?key=${PIXABAY_API_KEY}&q=${encodeURIComponent(query)}&image_type=photo&orientation=horizontal&safesearch=true&per_page=10`
+    );
+    if (!res.ok) throw new Error(`Pixabay ${res.status}`);
+    const data = await res.json();
+    if (!data.hits?.length) return null;
+    const pick = data.hits[Math.floor(Math.random() * Math.min(5, data.hits.length))];
+    return pick.largeImageURL || pick.fullHDURL || pick.webformatURL;
+  } catch (e) {
+    console.warn('Pixabay search failed:', e.message);
+    return null;
   }
+}
 
-  // 2. Fallback: AI generation (Gemini first)
-  for (const geminiKey of GEMINI_KEYS) {
-    try {
-      const client = new GoogleGenerativeAI(geminiKey);
-      const model = client.getGenerativeModel({ model: 'gemini-2.0-flash-exp-image-generation' });
-      const prompt = heroPrompt || `${keyword} educational illustration, modern, clean, no text, no words, no letters`;
-      const result = await model.generateContent({
-        contents: [{ role: 'user', parts: [{ text: prompt }] }],
-        generationConfig: { responseModalities: ['image'] },
-      });
-      const imagePart = result.response.candidates[0]?.content?.parts[0]?.inlineData;
-      if (imagePart) {
-        const buffer = Buffer.from(imagePart.data, 'base64');
-        const brandedBuffer = await createBrandedThumbnail(buffer, title, category);
-        return { buffer: brandedBuffer, ext: 'jpg', mimeType: 'image/jpeg' };
-      }
-    } catch (e) {
-      console.warn('Gemini image generation failed:', e.message);
+// Tries Pexels then Pixabay. Returns a raw image buffer, or null if both
+// libraries genuinely have nothing (rare, since the query is anchored).
+async function fetchStockImage(query) {
+  let url = await searchPexels(query);
+  let source = 'pexels';
+  if (!url) {
+    url = await searchPixabay(query);
+    source = 'pixabay';
+  }
+  if (!url) return null;
+
+  const imgRes = await fetch(url);
+  if (!imgRes.ok) return null;
+  const buffer = Buffer.from(await imgRes.arrayBuffer());
+  return { buffer, source };
+}
+
+// ─────────────────────────────────────────────────────────────────────────
+// TEXT OVERLAY — Sharp + SVG (no native canvas dependency, deploys cleanly
+// on Vercel serverless since sharp ships with Next.js already)
+// ─────────────────────────────────────────────────────────────────────────
+
+function escapeXml(str = '') {
+  return str
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&apos;');
+}
+
+// Greedy word-wrap by character count, capped at 3 lines so long titles
+// never overflow the canvas — this replaces a naive "8-word slice" that
+// doesn't account for actual pixel width.
+function wrapText(text, maxCharsPerLine, maxLines = 3) {
+  const words = text.split(' ');
+  const lines = [];
+  let current = '';
+
+  for (const word of words) {
+    const test = current ? `${current} ${word}` : word;
+    if (test.length > maxCharsPerLine && current) {
+      lines.push(current);
+      current = word;
+    } else {
+      current = test;
+    }
+    if (lines.length === maxLines) break;
+  }
+  if (current && lines.length < maxLines) lines.push(current);
+
+  // If we truncated mid-title, mark the last line with an ellipsis
+  if (lines.length === maxLines) {
+    const joinedSoFar = lines.join(' ');
+    if (joinedSoFar.length < text.length) {
+      lines[maxLines - 1] = lines[maxLines - 1].replace(/\s*$/, '') + '…';
     }
   }
+  return lines;
+}
 
-  // 3. Final fallback: Pollinations (no text)
-  const fallbackUrl = `https://image.pollinations.ai/prompt/${encodeURIComponent(keyword + ' educational illustration, no text, no words, no letters')}?width=1200&height=675&nologo=true`;
-  const response = await fetch(fallbackUrl);
-  if (!response.ok) throw new Error(`Pollinations failed: ${response.status}`);
-  const buffer = Buffer.from(await response.arrayBuffer());
-  const brandedBuffer = await createBrandedThumbnail(buffer, title, category);
-  return { buffer: brandedBuffer, ext: 'jpg', mimeType: 'image/jpeg' };
+function buildOverlaySvg({ title, category }) {
+  const titleLines = wrapText(title.toUpperCase(), 24, 3);
+  const lineHeight = 60;
+  const startY = CANVAS_HEIGHT - 70 - (titleLines.length - 1) * lineHeight;
+
+  const titleTspans = titleLines
+    .map(
+      (line, i) =>
+        `<tspan x="50" dy="${i === 0 ? 0 : lineHeight}">${escapeXml(line)}</tspan>`
+    )
+    .join('');
+
+  return `
+<svg width="${CANVAS_WIDTH}" height="${CANVAS_HEIGHT}" xmlns="http://www.w3.org/2000/svg">
+  <defs>
+    <linearGradient id="fade" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0%" stop-color="${BRAND.navy}" stop-opacity="0"/>
+      <stop offset="50%" stop-color="${BRAND.navy}" stop-opacity="0.55"/>
+      <stop offset="100%" stop-color="${BRAND.navy}" stop-opacity="0.92"/>
+    </linearGradient>
+  </defs>
+
+  <!-- darken bottom two-thirds so white text stays readable over any photo -->
+  <rect x="0" y="0" width="${CANVAS_WIDTH}" height="${CANVAS_HEIGHT}" fill="url(#fade)"/>
+
+  <!-- top-left brand chip -->
+  <rect x="24" y="24" width="230" height="46" rx="8" fill="${BRAND.blue}"/>
+  <text x="40" y="54" font-family="Arial, Helvetica, sans-serif" font-size="19" font-weight="700" fill="#FFFFFF">
+    ${escapeXml(BRAND.name)}
+  </text>
+
+  ${
+    category
+      ? `<rect x="${CANVAS_WIDTH - 176}" y="24" width="152" height="42" rx="20" fill="${BRAND.gold}"/>
+         <text x="${CANVAS_WIDTH - 100}" y="51" font-family="Arial, Helvetica, sans-serif" font-size="17" font-weight="700" fill="${BRAND.navy}" text-anchor="middle">
+           ${escapeXml(category.toUpperCase())}
+         </text>`
+      : ''
+  }
+
+  <!-- title -->
+  <text y="${startY}" font-family="Arial, Helvetica, sans-serif" font-size="50" font-weight="800" fill="#FFFFFF" style="letter-spacing:0.4px">
+    ${titleTspans}
+  </text>
+
+  <!-- site url footer -->
+  <text x="50" y="${CANVAS_HEIGHT - 24}" font-family="Arial, Helvetica, sans-serif" font-size="15" fill="rgba(255,255,255,0.7)">
+    shineybrainacademy.com
+  </text>
+</svg>`;
+}
+
+async function createBrandedThumbnail(imageBuffer, { title, category }) {
+  const base = await sharp(imageBuffer)
+    .resize(CANVAS_WIDTH, CANVAS_HEIGHT, { fit: 'cover', position: 'attention' })
+    .toBuffer();
+
+  const overlaySvg = Buffer.from(buildOverlaySvg({ title, category }));
+
+  const final = await sharp(base)
+    .composite([{ input: overlaySvg, top: 0, left: 0 }])
+    .jpeg({ quality: 88 })
+    .toBuffer();
+
+  return { buffer: final, ext: 'jpg', mimeType: 'image/jpeg' };
+}
+
+// Full cover-image pipeline:
+//   1. Search Pexels, then Pixabay, for a real matching photo.
+//   2. If (rarely) both come back empty, fall back to Pollinations with a
+//      strict no-text prompt — NOT Gemini's image model, since that's the
+//      exact source of the garbled-text problem this pipeline exists to
+//      avoid. Pollinations is only ever asked for a text-free illustration;
+//      the real title is always added afterward by createBrandedThumbnail.
+//   3. Brand every image (stock or fallback) with the same SVG overlay so
+//      output is visually consistent either way.
+async function generateCoverImage({ keyword, category, title }) {
+  const query = buildSearchQuery(keyword, category);
+
+  const stock = await fetchStockImage(query);
+  if (stock) {
+    return createBrandedThumbnail(stock.buffer, { title, category });
+  }
+
+  console.warn(`No stock image found for "${query}", using text-free illustration fallback`);
+  const fallbackPrompt = `Clean modern flat-design illustration related to: ${query}. No text, no words, no letters, no logos, no signage. Simple, high-contrast, vibrant colors, plenty of empty space.`;
+  const fallbackUrl = `https://image.pollinations.ai/prompt/${encodeURIComponent(
+    fallbackPrompt
+  )}?width=${CANVAS_WIDTH}&height=${CANVAS_HEIGHT}&nologo=true`;
+
+  const res = await fetch(fallbackUrl);
+  if (!res.ok) throw new Error(`Pollinations fallback failed: ${res.status}`);
+  const buffer = Buffer.from(await res.arrayBuffer());
+  return createBrandedThumbnail(buffer, { title, category });
 }
 
 // ─── Helper: Upload image to Supabase Storage ────────────────────────────
 async function uploadImage(supabase, buffer, ext, folder = 'blog-images') {
   const fileName = `hero-${Date.now()}.${ext}`;
   const path = `${folder}/${fileName}`;
-  const { data, error } = await supabase.storage
+  const { error } = await supabase.storage
     .from('blog-images')
     .upload(path, buffer, { contentType: `image/${ext}` });
   if (error) throw error;
-  const { data: urlData } = supabase.storage
-    .from('blog-images')
-    .getPublicUrl(path);
+  const { data: urlData } = supabase.storage.from('blog-images').getPublicUrl(path);
   return urlData.publicUrl;
 }
 
@@ -229,10 +329,7 @@ export async function POST(request) {
     }
 
     // ── 3. Mark as generating ─────────────────────────────────────────────
-    await supabase
-      .from('content_queue')
-      .update({ status: 'generating' })
-      .eq('id', queueItemId);
+    await supabase.from('content_queue').update({ status: 'generating' }).eq('id', queueItemId);
 
     // ── 4. Build prompt ───────────────────────────────────────────────────
     const prompt = `You are an expert content writer for Shiney Brain Academy (SBA), Nigeria's leading exam prep and skills platform.
@@ -299,7 +396,7 @@ Return the response as a valid JSON object with this exact structure:
       }
     }
 
-    // ── 5b. Fallback – try each Gemini key × each model ──────────────────
+    // ── 5b. Fallback – try each Gemini key × each model (TEXT ONLY) ──────
     if (!result) {
       for (const geminiKey of GEMINI_KEYS) {
         if (result) break;
@@ -329,10 +426,7 @@ Return the response as a valid JSON object with this exact structure:
 
     // ── 6. All providers failed ───────────────────────────────────────────
     if (!result) {
-      await supabase
-        .from('content_queue')
-        .update({ status: 'failed' })
-        .eq('id', queueItemId);
+      await supabase.from('content_queue').update({ status: 'failed' }).eq('id', queueItemId);
       return NextResponse.json(
         { error: `All AI providers failed. Details: ${errors.join('; ')}` },
         { status: 500 }
@@ -348,7 +442,7 @@ Return the response as a valid JSON object with this exact structure:
         .replace(/^-|-$/g, '') ||
       'untitled';
 
-    // ── 8. Save draft to Supabase ─────────────────────────────────────────
+    // ── 8. Save draft to Supabase (without cover_image yet) ──────────────
     const wordCount = result.content?.split(/\s+/).length || 0;
 
     const { data: draft, error: draftError } = await supabase
@@ -374,35 +468,28 @@ Return the response as a valid JSON object with this exact structure:
       .single();
 
     if (draftError) {
-      await supabase
-        .from('content_queue')
-        .update({ status: 'failed' })
-        .eq('id', queueItemId);
+      await supabase.from('content_queue').update({ status: 'failed' }).eq('id', queueItemId);
       return NextResponse.json({ error: draftError.message }, { status: 500 });
     }
 
-    // ── 9. Generate cover image ──────────────────────────────────────────
+    // ── 9. Generate branded cover image (stock photo first, safe fallback) ─
     let coverImageUrl = null;
     try {
-      const heroPrompt = `Educational illustration for ${item.keyword}, African students, modern, clean, professional`;
-      const { buffer, ext } = await generateCoverImage(item.keyword, result.title, item.category, heroPrompt);
+      const { buffer, ext } = await generateCoverImage({
+        keyword: item.keyword,
+        category: item.category,
+        title: result.title,
+      });
       coverImageUrl = await uploadImage(supabase, buffer, ext, 'blog-images');
-      await supabase
-        .from('content_drafts')
-        .update({ cover_image: coverImageUrl })
-        .eq('id', draft.id);
+      await supabase.from('content_drafts').update({ cover_image: coverImageUrl }).eq('id', draft.id);
     } catch (imgError) {
-      console.warn('Image generation failed, but article was saved:', imgError.message);
+      console.warn('Cover image generation failed, article still saved:', imgError.message);
     }
 
-    // ── 10. Update queue item status ──────────────────────────────────────
+    // ── 10. Update queue item status ────────────────────────────────────────
     await supabase
       .from('content_queue')
-      .update({
-        status: 'draft',
-        draft_id: draft.id,
-        generated_at: new Date().toISOString(),
-      })
+      .update({ status: 'draft', draft_id: draft.id, generated_at: new Date().toISOString() })
       .eq('id', queueItemId);
 
     return NextResponse.json({
@@ -412,7 +499,6 @@ Return the response as a valid JSON object with this exact structure:
       usedProvider,
       coverImage: coverImageUrl,
     });
-
   } catch (error) {
     console.error('Generation error:', error);
     return NextResponse.json({ error: error.message }, { status: 500 });
