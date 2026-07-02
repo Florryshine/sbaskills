@@ -1,4 +1,4 @@
-import { createServerClient } from '@/lib/supabase-server';   // ← changed
+import { createClient } from '@supabase/supabase-js';
 import { notFound } from 'next/navigation';
 import Navbar from '@/components/Navbar';
 import Footer from '@/components/Footer';
@@ -7,7 +7,17 @@ export const dynamic = 'force-dynamic';
 
 export default async function BlogPostPage({ params }) {
   try {
-    const supabase = createServerClient();   // ← changed (not createRouteHandlerClient)
+    // Create a Supabase client with the service role key (no cookies, no auth)
+    const supabase = createClient(
+      process.env.NEXT_PUBLIC_SUPABASE_URL,
+      process.env.SUPABASE_SERVICE_ROLE_KEY,
+      {
+        auth: {
+          autoRefreshToken: false,
+          persistSession: false,
+        },
+      }
+    );
 
     const { data: post, error } = await supabase
       .from('content_drafts')
