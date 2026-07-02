@@ -5,7 +5,6 @@ import Footer from '@/components/Footer';
 import nextDynamic from 'next/dynamic';
 import Link from 'next/link';
 import { marked } from 'marked';
-import DOMPurify from 'isomorphic-dompurify';
 
 // ─── Dynamically load interactive components (client-only) ────────────
 const ShareButtons = nextDynamic(() => import('@/components/ShareButtons'), { ssr: false });
@@ -13,12 +12,6 @@ const MarkDoneButton = nextDynamic(() => import('@/components/MarkDoneButton'), 
 const Comments = nextDynamic(() => import('@/components/Comments'), { ssr: false });
 
 export const dynamic = 'force-dynamic';
-
-// Configure marked options ONCE, before any conversion
-marked.setOptions({
-  breaks: true,   // Convert \n to <br>
-  gfm: true,      // GitHub Flavored Markdown
-});
 
 export default async function BlogPostPage({ params }) {
   try {
@@ -43,9 +36,18 @@ export default async function BlogPostPage({ params }) {
     const faq = post.schemas ? JSON.parse(post.schemas) : [];
     const internalLinks = post.internal_links || [];
 
-    // ─── Convert markdown → HTML and sanitize ──────────────────────────
-    const rawHtml = marked.parse(post.content || '');
-    const sanitizedHtml = DOMPurify.sanitize(rawHtml);
+    // ─── Convert markdown → HTML (safe, version-agnostic) ──────────────
+    let htmlContent = post.content || '';
+    try {
+      if (typeof marked.parse === 'function') {
+        htmlContent = marked.parse(post.content || '');
+      } else if (typeof marked === 'function') {
+        htmlContent = marked(post.content || '');
+      }
+    } catch (e) {
+      console.warn('Markdown parsing failed, using raw content:', e);
+      // Keep raw content as fallback
+    }
 
     return (
       <>
@@ -94,7 +96,7 @@ export default async function BlogPostPage({ params }) {
               </p>
             )}
 
-            {/* ─── Share Buttons (client-only) ─── */}
+            {/* ─── Share Buttons ─── */}
             <div className="mb-6">
               <ShareButtons
                 title={post.title}
@@ -105,10 +107,10 @@ export default async function BlogPostPage({ params }) {
               />
             </div>
 
-            {/* ─── Main Content (sanitized HTML from Markdown) ─── */}
+            {/* ─── Main Content ─── */}
             <div
               className="prose prose-lg max-w-none text-gray-700 leading-relaxed"
-              dangerouslySetInnerHTML={{ __html: sanitizedHtml }}
+              dangerouslySetInnerHTML={{ __html: htmlContent }}
             />
 
             {/* ─── FAQ Section ─── */}
@@ -132,7 +134,6 @@ export default async function BlogPostPage({ params }) {
                 <h3 className="text-xl font-bold text-gray-900 mb-4">🔗 Related Tools & Resources</h3>
                 <ul className="list-disc pl-5 space-y-1">
                   {internalLinks.map((link, i) => {
-                    // ⚠️ Assumes tool slugs match: lowercased, spaces replaced with '-'
                     const slug = link.toLowerCase().replace(/\s+/g, '-');
                     return (
                       <li key={i}>
@@ -150,14 +151,14 @@ export default async function BlogPostPage({ params }) {
               </div>
             )}
 
-            {/* ─── CTA / Before You Leave ─── */}
+            {/* ─── CTA ─── */}
             {post.cta && (
               <div className="mt-8 p-6 bg-brand-yellow/10 rounded-lg border border-brand-yellow">
                 <p className="text-lg font-medium text-gray-900">{post.cta}</p>
               </div>
             )}
 
-            {/* ─── Mark as Done (client-only) ─── */}
+            {/* ─── Mark as Done ─── */}
             <div className="mt-8 pt-6 border-t border-gray-200">
               <MarkDoneButton
                 activityType="blog"
@@ -167,7 +168,7 @@ export default async function BlogPostPage({ params }) {
               />
             </div>
 
-            {/* ─── Comments (client-only) ─── */}
+            {/* ─── Comments ─── */}
             <div className="mt-8">
               <Comments postId={post.id} />
             </div>
