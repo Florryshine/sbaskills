@@ -1,4 +1,4 @@
-import { createRouteHandlerClient } from '@/lib/supabase-server';
+import { createServerClient } from '@/lib/supabase-server';   // ← changed
 import { notFound } from 'next/navigation';
 import Navbar from '@/components/Navbar';
 import Footer from '@/components/Footer';
@@ -7,7 +7,7 @@ export const dynamic = 'force-dynamic';
 
 export default async function BlogPostPage({ params }) {
   try {
-    const supabase = createRouteHandlerClient();
+    const supabase = createServerClient();   // ← changed (not createRouteHandlerClient)
 
     const { data: post, error } = await supabase
       .from('content_drafts')
