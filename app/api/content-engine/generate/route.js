@@ -7,13 +7,13 @@ import Groq from 'groq-sdk';
 const GEMINI_KEYS = [
   process.env.GEMINI_API_KEY_1,
   process.env.GEMINI_API_KEY_2,
-  process.env.GEMINI_API_KEY, // fallback if single key is used
+  process.env.GEMINI_API_KEY,
 ].filter(Boolean);
 
 const GROQ_KEYS = [
   process.env.GROQ_API_KEY_1,
   process.env.GROQ_API_KEY_2,
-  process.env.GROQ_API_KEY, // fallback
+  process.env.GROQ_API_KEY,
 ].filter(Boolean);
 
 // ── Gemini models ────────────────────────────────────────────────────────
@@ -46,6 +46,58 @@ const knowledgeBase = {
     'Certificates',
   ],
 };
+
+// ─── Helper: Generate an image from a prompt ─────────────────────────────
+async function generateImage(prompt) {
+  // Option 1: Try Gemini image generation (experimental, free)
+  for (const geminiKey of GEMINI_KEYS) {
+    try {
+      const client = new GoogleGenerativeAI(geminiKey);
+      const model = client.getGenerativeModel({ model: 'gemini-2.0-flash-exp-image-generation' });
+      const result = await model.generateContent({
+        contents: [{ role: 'user', parts: [{ text: prompt }] }],
+        generationConfig: {
+          responseModalities: ['image'],
+        },
+      });
+      const imagePart = result.response.candidates[0]?.content?.parts[0]?.inlineData;
+      if (imagePart) {
+        // Base64 image data
+        const imageData = imagePart.data;
+        const mimeType = imagePart.mimeType || 'image/png';
+        const ext = mimeType.split('/')[1];
+        const buffer = Buffer.from(imageData, 'base64');
+        return { buffer, ext, mimeType };
+      }
+    } catch (e) {
+      console.warn('Gemini image generation failed:', e.message);
+      // Continue to fallback
+    }
+  }
+
+  // Option 2: Fallback to Pollinations.ai (completely free, no key)
+  const fallbackUrl = `https://image.pollinations.ai/prompt/${encodeURIComponent(prompt)}?width=800&height=400&nologo=true`;
+  const response = await fetch(fallbackUrl);
+  if (!response.ok) {
+    throw new Error(`Pollinations.ai failed: ${response.status}`);
+  }
+  const buffer = Buffer.from(await response.arrayBuffer());
+  return { buffer, ext: 'png', mimeType: 'image/png' };
+}
+
+// ─── Helper: Upload image to Supabase Storage ────────────────────────────
+async function uploadImage(supabase, buffer, ext, folder = 'blog-images') {
+  const fileName = `hero-${Date.now()}.${ext}`;
+  const path = `${folder}/${fileName}`;
+  const { data, error } = await supabase.storage
+    .from('blog-images')
+    .upload(path, buffer, { contentType: `image/${ext}` });
+  if (error) throw error;
+  const { data: urlData } = supabase.storage
+    .from('blog-images')
+    .getPublicUrl(path);
+  return urlData.publicUrl;
+}
 
 export async function POST(request) {
   try {
@@ -201,7 +253,7 @@ Return the response as a valid JSON object with this exact structure:
         .replace(/^-|-$/g, '') ||
       'untitled';
 
-    // ── 8. Save draft to Supabase ─────────────────────────────────────────
+    // ── 8. Save draft to Supabase (without cover_image yet) ──────────────
     const wordCount = result.content?.split(/\s+/).length || 0;
 
     const { data: draft, error: draftError } = await supabase
@@ -223,6 +275,7 @@ Return the response as a valid JSON object with this exact structure:
         status: 'draft',
         content_score: 85,
         readability_score: 80,
+        // cover_image will be set after image generation
       })
       .select()
       .single();
@@ -235,7 +288,27 @@ Return the response as a valid JSON object with this exact structure:
       return NextResponse.json({ error: draftError.message }, { status: 500 });
     }
 
-    // ── 9. Update queue item status ───────────────────────────────────────
+    // ── 9. Generate and upload hero image ──────────────────────────────────
+    let coverImageUrl = null;
+    const heroPrompt = result.images?.find(img => img.type === 'hero')?.description;
+    if (heroPrompt) {
+      try {
+        // Enhance prompt with brand style
+        const imagePrompt = `Shiney Brain Academy style: ${heroPrompt}. Bright blue (#1a73e8) and gold (#FFCC00) colors, modern, clean, Nigerian student-focused.`;
+        const { buffer, ext, mimeType } = await generateImage(imagePrompt);
+        coverImageUrl = await uploadImage(supabase, buffer, ext, 'blog-images');
+        // Update the draft with the cover image URL
+        await supabase
+          .from('content_drafts')
+          .update({ cover_image: coverImageUrl })
+          .eq('id', draft.id);
+      } catch (imgError) {
+        console.warn('Image generation failed, but article was saved:', imgError.message);
+        // Continue – the post will still exist without an image
+      }
+    }
+
+    // ── 10. Update queue item status ──────────────────────────────────────
     await supabase
       .from('content_queue')
       .update({
@@ -250,6 +323,7 @@ Return the response as a valid JSON object with this exact structure:
       draftId: draft.id,
       title: result.title,
       usedProvider,
+      coverImage: coverImageUrl,
     });
 
   } catch (error) {
