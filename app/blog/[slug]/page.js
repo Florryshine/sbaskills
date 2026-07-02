@@ -4,14 +4,21 @@ import Navbar from '@/components/Navbar';
 import Footer from '@/components/Footer';
 import nextDynamic from 'next/dynamic';
 import Link from 'next/link';
+import { marked } from 'marked';
+import DOMPurify from 'isomorphic-dompurify';
 
 // ─── Dynamically load interactive components (client-only) ────────────
 const ShareButtons = nextDynamic(() => import('@/components/ShareButtons'), { ssr: false });
 const MarkDoneButton = nextDynamic(() => import('@/components/MarkDoneButton'), { ssr: false });
 const Comments = nextDynamic(() => import('@/components/Comments'), { ssr: false });
 
-// Route segment config — force this page to render dynamically on every request
 export const dynamic = 'force-dynamic';
+
+// Configure marked options ONCE, before any conversion
+marked.setOptions({
+  breaks: true,   // Convert \n to <br>
+  gfm: true,      // GitHub Flavored Markdown
+});
 
 export default async function BlogPostPage({ params }) {
   try {
@@ -32,24 +39,33 @@ export default async function BlogPostPage({ params }) {
 
     // ─── Parse JSON fields ──────────────────────────────────────────────
     const images = post.image_prompts ? JSON.parse(post.image_prompts) : [];
-    const heroImage = images.find((img) => img.type === 'hero')?.description || null;
+    const heroPrompt = images.find((img) => img.type === 'hero')?.description || null;
     const faq = post.schemas ? JSON.parse(post.schemas) : [];
     const internalLinks = post.internal_links || [];
 
-    // ─── Render ──────────────────────────────────────────────────────────
+    // ─── Convert markdown → HTML and sanitize ──────────────────────────
+    const rawHtml = marked.parse(post.content || '');
+    const sanitizedHtml = DOMPurify.sanitize(rawHtml);
+
     return (
       <>
         <Navbar />
         <main className="min-h-screen bg-gray-50">
           <article className="max-w-4xl mx-auto px-4 py-8">
             {/* ─── Hero Image ─── */}
-            {heroImage && (
+            {post.cover_image ? (
+              <img
+                src={post.cover_image}
+                alt={post.title}
+                className="w-full h-64 md:h-80 object-cover rounded-lg mb-6"
+              />
+            ) : heroPrompt ? (
               <div className="relative w-full h-64 md:h-80 bg-gray-200 rounded-lg mb-6 overflow-hidden">
                 <div className="w-full h-full flex items-center justify-center bg-gradient-to-br from-blue-50 to-gray-100 text-gray-400">
-                  <span className="text-sm font-medium">📷 {heroImage}</span>
+                  <span className="text-sm font-medium">📷 {heroPrompt}</span>
                 </div>
               </div>
-            )}
+            ) : null}
 
             {/* ─── Title ─── */}
             <h1 className="text-3xl md:text-4xl font-extrabold text-gray-900 mb-4">
@@ -89,10 +105,10 @@ export default async function BlogPostPage({ params }) {
               />
             </div>
 
-            {/* ─── Main Content ─── */}
+            {/* ─── Main Content (sanitized HTML from Markdown) ─── */}
             <div
               className="prose prose-lg max-w-none text-gray-700 leading-relaxed"
-              dangerouslySetInnerHTML={{ __html: post.content || 'No content yet.' }}
+              dangerouslySetInnerHTML={{ __html: sanitizedHtml }}
             />
 
             {/* ─── FAQ Section ─── */}
@@ -115,13 +131,21 @@ export default async function BlogPostPage({ params }) {
               <div className="mt-8 border-t pt-6">
                 <h3 className="text-xl font-bold text-gray-900 mb-4">🔗 Related Tools & Resources</h3>
                 <ul className="list-disc pl-5 space-y-1">
-                  {internalLinks.map((link, i) => (
-                    <li key={i} className="text-blue-600 hover:underline">
-                      <Link href={`/tools/${link.toLowerCase().replace(/\s+/g, '-')}`}>
-                        {link}
-                      </Link>
-                    </li>
-                  ))}
+                  {internalLinks.map((link, i) => {
+                    // ⚠️ Assumes tool slugs match: lowercased, spaces replaced with '-'
+                    const slug = link.toLowerCase().replace(/\s+/g, '-');
+                    return (
+                      <li key={i}>
+                        <Link
+                          href={`/tools/${slug}`}
+                          className="text-blue-600 hover:underline"
+                          target="_blank"
+                        >
+                          {link}
+                        </Link>
+                      </li>
+                    );
+                  })}
                 </ul>
               </div>
             )}
