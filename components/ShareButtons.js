@@ -1,124 +1,89 @@
 'use client';
 
-import { useState, useEffect } from 'react';
-import { createBrowserClient } from '@/lib/supabase';
-import { addPoints } from '@/lib/gamification';
+import { useState } from 'react';
 
-export default function ShareButtons({ 
-  title, 
-  url, 
-  targetType, 
-  targetId,
-  description = '' 
-}) {
-  const [sharing, setSharing] = useState(false);
-  const [user, setUser] = useState(null);
-  const supabase = createBrowserClient();
+export default function ShareButtons({ title, url, targetType, targetId, description }) {
+  const [copied, setCopied] = useState(false);
 
-  useEffect(() => {
-    async function getUser() {
-      const { data: { user } } = await supabase.auth.getUser();
-      setUser(user);
-    }
-    getUser();
-  }, []);
-
-  const getShareUrl = (platform) => {
-    const baseUrl = process.env.NEXT_PUBLIC_SITE_URL || 'https://sbaskills.vercel.app';
-    const shareUrl = `${baseUrl}${url}`;
-    const encodedUrl = encodeURIComponent(shareUrl);
-    const encodedTitle = encodeURIComponent(title);
-    const encodedDesc = encodeURIComponent(description);
-
-    switch (platform) {
-      case 'whatsapp':
-        return `https://wa.me/?text=${encodedTitle}%0A${encodedDesc}%0A${encodedUrl}`;
-      case 'facebook':
-        return `https://www.facebook.com/sharer/sharer.php?u=${encodedUrl}&quote=${encodedTitle}`;
-      case 'telegram':
-        return `https://t.me/share/url?url=${encodedUrl}&text=${encodedTitle}`;
-      case 'twitter':
-        return `https://twitter.com/intent/tweet?text=${encodedTitle}&url=${encodedUrl}`;
-      case 'copy':
-        return shareUrl;
-      default:
-        return shareUrl;
-    }
+  const shareData = {
+    title,
+    text: description || `Check out "${title}" on Shiney Brain Academy!`,
+    url: `${window.location.origin}${url}`,
   };
 
-  const handleShare = async (platform) => {
-    const shareUrl = getShareUrl(platform);
-    
+  const shareVia = (platform) => {
+    const shareUrl = encodeURIComponent(shareData.url);
+    const text = encodeURIComponent(shareData.text);
+
+    const links = {
+      whatsapp: `https://api.whatsapp.com/send?text=${text}%20${shareUrl}`,
+      facebook: `https://www.facebook.com/sharer/sharer.php?u=${shareUrl}`,
+      twitter: `https://twitter.com/intent/tweet?text=${text}&url=${shareUrl}`,
+      telegram: `https://t.me/share/url?url=${shareUrl}&text=${text}`,
+    };
+
     if (platform === 'copy') {
-      try {
-        await navigator.clipboard.writeText(shareUrl);
-        alert('✅ Link copied to clipboard! Share it with your friends.');
-      } catch (err) {
-        prompt('Copy this link:', shareUrl);
-      }
-    } else {
-      window.open(shareUrl, '_blank', 'noopener,noreferrer,width=600,height=500');
+      navigator.clipboard.writeText(shareData.url).then(() => {
+        setCopied(true);
+        setTimeout(() => setCopied(false), 2000);
+      });
+      return;
     }
 
-    // Track share and award points (only if logged in and first time sharing this item)
-    if (user) {
-      await trackShare(platform);
-    }
+    window.open(links[platform], '_blank', 'width=600,height=400');
   };
-
-  const trackShare = async (platform) => {
-    try {
-      // Check if already shared this item on this platform
-      const { data: existing } = await supabase
-        .from('shares')
-        .select('id')
-        .eq('user_id', user.id)
-        .eq('target_type', targetType)
-        .eq('target_id', targetId)
-        .eq('platform', platform)
-        .maybeSingle();
-
-      if (!existing) {
-        // Log the share
-        await supabase
-          .from('shares')
-          .insert({
-            user_id: user.id,
-            target_type: targetType,
-            target_id: targetId,
-            platform: platform
-          });
-
-        // Award points for first share of this item
-        await addPoints(user.id, 10, `Shared ${targetType} on ${platform}`, 'share', targetId);
-      }
-    } catch (error) {
-      console.error('Error tracking share:', error);
-    }
-  };
-
-  const platforms = [
-    { id: 'whatsapp', icon: '💬', label: 'WhatsApp', color: 'bg-green-500' },
-    { id: 'facebook', icon: '👍', label: 'Facebook', color: 'bg-blue-600' },
-    { id: 'telegram', icon: '✈️', label: 'Telegram', color: 'bg-blue-400' },
-    { id: 'twitter', icon: '🐦', label: 'Twitter', color: 'bg-black' },
-    { id: 'copy', icon: '📋', label: 'Copy Link', color: 'bg-gray-600' },
-  ];
 
   return (
-    <div className="flex flex-wrap items-center gap-2 mt-4">
-      <span className="text-sm font-bold text-gray-600 mr-2">📤 Share:</span>
-      {platforms.map((platform) => (
-        <button
-          key={platform.id}
-          onClick={() => handleShare(platform.id)}
-          disabled={sharing}
-          className={`flex items-center gap-1 px-3 py-1.5 rounded-full text-white text-xs font-bold hover:opacity-80 transition ${platform.color}`}
-        >
-          <span>{platform.icon}</span>
-          <span className="hidden sm:inline">{platform.label}</span>
-        </button>
-      ))}
+    <div className="flex flex-wrap items-center gap-3 my-4">
+      <span className="text-sm font-medium text-gray-600">Share:</span>
+      <button
+        onClick={() => shareVia('whatsapp')}
+        className="p-2 rounded-full bg-green-500 hover:bg-green-600 text-white transition-colors"
+        aria-label="Share on WhatsApp"
+      >
+        <svg className="w-5 h-5" fill="currentColor" viewBox="0 0 24 24">
+          <path d="M17.472 14.382c-.297-.149-1.758-.867-2.03-.967-.273-.099-.471-.148-.67.15-.197.297-.767.966-.94 1.164-.173.199-.347.223-.644.075-.297-.15-1.255-.463-2.39-1.475-.883-.788-1.48-1.761-1.653-2.059-.173-.297-.018-.458.13-.606.134-.133.298-.347.446-.52.149-.174.198-.298.298-.497.099-.198.05-.371-.025-.52-.075-.149-.669-1.612-.916-2.207-.242-.579-.487-.5-.669-.51-.173-.008-.371-.01-.57-.01-.198 0-.52.074-.792.372-.272.297-1.04 1.016-1.04 2.479 0 1.462 1.065 2.875 1.213 3.074.149.198 2.096 3.2 5.077 4.487.709.306 1.262.489 1.694.625.712.227 1.36.195 1.871.118.571-.085 1.758-.719 2.006-1.413.248-.694.248-1.289.173-1.413-.074-.124-.272-.198-.57-.347m-5.421 7.403h-.004a9.87 9.87 0 01-5.031-1.378l-.361-.214-3.741.982.998-3.648-.235-.374a9.86 9.86 0 01-1.51-5.26c.001-5.45 4.436-9.884 9.888-9.884 2.64 0 5.122 1.03 6.988 2.898a9.825 9.825 0 012.893 6.994c-.003 5.45-4.437 9.884-9.885 9.884m8.413-18.297A11.815 11.815 0 0012.05 0C5.495 0 .16 5.335.157 11.892c0 2.096.547 4.142 1.588 5.945L.057 24l6.305-1.654a11.882 11.882 0 005.683 1.448h.005c6.554 0 11.89-5.335 11.893-11.893a11.821 11.821 0 00-3.48-8.413z"/>
+        </svg>
+      </button>
+      <button
+        onClick={() => shareVia('facebook')}
+        className="p-2 rounded-full bg-blue-600 hover:bg-blue-700 text-white transition-colors"
+        aria-label="Share on Facebook"
+      >
+        <svg className="w-5 h-5" fill="currentColor" viewBox="0 0 24 24">
+          <path d="M24 12.073c0-6.627-5.373-12-12-12s-12 5.373-12 12c0 5.99 4.388 10.954 10.125 11.854v-8.385H7.078v-3.47h3.047V9.43c0-3.007 1.792-4.669 4.533-4.669 1.312 0 2.686.235 2.686.235v2.953H15.83c-1.491 0-1.956.925-1.956 1.874v2.25h3.328l-.532 3.47h-2.796v8.385C19.612 23.027 24 18.062 24 12.073z"/>
+        </svg>
+      </button>
+      <button
+        onClick={() => shareVia('twitter')}
+        className="p-2 rounded-full bg-black hover:bg-gray-800 text-white transition-colors"
+        aria-label="Share on X"
+      >
+        <svg className="w-5 h-5" fill="currentColor" viewBox="0 0 24 24">
+          <path d="M18.244 2.25h3.308l-7.227 8.26 8.502 11.24H16.17l-5.214-6.817L4.99 21.75H1.68l7.73-8.835L1.254 2.25H8.08l4.713 6.231zm-1.161 17.52h1.833L7.084 4.126H5.117z"/>
+        </svg>
+      </button>
+      <button
+        onClick={() => shareVia('telegram')}
+        className="p-2 rounded-full bg-blue-400 hover:bg-blue-500 text-white transition-colors"
+        aria-label="Share on Telegram"
+      >
+        <svg className="w-5 h-5" fill="currentColor" viewBox="0 0 24 24">
+          <path d="M11.944 0A12 12 0 000 12a12 12 0 0012 12 12 12 0 0012-12A12 12 0 0012 0zm5.871 7.17l-1.614 7.646c-.12.544-.481.709-.946.443l-2.62-1.93-1.267 1.216c-.14.14-.25.243-.517.243l.184-2.662 4.86-4.393c.216-.192-.048-.299-.335-.108l-6.016 3.787-2.582-.807c-.555-.174-.567-.555.102-.828l10.064-3.883c.469-.17.877.101.73.78z"/>
+        </svg>
+      </button>
+      <button
+        onClick={() => shareVia('copy')}
+        className={`p-2 rounded-full transition-colors ${
+          copied ? 'bg-green-500 text-white' : 'bg-gray-200 hover:bg-gray-300 text-gray-700'
+        }`}
+        aria-label="Copy link"
+      >
+        <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M8 5H6a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2v-1M8 5a2 2 0 002 2h2a2 2 0 002-2M8 5a2 2 0 012-2h2a2 2 0 012 2m0 0h2a2 2 0 012 2v3m2 4V10m0 0h-4m4 0l-4 4"/>
+        </svg>
+      </button>
+      {copied && <span className="text-xs text-green-600">✓ Copied!</span>}
     </div>
   );
 }
