@@ -32,8 +32,22 @@ const GEMINI_MODELS = [
   'gemini-2.0-flash',
 ];
 
+// ── Real tools that exist on the platform ───────────────────────────────
+// Keep this in sync with toolUrlMap in app/blog/[slug]/page.js
+const AVAILABLE_TOOLS = [
+  'JAMB Aggregate Calculator',
+  'Cut-off Mark Checker',
+  'Past Question Search',
+  'Subject Combination Checker',
+  'Admission Chance Checker',
+  'WAEC Grade Calculator',
+  'Study Timetable Generator',
+  'Daily Mentor',
+  'Shine AI',
+];
+
 // ─── Prompt builder ─────────────────────────────────────────────────────
-function buildPrompt(item) {
+function buildPrompt(item, availableTools = [], availableBlogTitles = []) {
   return `You are the Lead Content Writer and Senior SEO Strategist for Shiney Brain Academy, one of Africa's fastest-growing educational platforms.
 
 Your mission is NOT to write generic educational articles. Your mission is to create the BEST article on the internet for the chosen topic. Every article must make students think: "Wow...this website actually understands me."
@@ -59,8 +73,8 @@ ARTICLE STRUCTURE (build the "content" field in this order, as Markdown):
 6. Myth vs Reality — format as ❌ Myth / ✅ Reality pairs.
 7. Quick Summary — summarize the article in a table.
 8. FAQ — answer the most searched questions, each answer genuinely useful.
-9. Before You Leave — never end with "Thank you for reading." Instead use a "🎯 Before you leave" section pointing students to: the JAMB Aggregate Calculator, today's Daily Challenge, a Boss Battle, Shine AI, and a related guide. Keep students inside the platform.
-10. At the very end, suggest 5 related article topics and relevant Shiney Brain Academy tools to continue the student's learning journey.
+9. Before You Leave — never end with "Thank you for reading." Instead use a "🎯 Before you leave" section pointing students to real tools and a related guide from the AVAILABLE lists below. Keep students inside the platform.
+10. At the very end, suggest related topics and tools to continue the student's learning journey, drawn ONLY from the AVAILABLE lists below.
 
 STYLE RULES: Use lines like "Let's be honest...", "Here's the interesting part...", "You might be surprised...", "Most students don't realize this...", "Think about it...", "What if I told you...", "Here's where many students get it wrong." Keep readers curious.
 
@@ -72,6 +86,18 @@ Every article should make students feel: "I actually learned something." "I want
 
 TOPIC / KEYWORD: "${item.keyword}"
 CATEGORY: "${item.category || 'General'}"
+
+AVAILABLE TOOLS (real, live tools on the platform — reference by this exact name if relevant):
+${availableTools.map((t) => `- ${t}`).join('\n')}
+
+AVAILABLE EXISTING BLOG POSTS (real, already-published articles on the platform — reference by this exact title if genuinely relevant to this topic):
+${
+  availableBlogTitles.length > 0
+    ? availableBlogTitles.map((t) => `- ${t}`).join('\n')
+    : '(no other posts published yet — do not reference any blog post title, only tools)'
+}
+
+IMPORTANT RULE FOR INTERNAL LINKS: You may ONLY reference items that appear verbatim in the two AVAILABLE lists above. NEVER invent, guess, paraphrase, or slightly reword a tool name or blog post title. If nothing in the AVAILABLE EXISTING BLOG POSTS list is genuinely relevant to this topic, do not force one in — just use tools instead. It is completely fine to return fewer than 7 links if fewer genuinely fit; never pad the list with made-up items.
 
 Now produce ONE JSON object with ALL of the fields below. No markdown code fences, no commentary outside the JSON. The "content" field must be the full Markdown article following the structure and voice rules above.
 
@@ -93,7 +119,7 @@ PART 2 — BLOG ARTICLE:
 - "tags": array of 4-8 relevant tags
 - "content": the full article in Markdown, 2,000-3,500 words, following the ARTICLE STRUCTURE and STYLE RULES above exactly
 - "faq": array of 6-10 objects {"question": "...", "answer": "..."}
-- "internal_links": array of the 5 related article topics suggested at the end of the article (just the topic names, not URLs)
+- "internal_links": array of 7-10 items (fewer is fine if fewer genuinely fit), each copied EXACTLY from the AVAILABLE TOOLS or AVAILABLE EXISTING BLOG POSTS lists above — never invented, never guessed, never reworded
 - "cta": one short line summarizing the "Before You Leave" call-to-action
 - "image_search": a short 3-5 word search phrase (in English, describing a real photographable scene, e.g. "Nigerian student studying textbook") to find a stock photo for the cover image. Do NOT include the SBA brand name in this phrase.
 
@@ -117,6 +143,13 @@ function isValidResult(r) {
     r.title.trim().length > 0 &&
     typeof r.topic_type === 'string'
   );
+}
+
+// ─── Internal links sanitizer (belt-and-braces on top of prompt rules) ──
+function sanitizeInternalLinks(links, availableTools, availableBlogTitles) {
+  if (!Array.isArray(links)) return [];
+  const validSet = new Set([...availableTools, ...availableBlogTitles]);
+  return links.filter((link) => typeof link === 'string' && validSet.has(link));
 }
 
 async function tryOpenRouter(prompt) {
@@ -203,10 +236,25 @@ export async function POST(request) {
     // 3. Mark generating
     await supabase.from('content_queue').update({ status: 'generating' }).eq('id', queueItemId);
 
-    // 4. Build prompt
-    const prompt = buildPrompt(item);
+    // 4. Fetch real, existing published posts to offer as internal link targets
+    const { data: existingPosts, error: existingPostsError } = await supabase
+      .from('content_drafts')
+      .select('title')
+      .eq('status', 'published')
+      .order('created_at', { ascending: false })
+      .limit(150);
 
-    // ── 5. Text generation (Groq → Gemini → OpenRouter → HuggingFace) ──
+    if (existingPostsError) {
+      console.warn('Could not fetch existing posts for internal links:', existingPostsError);
+    }
+    const availableBlogTitles = (existingPosts || [])
+      .map((p) => p.title)
+      .filter(Boolean);
+
+    // 5. Build prompt
+    const prompt = buildPrompt(item, AVAILABLE_TOOLS, availableBlogTitles);
+
+    // ── 6. Text generation (Groq → Gemini → OpenRouter → HuggingFace) ──
     let result = null;
     let usedProvider = '';
     const errors = [];
@@ -299,7 +347,14 @@ export async function POST(request) {
       return NextResponse.json({ error: `All providers failed: ${errors.join('; ')}` }, { status: 500 });
     }
 
-    // ── 6. Create Knowledge Asset ────────────────────────────────────
+    // ── 7. Sanitize internal links (defense in depth against hallucinated links) ──
+    const cleanInternalLinks = sanitizeInternalLinks(
+      result.internal_links,
+      AVAILABLE_TOOLS,
+      availableBlogTitles
+    );
+
+    // ── 8. Create Knowledge Asset ────────────────────────────────────
     const { data: asset, error: assetError } = await supabase
       .from('knowledge_assets')
       .insert({
@@ -326,7 +381,7 @@ export async function POST(request) {
       console.error('Knowledge asset insert failed:', assetError);
     }
 
-    // ── 7. Slug & save draft ──────────────────────────────────────────
+    // ── 9. Slug & save draft ──────────────────────────────────────────
     const slug = result.slug || result.title?.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '') || 'untitled';
     const wordCount = result.content?.split(/\s+/).length || 0;
 
@@ -342,7 +397,7 @@ export async function POST(request) {
         tags: result.tags || [],
         content: result.content,
         schemas: JSON.stringify(result.faq || []),
-        internal_links: result.internal_links || [],
+        internal_links: cleanInternalLinks,
         cta: result.cta || '',
         word_count: wordCount,
         category: item.category,
@@ -358,9 +413,10 @@ export async function POST(request) {
       return NextResponse.json({ error: draftError.message }, { status: 500 });
     }
 
-    // ── 8. Generate image ──────────────────────────────────────────────
+    // ── 10. Generate image ──────────────────────────────────────────────
     let coverImageUrl = null;
     let imageMeta = {};
+    let imageError = null;
     try {
       const searchPhrase = result.image_search || result.title;
       const stock = await fetchStockImage(searchPhrase);
@@ -386,10 +442,11 @@ export async function POST(request) {
 
       coverImageUrl = await uploadImage(supabase, brandedBuffer, 'jpg', 'blog-images');
     } catch (imgErr) {
-      console.warn('Image generation failed:', imgErr);
+      console.error('Image generation failed:', imgErr);
+      imageError = imgErr.message;
     }
 
-    // ── 9. Update draft with image metadata ────────────────────────────
+    // ── 11. Update draft with image metadata ────────────────────────────
     if (coverImageUrl) {
       await supabase
         .from('content_drafts')
@@ -405,7 +462,7 @@ export async function POST(request) {
         .eq('id', draft.id);
     }
 
-    // ── 10. Update queue ────────────────────────────────────────────────
+    // ── 12. Update queue ────────────────────────────────────────────────
     await supabase
       .from('content_queue')
       .update({
@@ -422,6 +479,8 @@ export async function POST(request) {
       title: result.title,
       usedProvider,
       coverImage: coverImageUrl,
+      imageError, // will be null if image generation succeeded
+      internalLinksUsed: cleanInternalLinks,
     });
   } catch (error) {
     console.error('Generation error:', error);
