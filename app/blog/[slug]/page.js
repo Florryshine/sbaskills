@@ -14,10 +14,10 @@ const Comments = nextDynamic(() => import('@/components/Comments'), { ssr: false
 export const dynamic = 'force-dynamic';
 
 // ─── Tool URL Mapping (fixes internal 404s) ────────────────────────────
+// Keep this in sync with AVAILABLE_TOOLS in app/api/content-engine/generate/route.js
 const toolUrlMap = {
   'JAMB Aggregate Calculator': '/tools/jamb-aggregate',
   'Cut-off Mark Checker': '/tools/cut-off-mark',
-  'Cutoff Mark Checker': '/tools/cut-off-mark',
   'Past Question Search': '/tools/past-questions',
   'Subject Combination Checker': '/tools/subject-combination',
   'Admission Chance Checker': '/tools/admission-chance',
@@ -50,15 +50,46 @@ export default async function BlogPostPage({ params }) {
     const faq = post.schemas ? JSON.parse(post.schemas) : [];
     const internalLinks = post.internal_links || [];
 
+    // ─── Fetch real published posts to resolve blog-post internal links ──
+    // Only fetched if there are internal links to resolve, to avoid an
+    // unnecessary query on every page load.
+    let postTitleToSlug = {};
+    if (internalLinks.length > 0) {
+      const { data: allPosts } = await supabase
+        .from('content_drafts')
+        .select('title, url_slug')
+        .eq('status', 'published');
+      postTitleToSlug = Object.fromEntries(
+        (allPosts || [])
+          .filter((p) => p.title && p.url_slug)
+          .map((p) => [p.title, p.url_slug])
+      );
+    }
+
+    // ─── Resolve a link label to a real, existing URL — or null ─────────
+    // Never guesses a URL. If it doesn't match a known tool or an actual
+    // published post, it's dropped instead of rendered as a broken link.
+    function resolveInternalLink(label) {
+      if (toolUrlMap[label]) {
+        return { href: toolUrlMap[label], isTool: true };
+      }
+      if (postTitleToSlug[label] && postTitleToSlug[label] !== post.url_slug) {
+        return { href: `/blog/${postTitleToSlug[label]}`, isTool: false };
+      }
+      return null;
+    }
+
+    const resolvedLinks = internalLinks
+      .map((label) => ({ label, resolved: resolveInternalLink(label) }))
+      .filter((item) => item.resolved !== null);
+
     // ─── Convert markdown → HTML ────────────────────────────────────────
     let htmlContent = post.content || '';
     try {
-      // Configure marked for GitHub-flavored markdown with line breaks
       marked.setOptions({ breaks: true, gfm: true });
       htmlContent = marked.parse(post.content || '');
     } catch (e) {
       console.warn('Markdown parsing failed, using raw content:', e);
-      // Keep raw content as fallback
     }
 
     return (
@@ -140,26 +171,22 @@ export default async function BlogPostPage({ params }) {
               </div>
             )}
 
-            {/* ─── Internal Links ─── */}
-            {internalLinks.length > 0 && (
+            {/* ─── Internal Links (only real, resolvable ones) ─── */}
+            {resolvedLinks.length > 0 && (
               <div className="mt-8 border-t pt-6">
                 <h3 className="text-xl font-bold text-gray-900 mb-4">🔗 Related Tools & Resources</h3>
                 <ul className="list-disc pl-5 space-y-1">
-                  {internalLinks.map((link, i) => {
-                    // Use mapping if available, otherwise fallback to slug generation
-                    const href = toolUrlMap[link] || `/tools/${link.toLowerCase().replace(/\s+/g, '-')}`;
-                    return (
-                      <li key={i}>
-                        <Link
-                          href={href}
-                          className="text-blue-600 hover:underline"
-                          target="_blank"
-                        >
-                          {link}
-                        </Link>
-                      </li>
-                    );
-                  })}
+                  {resolvedLinks.map(({ label, resolved }, i) => (
+                    <li key={i}>
+                      <Link
+                        href={resolved.href}
+                        className="text-blue-600 hover:underline"
+                        target={resolved.isTool ? '_blank' : undefined}
+                      >
+                        {label}
+                      </Link>
+                    </li>
+                  ))}
                 </ul>
               </div>
             )}
