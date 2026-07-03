@@ -59,17 +59,49 @@ export async function POST(request) {
     }
 
     const supabase = createRouteHandlerClient();
-    const { data, error } = await supabase
-      .from('content_queue')
-      .insert(items)
-      .select();
 
-    if (error) throw error;
+    // Find which keywords already exist in the queue
+    const incomingKeywords = items.map(item => item.keyword);
+    const { data: existingRows, error: existingError } = await supabase
+      .from('content_queue')
+      .select('keyword')
+      .in('keyword', incomingKeywords);
+
+    if (existingError) throw existingError;
+
+    const existingKeywords = new Set((existingRows || []).map(row => row.keyword));
+    const newItems = items.filter(item => !existingKeywords.has(item.keyword));
+    const duplicateKeywords = items
+      .filter(item => existingKeywords.has(item.keyword))
+      .map(item => item.keyword);
+
+    // Mark duplicates as draft instead of rejecting the whole batch
+    if (duplicateKeywords.length > 0) {
+      const { error: updateError } = await supabase
+        .from('content_queue')
+        .update({ status: 'draft' })
+        .in('keyword', duplicateKeywords);
+
+      if (updateError) throw updateError;
+    }
+
+    // Insert only the genuinely new keywords
+    let insertedCount = 0;
+    if (newItems.length > 0) {
+      const { data, error } = await supabase
+        .from('content_queue')
+        .insert(newItems)
+        .select();
+
+      if (error) throw error;
+      insertedCount = data.length;
+    }
 
     return NextResponse.json({
       success: true,
-      count: data.length,
-      message: `${data.length} keywords added to queue`,
+      count: insertedCount,
+      duplicates: duplicateKeywords.length,
+      message: `${insertedCount} new keywords added, ${duplicateKeywords.length} duplicates marked as draft`,
     });
   } catch (error) {
     return NextResponse.json({ error: error.message }, { status: 500 });
