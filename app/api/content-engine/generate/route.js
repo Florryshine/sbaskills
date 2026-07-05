@@ -32,7 +32,6 @@ const GEMINI_MODELS = [
   'gemini-2.0-flash',
 ];
 
-// ── Real tools that exist on the platform ───────────────────────────────
 const AVAILABLE_TOOLS = [
   'JAMB Aggregate Calculator',
   'Cut-off Mark Checker',
@@ -64,7 +63,7 @@ ARTICLE LENGTH: 2,000–3,500 words. The article must completely answer the user
 SEO REQUIREMENTS: Include primary keyword, secondary keywords naturally, H1, multiple H2, H3 sections, short paragraphs, bullet lists, tables where useful, FAQ section (6-10 questions), meta description (155 characters), SEO title (under 60 characters), URL slug. Write for humans first, SEO second.
 
 ARTICLE STRUCTURE (build the "content" field in this order, as Markdown):
-1. Introduction — must immediately hook the reader. Never begin with definitions. Start with a surprising fact, a relatable story, a common mistake, a question, or a myth. Example: "You finally checked your JAMB result. You scored 238. Now everyone around you suddenly becomes an admission expert. 'UNILAG no dey take that score.' But is that actually true? Let's find out."
+1. Introduction — must immediately hook the reader. Never begin with definitions. Start with a surprising fact, a relatable story, a common mistake, a question, or a myth.
 2. Explain the Topic — break everything into small sections. Explain like you're teaching your younger sibling. Use analogies. Use real examples. Never assume students already understand.
 3. Common Mistakes — e.g. "5 Mistakes Students Make When Choosing a Course"
 4. Practical Tips — actionable advice, not generic advice.
@@ -125,7 +124,7 @@ PART 2 — BLOG ARTICLE:
 Return ONLY the JSON object.`;
 }
 
-// ─── Provider callers ───────────────────────────────────────────────────
+// ─── Helpers ───────────────────────────────────────────────────────────
 function parseJsonFromText(text) {
   const cleaned = text.replace(/```json|```/g, '').trim();
   const match = cleaned.match(/\{[\s\S]*\}/);
@@ -465,9 +464,13 @@ export async function POST(request) {
       imageError = imgErr.message;
     }
 
-    // ── 10. Update draft with image metadata ──────────────────────────
+    // ── 10. Update draft with image metadata ───────────────────────────
+    // IMPORTANT: Use the service role client to bypass RLS for UPDATE
     if (coverImageUrl) {
       console.log('💾 Updating draft with cover_image...');
+
+      // Option 1: Use the same supabase client (which uses service role in server components)
+      // Option 2: Direct fetch with service role key as fallback
       const { error: updateError } = await supabase
         .from('content_drafts')
         .update({
@@ -480,8 +483,39 @@ export async function POST(request) {
           height: IMAGE_PRESETS.hero.height,
         })
         .eq('id', draft.id);
+
       if (updateError) {
         console.error('❌ Failed to update draft with image:', updateError);
+        // Attempt fallback using direct service role fetch
+        const serviceRoleKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
+        if (serviceRoleKey) {
+          console.log('🔄 Trying direct PATCH with service role key...');
+          const updateUrl = `${process.env.NEXT_PUBLIC_SUPABASE_URL}/rest/v1/content_drafts?id=eq.${draft.id}`;
+          const response = await fetch(updateUrl, {
+            method: 'PATCH',
+            headers: {
+              'Content-Type': 'application/json',
+              'apikey': serviceRoleKey,
+              'Authorization': `Bearer ${serviceRoleKey}`,
+            },
+            body: JSON.stringify({
+              cover_image: coverImageUrl,
+              image_source: imageMeta.image_source || null,
+              image_provider: imageMeta.image_provider || null,
+              image_photographer: imageMeta.image_photographer || null,
+              image_search_query: imageMeta.image_search_query || null,
+              width: IMAGE_PRESETS.hero.width,
+              height: IMAGE_PRESETS.hero.height,
+            }),
+          });
+          if (!response.ok) {
+            console.error('❌ Direct PATCH failed:', await response.text());
+          } else {
+            console.log('✅ Direct PATCH succeeded.');
+          }
+        } else {
+          console.error('❌ SUPABASE_SERVICE_ROLE_KEY not set in environment!');
+        }
       } else {
         console.log('✅ Draft updated with image metadata.');
       }
