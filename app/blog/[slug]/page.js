@@ -26,6 +26,7 @@ export default function BlogPage({ searchParams }) {
   async function fetchPostsAndCategories() {
     setLoading(true);
 
+    // ── Fetch all published posts ────────────────────────────
     let query = supabase
       .from('content_drafts')
       .select('*')
@@ -73,6 +74,7 @@ export default function BlogPage({ searchParams }) {
         <div className="max-w-6xl mx-auto px-4">
           <h1 className="text-3xl font-bold text-gray-900 mb-6">📝 Blog</h1>
 
+          {/* ─── Filters ─── */}
           <div className="flex flex-wrap gap-2 mb-4">
             {categories.map((cat) => (
               <button
