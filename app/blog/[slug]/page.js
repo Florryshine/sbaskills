@@ -27,6 +27,25 @@ const toolUrlMap = {
   'Shine AI': '/tools/shine-ai',
 };
 
+// ─── Safe JSON parse ────────────────────────────────────────────────────
+// Handles both cases that can occur across different pipeline versions:
+//  - column is jsonb -> Supabase already returns a parsed array/object
+//  - column is text/legacy -> value is a JSON string that needs parsing
+//  - value is null/empty -> returns the fallback
+// Without this, JSON.parse() on an already-parsed value throws
+// "Unexpected token 'o', "[object Obj"... is not valid JSON" — which is
+// what was crashing some posts and not others.
+function safeJsonParse(value, fallback = []) {
+  if (value === null || value === undefined || value === '') return fallback;
+  if (typeof value !== 'string') return value; // already parsed by Supabase
+  try {
+    return JSON.parse(value);
+  } catch (e) {
+    console.warn('safeJsonParse failed, using fallback:', e.message);
+    return fallback;
+  }
+}
+
 export default async function BlogPostPage({ params }) {
   try {
     const supabase = createServerClient();
@@ -44,11 +63,11 @@ export default async function BlogPostPage({ params }) {
     }
     if (!post) notFound();
 
-    // ─── Parse JSON fields ──────────────────────────────────────────────
-    const images = post.image_prompts ? JSON.parse(post.image_prompts) : [];
+    // ─── Parse JSON fields (safely, regardless of column type) ─────────
+    const images = safeJsonParse(post.image_prompts, []);
     const heroPrompt = images.find((img) => img.type === 'hero')?.description || null;
-    const faq = post.schemas ? JSON.parse(post.schemas) : [];
-    const internalLinks = post.internal_links || [];
+    const faq = safeJsonParse(post.schemas, []);
+    const internalLinks = safeJsonParse(post.internal_links, []);
 
     // ─── Fetch real published posts to resolve blog-post internal links ──
     // Only fetched if there are internal links to resolve, to avoid an
