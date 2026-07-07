@@ -10,6 +10,7 @@ import { marked } from 'marked';
 const ShareButtons = nextDynamic(() => import('@/components/ShareButtons'), { ssr: false });
 const MarkDoneButton = nextDynamic(() => import('@/components/MarkDoneButton'), { ssr: false });
 const Comments = nextDynamic(() => import('@/components/Comments'), { ssr: false });
+const PodcastPlayer = nextDynamic(() => import('@/components/PodcastPlayer'), { ssr: false });
 
 export const dynamic = 'force-dynamic';
 
@@ -101,6 +102,28 @@ export default async function BlogPostPage({ params }) {
     const resolvedLinks = internalLinks
       .map((label) => ({ label, resolved: resolveInternalLink(label) }))
       .filter((item) => item.resolved !== null);
+
+    // ─── Podcast episode (if one has been generated for this post) ──────
+    let podcastSegments = [];
+    let podcastEpisode = null;
+    const { data: fetchedPodcastEpisode } = await supabase
+      .from('podcast_episodes')
+      .select('id, title')
+      .eq('content_draft_id', post.id)
+      .eq('status', 'ready')
+      .order('created_at', { ascending: false })
+      .limit(1)
+      .maybeSingle();
+    podcastEpisode = fetchedPodcastEpisode;
+
+    if (podcastEpisode) {
+      const { data: segments } = await supabase
+        .from('podcast_segments')
+        .select('position, speaker, text, audio_url, duration_seconds')
+        .eq('episode_id', podcastEpisode.id)
+        .order('position', { ascending: true });
+      podcastSegments = segments || [];
+    }
 
     // ─── Convert markdown → HTML ────────────────────────────────────────
     let htmlContent = post.content || '';
@@ -226,6 +249,13 @@ export default async function BlogPostPage({ params }) {
                 label="📚 Mark as Read (Earn 10 Points)"
               />
             </div>
+
+            {/* ─── Podcast (if generated) ─── */}
+            {podcastSegments.length > 0 && (
+              <div className="mt-8">
+                <PodcastPlayer segments={podcastSegments} title={podcastEpisode?.title || post.title} />
+              </div>
+            )}
 
             {/* ─── Comments ─── */}
             <div className="mt-8">
