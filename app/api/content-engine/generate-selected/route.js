@@ -13,10 +13,9 @@ export async function POST(request) {
       return NextResponse.json({ error: 'At least one engine must be selected' }, { status: 400 });
     }
 
-    // Use the authenticated client (user must be an admin)
     const supabase = createRouteHandlerClient();
 
-    // 1. Fetch the knowledge asset
+    // Fetch the keyword
     const { data: asset, error: assetError } = await supabase
       .from('knowledge_assets')
       .select('keyword')
@@ -27,7 +26,7 @@ export async function POST(request) {
       return NextResponse.json({ error: 'Knowledge asset not found' }, { status: 404 });
     }
 
-    // 2. Create the generation job
+    // Create generation job
     const { data: job, error: jobError } = await supabase
       .from('generation_jobs')
       .insert({
@@ -43,7 +42,9 @@ export async function POST(request) {
       return NextResponse.json({ error: jobError.message }, { status: 500 });
     }
 
-    // 3. Define the API endpoints for each engine
+    // Determine base URL from the request
+    const baseUrl = request.nextUrl.origin; // e.g. https://shineybrainacademy.vercel.app
+
     const engineEndpoints = {
       quiz: '/api/engines/quiz',
       boss_battle: '/api/engines/boss-battle',
@@ -52,9 +53,9 @@ export async function POST(request) {
       social: '/api/engines/social',
     };
 
-    // 4. Run each selected engine in parallel
     const results = await Promise.allSettled(
       engines.map(async (engine) => {
+        // Skip unsupported engines
         if (engine === 'blog' || engine === 'podcast') {
           return { engine, status: 'skipped', message: `${engine} generation not implemented yet` };
         }
@@ -65,27 +66,31 @@ export async function POST(request) {
         }
 
         try {
-          const baseUrl = process.env.NEXT_PUBLIC_APP_URL || 'http://localhost:3000';
-          const response = await fetch(`${baseUrl}${endpoint}`, {
+          const url = `${baseUrl}${endpoint}`;
+          console.log(`🚀 Calling engine: ${url}`);
+
+          const response = await fetch(url, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({ knowledgeAssetId }),
           });
 
           if (!response.ok) {
-            const error = await response.json();
-            throw new Error(error.error || `HTTP ${response.status}`);
+            const errorText = await response.text();
+            console.error(`❌ Engine ${engine} failed: ${response.status} - ${errorText}`);
+            throw new Error(`HTTP ${response.status}: ${errorText}`);
           }
 
           const data = await response.json();
           return { engine, status: 'completed', data };
         } catch (error) {
+          console.error(`❌ Engine ${engine} error:`, error.message);
           return { engine, status: 'failed', error: error.message };
         }
       })
     );
 
-    // 5. Build the job items records
+    // Build job items
     const jobItems = results.map((result, index) => {
       const engine = engines[index];
       let status = 'pending';
@@ -105,11 +110,11 @@ export async function POST(request) {
 
       return {
         generation_job_id: job.id,
-        engine: engine,
-        status: status,
+        engine,
+        status,
         started_at: new Date().toISOString(),
         finished_at: status !== 'pending' ? new Date().toISOString() : null,
-        error: error,
+        error,
       };
     });
 
@@ -121,9 +126,9 @@ export async function POST(request) {
       console.error('Failed to insert job items:', itemsError);
     }
 
-    // 6. Update overall job status
+    // Update overall status
     const completedEngines = results.filter(r => r.status === 'fulfilled' && r.value.status === 'completed');
-    const failedEngines = results.filter(r => r.status === 'rejected' || r.value.status === 'failed');
+    const failedEngines = results.filter(r => r.status === 'rejected' || (r.status === 'fulfilled' && r.value.status === 'failed'));
 
     let overallStatus = 'completed';
     if (failedEngines.length > 0 && completedEngines.length === 0) {
