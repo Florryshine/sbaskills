@@ -152,13 +152,17 @@ export async function POST(request) {
       overallStatus = 'completed_with_errors';
     }
 
-    await supabase
+    const { error: updateError } = await supabase
       .from('generation_jobs')
       .update({
         overall_status: overallStatus,
         finished_at: new Date().toISOString(),
       })
       .eq('id', job.id);
+
+    if (updateError) {
+      console.error('❌ Job status update error:', updateError);
+    }
 
     return NextResponse.json({
       success: true,
