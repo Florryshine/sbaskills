@@ -18,6 +18,8 @@ const navItems = [
   { href: '/admin/boss-battles', label: 'Boss Battles', icon: '👹' },
   { href: '/admin/content-engine', label: 'Content Engine', icon: '⚡' },
   { href: '/admin/generate', label: 'Generate Content', icon: '🚀' }, // NEW
+  { href: '/admin/knowledge-assets', label: 'Knowledge Assets', icon: '🧠' },
+  { href: '/admin/quiz-drafts', label: 'Quiz Drafts', icon: '❓' },
   { href: '/admin/past-questions/upload', label: 'Upload Past Qs', icon: '📤' },
 ];
 
