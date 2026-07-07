@@ -3,10 +3,10 @@ import { createAdminClient } from '@/lib/supabase-admin';
 import { GoogleGenerativeAI } from '@google/generative-ai';
 import Groq from 'groq-sdk';
 
-// Same keys, helpers, sanitize, tryOpenRouter, tryHuggingFace.
+// ... (keys, helpers, sanitizeJsonString, tryOpenRouter, tryHuggingFace)
 
 function buildSocialPrompt(asset) {
-  const keyword = asset.keyword;
+  const keyword = asset.keyword || '';
   const summary = asset.summary || '';
   const keyConcepts = (asset.key_concepts || []).slice(0,3).join(', ');
   const examples = (asset.examples || []).slice(0,2).join('; ');
@@ -42,11 +42,20 @@ export async function POST(request) {
     }
 
     const prompt = buildSocialPrompt(asset);
+
+    if (!prompt || typeof prompt !== 'string' || prompt.trim().length === 0) {
+      console.error('❌ Social prompt is empty:', { prompt });
+      return NextResponse.json({ error: 'Prompt generation failed' }, { status: 500 });
+    }
+
+    console.log(`📝 Social prompt length: ${prompt.length}`);
+    console.log(`📝 First 200 chars: ${prompt.substring(0, 200)}...`);
+
     let result = null;
     let usedProvider = '';
     const errors = [];
 
-    // Generation loop (same pattern – check parsed.posts)
+    // (same generation loop – check parsed.posts)
 
     const posts = result.posts.slice(0, 5);
     const inserted = [];

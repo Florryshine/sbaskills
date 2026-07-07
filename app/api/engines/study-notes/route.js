@@ -3,13 +3,15 @@ import { createAdminClient } from '@/lib/supabase-admin';
 import { GoogleGenerativeAI } from '@google/generative-ai';
 import Groq from 'groq-sdk';
 
-// Same keys, helpers, sanitize, tryOpenRouter, tryHuggingFace.
+// ... (keys, helpers, sanitizeJsonString, tryOpenRouter, tryHuggingFace – same as flashcards)
 
 function buildStudyNotesPrompt(asset) {
-  const keyword = asset.keyword;
+  const keyword = asset.keyword || '';
   const summary = asset.summary || '';
-  const keyConcepts = (asset.key_concepts || []).join('\n- ');
-  const definitions = (asset.definitions || []).map(d => `- **${d.term}**: ${d.definition}`).join('\n');
+  const keyConcepts = (asset.key_concepts || []).map(k => `- ${k}`).join('\n');
+  const definitions = (asset.definitions || [])
+    .map(d => `- **${d.term}**: ${d.definition}`)
+    .join('\n');
   const examples = (asset.examples || []).map(ex => `- ${ex}`).join('\n');
   const facts = (asset.facts || []).map(f => `- ${f}`).join('\n');
   const commonMistakes = (asset.common_mistakes || []).map(m => `- ${m}`).join('\n');
@@ -43,12 +45,22 @@ export async function POST(request) {
     }
 
     const prompt = buildStudyNotesPrompt(asset);
+
+    if (!prompt || typeof prompt !== 'string' || prompt.trim().length === 0) {
+      console.error('❌ Study notes prompt is empty:', { prompt });
+      return NextResponse.json({ error: 'Prompt generation failed' }, { status: 500 });
+    }
+
+    console.log(`📝 Study notes prompt length: ${prompt.length}`);
+    console.log(`📝 First 200 chars: ${prompt.substring(0, 200)}...`);
+
     let result = null;
     let usedProvider = '';
     const errors = [];
 
-    // Generation loop (same pattern – check parsed.content)
+    // (same generation loop as flashcards – check parsed.content, not cards)
 
+    // After generation, insert:
     const { data: draft, error: draftError } = await supabase
       .from('study_note_drafts')
       .insert({
