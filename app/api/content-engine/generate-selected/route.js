@@ -1,5 +1,5 @@
 import { NextResponse } from 'next/server';
-import { createRouteHandlerClient } from '@/lib/supabase-server';
+import { createClient } from '@supabase/supabase-js';
 
 export async function POST(request) {
   try {
@@ -13,8 +13,24 @@ export async function POST(request) {
       return NextResponse.json({ error: 'At least one engine must be selected' }, { status: 400 });
     }
 
-    // Use the authenticated client (no service role key)
-    const supabase = createRouteHandlerClient();
+    // ✅ Create Supabase client with service role key **inside** the handler
+    const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
+    const supabaseKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
+
+    if (!supabaseUrl || !supabaseKey) {
+      console.error('Missing Supabase credentials:', { supabaseUrl: !!supabaseUrl, supabaseKey: !!supabaseKey });
+      return NextResponse.json(
+        { error: 'Server configuration error: missing Supabase credentials' },
+        { status: 500 }
+      );
+    }
+
+    const supabase = createClient(supabaseUrl, supabaseKey, {
+      auth: {
+        autoRefreshToken: false,
+        persistSession: false,
+      },
+    });
 
     // 1. Fetch asset
     const { data: asset, error: assetError } = await supabase
@@ -27,7 +43,7 @@ export async function POST(request) {
       return NextResponse.json({ error: 'Knowledge asset not found' }, { status: 404 });
     }
 
-    // 2. Create job
+    // 2. Create job (bypasses RLS)
     const { data: job, error: jobError } = await supabase
       .from('generation_jobs')
       .insert({
@@ -53,7 +69,6 @@ export async function POST(request) {
       social: '/api/engines/social',
     };
 
-    // 4. Run engines
     const baseUrl = request.nextUrl.origin;
 
     const results = await Promise.allSettled(
@@ -88,7 +103,7 @@ export async function POST(request) {
       })
     );
 
-    // 5. Insert job items
+    // 4. Insert job items (bypasses RLS)
     const jobItems = results.map((result, index) => {
       const engine = engines[index];
       let status = 'pending';
@@ -124,7 +139,7 @@ export async function POST(request) {
       console.error('❌ Job items insert error:', itemsError);
     }
 
-    // 6. Update overall status
+    // 5. Update overall status
     const completedEngines = results.filter(r => r.status === 'fulfilled' && r.value.status === 'completed');
     const failedEngines = results.filter(r => r.status === 'rejected' || (r.status === 'fulfilled' && r.value.status === 'failed'));
 
