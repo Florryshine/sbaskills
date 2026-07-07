@@ -1,11 +1,12 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, Suspense } from 'react';
 import { useSearchParams } from 'next/navigation';
 import { createBrowserClient } from '@/lib/supabase';
 import Link from 'next/link';
 
-export default function GeneratePage() {
+// Component that uses useSearchParams — wrapped in Suspense below
+function GenerateContent() {
   const searchParams = useSearchParams();
   const assetIdFromUrl = searchParams.get('assetId');
 
@@ -31,7 +32,6 @@ export default function GeneratePage() {
   useEffect(() => {
     if (assetIdFromUrl) {
       setAssetId(assetIdFromUrl);
-      // Fetch the keyword for display
       supabase
         .from('knowledge_assets')
         .select('keyword')
@@ -68,7 +68,6 @@ export default function GeneratePage() {
       if (data.success) {
         setAssetId(data.knowledgeAssetId);
         setResult({ type: 'knowledge', data });
-        // Update URL to include assetId
         const url = new URL(window.location);
         url.searchParams.set('assetId', data.knowledgeAssetId);
         window.history.replaceState({}, '', url);
@@ -132,14 +131,12 @@ export default function GeneratePage() {
       <h1 className="text-3xl font-bold text-brand-blue mb-2">🚀 Generate Content</h1>
       <p className="text-gray-500 mb-8">Create a Learning Core, then generate any combination of content.</p>
 
-      {/* Error display */}
       {error && (
         <div className="mb-6 p-4 bg-red-50 border border-red-200 rounded-xl text-red-700">
           ❌ {error}
         </div>
       )}
 
-      {/* Step 1: Generate Knowledge */}
       <div className="bg-white rounded-2xl shadow-sm border p-6 mb-6">
         <h2 className="font-bold text-lg mb-4">Step 1: 🧠 Generate Learning Core</h2>
         <div className="flex gap-3">
@@ -165,17 +162,13 @@ export default function GeneratePage() {
               ✅ <span className="font-medium">Knowledge Asset Ready</span>
               <span className="ml-2 text-sm text-gray-600">“{keyword}”</span>
             </div>
-            <Link
-              href={`/admin/knowledge-assets`}
-              className="text-sm text-brand-blue hover:underline"
-            >
+            <Link href="/admin/knowledge-assets" className="text-sm text-brand-blue hover:underline">
               View All Assets →
             </Link>
           </div>
         )}
       </div>
 
-      {/* Step 2: Select Engines */}
       <div className="bg-white rounded-2xl shadow-sm border p-6 mb-6">
         <h2 className="font-bold text-lg mb-4">Step 2: 📦 Select Content to Generate</h2>
         <div className="grid grid-cols-2 md:grid-cols-3 gap-3">
@@ -211,7 +204,6 @@ export default function GeneratePage() {
         )}
       </div>
 
-      {/* Results */}
       {result && (
         <div className="bg-white rounded-2xl shadow-sm border p-6">
           <h3 className="font-bold text-lg mb-2">
@@ -222,10 +214,7 @@ export default function GeneratePage() {
           </pre>
           {result.type === 'job' && result.data.jobId && (
             <div className="mt-4">
-              <Link
-                href={`/admin/generation-jobs`}
-                className="text-brand-blue hover:underline text-sm"
-              >
+              <Link href="/admin/generation-jobs" className="text-brand-blue hover:underline text-sm">
                 View Job Details →
               </Link>
             </div>
@@ -236,5 +225,11 @@ export default function GeneratePage() {
   );
 }
 
-// Add this to skip static generation and avoid the useSearchParams build error
-export const dynamic = 'force-dynamic';
+// Main page with Suspense boundary — this fixes the build error
+export default function GeneratePage() {
+  return (
+    <Suspense fallback={<div className="p-8 text-center">Loading...</div>}>
+      <GenerateContent />
+    </Suspense>
+  );
+}
