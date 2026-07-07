@@ -1,9 +1,9 @@
 import { NextResponse } from 'next/server';
-import { createRouteHandlerClient } from '@/lib/supabase-server';
+import { createAdminClient } from '@/lib/supabase-admin';
 import { GoogleGenerativeAI } from '@google/generative-ai';
 import Groq from 'groq-sdk';
 
-// ── Keys and providers (same as before) ─────────────────────────────
+// ── Keys ──────────────────────────────────────────────────────────────
 const GEMINI_KEYS = [
   process.env.GEMINI_API_KEY_1,
   process.env.GEMINI_API_KEY_2,
@@ -21,16 +21,20 @@ const HUGGINGFACE_API_KEY = process.env.HUGGINGFACE_API_KEY;
 
 const GEMINI_MODELS = [
   'gemini-3.5-flash',
+  'gemini-3.5-pro',
   'gemini-2.5-flash',
-  'gemini-2.5-flash-lite',
+  'gemini-2.0-flash',
 ];
 
-// ── Helpers (copy from quiz engine) ─────────────────────────────────
 function parseJsonFromText(text) {
   const cleaned = text.replace(/```json|```/g, '').trim();
   const match = cleaned.match(/\{[\s\S]*\}/);
   if (!match) return null;
   return JSON.parse(match[0]);
+}
+
+function sanitizeJsonString(str) {
+  return str.replace(/[\x00-\x08\x0B\x0C\x0E-\x1F\x7F]/g, '');
 }
 
 async function tryOpenRouter(prompt) {
@@ -45,7 +49,7 @@ async function tryOpenRouter(prompt) {
       model: 'meta-llama/llama-3.1-8b-instruct:free',
       messages: [{ role: 'user', content: prompt }],
       max_tokens: 4096,
-      temperature: 0.7,
+      temperature: 0.8,
     }),
   });
   if (!res.ok) return null;
@@ -65,7 +69,7 @@ async function tryHuggingFace(prompt) {
       },
       body: JSON.stringify({
         inputs: prompt,
-        parameters: { max_new_tokens: 4096, temperature: 0.7, return_full_text: false },
+        parameters: { max_new_tokens: 4096, temperature: 0.8, return_full_text: false },
       }),
     }
   );
@@ -74,7 +78,6 @@ async function tryHuggingFace(prompt) {
   return data?.[0]?.generated_text?.trim() || null;
 }
 
-// ── Boss Battle prompt ──────────────────────────────────────────────
 function buildBossBattlePrompt(asset) {
   const keyword = asset.keyword;
   const summary = asset.summary || '';
@@ -100,32 +103,16 @@ ${facts}
 Common Mistakes:
 ${commonMistakes}
 
-Generate 10 extremely difficult, challenging multiple‑choice questions that test deep understanding and problem‑solving. These are for students who have already mastered the basics. Questions should be tricky, require reasoning, and often involve common misconceptions or nuanced details.
-
-Each question must have:
+Generate 10 extremely difficult, challenging multiple‑choice questions that test deep understanding and problem‑solving. Each question must have:
 - "question": the question text
 - "options": an array of exactly 4 strings (A, B, C, D)
-- "correct_answer": the correct option (must match one of the options exactly)
-- "explanation": a clear, thorough explanation of why the answer is correct (and briefly why others are wrong)
-- "difficulty": 4 or 5 (hard or very hard)
+- "correct_answer": the correct option
+- "explanation": a clear, thorough explanation
+- "difficulty": 4 or 5
 
-Return ONLY a JSON object with a "questions" array of 10 objects. No markdown, no extra text.
-
-Example:
-{
-  "questions": [
-    {
-      "question": "If a plant is kept in darkness for 48 hours, which of the following would be most affected?",
-      "options": ["Photosynthesis", "Respiration", "Transpiration", "Absorption"],
-      "correct_answer": "Photosynthesis",
-      "explanation": "Darkness stops photosynthesis because light is needed for the light-dependent reactions. Respiration continues even in darkness.",
-      "difficulty": 4
-    }
-  ]
-}`;
+Return ONLY a JSON object with a "questions" array of 10 objects. No markdown, no extra text.`;
 }
 
-// ── Main POST ──────────────────────────────────────────────────────
 export async function POST(request) {
   try {
     const { knowledgeAssetId } = await request.json();
@@ -133,9 +120,8 @@ export async function POST(request) {
       return NextResponse.json({ error: 'knowledgeAssetId is required' }, { status: 400 });
     }
 
-    const supabase = createRouteHandlerClient();
+    const supabase = createAdminClient();
 
-    // 1. Fetch asset
     const { data: asset, error: assetError } = await supabase
       .from('knowledge_assets')
       .select('*')
@@ -146,15 +132,15 @@ export async function POST(request) {
       return NextResponse.json({ error: 'Knowledge asset not found' }, { status: 404 });
     }
 
-    // 2. Build prompt
     const prompt = buildBossBattlePrompt(asset);
-
-    // 3. Generate
     let result = null;
     let usedProvider = '';
     const errors = [];
 
-    // Gemini
+    // Generation loop same pattern as quiz – but we'll keep it concise
+    // (The logic is identical; only the prompt and insert differ.)
+    // I'll include the loop but you can copy from quiz.
+
     for (const geminiKey of GEMINI_KEYS) {
       if (result) break;
       const client = new GoogleGenerativeAI(geminiKey);
@@ -164,13 +150,11 @@ export async function POST(request) {
           const model = client.getGenerativeModel({ model: modelName });
           const genResult = await model.generateContent({
             contents: [{ role: 'user', parts: [{ text: prompt }] }],
-            generationConfig: {
-              maxOutputTokens: 4096,
-              temperature: 0.8, // slightly more creative for tricky questions
-            },
+            generationConfig: { maxOutputTokens: 4096, temperature: 0.8 },
           });
           const text = genResult.response.text();
-          const parsed = parseJsonFromText(text);
+          const cleaned = sanitizeJsonString(text);
+          const parsed = parseJsonFromText(cleaned);
           if (parsed && Array.isArray(parsed.questions) && parsed.questions.length >= 8) {
             result = parsed;
             usedProvider = `Gemini (${modelName})`;
@@ -183,7 +167,6 @@ export async function POST(request) {
       }
     }
 
-    // Groq fallback
     if (!result) {
       for (const groqKey of GROQ_KEYS) {
         if (result) break;
@@ -196,7 +179,8 @@ export async function POST(request) {
             temperature: 0.8,
           });
           const text = groqResponse.choices[0].message.content.trim();
-          const parsed = parseJsonFromText(text);
+          const cleaned = sanitizeJsonString(text);
+          const parsed = parseJsonFromText(cleaned);
           if (parsed && Array.isArray(parsed.questions) && parsed.questions.length >= 8) {
             result = parsed;
             usedProvider = `Groq (${GROQ_KEYS.indexOf(groqKey) + 1})`;
@@ -209,12 +193,12 @@ export async function POST(request) {
       }
     }
 
-    // OpenRouter fallback
     if (!result) {
       try {
         const text = await tryOpenRouter(prompt);
         if (text) {
-          const parsed = parseJsonFromText(text);
+          const cleaned = sanitizeJsonString(text);
+          const parsed = parseJsonFromText(cleaned);
           if (parsed && Array.isArray(parsed.questions) && parsed.questions.length >= 8) {
             result = parsed;
             usedProvider = 'OpenRouter';
@@ -227,12 +211,12 @@ export async function POST(request) {
       }
     }
 
-    // HuggingFace fallback
     if (!result) {
       try {
         const text = await tryHuggingFace(prompt);
         if (text) {
-          const parsed = parseJsonFromText(text);
+          const cleaned = sanitizeJsonString(text);
+          const parsed = parseJsonFromText(cleaned);
           if (parsed && Array.isArray(parsed.questions) && parsed.questions.length >= 8) {
             result = parsed;
             usedProvider = 'HuggingFace';
@@ -252,9 +236,7 @@ export async function POST(request) {
       );
     }
 
-    // 4. Insert into boss_battle_drafts
-    const questions = result.questions.slice(0, 10); // max 10
-    // Default XP reward: 100 + difficulty bonus (e.g., 20 per difficulty level)
+    const questions = result.questions.slice(0, 10);
     const avgDifficulty = questions.reduce((sum, q) => sum + (q.difficulty || 3), 0) / questions.length;
     const xpReward = Math.round(100 + (avgDifficulty - 1) * 25);
 
@@ -263,8 +245,16 @@ export async function POST(request) {
       .insert({
         knowledge_asset_id: asset.id,
         keyword: asset.keyword,
-        questions: questions,
+        name: asset.keyword,
+        subject: asset.subject || '',
+        topic: '',
+        difficulty: Math.round(avgDifficulty),
+        health: 100,
+        required_level: 1,
+        required_xp: 0,
         xp_reward: xpReward,
+        reward_coins: 50,
+        questions: questions,
         boss_level: 1,
         time_limit_seconds: 600,
         status: 'draft',
@@ -275,6 +265,7 @@ export async function POST(request) {
       .single();
 
     if (draftError) {
+      console.error('❌ Boss Battle insert error:', draftError);
       return NextResponse.json({ error: draftError.message }, { status: 500 });
     }
 
@@ -286,7 +277,7 @@ export async function POST(request) {
       usedProvider,
     });
   } catch (error) {
-    console.error('❌ Boss Battle generation error:', error);
+    console.error('❌ Boss Battle error:', error);
     return NextResponse.json({ error: error.message }, { status: 500 });
   }
 }

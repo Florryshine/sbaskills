@@ -1,9 +1,9 @@
 import { NextResponse } from 'next/server';
-import { createRouteHandlerClient } from '@/lib/supabase-server';
+import { createAdminClient } from '@/lib/supabase-admin';
 import { GoogleGenerativeAI } from '@google/generative-ai';
 import Groq from 'groq-sdk';
 
-// ── Keys and providers ──────────────────────────────────────────────
+// ── Keys ──────────────────────────────────────────────────────────────
 const GEMINI_KEYS = [
   process.env.GEMINI_API_KEY_1,
   process.env.GEMINI_API_KEY_2,
@@ -19,130 +19,67 @@ const GROQ_KEYS = [
 const OPENROUTER_API_KEY = process.env.OPENROUTER_API_KEY;
 const HUGGINGFACE_API_KEY = process.env.HUGGINGFACE_API_KEY;
 
-// NOTE: gemini-2.0-flash was shut down June 1, 2026 — replaced with gemini-2.5-flash-lite below.
-// Verify gemini-3.5-pro is a real model slug for your account/region before relying on it;
-// if it 404s, drop it from this list.
 const GEMINI_MODELS = [
   'gemini-3.5-flash',
+  'gemini-3.5-pro',
   'gemini-2.5-flash',
-  'gemini-2.5-flash-lite',
+  'gemini-2.0-flash',
 ];
 
 // ── Helpers ──────────────────────────────────────────────────────────
 function parseJsonFromText(text) {
-  if (!text) return null;
   const cleaned = text.replace(/```json|```/g, '').trim();
   const match = cleaned.match(/\{[\s\S]*\}/);
   if (!match) return null;
-  try {
-    return JSON.parse(match[0]);
-  } catch (e) {
-    return null;
-  }
+  return JSON.parse(match[0]);
 }
 
-async function tryGemini(prompt) {
-  for (const apiKey of GEMINI_KEYS) {
-    for (const modelName of GEMINI_MODELS) {
-      try {
-        const genAI = new GoogleGenerativeAI(apiKey);
-        const model = genAI.getGenerativeModel({ model: modelName });
-        const res = await model.generateContent(prompt);
-        const text = res.response.text();
-        const parsed = parseJsonFromText(text);
-        if (parsed?.questions?.length) {
-          return { result: parsed, provider: `gemini:${modelName}` };
-        }
-      } catch (err) {
-        console.error(`Gemini ${modelName} failed:`, err.message);
-      }
-    }
-  }
-  return null;
-}
-
-async function tryGroq(prompt) {
-  for (const apiKey of GROQ_KEYS) {
-    try {
-      const groq = new Groq({ apiKey });
-      const completion = await groq.chat.completions.create({
-        model: 'llama-3.3-70b-versatile',
-        messages: [{ role: 'user', content: prompt }],
-        temperature: 0.7,
-        max_tokens: 4096,
-      });
-      const text = completion.choices?.[0]?.message?.content;
-      const parsed = parseJsonFromText(text);
-      if (parsed?.questions?.length) {
-        return { result: parsed, provider: 'groq' };
-      }
-    } catch (err) {
-      console.error('Groq failed:', err.message);
-    }
-  }
-  return null;
+function sanitizeJsonString(str) {
+  // Remove raw control characters (except newline and tab) that break JSON.parse
+  return str.replace(/[\x00-\x08\x0B\x0C\x0E-\x1F\x7F]/g, '');
 }
 
 async function tryOpenRouter(prompt) {
   if (!OPENROUTER_API_KEY) return null;
-  try {
-    const res = await fetch('https://openrouter.ai/api/v1/chat/completions', {
-      method: 'POST',
-      headers: {
-        Authorization: `Bearer ${OPENROUTER_API_KEY}`,
-        'Content-Type': 'application/json',
-      },
-      body: JSON.stringify({
-        model: 'meta-llama/llama-3.1-8b-instruct:free',
-        messages: [{ role: 'user', content: prompt }],
-        max_tokens: 4096,
-        temperature: 0.7,
-      }),
-    });
-    if (!res.ok) return null;
-    const data = await res.json();
-    const text = data.choices?.[0]?.message?.content?.trim();
-    const parsed = parseJsonFromText(text);
-    if (parsed?.questions?.length) {
-      return { result: parsed, provider: 'openrouter' };
-    }
-  } catch (err) {
-    console.error('OpenRouter failed:', err.message);
-  }
-  return null;
+  const res = await fetch('https://openrouter.ai/api/v1/chat/completions', {
+    method: 'POST',
+    headers: {
+      Authorization: `Bearer ${OPENROUTER_API_KEY}`,
+      'Content-Type': 'application/json',
+    },
+    body: JSON.stringify({
+      model: 'meta-llama/llama-3.1-8b-instruct:free',
+      messages: [{ role: 'user', content: prompt }],
+      max_tokens: 4096,
+      temperature: 0.7,
+    }),
+  });
+  if (!res.ok) return null;
+  const data = await res.json();
+  return data.choices?.[0]?.message?.content?.trim() || null;
 }
 
 async function tryHuggingFace(prompt) {
   if (!HUGGINGFACE_API_KEY) return null;
-  try {
-    const res = await fetch(
-      'https://api-inference.huggingface.co/models/meta-llama/Llama-3.1-8B-Instruct',
-      {
-        method: 'POST',
-        headers: {
-          Authorization: `Bearer ${HUGGINGFACE_API_KEY}`,
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({
-          inputs: prompt,
-          parameters: { max_new_tokens: 4096, temperature: 0.7, return_full_text: false },
-        }),
-      }
-    );
-    if (!res.ok) return null;
-    const data = await res.json();
-    const text = data?.[0]?.generated_text?.trim();
-    const parsed = parseJsonFromText(text);
-    if (parsed?.questions?.length) {
-      return { result: parsed, provider: 'huggingface' };
+  const res = await fetch(
+    'https://api-inference.huggingface.co/models/meta-llama/Llama-3.1-8B-Instruct',
+    {
+      method: 'POST',
+      headers: {
+        Authorization: `Bearer ${HUGGINGFACE_API_KEY}`,
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({
+        inputs: prompt,
+        parameters: { max_new_tokens: 4096, temperature: 0.7, return_full_text: false },
+      }),
     }
-  } catch (err) {
-    console.error('HuggingFace failed:', err.message);
-  }
-  return null;
+  );
+  if (!res.ok) return null;
+  const data = await res.json();
+  return data?.[0]?.generated_text?.trim() || null;
 }
 
-// ── Quiz-specific prompt ────────────────────────────────────────────
 function buildQuizPrompt(asset) {
   const keyword = asset.keyword;
   const summary = asset.summary || '';
@@ -196,7 +133,6 @@ Example format:
 }`;
 }
 
-// ── Main POST ──────────────────────────────────────────────────────
 export async function POST(request) {
   try {
     const { knowledgeAssetId } = await request.json();
@@ -204,9 +140,8 @@ export async function POST(request) {
       return NextResponse.json({ error: 'knowledgeAssetId is required' }, { status: 400 });
     }
 
-    const supabase = createRouteHandlerClient();
+    const supabase = createAdminClient();
 
-    // 1. Fetch asset
     const { data: asset, error: assetError } = await supabase
       .from('knowledge_assets')
       .select('*')
@@ -214,45 +149,115 @@ export async function POST(request) {
       .single();
 
     if (assetError || !asset) {
-      console.error('Asset fetch error:', assetError);
       return NextResponse.json({ error: 'Knowledge asset not found' }, { status: 404 });
     }
 
-    // 2. Build prompt
     const prompt = buildQuizPrompt(asset);
+    let result = null;
+    let usedProvider = '';
+    const errors = [];
 
-    // 3. Generate questions — try each provider in order until one succeeds
-    let outcome = null;
+    // Gemini
+    for (const geminiKey of GEMINI_KEYS) {
+      if (result) break;
+      const client = new GoogleGenerativeAI(geminiKey);
+      for (const modelName of GEMINI_MODELS) {
+        if (result) break;
+        try {
+          const model = client.getGenerativeModel({ model: modelName });
+          const genResult = await model.generateContent({
+            contents: [{ role: 'user', parts: [{ text: prompt }] }],
+            generationConfig: { maxOutputTokens: 4096, temperature: 0.7 },
+          });
+          const text = genResult.response.text();
+          const cleaned = sanitizeJsonString(text);
+          const parsed = parseJsonFromText(cleaned);
+          if (parsed && Array.isArray(parsed.questions) && parsed.questions.length >= 10) {
+            result = parsed;
+            usedProvider = `Gemini (${modelName})`;
+          } else {
+            errors.push(`Gemini ${modelName}: insufficient questions`);
+          }
+        } catch (e) {
+          errors.push(`Gemini ${modelName}: ${e.message}`);
+        }
+      }
+    }
 
-    outcome = await tryGemini(prompt);
-    if (!outcome) outcome = await tryGroq(prompt);
-    if (!outcome) outcome = await tryOpenRouter(prompt);
-    if (!outcome) outcome = await tryHuggingFace(prompt);
+    // Groq
+    if (!result) {
+      for (const groqKey of GROQ_KEYS) {
+        if (result) break;
+        try {
+          const groq = new Groq({ apiKey: groqKey });
+          const groqResponse = await groq.chat.completions.create({
+            messages: [{ role: 'user', content: prompt }],
+            model: 'llama-3.3-70b-versatile',
+            max_tokens: 4096,
+            temperature: 0.7,
+          });
+          const text = groqResponse.choices[0].message.content.trim();
+          const cleaned = sanitizeJsonString(text);
+          const parsed = parseJsonFromText(cleaned);
+          if (parsed && Array.isArray(parsed.questions) && parsed.questions.length >= 10) {
+            result = parsed;
+            usedProvider = `Groq (${GROQ_KEYS.indexOf(groqKey) + 1})`;
+          } else {
+            errors.push('Groq: insufficient questions');
+          }
+        } catch (e) {
+          errors.push(`Groq: ${e.message}`);
+        }
+      }
+    }
 
-    if (!outcome) {
-      console.error('❌ All providers failed to generate quiz questions');
+    // OpenRouter
+    if (!result) {
+      try {
+        const text = await tryOpenRouter(prompt);
+        if (text) {
+          const cleaned = sanitizeJsonString(text);
+          const parsed = parseJsonFromText(cleaned);
+          if (parsed && Array.isArray(parsed.questions) && parsed.questions.length >= 10) {
+            result = parsed;
+            usedProvider = 'OpenRouter';
+          } else {
+            errors.push('OpenRouter: insufficient questions');
+          }
+        }
+      } catch (e) {
+        errors.push(`OpenRouter: ${e.message}`);
+      }
+    }
+
+    // HuggingFace
+    if (!result) {
+      try {
+        const text = await tryHuggingFace(prompt);
+        if (text) {
+          const cleaned = sanitizeJsonString(text);
+          const parsed = parseJsonFromText(cleaned);
+          if (parsed && Array.isArray(parsed.questions) && parsed.questions.length >= 10) {
+            result = parsed;
+            usedProvider = 'HuggingFace';
+          } else {
+            errors.push('HuggingFace: insufficient questions');
+          }
+        }
+      } catch (e) {
+        errors.push(`HuggingFace: ${e.message}`);
+      }
+    }
+
+    if (!result) {
       return NextResponse.json(
-        { error: 'All LLM providers failed to generate quiz questions' },
+        { error: `All providers failed: ${errors.join('; ')}` },
         { status: 500 }
       );
     }
 
-    const { result, provider: usedProvider } = outcome;
-
-    if (!result?.questions?.length) {
-      console.error('❌ Provider returned no questions:', usedProvider);
-      return NextResponse.json(
-        { error: `Provider ${usedProvider} returned no questions` },
-        { status: 500 }
-      );
-    }
-
-    // 4. Insert into quiz_drafts with detailed error logging
     const questions = result.questions.slice(0, 20);
     const estimatedMinutes = Math.ceil(questions.length * 1.2);
-
-    console.log('📝 Attempting to insert quiz draft for asset:', asset.id, 'via', usedProvider);
-    console.log('📝 Questions count:', questions.length);
 
     const { data: draft, error: draftError } = await supabase
       .from('quiz_drafts')
@@ -271,19 +276,8 @@ export async function POST(request) {
 
     if (draftError) {
       console.error('❌ Quiz draft insert error:', draftError);
-      return NextResponse.json(
-        {
-          error: draftError.message,
-          code: draftError.code,
-          details: draftError.details,
-          hint: draftError.hint,
-          questions_sample: questions.slice(0, 2),
-        },
-        { status: 500 }
-      );
+      return NextResponse.json({ error: draftError.message }, { status: 500 });
     }
-
-    console.log('✅ Quiz draft inserted successfully:', draft.id);
 
     return NextResponse.json({
       success: true,
@@ -293,6 +287,6 @@ export async function POST(request) {
     });
   } catch (error) {
     console.error('❌ Quiz generation error:', error);
-    return NextResponse.json({ error: error.message, stack: error.stack }, { status: 500 });
+    return NextResponse.json({ error: error.message }, { status: 500 });
   }
 }
