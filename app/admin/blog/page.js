@@ -4,6 +4,7 @@ import { useState, useEffect } from 'react';
 import Link from 'next/link';
 import { supabase } from '@/lib/supabase-client';
 import { useRouter } from 'next/navigation';
+import AdminGeneratePodcastButton from '@/components/AdminGeneratePodcastButton';
 
 export const dynamic = 'force-dynamic';
 
@@ -78,6 +79,7 @@ export default function BlogAdminPage() {
                 <th className="text-left p-3 text-sm font-medium text-gray-500">Slug</th>
                 <th className="text-left p-3 text-sm font-medium text-gray-500">Category</th>
                 <th className="text-left p-3 text-sm font-medium text-gray-500">Published</th>
+                <th className="text-left p-3 text-sm font-medium text-gray-500">Podcast</th>
                 <th className="text-right p-3 text-sm font-medium text-gray-500">Actions</th>
               </tr>
             </thead>
@@ -97,6 +99,9 @@ export default function BlogAdminPage() {
                   <td className="p-3 text-sm text-gray-500">{post.category || 'Uncategorized'}</td>
                   <td className="p-3 text-sm text-gray-500">
                     {post.published_at ? new Date(post.published_at).toLocaleDateString() : '—'}
+                  </td>
+                  <td className="p-3">
+                    <AdminGeneratePodcastButton contentDraftId={post.id} />
                   </td>
                   <td className="p-3 text-right">
                     <div className="flex justify-end gap-2">
