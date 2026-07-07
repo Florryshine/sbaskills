@@ -1,8 +1,17 @@
 import { NextResponse } from 'next/server';
-import { createRouteHandlerClient } from '@/lib/supabase-server';
+import { createClient } from '@supabase/supabase-js';
 
-// This route orchestrates running multiple content engines at once
-// It creates a generation_job and launches each selected engine
+// Use service role client to bypass RLS
+const supabase = createClient(
+  process.env.NEXT_PUBLIC_SUPABASE_URL,
+  process.env.SUPABASE_SERVICE_ROLE_KEY,
+  {
+    auth: {
+      autoRefreshToken: false,
+      persistSession: false,
+    },
+  }
+);
 
 export async function POST(request) {
   try {
@@ -18,8 +27,6 @@ export async function POST(request) {
     if (!engines || engines.length === 0) {
       return NextResponse.json({ error: 'At least one engine must be selected' }, { status: 400 });
     }
-
-    const supabase = createRouteHandlerClient();
 
     // 1. Fetch the knowledge asset to get the keyword
     const { data: asset, error: assetError } = await supabase
@@ -55,7 +62,6 @@ export async function POST(request) {
       flashcard: '/api/engines/flashcards',
       study_note: '/api/engines/study-notes',
       social: '/api/engines/social',
-      // blog and podcast use different endpoints
     };
 
     // 4. Run each selected engine in parallel
@@ -64,13 +70,11 @@ export async function POST(request) {
         // Special handling for blog (uses existing generate route)
         if (engine === 'blog') {
           // You'd call your existing blog generator here
-          // This is a placeholder - adapt to your existing route
           return { engine, status: 'skipped', message: 'Blog generation not implemented in this route' };
         }
 
         // Special handling for podcast
         if (engine === 'podcast') {
-          // You'd call your podcast generator here
           return { engine, status: 'skipped', message: 'Podcast generation not implemented in this route' };
         }
 
@@ -134,7 +138,7 @@ export async function POST(request) {
       };
     });
 
-    // Insert job items
+    // Insert job items – we're using the service role client, so RLS is bypassed
     const { error: itemsError } = await supabase
       .from('generation_job_items')
       .insert(jobItems);
