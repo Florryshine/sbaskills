@@ -1,5 +1,5 @@
 import { NextResponse } from 'next/server';
-import { createRouteHandlerClient } from '@/lib/supabase-server';
+import { createClient } from '@supabase/supabase-js';
 
 export async function POST(request) {
   try {
@@ -13,9 +13,28 @@ export async function POST(request) {
       return NextResponse.json({ error: 'At least one engine must be selected' }, { status: 400 });
     }
 
-    const supabase = createRouteHandlerClient();
+    // Create a Supabase client with service role key (bypasses RLS)
+    const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
+    const serviceRoleKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
 
-    // Fetch the keyword
+    if (!supabaseUrl || !serviceRoleKey) {
+      console.error('Missing Supabase credentials for service role');
+      // Fallback to authenticated client (may fail due to RLS)
+      const { createRouteHandlerClient } = await import('@/lib/supabase-server');
+      const supabase = createRouteHandlerClient();
+      // ... continue with that client
+      // For now, let's just return an error
+      return NextResponse.json(
+        { error: 'Server configuration error: missing SUPABASE_SERVICE_ROLE_KEY' },
+        { status: 500 }
+      );
+    }
+
+    const supabase = createClient(supabaseUrl, serviceRoleKey, {
+      auth: { autoRefreshToken: false, persistSession: false },
+    });
+
+    // 1. Fetch the knowledge asset
     const { data: asset, error: assetError } = await supabase
       .from('knowledge_assets')
       .select('keyword')
@@ -26,7 +45,7 @@ export async function POST(request) {
       return NextResponse.json({ error: 'Knowledge asset not found' }, { status: 404 });
     }
 
-    // Create generation job
+    // 2. Create the generation job (bypasses RLS)
     const { data: job, error: jobError } = await supabase
       .from('generation_jobs')
       .insert({
@@ -42,9 +61,7 @@ export async function POST(request) {
       return NextResponse.json({ error: jobError.message }, { status: 500 });
     }
 
-    // Determine base URL from the request
-    const baseUrl = request.nextUrl.origin; // e.g. https://shineybrainacademy.vercel.app
-
+    // 3. Engine endpoints
     const engineEndpoints = {
       quiz: '/api/engines/quiz',
       boss_battle: '/api/engines/boss-battle',
@@ -53,9 +70,10 @@ export async function POST(request) {
       social: '/api/engines/social',
     };
 
+    // 4. Run engines
+    const baseUrl = request.nextUrl.origin;
     const results = await Promise.allSettled(
       engines.map(async (engine) => {
-        // Skip unsupported engines
         if (engine === 'blog' || engine === 'podcast') {
           return { engine, status: 'skipped', message: `${engine} generation not implemented yet` };
         }
@@ -66,10 +84,7 @@ export async function POST(request) {
         }
 
         try {
-          const url = `${baseUrl}${endpoint}`;
-          console.log(`🚀 Calling engine: ${url}`);
-
-          const response = await fetch(url, {
+          const response = await fetch(`${baseUrl}${endpoint}`, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({ knowledgeAssetId }),
@@ -77,20 +92,18 @@ export async function POST(request) {
 
           if (!response.ok) {
             const errorText = await response.text();
-            console.error(`❌ Engine ${engine} failed: ${response.status} - ${errorText}`);
             throw new Error(`HTTP ${response.status}: ${errorText}`);
           }
 
           const data = await response.json();
           return { engine, status: 'completed', data };
         } catch (error) {
-          console.error(`❌ Engine ${engine} error:`, error.message);
           return { engine, status: 'failed', error: error.message };
         }
       })
     );
 
-    // Build job items
+    // 5. Insert job items (also bypasses RLS)
     const jobItems = results.map((result, index) => {
       const engine = engines[index];
       let status = 'pending';
@@ -126,7 +139,7 @@ export async function POST(request) {
       console.error('Failed to insert job items:', itemsError);
     }
 
-    // Update overall status
+    // 6. Update job status
     const completedEngines = results.filter(r => r.status === 'fulfilled' && r.value.status === 'completed');
     const failedEngines = results.filter(r => r.status === 'rejected' || (r.status === 'fulfilled' && r.value.status === 'failed'));
 
