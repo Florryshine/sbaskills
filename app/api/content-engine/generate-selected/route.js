@@ -1,24 +1,9 @@
 import { NextResponse } from 'next/server';
 import { createClient } from '@supabase/supabase-js';
 
-// Use service role client to bypass RLS
-const supabase = createClient(
-  process.env.NEXT_PUBLIC_SUPABASE_URL,
-  process.env.SUPABASE_SERVICE_ROLE_KEY,
-  {
-    auth: {
-      autoRefreshToken: false,
-      persistSession: false,
-    },
-  }
-);
-
 export async function POST(request) {
   try {
-    const { 
-      knowledgeAssetId, 
-      engines = [] // ['blog', 'podcast', 'quiz', 'boss_battle', 'flashcard', 'study_note', 'social']
-    } = await request.json();
+    const { knowledgeAssetId, engines = [] } = await request.json();
 
     if (!knowledgeAssetId) {
       return NextResponse.json({ error: 'knowledgeAssetId is required' }, { status: 400 });
@@ -28,7 +13,23 @@ export async function POST(request) {
       return NextResponse.json({ error: 'At least one engine must be selected' }, { status: 400 });
     }
 
-    // 1. Fetch the knowledge asset to get the keyword
+    // ✅ Create Supabase client with service role key inside the handler
+    const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
+    const supabaseKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
+
+    if (!supabaseUrl || !supabaseKey) {
+      console.error('Missing Supabase credentials');
+      return NextResponse.json(
+        { error: 'Server configuration error: missing Supabase credentials' },
+        { status: 500 }
+      );
+    }
+
+    const supabase = createClient(supabaseUrl, supabaseKey, {
+      auth: { autoRefreshToken: false, persistSession: false },
+    });
+
+    // 1. Fetch the knowledge asset
     const { data: asset, error: assetError } = await supabase
       .from('knowledge_assets')
       .select('keyword')
@@ -39,7 +40,7 @@ export async function POST(request) {
       return NextResponse.json({ error: 'Knowledge asset not found' }, { status: 404 });
     }
 
-    // 2. Create the generation job
+    // 2. Create generation job
     const { data: job, error: jobError } = await supabase
       .from('generation_jobs')
       .insert({
@@ -55,7 +56,7 @@ export async function POST(request) {
       return NextResponse.json({ error: jobError.message }, { status: 500 });
     }
 
-    // 3. Define the API endpoints for each engine
+    // 3. Engine endpoints
     const engineEndpoints = {
       quiz: '/api/engines/quiz',
       boss_battle: '/api/engines/boss-battle',
@@ -64,21 +65,13 @@ export async function POST(request) {
       social: '/api/engines/social',
     };
 
-    // 4. Run each selected engine in parallel
+    // 4. Run engines in parallel
     const results = await Promise.allSettled(
       engines.map(async (engine) => {
-        // Special handling for blog (uses existing generate route)
-        if (engine === 'blog') {
-          // You'd call your existing blog generator here
-          return { engine, status: 'skipped', message: 'Blog generation not implemented in this route' };
+        if (engine === 'blog' || engine === 'podcast') {
+          return { engine, status: 'skipped', message: `${engine} generation not implemented` };
         }
 
-        // Special handling for podcast
-        if (engine === 'podcast') {
-          return { engine, status: 'skipped', message: 'Podcast generation not implemented in this route' };
-        }
-
-        // For other engines, call the API route
         const endpoint = engineEndpoints[engine];
         if (!endpoint) {
           return { engine, status: 'failed', error: `Unknown engine: ${engine}` };
@@ -105,12 +98,7 @@ export async function POST(request) {
       })
     );
 
-    // 5. Update the job with results
-    const completedEngines = results.filter(r => r.status === 'fulfilled' && r.value.status === 'completed');
-    const failedEngines = results.filter(r => r.status === 'rejected' || r.value.status === 'failed');
-    const skippedEngines = results.filter(r => r.status === 'fulfilled' && r.value.status === 'skipped');
-
-    // Build the job item records
+    // 5. Build job items
     const jobItems = results.map((result, index) => {
       const engine = engines[index];
       let status = 'pending';
@@ -130,15 +118,14 @@ export async function POST(request) {
 
       return {
         generation_job_id: job.id,
-        engine: engine,
-        status: status,
+        engine,
+        status,
         started_at: new Date().toISOString(),
         finished_at: status !== 'pending' ? new Date().toISOString() : null,
-        error: error,
+        error,
       };
     });
 
-    // Insert job items – we're using the service role client, so RLS is bypassed
     const { error: itemsError } = await supabase
       .from('generation_job_items')
       .insert(jobItems);
@@ -147,7 +134,14 @@ export async function POST(request) {
       console.error('Failed to insert job items:', itemsError);
     }
 
-    // 6. Update overall job status
+    // 6. Update overall status
+    const completedEngines = results.filter(
+      (r) => r.status === 'fulfilled' && r.value.status === 'completed'
+    );
+    const failedEngines = results.filter(
+      (r) => r.status === 'rejected' || (r.status === 'fulfilled' && r.value.status === 'failed')
+    );
+
     let overallStatus = 'completed';
     if (failedEngines.length > 0 && completedEngines.length === 0) {
       overallStatus = 'failed';
@@ -170,9 +164,11 @@ export async function POST(request) {
         total: engines.length,
         completed: completedEngines.length,
         failed: failedEngines.length,
-        skipped: skippedEngines.length,
+        skipped: results.filter(
+          (r) => r.status === 'fulfilled' && r.value.status === 'skipped'
+        ).length,
       },
-      results: results.map(r => {
+      results: results.map((r) => {
         if (r.status === 'rejected') {
           return { engine: engines[results.indexOf(r)], status: 'failed', error: r.reason?.message };
         }
