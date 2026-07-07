@@ -1,14 +1,20 @@
 'use client';
 
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
+import { useSearchParams } from 'next/navigation';
 import { createBrowserClient } from '@/lib/supabase';
+import Link from 'next/link';
 
 export default function GeneratePage() {
+  const searchParams = useSearchParams();
+  const assetIdFromUrl = searchParams.get('assetId');
+
   const [keyword, setKeyword] = useState('');
   const [assetId, setAssetId] = useState(null);
   const [loading, setLoading] = useState(false);
   const [generating, setGenerating] = useState(false);
   const [result, setResult] = useState(null);
+  const [error, setError] = useState(null);
   const [engines, setEngines] = useState({
     blog: false,
     podcast: false,
@@ -21,6 +27,26 @@ export default function GeneratePage() {
 
   const supabase = createBrowserClient();
 
+  // Load asset from URL parameter
+  useEffect(() => {
+    if (assetIdFromUrl) {
+      setAssetId(assetIdFromUrl);
+      // Fetch the keyword for display
+      supabase
+        .from('knowledge_assets')
+        .select('keyword')
+        .eq('id', assetIdFromUrl)
+        .single()
+        .then(({ data, error }) => {
+          if (data) {
+            setKeyword(data.keyword);
+          } else if (error) {
+            setError('Could not load asset details: ' + error.message);
+          }
+        });
+    }
+  }, [assetIdFromUrl]);
+
   const handleGenerateKnowledge = async () => {
     if (!keyword.trim()) {
       alert('Please enter a keyword');
@@ -29,6 +55,7 @@ export default function GeneratePage() {
 
     setLoading(true);
     setResult(null);
+    setError(null);
 
     try {
       const response = await fetch('/api/learning-core/generate', {
@@ -41,11 +68,15 @@ export default function GeneratePage() {
       if (data.success) {
         setAssetId(data.knowledgeAssetId);
         setResult({ type: 'knowledge', data });
+        // Update URL to include assetId (optional)
+        const url = new URL(window.location);
+        url.searchParams.set('assetId', data.knowledgeAssetId);
+        window.history.replaceState({}, '', url);
       } else {
-        alert(data.error || 'Failed to generate knowledge');
+        setError(data.error || 'Failed to generate knowledge');
       }
-    } catch (error) {
-      alert(error.message);
+    } catch (err) {
+      setError(err.message);
     } finally {
       setLoading(false);
     }
@@ -59,6 +90,8 @@ export default function GeneratePage() {
     }
 
     setGenerating(true);
+    setResult(null);
+    setError(null);
 
     try {
       const response = await fetch('/api/content-engine/generate-selected', {
@@ -71,9 +104,14 @@ export default function GeneratePage() {
       });
 
       const data = await response.json();
-      setResult({ type: 'job', data });
-    } catch (error) {
-      alert(error.message);
+      if (data.success) {
+        setResult({ type: 'job', data });
+      } else {
+        setError(data.error || 'Generation failed');
+        setResult({ type: 'job', data });
+      }
+    } catch (err) {
+      setError(err.message);
     } finally {
       setGenerating(false);
     }
@@ -94,6 +132,13 @@ export default function GeneratePage() {
       <h1 className="text-3xl font-bold text-brand-blue mb-2">🚀 Generate Content</h1>
       <p className="text-gray-500 mb-8">Create a Learning Core, then generate any combination of content.</p>
 
+      {/* Error display */}
+      {error && (
+        <div className="mb-6 p-4 bg-red-50 border border-red-200 rounded-xl text-red-700">
+          ❌ {error}
+        </div>
+      )}
+
       {/* Step 1: Generate Knowledge */}
       <div className="bg-white rounded-2xl shadow-sm border p-6 mb-6">
         <h2 className="font-bold text-lg mb-4">Step 1: 🧠 Generate Learning Core</h2>
@@ -104,18 +149,28 @@ export default function GeneratePage() {
             onChange={(e) => setKeyword(e.target.value)}
             placeholder="e.g. JAMB Biology Photosynthesis"
             className="flex-1 rounded-xl border border-slate-200 px-4 py-3"
+            disabled={!!assetId}
           />
           <button
             onClick={handleGenerateKnowledge}
-            disabled={loading}
+            disabled={loading || !!assetId}
             className="bg-brand-yellow px-6 py-3 rounded-xl font-bold hover:opacity-90 disabled:opacity-50"
           >
-            {loading ? 'Generating...' : 'Generate Knowledge'}
+            {loading ? 'Generating...' : assetId ? 'Asset Loaded' : 'Generate Knowledge'}
           </button>
         </div>
         {assetId && (
-          <div className="mt-4 p-3 bg-green-50 rounded-xl border border-green-200">
-            ✅ Knowledge Asset Ready: <code className="text-sm">{assetId}</code>
+          <div className="mt-4 p-3 bg-green-50 rounded-xl border border-green-200 flex items-center justify-between">
+            <div>
+              ✅ <span className="font-medium">Knowledge Asset Ready</span>
+              <span className="ml-2 text-sm text-gray-600">“{keyword}”</span>
+            </div>
+            <Link
+              href={`/admin/knowledge-assets`}
+              className="text-sm text-brand-blue hover:underline"
+            >
+              View All Assets →
+            </Link>
           </div>
         )}
       </div>
@@ -125,7 +180,12 @@ export default function GeneratePage() {
         <h2 className="font-bold text-lg mb-4">Step 2: 📦 Select Content to Generate</h2>
         <div className="grid grid-cols-2 md:grid-cols-3 gap-3">
           {Object.keys(engineLabels).map((key) => (
-            <label key={key} className="flex items-center gap-2 p-3 border rounded-xl hover:bg-slate-50 cursor-pointer">
+            <label
+              key={key}
+              className={`flex items-center gap-2 p-3 border rounded-xl cursor-pointer transition ${
+                assetId ? 'hover:bg-slate-50' : 'opacity-50 cursor-not-allowed'
+              }`}
+            >
               <input
                 type="checkbox"
                 checked={engines[key]}
@@ -140,19 +200,36 @@ export default function GeneratePage() {
         <button
           onClick={handleGenerateSelected}
           disabled={!assetId || generating}
-          className="mt-4 w-full bg-brand-blue text-white py-3 rounded-xl font-bold hover:opacity-90 disabled:opacity-50"
+          className="mt-4 w-full bg-brand-blue text-white py-3 rounded-xl font-bold hover:opacity-90 disabled:opacity-50 transition"
         >
-          {generating ? 'Generating...' : '🚀 Generate Selected'}
+          {generating ? '⏳ Generating...' : '🚀 Generate Selected'}
         </button>
+        {generating && (
+          <p className="mt-2 text-sm text-gray-500 text-center">
+            This may take up to a minute. Check the Generation Jobs page for progress.
+          </p>
+        )}
       </div>
 
       {/* Results */}
       {result && (
         <div className="bg-white rounded-2xl shadow-sm border p-6">
-          <h3 className="font-bold text-lg mb-2">✅ Results</h3>
-          <pre className="bg-slate-50 p-4 rounded-xl text-sm overflow-auto max-h-96">
-            {JSON.stringify(result, null, 2)}
+          <h3 className="font-bold text-lg mb-2">
+            {result.type === 'knowledge' ? '🧠 Knowledge Asset Created' : '✅ Generation Results'}
+          </h3>
+          <pre className="bg-slate-50 p-4 rounded-xl text-sm overflow-auto max-h-96 whitespace-pre-wrap">
+            {JSON.stringify(result.data, null, 2)}
           </pre>
+          {result.type === 'job' && result.data.jobId && (
+            <div className="mt-4">
+              <Link
+                href={`/admin/generation-jobs`}
+                className="text-brand-blue hover:underline text-sm"
+              >
+                View Job Details →
+              </Link>
+            </div>
+          )}
         </div>
       )}
     </div>
