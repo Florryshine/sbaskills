@@ -1,5 +1,5 @@
 import { NextResponse } from 'next/server';
-import { createClient } from '@supabase/supabase-js';
+import { createRouteHandlerClient } from '@/lib/supabase-server';
 
 export async function POST(request) {
   try {
@@ -13,28 +13,10 @@ export async function POST(request) {
       return NextResponse.json({ error: 'At least one engine must be selected' }, { status: 400 });
     }
 
-    // Create a Supabase client with service role key (bypasses RLS)
-    const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
-    const serviceRoleKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
+    // Use the authenticated client (no service role key)
+    const supabase = createRouteHandlerClient();
 
-    if (!supabaseUrl || !serviceRoleKey) {
-      console.error('Missing Supabase credentials for service role');
-      // Fallback to authenticated client (may fail due to RLS)
-      const { createRouteHandlerClient } = await import('@/lib/supabase-server');
-      const supabase = createRouteHandlerClient();
-      // ... continue with that client
-      // For now, let's just return an error
-      return NextResponse.json(
-        { error: 'Server configuration error: missing SUPABASE_SERVICE_ROLE_KEY' },
-        { status: 500 }
-      );
-    }
-
-    const supabase = createClient(supabaseUrl, serviceRoleKey, {
-      auth: { autoRefreshToken: false, persistSession: false },
-    });
-
-    // 1. Fetch the knowledge asset
+    // 1. Fetch asset
     const { data: asset, error: assetError } = await supabase
       .from('knowledge_assets')
       .select('keyword')
@@ -45,7 +27,7 @@ export async function POST(request) {
       return NextResponse.json({ error: 'Knowledge asset not found' }, { status: 404 });
     }
 
-    // 2. Create the generation job (bypasses RLS)
+    // 2. Create job
     const { data: job, error: jobError } = await supabase
       .from('generation_jobs')
       .insert({
@@ -58,6 +40,7 @@ export async function POST(request) {
       .single();
 
     if (jobError) {
+      console.error('❌ Job creation error:', jobError);
       return NextResponse.json({ error: jobError.message }, { status: 500 });
     }
 
@@ -72,10 +55,11 @@ export async function POST(request) {
 
     // 4. Run engines
     const baseUrl = request.nextUrl.origin;
+
     const results = await Promise.allSettled(
       engines.map(async (engine) => {
         if (engine === 'blog' || engine === 'podcast') {
-          return { engine, status: 'skipped', message: `${engine} generation not implemented yet` };
+          return { engine, status: 'skipped', message: `${engine} not implemented yet` };
         }
 
         const endpoint = engineEndpoints[engine];
@@ -84,7 +68,8 @@ export async function POST(request) {
         }
 
         try {
-          const response = await fetch(`${baseUrl}${endpoint}`, {
+          const url = `${baseUrl}${endpoint}`;
+          const response = await fetch(url, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({ knowledgeAssetId }),
@@ -103,7 +88,7 @@ export async function POST(request) {
       })
     );
 
-    // 5. Insert job items (also bypasses RLS)
+    // 5. Insert job items
     const jobItems = results.map((result, index) => {
       const engine = engines[index];
       let status = 'pending';
@@ -136,10 +121,10 @@ export async function POST(request) {
       .insert(jobItems);
 
     if (itemsError) {
-      console.error('Failed to insert job items:', itemsError);
+      console.error('❌ Job items insert error:', itemsError);
     }
 
-    // 6. Update job status
+    // 6. Update overall status
     const completedEngines = results.filter(r => r.status === 'fulfilled' && r.value.status === 'completed');
     const failedEngines = results.filter(r => r.status === 'rejected' || (r.status === 'fulfilled' && r.value.status === 'failed'));
 
