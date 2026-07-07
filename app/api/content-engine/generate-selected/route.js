@@ -1,5 +1,5 @@
 import { NextResponse } from 'next/server';
-import { createClient } from '@supabase/supabase-js';
+import { createRouteHandlerClient } from '@/lib/supabase-server';
 
 export async function POST(request) {
   try {
@@ -13,21 +13,8 @@ export async function POST(request) {
       return NextResponse.json({ error: 'At least one engine must be selected' }, { status: 400 });
     }
 
-    // ✅ Create Supabase client with service role key inside the handler
-    const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
-    const supabaseKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
-
-    if (!supabaseUrl || !supabaseKey) {
-      console.error('Missing Supabase credentials');
-      return NextResponse.json(
-        { error: 'Server configuration error: missing Supabase credentials' },
-        { status: 500 }
-      );
-    }
-
-    const supabase = createClient(supabaseUrl, supabaseKey, {
-      auth: { autoRefreshToken: false, persistSession: false },
-    });
+    // Use the authenticated client (user must be an admin)
+    const supabase = createRouteHandlerClient();
 
     // 1. Fetch the knowledge asset
     const { data: asset, error: assetError } = await supabase
@@ -40,7 +27,7 @@ export async function POST(request) {
       return NextResponse.json({ error: 'Knowledge asset not found' }, { status: 404 });
     }
 
-    // 2. Create generation job
+    // 2. Create the generation job
     const { data: job, error: jobError } = await supabase
       .from('generation_jobs')
       .insert({
@@ -56,7 +43,7 @@ export async function POST(request) {
       return NextResponse.json({ error: jobError.message }, { status: 500 });
     }
 
-    // 3. Engine endpoints
+    // 3. Define the API endpoints for each engine
     const engineEndpoints = {
       quiz: '/api/engines/quiz',
       boss_battle: '/api/engines/boss-battle',
@@ -65,11 +52,11 @@ export async function POST(request) {
       social: '/api/engines/social',
     };
 
-    // 4. Run engines in parallel
+    // 4. Run each selected engine in parallel
     const results = await Promise.allSettled(
       engines.map(async (engine) => {
         if (engine === 'blog' || engine === 'podcast') {
-          return { engine, status: 'skipped', message: `${engine} generation not implemented` };
+          return { engine, status: 'skipped', message: `${engine} generation not implemented yet` };
         }
 
         const endpoint = engineEndpoints[engine];
@@ -98,7 +85,7 @@ export async function POST(request) {
       })
     );
 
-    // 5. Build job items
+    // 5. Build the job items records
     const jobItems = results.map((result, index) => {
       const engine = engines[index];
       let status = 'pending';
@@ -118,11 +105,11 @@ export async function POST(request) {
 
       return {
         generation_job_id: job.id,
-        engine,
-        status,
+        engine: engine,
+        status: status,
         started_at: new Date().toISOString(),
         finished_at: status !== 'pending' ? new Date().toISOString() : null,
-        error,
+        error: error,
       };
     });
 
@@ -134,13 +121,9 @@ export async function POST(request) {
       console.error('Failed to insert job items:', itemsError);
     }
 
-    // 6. Update overall status
-    const completedEngines = results.filter(
-      (r) => r.status === 'fulfilled' && r.value.status === 'completed'
-    );
-    const failedEngines = results.filter(
-      (r) => r.status === 'rejected' || (r.status === 'fulfilled' && r.value.status === 'failed')
-    );
+    // 6. Update overall job status
+    const completedEngines = results.filter(r => r.status === 'fulfilled' && r.value.status === 'completed');
+    const failedEngines = results.filter(r => r.status === 'rejected' || r.value.status === 'failed');
 
     let overallStatus = 'completed';
     if (failedEngines.length > 0 && completedEngines.length === 0) {
@@ -164,11 +147,9 @@ export async function POST(request) {
         total: engines.length,
         completed: completedEngines.length,
         failed: failedEngines.length,
-        skipped: results.filter(
-          (r) => r.status === 'fulfilled' && r.value.status === 'skipped'
-        ).length,
+        skipped: results.filter(r => r.status === 'fulfilled' && r.value.status === 'skipped').length,
       },
-      results: results.map((r) => {
+      results: results.map(r => {
         if (r.status === 'rejected') {
           return { engine: engines[results.indexOf(r)], status: 'failed', error: r.reason?.message };
         }
