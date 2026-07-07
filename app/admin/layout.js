@@ -8,7 +8,7 @@ const navItems = [
   { href: '/admin/courses', label: 'Courses', icon: '📚' },
   { href: '/admin/students', label: 'Students', icon: '👨‍🎓' },
   { href: '/admin/blog', label: 'Blog', icon: '📝' },
-  { href: '/admin/library', label: 'Library', icon: '📖' },   // <-- Added
+  { href: '/admin/library', label: 'Library', icon: '📖' },
   { href: '/admin/audio', label: 'Audio', icon: '🎵' },
   { href: '/admin/roles', label: 'Roles', icon: '🔑' },
   { href: '/admin/testimonials', label: 'Testimonials', icon: '💬' },
@@ -17,6 +17,7 @@ const navItems = [
   { href: '/admin/daily-challenge', label: 'Daily Challenge', icon: '📅' },
   { href: '/admin/boss-battles', label: 'Boss Battles', icon: '👹' },
   { href: '/admin/content-engine', label: 'Content Engine', icon: '⚡' },
+  { href: '/admin/generate', label: 'Generate Content', icon: '🚀' }, // NEW
   { href: '/admin/past-questions/upload', label: 'Upload Past Qs', icon: '📤' },
 ];
 
