@@ -1,5 +1,6 @@
 import { NextResponse } from 'next/server';
 import { createClient } from '@supabase/supabase-js';
+import { createRouteHandlerClient } from '@/lib/supabase-server';
 
 export async function POST(request) {
   try {
@@ -13,24 +14,24 @@ export async function POST(request) {
       return NextResponse.json({ error: 'At least one engine must be selected' }, { status: 400 });
     }
 
-    // ✅ Create Supabase client with service role key **inside** the handler
+    // ── Supabase client setup ──────────────────────────────────────────
+    // Prefer service role key (bypasses RLS); fallback to authenticated client
     const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
-    const supabaseKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
+    const serviceRoleKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
 
-    if (!supabaseUrl || !supabaseKey) {
-      console.error('Missing Supabase credentials:', { supabaseUrl: !!supabaseUrl, supabaseKey: !!supabaseKey });
-      return NextResponse.json(
-        { error: 'Server configuration error: missing Supabase credentials' },
-        { status: 500 }
-      );
+    let supabase;
+
+    if (supabaseUrl && serviceRoleKey) {
+      // Use service role client (bypass RLS)
+      supabase = createClient(supabaseUrl, serviceRoleKey, {
+        auth: { autoRefreshToken: false, persistSession: false },
+      });
+      console.log('🔑 Using service role client');
+    } else {
+      // Fallback to authenticated client (relies on RLS)
+      supabase = createRouteHandlerClient();
+      console.log('🔑 Using authenticated client (RLS)');
     }
-
-    const supabase = createClient(supabaseUrl, supabaseKey, {
-      auth: {
-        autoRefreshToken: false,
-        persistSession: false,
-      },
-    });
 
     // 1. Fetch asset
     const { data: asset, error: assetError } = await supabase
@@ -43,7 +44,7 @@ export async function POST(request) {
       return NextResponse.json({ error: 'Knowledge asset not found' }, { status: 404 });
     }
 
-    // 2. Create job (bypasses RLS)
+    // 2. Create job
     const { data: job, error: jobError } = await supabase
       .from('generation_jobs')
       .insert({
@@ -71,6 +72,7 @@ export async function POST(request) {
 
     const baseUrl = request.nextUrl.origin;
 
+    // 4. Run engines
     const results = await Promise.allSettled(
       engines.map(async (engine) => {
         if (engine === 'blog' || engine === 'podcast') {
@@ -103,7 +105,7 @@ export async function POST(request) {
       })
     );
 
-    // 4. Insert job items (bypasses RLS)
+    // 5. Insert job items
     const jobItems = results.map((result, index) => {
       const engine = engines[index];
       let status = 'pending';
@@ -139,7 +141,7 @@ export async function POST(request) {
       console.error('❌ Job items insert error:', itemsError);
     }
 
-    // 5. Update overall status
+    // 6. Update overall status
     const completedEngines = results.filter(r => r.status === 'fulfilled' && r.value.status === 'completed');
     const failedEngines = results.filter(r => r.status === 'rejected' || (r.status === 'fulfilled' && r.value.status === 'failed'));
 
