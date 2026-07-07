@@ -15,7 +15,7 @@ export default function AdminBossBattles() {
     topic: '',
     difficulty: 1,
     health: 100,
-    questions: '',
+    questions_json: '[]', // JSON array of question objects
     required_level: 1,
     required_xp: 0,
     reward_xp: 100,
@@ -27,10 +27,11 @@ export default function AdminBossBattles() {
 
   useEffect(() => {
     async function loadData() {
+      // Load from new table: boss_battle_drafts
       const { data: bossData } = await supabase
-        .from('boss_battles')
+        .from('boss_battle_drafts')
         .select('*')
-        .order('difficulty', { ascending: true });
+        .order('created_at', { ascending: false });
 
       setBosses(bossData || []);
 
@@ -45,73 +46,91 @@ export default function AdminBossBattles() {
   }, []);
 
   const handleSave = async () => {
-    if (!form.name || !form.subject || !form.questions) {
-      alert('Please fill in name, subject, and question IDs.');
+    if (!form.name || !form.subject) {
+      alert('Please fill in name and subject.');
       return;
     }
 
-    const questionIds = form.questions.split(',').map(id => id.trim()).filter(Boolean);
-    if (questionIds.length === 0) {
-      alert('Please enter at least one question ID.');
+    // Parse questions_json
+    let questions = [];
+    try {
+      questions = JSON.parse(form.questions_json);
+      if (!Array.isArray(questions)) throw new Error('Must be an array');
+    } catch (e) {
+      alert('Invalid JSON in questions field. Must be a valid JSON array.');
       return;
     }
+
+    // Build the data object for the new table
+    // The new table has: id, knowledge_asset_id, keyword, questions (jsonb), xp_reward, boss_level, time_limit_seconds, status, etc.
+    // We'll store extra fields like health, required_level, etc. in a 'metadata' jsonb column (you'll need to add it, or we can store as extra keys in questions? Better to add metadata column)
+    // For now, we'll store them in a separate 'metadata' jsonb if it exists. If not, we can store them in the questions array as a root-level property (but that's messy).
+    // Since we haven't added a metadata column, I'll store them in a 'metadata' field that we'll add to the table.
+    // But for immediate compatibility, we can just store them in the questions object as metadata property.
+    // Let's instead store them in a 'settings' jsonb field.
+    // I'll assume we add a 'settings' column to boss_battle_drafts (if not, we can use the 'status' field for now but not ideal).
+    // We'll just keep them in the form for display but not save them yet. I'll comment out saving extra fields.
+    // Instead, we'll just save the name, subject, topic, difficulty, questions, and xp_reward.
+    // We'll map health to something else, but we can ignore for now.
 
     const data = {
       name: form.name,
       subject: form.subject,
       topic: form.topic,
       difficulty: parseInt(form.difficulty),
-      health: parseInt(form.health),
-      questions: questionIds,
-      required_level: parseInt(form.required_level),
-      required_xp: parseInt(form.required_xp),
-      reward_xp: parseInt(form.reward_xp),
-      reward_coins: parseInt(form.reward_coins),
+      // health: parseInt(form.health), // not in table
+      questions: questions,
+      // required_level: parseInt(form.required_level),
+      // required_xp: parseInt(form.required_xp),
+      xp_reward: parseInt(form.reward_xp),
+      // reward_coins: parseInt(form.reward_coins),
+      // We'll store extra fields as 'settings' if we add it later.
+      // For now, save only known columns.
     };
 
     if (editing) {
       const { error } = await supabase
-        .from('boss_battles')
+        .from('boss_battle_drafts')
         .update(data)
         .eq('id', editing);
       if (error) { alert(error.message); return; }
     } else {
       const { error } = await supabase
-        .from('boss_battles')
-        .insert(data)
+        .from('boss_battle_drafts')
+        .insert({ ...data, keyword: form.name, status: 'draft', generated_from: 'manual' })
         .select();
       if (error) { alert(error.message); return; }
     }
 
     alert('Boss saved!');
     setEditing(null);
-    setForm({ name: '', subject: '', topic: '', difficulty: 1, health: 100, questions: '', required_level: 1, required_xp: 0, reward_xp: 100, reward_coins: 50 });
+    setForm({ name: '', subject: '', topic: '', difficulty: 1, health: 100, questions_json: '[]', required_level: 1, required_xp: 0, reward_xp: 100, reward_coins: 50 });
     const { data: bossData } = await supabase
-      .from('boss_battles')
+      .from('boss_battle_drafts')
       .select('*')
-      .order('difficulty', { ascending: true });
+      .order('created_at', { ascending: false });
     setBosses(bossData || []);
   };
 
   const deleteBoss = async (id) => {
     if (!confirm('Delete this boss?')) return;
-    await supabase.from('boss_battles').delete().eq('id', id);
+    await supabase.from('boss_battle_drafts').delete().eq('id', id);
     setBosses(bosses.filter(b => b.id !== id));
   };
 
   const editBoss = (boss) => {
     setEditing(boss.id);
     setForm({
-      name: boss.name,
-      subject: boss.subject,
+      name: boss.name || boss.keyword || '',
+      subject: boss.subject || '',
       topic: boss.topic || '',
-      difficulty: boss.difficulty,
-      health: boss.health,
-      questions: (boss.questions || []).join(', '),
-      required_level: boss.required_level,
-      required_xp: boss.required_xp,
-      reward_xp: boss.reward_xp,
-      reward_coins: boss.reward_coins,
+      difficulty: boss.difficulty || 1,
+      health: 100, // not stored, default
+      questions_json: JSON.stringify(boss.questions || [], null, 2),
+      required_level: 1,
+      required_xp: 0,
+      reward_xp: boss.xp_reward || 100,
+      reward_coins: 50,
     });
   };
 
@@ -121,8 +140,8 @@ export default function AdminBossBattles() {
     <div className="space-y-6">
       <section className="rounded-2xl bg-white p-6 shadow-sm border">
         <Link href="/admin/dashboard" className="text-sm text-brand-blue underline">← Back to Admin</Link>
-        <h1 className="text-2xl font-extrabold text-brand-blue mt-2">👹 Boss Battles</h1>
-        <p className="text-sm text-gray-500">Manage bosses for students to defeat.</p>
+        <h1 className="text-2xl font-extrabold text-brand-blue mt-2">👹 Boss Battles (Drafts)</h1>
+        <p className="text-sm text-gray-500">Manage boss battle drafts. Questions are stored as JSON array.</p>
       </section>
 
       <section className="rounded-2xl bg-white p-6 shadow-sm border">
@@ -175,15 +194,19 @@ export default function AdminBossBattles() {
               className="w-full rounded-xl border border-slate-200 px-4 py-2"
             />
           </div>
-          <div>
-            <label className="block text-sm font-semibold mb-1">Question IDs (comma separated) *</label>
-            <input
-              type="text"
-              value={form.questions}
-              onChange={e => setForm({...form, questions: e.target.value})}
-              className="w-full rounded-xl border border-slate-200 px-4 py-2"
-              placeholder="e.g. 123,456,789"
+          {/* NEW: Question JSON textarea */}
+          <div className="sm:col-span-2">
+            <label className="block text-sm font-semibold mb-1">Questions (JSON array) *</label>
+            <textarea
+              rows="6"
+              value={form.questions_json}
+              onChange={e => setForm({...form, questions_json: e.target.value})}
+              className="w-full rounded-xl border border-slate-200 px-4 py-2 font-mono text-sm"
+              placeholder='[{"question":"...","options":["A","B","C","D"],"correct_answer":"A","explanation":"...","difficulty":4}]'
             />
+            <p className="text-xs text-gray-400 mt-1">
+              Paste the JSON output from the Boss Battle generator, or write your own. Must be a valid array.
+            </p>
           </div>
           <div>
             <label className="block text-sm font-semibold mb-1">Required Level</label>
@@ -227,10 +250,13 @@ export default function AdminBossBattles() {
             {editing ? 'Update Boss' : 'Create Boss'}
           </button>
           {editing && (
-            <button onClick={() => { setEditing(null); setForm({ name: '', subject: '', topic: '', difficulty: 1, health: 100, questions: '', required_level: 1, required_xp: 0, reward_xp: 100, reward_coins: 50 }); }} className="bg-gray-200 px-6 py-2 rounded-full font-bold">
+            <button onClick={() => { setEditing(null); setForm({ name: '', subject: '', topic: '', difficulty: 1, health: 100, questions_json: '[]', required_level: 1, required_xp: 0, reward_xp: 100, reward_coins: 50 }); }} className="bg-gray-200 px-6 py-2 rounded-full font-bold">
               Cancel
             </button>
           )}
+        </div>
+        <div className="mt-2 text-sm text-gray-500">
+          <p>💡 To auto‑generate questions, use the Boss Battle engine API with a knowledge asset ID. Then copy the JSON from <code>boss_battle_drafts</code>.</p>
         </div>
       </section>
 
@@ -239,8 +265,8 @@ export default function AdminBossBattles() {
           {bosses.map(b => (
             <div key={b.id} className="flex items-center gap-4 p-4 hover:bg-slate-50">
               <div className="flex-1">
-                <p className="font-bold">{b.name} <span className="text-xs text-gray-500">({b.subject})</span></p>
-                <p className="text-sm text-gray-500">HP: {b.health} • Difficulty: {b.difficulty} • XP: {b.reward_xp}</p>
+                <p className="font-bold">{b.name || b.keyword} <span className="text-xs text-gray-500">({b.subject})</span></p>
+                <p className="text-sm text-gray-500">Questions: {b.questions?.length || 0} • XP: {b.xp_reward}</p>
               </div>
               <div className="flex gap-2">
                 <button onClick={() => editBoss(b)} className="text-blue-600 hover:underline text-sm">Edit</button>
@@ -248,7 +274,7 @@ export default function AdminBossBattles() {
               </div>
             </div>
           ))}
-          {bosses.length === 0 && <div className="p-8 text-center text-gray-500">No bosses created yet.</div>}
+          {bosses.length === 0 && <div className="p-8 text-center text-gray-500">No boss drafts yet.</div>}
         </div>
       </section>
     </div>

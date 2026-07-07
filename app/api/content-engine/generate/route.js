@@ -55,7 +55,8 @@ Write like a brilliant teacher – conversational, encouraging, practical. Use c
 
 Requirements:
 - Length: at least 1200 words (aim for 1500-2000 if possible).
-- Include: H1, H2, H3 headings, bullet lists, a table (if useful), FAQ section (6-10 Q&As), meta description (~155 chars), SEO title (<60 chars), URL slug.
+- Include: H1, H2, H3 headings, bullet lists, a table (if useful), FAQ section (6-10 Q&As), meta description (~155 chars), URL slug.
+- SEO Title: 55-70 characters (up to 90 if needed for clarity). Put the primary keyword near the start, include the exam name (JAMB, WAEC, NECO) or university where relevant, include the year 2026 or 2026/2027 when appropriate, and target real search intent (not just "Subject + Topic"). Avoid vague 1-2 word titles.
 - Structure:
   1. Introduction (hook the reader – question, myth, surprising fact)
   2. Explain the topic (simple, step‑by‑step)
@@ -90,7 +91,7 @@ Return ONLY this JSON object – no markdown fences, no extra text. The "content
   "facts": ["fact1", ...],
   "common_mistakes": ["mistake1", ...],
   "difficulty": 1-5,
-  "title": "SEO title <60 chars",
+  "title": "SEO-optimized title, 55-70 chars (up to 90 if needed), keyword-first, includes exam/university name and year where relevant, targets real search intent — not vague",
   "slug": "url-friendly-slug",
   "meta_description": "~155 chars",
   "tags": ["tag1", ...],
