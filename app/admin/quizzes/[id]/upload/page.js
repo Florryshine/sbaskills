@@ -91,7 +91,7 @@ export default function UploadQuestions() {
           {uploading ? 'Uploading...' : 'Upload Questions'}
         </button>
         <button
-          onClick={() => router.push(`/admin/quizzes/${quizId}`)}
+          onClick={() => router.push(`/admin/quizzes`)}
           className="bg-gray-200 text-gray-700 px-6 py-2 rounded hover:bg-gray-300"
         >
           Cancel
