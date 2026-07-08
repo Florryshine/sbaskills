@@ -2,6 +2,7 @@
 
 import { useState, useEffect } from 'react';
 import { createBrowserClient } from '@/lib/supabase';
+import { syncQuizDraftToPastQuestions } from '@/lib/syncQuizToPastQuestions';
 
 export default function QuizDraftsPage() {
   const [drafts, setDrafts] = useState([]);
@@ -39,8 +40,23 @@ export default function QuizDraftsPage() {
       .from('quiz_drafts')
       .update({ status })
       .eq('id', id);
-    if (error) alert(error.message);
-    else loadDrafts();
+    if (error) {
+      alert(error.message);
+      return;
+    }
+
+    // If publishing, sync questions to past_questions (replace existing)
+    if (status === 'published') {
+      try {
+        await syncQuizDraftToPastQuestions(supabase, id);
+      } catch (syncError) {
+        console.error('Failed to sync to past_questions:', syncError);
+        alert('Quiz published, but failed to sync questions to past_questions: ' + syncError.message);
+      }
+    }
+    // Do NOT remove on unpublish → questions stay in past_questions
+
+    loadDrafts();
   };
 
   const toggleExpand = (id) => {
