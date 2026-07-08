@@ -1,18 +1,20 @@
-import { createClient } from '@/lib/supabase-server';
+import { createClient } from '@supabase/supabase-js';
 
 export const dynamic = 'force-dynamic';
 
 export default async function QuizzesPage() {
-  const supabase = createClient();
+  const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
+  const supabaseAnonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
+  const supabase = createClient(supabaseUrl, supabaseAnonKey);
 
-  // 1. Fetch manual quizzes (from 'quizzes' table)
+  // 1. Fetch manual quizzes
   const { data: manualQuizzes, error: manualError } = await supabase
     .from('quizzes')
     .select('id, title, description, points_reward, is_published')
     .eq('is_published', true)
     .order('created_at', { ascending: false });
 
-  // 2. Fetch published content‑engine quizzes (from 'quiz_drafts')
+  // 2. Fetch published content‑engine quizzes
   const { data: draftQuizzes, error: draftError } = await supabase
     .from('quiz_drafts')
     .select('id, keyword, questions, passing_score, estimated_minutes')
@@ -22,7 +24,6 @@ export default async function QuizzesPage() {
   if (manualError) console.error('Manual quiz fetch error:', manualError);
   if (draftError) console.error('Draft quiz fetch error:', draftError);
 
-  // Combine both lists
   const allQuizzes = [
     ...(manualQuizzes || []).map(q => ({
       id: q.id,
@@ -30,7 +31,7 @@ export default async function QuizzesPage() {
       description: q.description || 'Manual quiz',
       points: q.points_reward || 10,
       is_manual: true,
-      questionCount: null, // we don't have count here; can fetch separately
+      questionCount: null,
     })),
     ...(draftQuizzes || []).map(q => ({
       id: q.id,
