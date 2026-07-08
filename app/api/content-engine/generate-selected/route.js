@@ -63,21 +63,22 @@ export async function POST(request) {
 
     // 3. Engine endpoints
     const engineEndpoints = {
-      quiz: '/api/engines/quiz',
-      boss_battle: '/api/engines/boss-battle',
-      flashcard: '/api/engines/flashcards',
-      study_note: '/api/engines/study-notes',
-      social: '/api/engines/social',
-    };
+  quiz: '/api/engines/quiz',
+  boss_battle: '/api/engines/boss-battle',
+  flashcard: '/api/engines/flashcards',
+  study_note: '/api/engines/study-notes',
+  social: '/api/engines/social',
+  podcast: '/api/content-engine/podcast/generate', 
+};
 
     const baseUrl = request.nextUrl.origin;
 
     // 4. Run engines
     const results = await Promise.allSettled(
       engines.map(async (engine) => {
-        if (engine === 'blog' || engine === 'podcast') {
-          return { engine, status: 'skipped', message: `${engine} not implemented yet` };
-        }
+        if (engine === 'blog') {
+  return { engine, status: 'skipped', message: 'Blog generation not implemented yet' };
+}
 
         const endpoint = engineEndpoints[engine];
         if (!endpoint) {

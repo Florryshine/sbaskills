@@ -11,7 +11,7 @@ async function uploadSegmentAudio(supabase, episodeId, position, buffer) {
   const { error } = await supabase.storage
     .from(BUCKET)
     .upload(path, buffer, { contentType: 'audio/mpeg', upsert: true });
-  if (error) throw new Error(`Storage upload failed (segment ${position}): ${error.message}`);
+  if (error) throw new Error(`Storage upload failed: ${error.message}`);
   const { data: urlData } = supabase.storage.from(BUCKET).getPublicUrl(path);
   return urlData.publicUrl;
 }
@@ -21,7 +21,6 @@ export async function POST(request) {
   let episodeId = null;
 
   try {
-    // ✅ Accept knowledgeAssetId instead of contentDraftId
     const { knowledgeAssetId, format } = await request.json();
     if (!knowledgeAssetId) {
       return NextResponse.json({ error: 'knowledgeAssetId is required' }, { status: 400 });
@@ -38,7 +37,7 @@ export async function POST(request) {
       return NextResponse.json({ error: 'Knowledge asset not found' }, { status: 404 });
     }
 
-    // 2. Build a "post" object for the prompt builder (matches the shape it expects)
+    // 2. Build a "post" object from the asset
     const post = {
       id: asset.id,
       title: asset.keyword,
@@ -63,11 +62,11 @@ ${(asset.common_mistakes || []).map(m => `- ${m}`).join('\n')}
       topic_type: asset.topic_type || 'learning'
     };
 
-    // 3. Create the episode row (status: generating)
+    // 3. Create the episode
     const { data: episode, error: episodeError } = await supabase
       .from('podcast_episodes')
       .insert({
-        content_draft_id: null, // no associated blog draft
+        content_draft_id: null,
         title: asset.keyword,
         status: 'generating',
         host_a_voice: VOICES.host_a,
@@ -76,12 +75,12 @@ ${(asset.common_mistakes || []).map(m => `- ${m}`).join('\n')}
       .select()
       .single();
 
-    if (episodeError || !episode) {
-      throw new Error(`Could not create episode row: ${episodeError?.message}`);
+    if (episodeError) {
+      throw new Error(`Could not create episode: ${episodeError.message}`);
     }
     episodeId = episode.id;
 
-    // 4. Generate the script via the LLM fallback chain
+    // 4. Generate the script
     const prompt = buildPodcastPrompt(post, format || 'teacher_examiner');
     const { result: script, usedProvider, errors } = await generateWithFallback(
       prompt,
@@ -96,19 +95,18 @@ ${(asset.common_mistakes || []).map(m => `- ${m}`).join('\n')}
         .update({ status: 'failed', error_message: errors.join(' | ').slice(0, 2000) })
         .eq('id', episodeId);
       return NextResponse.json(
-        { error: 'Script generation failed on all providers', details: errors },
+        { error: 'Script generation failed', details: errors },
         { status: 502 }
       );
     }
 
-    // 5. Synthesize each line and upload, sequentially (keeps memory low)
+    // 5. Synthesize each line
     let totalDuration = 0;
     const segmentRows = [];
 
     for (let i = 0; i < script.length; i++) {
       const line = script[i];
       const emotion = line.emotion || 'neutral';
-
       let audioUrl = null;
       let duration = estimateDurationSeconds(line.text);
 
@@ -116,9 +114,7 @@ ${(asset.common_mistakes || []).map(m => `- ${m}`).join('\n')}
         const buffer = await synthesizeLine(line.text, line.speaker, emotion);
         audioUrl = await uploadSegmentAudio(supabase, episodeId, i, buffer);
       } catch (e) {
-        console.error(`Segment ${i} TTS/upload failed:`, e.message);
-        // Continue — a missing segment just gets skipped by the player,
-        // rather than failing the whole episode.
+        console.error(`Segment ${i} TTS failed:`, e.message);
       }
 
       totalDuration += duration;
@@ -134,10 +130,10 @@ ${(asset.common_mistakes || []).map(m => `- ${m}`).join('\n')}
         keywords: Array.isArray(line.keywords) ? line.keywords : [],
         exam_tip: line.exam_tip === true,
         difficulty: ['easy', 'medium', 'hard'].includes(line.difficulty) ? line.difficulty : null,
-        estimated_duration_seconds: duration,
       });
     }
 
+    // 6. Save segments
     const { error: segmentsError } = await supabase
       .from('podcast_segments')
       .insert(segmentRows);
@@ -153,8 +149,7 @@ ${(asset.common_mistakes || []).map(m => `- ${m}`).join('\n')}
       .update({
         status: 'ready',
         total_duration_seconds: totalDuration,
-        error_message:
-          failedSegments > 0 ? `${failedSegments} segment(s) failed TTS and were skipped` : null,
+        error_message: failedSegments > 0 ? `${failedSegments} segment(s) failed TTS` : null,
       })
       .eq('id', episodeId);
 
@@ -167,45 +162,13 @@ ${(asset.common_mistakes || []).map(m => `- ${m}`).join('\n')}
       totalDurationSeconds: totalDuration,
     });
   } catch (err) {
-    console.error('Podcast generation error:', err);
+    console.error('Podcast error:', err);
     if (episodeId) {
       await supabase
         .from('podcast_episodes')
         .update({ status: 'failed', error_message: err.message?.slice(0, 2000) })
         .eq('id', episodeId);
     }
-    return NextResponse.json({ error: err.message || 'Internal server error' }, { status: 500 });
+    return NextResponse.json({ error: err.message || 'Internal error' }, { status: 500 });
   }
-}
-
-// GET a single episode + its segments (used by the player)
-export async function GET(request) {
-  const { searchParams } = new URL(request.url);
-  const contentDraftId = searchParams.get('contentDraftId');
-  const episodeId = searchParams.get('episodeId');
-
-  if (!contentDraftId && !episodeId) {
-    return NextResponse.json({ error: 'contentDraftId or episodeId is required' }, { status: 400 });
-  }
-
-  const supabase = createAdminClient();
-
-  let episodeQuery = supabase.from('podcast_episodes').select('*').eq('status', 'ready');
-  episodeQuery = episodeId
-    ? episodeQuery.eq('id', episodeId)
-    : episodeQuery.eq('content_draft_id', contentDraftId);
-
-  const { data: episode } = await episodeQuery.order('created_at', { ascending: false }).limit(1).maybeSingle();
-
-  if (!episode) {
-    return NextResponse.json({ episode: null, segments: [] });
-  }
-
-  const { data: segments } = await supabase
-    .from('podcast_segments')
-    .select('*')
-    .eq('episode_id', episode.id)
-    .order('position', { ascending: true });
-
-  return NextResponse.json({ episode, segments: segments || [] });
 }
