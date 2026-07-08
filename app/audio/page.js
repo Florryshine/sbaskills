@@ -7,6 +7,7 @@ import Footer from '@/components/Footer';
 import MarkDoneButton from '@/components/MarkDoneButton';
 import Link from 'next/link';
 
+export const dynamic = 'force-dynamic';
 export default function AudioPage() {
   const [audios, setAudios] = useState([]);
   const [podcasts, setPodcasts] = useState([]);
