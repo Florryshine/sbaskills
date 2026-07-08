@@ -22,6 +22,7 @@ const navItems = [
   { href: '/admin/quiz-drafts', label: 'Quiz Drafts', icon: '❓' },
   { href: '/admin/flashcard-drafts', label: 'Flashcard Drafts', icon: '🃏' },
   { href: '/admin/study-note-drafts', label: 'Study Notes', icon: '📝' },
+  { href: '/admin/podcasts', label: 'Podcasts', icon: '🎙️' },
   { href: '/admin/social-post-drafts', label: 'Social Posts', icon: '📱' },
   { href: '/admin/generation-jobs', label: 'Generation Jobs', icon: '⚡' },
   { href: '/admin/past-questions/upload', label: 'Upload Past Qs', icon: '📤' },
