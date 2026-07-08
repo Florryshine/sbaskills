@@ -1,93 +1,243 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useEffect, useState } from 'react';
 import { createBrowserClient } from '@/lib/supabase';
+import { useRouter } from 'next/navigation';
 import Link from 'next/link';
 
-export default function QuizzesPage() {
+export default function AdminQuizzesPage() {
   const [quizzes, setQuizzes] = useState([]);
+  const [draftQuizzes, setDraftQuizzes] = useState([]); // from quiz_drafts (published)
   const [loading, setLoading] = useState(true);
+  const router = useRouter();
   const supabase = createBrowserClient();
 
   useEffect(() => {
-    loadQuizzes();
-  }, []);
+    async function loadData() {
+      const { data: { user } } = await supabase.auth.getUser();
+      if (!user) { router.push('/admin/login'); return; }
 
-  const loadQuizzes = async () => {
-    setLoading(true);
-    const { data, error } = await supabase
-      .from('quiz_drafts')
-      .select('*')
-      .eq('status', 'published')
-      .order('created_at', { ascending: false });
-    if (error) {
-      console.error(error);
-    } else {
-      setQuizzes(data || []);
+      const { data: profile } = await supabase
+        .from('profiles')
+        .select('role')
+        .eq('id', user.id)
+        .single();
+
+      if (profile?.role !== 'admin') { router.push('/login'); return; }
+
+      // 1. Load original quizzes from 'quizzes' table
+      const { data: quizzesData } = await supabase
+        .from('quizzes')
+        .select(`
+          *,
+          profiles: tutor_id (full_name, email),
+          quiz_questions (count)
+        `)
+        .order('created_at', { ascending: false });
+
+      setQuizzes(quizzesData || []);
+
+      // 2. Load published quiz_drafts
+      const { data: draftsData } = await supabase
+        .from('quiz_drafts')
+        .select('*')
+        .eq('status', 'published')
+        .order('created_at', { ascending: false });
+
+      setDraftQuizzes(draftsData || []);
+      setLoading(false);
     }
-    setLoading(false);
+
+    loadData();
+  }, [router]);
+
+  const togglePublish = async (id, currentStatus) => {
+    const { error } = await supabase
+      .from('quizzes')
+      .update({ is_published: !currentStatus })
+      .eq('id', id);
+
+    if (error) {
+      alert('Error: ' + error.message);
+    } else {
+      setQuizzes(quizzes.map(q => q.id === id ? { ...q, is_published: !currentStatus } : q));
+    }
   };
 
   const deleteQuiz = async (id) => {
-    if (!confirm('Delete this quiz?')) return;
-    const { error } = await supabase.from('quiz_drafts').delete().eq('id', id);
-    if (error) alert(error.message);
-    else loadQuizzes();
+    if (!confirm('Delete this quiz and all its questions?')) return;
+    const { error } = await supabase
+      .from('quizzes')
+      .delete()
+      .eq('id', id);
+
+    if (error) {
+      alert('Error: ' + error.message);
+    } else {
+      setQuizzes(quizzes.filter(q => q.id !== id));
+    }
   };
 
-  const unpublishQuiz = async (id) => {
-    if (!confirm('Unpublish this quiz?')) return;
+  const unpublishDraft = async (id) => {
+    if (!confirm('Unpublish this draft quiz?')) return;
     const { error } = await supabase
       .from('quiz_drafts')
       .update({ status: 'draft' })
       .eq('id', id);
     if (error) alert(error.message);
-    else loadQuizzes();
+    else {
+      setDraftQuizzes(draftQuizzes.filter(q => q.id !== id));
+    }
   };
 
+  const deleteDraft = async (id) => {
+    if (!confirm('Delete this draft quiz?')) return;
+    const { error } = await supabase
+      .from('quiz_drafts')
+      .delete()
+      .eq('id', id);
+    if (error) alert(error.message);
+    else {
+      setDraftQuizzes(draftQuizzes.filter(q => q.id !== id));
+    }
+  };
+
+  if (loading) return <div className="text-center py-20">Loading quizzes...</div>;
+
   return (
-    <div className="p-6">
-      <h1 className="text-2xl font-bold text-brand-blue mb-6">📝 Published Quizzes</h1>
-      {loading ? (
-        <div className="text-center py-8">Loading...</div>
-      ) : quizzes.length === 0 ? (
-        <div className="text-center py-8 text-gray-500">No published quizzes found.</div>
-      ) : (
-        <div className="grid gap-4">
-          {quizzes.map((quiz) => (
-            <div key={quiz.id} className="bg-white rounded-2xl shadow-sm border p-4">
-              <div className="flex flex-col md:flex-row md:items-center justify-between gap-3">
-                <div>
-                  <h3 className="font-bold">{quiz.keyword}</h3>
-                  <p className="text-sm text-gray-500">
-                    Questions: {quiz.questions?.length || 0} • Published: {new Date(quiz.created_at).toLocaleDateString()}
-                  </p>
-                </div>
-                <div className="flex gap-2">
-                  <Link
-                    href={`/admin/quizzes/${quiz.id}`}
-                    className="text-blue-600 hover:underline text-sm"
-                  >
-                    View
-                  </Link>
-                  <button
-                    onClick={() => unpublishQuiz(quiz.id)}
-                    className="text-yellow-600 hover:underline text-sm"
-                  >
-                    Unpublish
-                  </button>
-                  <button
-                    onClick={() => deleteQuiz(quiz.id)}
-                    className="text-red-600 hover:underline text-sm"
-                  >
-                    Delete
-                  </button>
-                </div>
-              </div>
-            </div>
-          ))}
+    <div className="space-y-6">
+      <div className="bg-white rounded-2xl p-6 shadow-sm border">
+        <div className="flex justify-between items-center">
+          <div>
+            <p className="text-xs font-bold uppercase tracking-widest text-brand-yellow">Manage Quizzes</p>
+            <h1 className="text-2xl font-extrabold text-brand-blue mt-1">All Quizzes</h1>
+            <p className="text-sm text-gray-500">{quizzes.length} manual quizzes + {draftQuizzes.length} published content‑engine quizzes</p>
+          </div>
+          <Link
+            href="/tutor/quizzes/new"
+            className="rounded-full bg-brand-yellow px-5 py-2.5 text-sm font-bold text-brand-dark hover:opacity-90"
+          >
+            + New Quiz
+          </Link>
         </div>
-      )}
+      </div>
+
+      {/* Manual Quizzes Section */}
+      <div className="bg-white rounded-2xl shadow-sm border overflow-hidden">
+        <div className="px-6 py-3 bg-slate-50 border-b font-semibold">📝 Manual Quizzes</div>
+        {quizzes.length === 0 ? (
+          <div className="py-8 text-center text-gray-500">No manual quizzes created yet.</div>
+        ) : (
+          <div className="overflow-x-auto">
+            <table className="min-w-full divide-y divide-slate-100 text-sm">
+              <thead className="bg-slate-50">
+                <tr>
+                  <th className="px-6 py-4 text-left font-semibold">Title</th>
+                  <th className="px-6 py-4 text-left font-semibold">Tutor</th>
+                  <th className="px-6 py-4 text-left font-semibold">Questions</th>
+                  <th className="px-6 py-4 text-left font-semibold">Points</th>
+                  <th className="px-6 py-4 text-left font-semibold">Status</th>
+                  <th className="px-6 py-4 text-left font-semibold">Actions</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-slate-100">
+                {quizzes.map((quiz) => {
+                  const questionCount = quiz.quiz_questions?.[0]?.count || 0;
+                  return (
+                    <tr key={quiz.id} className="hover:bg-slate-50">
+                      <td className="px-6 py-4 font-semibold">{quiz.title}</td>
+                      <td className="px-6 py-4">{quiz.profiles?.full_name || quiz.profiles?.email || 'Unknown'}</td>
+                      <td className="px-6 py-4">{questionCount}</td>
+                      <td className="px-6 py-4">{quiz.points_reward || 10}</td>
+                      <td className="px-6 py-4">
+                        <span className={`px-2 py-1 rounded-full text-xs font-bold ${quiz.is_published ? 'bg-green-100 text-green-700' : 'bg-gray-100 text-gray-500'}`}>
+                          {quiz.is_published ? 'Published' : 'Draft'}
+                        </span>
+                      </td>
+                      <td className="px-6 py-4 space-x-2">
+                        <Link
+                          href={`/admin/quizzes/${quiz.id}/upload`}
+                          className="text-purple-600 text-xs font-bold hover:underline"
+                        >
+                          Upload Questions
+                        </Link>
+                        <button
+                          onClick={() => togglePublish(quiz.id, quiz.is_published)}
+                          className={`text-xs font-bold ${quiz.is_published ? 'text-yellow-600' : 'text-green-600'} hover:underline`}
+                        >
+                          {quiz.is_published ? 'Unpublish' : 'Publish'}
+                        </button>
+                        <button
+                          onClick={() => deleteQuiz(quiz.id)}
+                          className="text-red-500 text-xs font-bold hover:underline"
+                        >
+                          Delete
+                        </button>
+                      </td>
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
+          </div>
+        )}
+      </div>
+
+      {/* Published Drafts (from Content Engine) Section */}
+      <div className="bg-white rounded-2xl shadow-sm border overflow-hidden">
+        <div className="px-6 py-3 bg-slate-50 border-b font-semibold">🧠 Published from Content Engine</div>
+        {draftQuizzes.length === 0 ? (
+          <div className="py-8 text-center text-gray-500">No published content‑engine quizzes yet.</div>
+        ) : (
+          <div className="overflow-x-auto">
+            <table className="min-w-full divide-y divide-slate-100 text-sm">
+              <thead className="bg-slate-50">
+                <tr>
+                  <th className="px-6 py-4 text-left font-semibold">Topic</th>
+                  <th className="px-6 py-4 text-left font-semibold">Questions</th>
+                  <th className="px-6 py-4 text-left font-semibold">Passing Score</th>
+                  <th className="px-6 py-4 text-left font-semibold">Est. Minutes</th>
+                  <th className="px-6 py-4 text-left font-semibold">Status</th>
+                  <th className="px-6 py-4 text-left font-semibold">Actions</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-slate-100">
+                {draftQuizzes.map((draft) => (
+                  <tr key={draft.id} className="hover:bg-slate-50">
+                    <td className="px-6 py-4 font-semibold">{draft.keyword}</td>
+                    <td className="px-6 py-4">{draft.questions?.length || 0}</td>
+                    <td className="px-6 py-4">{draft.passing_score || 70}%</td>
+                    <td className="px-6 py-4">{draft.estimated_minutes || 0}</td>
+                    <td className="px-6 py-4">
+                      <span className="px-2 py-1 rounded-full text-xs font-bold bg-green-100 text-green-700">Published</span>
+                    </td>
+                    <td className="px-6 py-4 space-x-2">
+                      <Link
+                        href={`/admin/quiz-drafts`}
+                        className="text-blue-600 text-xs font-bold hover:underline"
+                      >
+                        View Details
+                      </Link>
+                      <button
+                        onClick={() => unpublishDraft(draft.id)}
+                        className="text-yellow-600 text-xs font-bold hover:underline"
+                      >
+                        Unpublish
+                      </button>
+                      <button
+                        onClick={() => deleteDraft(draft.id)}
+                        className="text-red-500 text-xs font-bold hover:underline"
+                      >
+                        Delete
+                      </button>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        )}
+      </div>
     </div>
   );
 }
