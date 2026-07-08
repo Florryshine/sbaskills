@@ -37,12 +37,46 @@ export default function SocialPostDraftsPage() {
     instagram: '📸',
     x: '🐦',
     telegram: '✈️',
+    linkedin: '💼',
+  };
+
+  // ── Share handler ──────────────────────────────────────────────────
+  const handleShare = async (caption, platform) => {
+    // Add a link to your site at the end of the caption if not already present
+    const shareText = caption.includes('Shiney Brain Academy')
+      ? caption
+      : `${caption}\n\n📚 Read more at Shiney Brain Academy: ${window.location.origin}`;
+
+    if (navigator.share) {
+      try {
+        await navigator.share({
+          title: `Shiney Brain Academy - ${platform}`,
+          text: shareText,
+          url: window.location.origin,
+        });
+      } catch (err) {
+        if (err.name !== 'AbortError') {
+          console.error('Share error:', err);
+          alert('Could not share. Copy the caption manually.');
+        }
+      }
+    } else {
+      // Fallback: copy to clipboard
+      try {
+        await navigator.clipboard.writeText(shareText);
+        alert('✅ Caption copied to clipboard! You can now paste it anywhere.');
+      } catch (err) {
+        alert('Unable to copy. Please select and copy manually.');
+      }
+    }
   };
 
   return (
     <div className="p-6">
       <h1 className="text-2xl font-bold text-brand-blue mb-6">📱 Social Post Drafts</h1>
-      {loading ? <div className="text-center py-8">Loading...</div> : drafts.length === 0 ? (
+      {loading ? (
+        <div className="text-center py-8">Loading...</div>
+      ) : drafts.length === 0 ? (
         <div className="text-center py-8 text-gray-500">No social post drafts found.</div>
       ) : (
         <div className="grid gap-4">
@@ -56,7 +90,18 @@ export default function SocialPostDraftsPage() {
                   </p>
                 </div>
                 <div className="flex gap-2 flex-wrap">
-                  <button onClick={() => { navigator.clipboard.writeText(draft.caption); alert('Copied!'); }} className="text-brand-blue px-4 py-2 rounded-xl text-sm font-bold hover:bg-blue-50">Copy Caption</button>
+                  <button
+                    onClick={() => { navigator.clipboard.writeText(draft.caption); alert('Copied!'); }}
+                    className="text-brand-blue px-4 py-2 rounded-xl text-sm font-bold hover:bg-blue-50"
+                  >
+                    Copy Caption
+                  </button>
+                  <button
+                    onClick={() => handleShare(draft.caption, draft.platform)}
+                    className="bg-blue-600 text-white px-4 py-2 rounded-xl text-sm font-bold hover:bg-blue-700"
+                  >
+                    Share
+                  </button>
                   {draft.status === 'draft' ? (
                     <button onClick={() => updateStatus(draft.id, 'published')} className="bg-green-100 text-green-700 px-4 py-2 rounded-xl text-sm font-bold hover:bg-green-200">Publish</button>
                   ) : (

@@ -78,7 +78,7 @@ async function tryHuggingFace(prompt) {
   return data?.[0]?.generated_text?.trim() || null;
 }
 
-// ── Social Posts prompt ─────────────────────────────────────────────
+// ── Social Posts prompt (includes LinkedIn) ──────────────────────────
 function buildSocialPrompt(asset) {
   const keyword = asset.keyword || 'this topic';
   const summary = asset.summary || 'No summary available.';
@@ -97,11 +97,12 @@ Examples: ${examples}
 
 Create posts for the following platforms:
 
-1. **Facebook** (longer, educational, community‑oriented)
-2. **WhatsApp** (short, conversational, for groups)
-3. **Instagram** (short, visual, with emojis and hashtags)
-4. **X (Twitter)** (very short, under 280 chars, attention‑grabbing)
-5. **Telegram** (educational, engaging, with emojis)
+1. **Facebook** (longer, educational, community‑oriented, friendly tone)
+2. **WhatsApp** (short, conversational, for groups, emojis)
+3. **Instagram** (short, visual, with emojis and hashtags, inspiring)
+4. **X (Twitter)** (very short, under 280 chars, attention‑grabbing, hashtags)
+5. **Telegram** (educational, engaging, with emojis, clear call‑to‑action)
+6. **LinkedIn** (professional, educational, formal tone, suitable for educators and students, with a clear value proposition)
 
 Each post should:
 - Be engaging and encourage clicks/engagement.
@@ -109,8 +110,8 @@ Each post should:
 - End with a call‑to‑action (e.g., "📚 Read the full article at Shiney Brain Academy" or "🧠 Test yourself with our quiz!").
 - Mention Shiney Brain Academy naturally.
 
-Return ONLY a JSON object with a "posts" array containing 5 objects, each with:
-- "platform": one of ["facebook", "whatsapp", "instagram", "x", "telegram"]
+Return ONLY a JSON object with a "posts" array containing 6 objects, each with:
+- "platform": one of ["facebook", "whatsapp", "instagram", "x", "telegram", "linkedin"]
 - "caption": the post text
 
 No markdown, no extra text.`;
@@ -251,7 +252,7 @@ export async function POST(request) {
     }
 
     // ── Insert each post as a separate row ─────────────────────────
-    const posts = result.posts.slice(0, 5);
+    const posts = result.posts.slice(0, 6);
     const inserted = [];
 
     for (const post of posts) {
