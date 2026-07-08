@@ -37,7 +37,7 @@ export async function POST(request) {
       return NextResponse.json({ error: 'Knowledge asset not found' }, { status: 404 });
     }
 
-    // 2. Build a "post" object from the asset
+    // 2. Build a "post" object from the asset (matches prompt expectations)
     const post = {
       id: asset.id,
       title: asset.keyword,
@@ -100,7 +100,7 @@ ${(asset.common_mistakes || []).map(m => `- ${m}`).join('\n')}
       );
     }
 
-    // 5. Synthesize each line
+    // 5. Synthesize each line with detailed error logging
     let totalDuration = 0;
     const segmentRows = [];
 
@@ -114,7 +114,13 @@ ${(asset.common_mistakes || []).map(m => `- ${m}`).join('\n')}
         const buffer = await synthesizeLine(line.text, line.speaker, emotion);
         audioUrl = await uploadSegmentAudio(supabase, episodeId, i, buffer);
       } catch (e) {
-        console.error(`Segment ${i} TTS failed:`, e.message);
+        console.error(`❌ Segment ${i} TTS/upload failed:`, {
+          message: e.message,
+          stack: e.stack,
+          speaker: line.speaker,
+          text: line.text.substring(0, 50)
+        });
+        // Continue – a missing segment just gets skipped by the player
       }
 
       totalDuration += duration;
