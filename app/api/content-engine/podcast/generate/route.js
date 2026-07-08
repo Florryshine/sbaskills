@@ -4,14 +4,6 @@ import { generateWithFallback } from '@/lib/llmFallbackChain';
 import { buildPodcastPrompt, parseScriptJson, isValidScript } from '@/lib/podcastPrompt';
 import { synthesizeLine, estimateDurationSeconds, VOICES } from '@/lib/podcastTTS';
 
-// NOTE: this route uses the service-role admin client, not the
-// cookie-based route handler client. The podcast_episodes/podcast_segments
-// RLS policies only grant public SELECT on ready rows — there is no
-// INSERT/UPDATE policy for anon/authenticated, by design (see the SQL
-// migration comment). Using the cookie-based client here would fail every
-// insert with "new row violates row-level security policy", the same
-// issue we just fixed on the other engines.
-
 const BUCKET = 'podcast-audio';
 
 async function uploadSegmentAudio(supabase, episodeId, position, buffer) {
@@ -29,28 +21,54 @@ export async function POST(request) {
   let episodeId = null;
 
   try {
-    const { contentDraftId, format } = await request.json();
-    if (!contentDraftId) {
-      return NextResponse.json({ error: 'contentDraftId is required' }, { status: 400 });
+    // ✅ Accept knowledgeAssetId instead of contentDraftId
+    const { knowledgeAssetId, format } = await request.json();
+    if (!knowledgeAssetId) {
+      return NextResponse.json({ error: 'knowledgeAssetId is required' }, { status: 400 });
     }
 
-    // 1. Fetch the source post
-    const { data: post, error: postError } = await supabase
-      .from('content_drafts')
-      .select('id, title, content, topic_type')
-      .eq('id', contentDraftId)
+    // 1. Fetch the knowledge asset
+    const { data: asset, error: assetError } = await supabase
+      .from('knowledge_assets')
+      .select('*')
+      .eq('id', knowledgeAssetId)
       .single();
 
-    if (postError || !post) {
-      return NextResponse.json({ error: 'Source post not found' }, { status: 404 });
+    if (assetError || !asset) {
+      return NextResponse.json({ error: 'Knowledge asset not found' }, { status: 404 });
     }
 
-    // 2. Create the episode row (status: generating)
+    // 2. Build a "post" object for the prompt builder (matches the shape it expects)
+    const post = {
+      id: asset.id,
+      title: asset.keyword,
+      content: `
+Summary: ${asset.summary || ''}
+
+Key Concepts:
+${(asset.key_concepts || []).map(k => `- ${k}`).join('\n')}
+
+Definitions:
+${(asset.definitions || []).map(d => `- ${d.term}: ${d.definition}`).join('\n')}
+
+Examples:
+${(asset.examples || []).map(e => `- ${e}`).join('\n')}
+
+Facts:
+${(asset.facts || []).map(f => `- ${f}`).join('\n')}
+
+Common Mistakes:
+${(asset.common_mistakes || []).map(m => `- ${m}`).join('\n')}
+      `.trim(),
+      topic_type: asset.topic_type || 'learning'
+    };
+
+    // 3. Create the episode row (status: generating)
     const { data: episode, error: episodeError } = await supabase
       .from('podcast_episodes')
       .insert({
-        content_draft_id: post.id,
-        title: post.title,
+        content_draft_id: null, // no associated blog draft
+        title: asset.keyword,
         status: 'generating',
         host_a_voice: VOICES.host_a,
         host_b_voice: VOICES.host_b,
@@ -63,7 +81,7 @@ export async function POST(request) {
     }
     episodeId = episode.id;
 
-    // 3. Generate the script via the LLM fallback chain
+    // 4. Generate the script via the LLM fallback chain
     const prompt = buildPodcastPrompt(post, format || 'teacher_examiner');
     const { result: script, usedProvider, errors } = await generateWithFallback(
       prompt,
@@ -83,9 +101,7 @@ export async function POST(request) {
       );
     }
 
-    // 4. Synthesize each line and upload, sequentially (keeps memory low,
-    //    and Edge TTS has no benefit from parallelizing since it's one
-    //    websocket connection per call anyway).
+    // 5. Synthesize each line and upload, sequentially (keeps memory low)
     let totalDuration = 0;
     const segmentRows = [];
 
@@ -114,7 +130,6 @@ export async function POST(request) {
         emotion_tag: emotion,
         audio_url: audioUrl,
         duration_seconds: duration,
-        // ── metadata (additive; defaults keep this safe if a provider omits them) ──
         topic: typeof line.topic === 'string' ? line.topic : null,
         keywords: Array.isArray(line.keywords) ? line.keywords : [],
         exam_tip: line.exam_tip === true,
@@ -173,10 +188,6 @@ export async function GET(request) {
     return NextResponse.json({ error: 'contentDraftId or episodeId is required' }, { status: 400 });
   }
 
-  // Public read policy exists for status='ready' rows, so either client
-  // works here — using the admin client for consistency with the POST
-  // handler above (avoids needing both supabase-server and supabase-admin
-  // imports in this file).
   const supabase = createAdminClient();
 
   let episodeQuery = supabase.from('podcast_episodes').select('*').eq('status', 'ready');
