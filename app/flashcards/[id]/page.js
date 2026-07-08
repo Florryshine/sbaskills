@@ -65,23 +65,59 @@ export default function FlashcardViewer() {
       </p>
 
       <div
-        className="relative w-full aspect-[4/3] cursor-pointer perspective-1000"
+        className="relative w-full aspect-[4/3] cursor-pointer"
         onClick={handleFlip}
+        style={{ perspective: '1000px' }}
       >
         <div
-          className={`w-full h-full transition-transform duration-500 transform-style-3d ${
-            isFlipped ? 'rotate-y-180' : ''
-          }`}
+          style={{
+            position: 'relative',
+            width: '100%',
+            height: '100%',
+            transformStyle: 'preserve-3d',
+            transform: isFlipped ? 'rotateY(180deg)' : 'rotateY(0deg)',
+            transition: 'transform 0.6s ease',
+          }}
         >
           {/* Front */}
           <div
-            className="absolute inset-0 backface-hidden bg-white border-2 border-slate-200 rounded-2xl p-8 flex items-center justify-center text-center text-xl font-semibold shadow-lg"
+            style={{
+              position: 'absolute',
+              inset: 0,
+              backfaceVisibility: 'hidden',
+              backgroundColor: 'white',
+              border: '2px solid #e2e8f0',
+              borderRadius: '1rem',
+              padding: '2rem',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              textAlign: 'center',
+              fontSize: '1.25rem',
+              fontWeight: 600,
+              boxShadow: '0 4px 6px rgba(0,0,0,0.1)',
+            }}
           >
             {currentCard.front}
           </div>
           {/* Back */}
           <div
-            className="absolute inset-0 backface-hidden bg-brand-blue text-white rounded-2xl p-8 flex items-center justify-center text-center text-lg rotate-y-180 shadow-lg"
+            style={{
+              position: 'absolute',
+              inset: 0,
+              backfaceVisibility: 'hidden',
+              backgroundColor: '#1a3a6b', // brand-blue
+              color: 'white',
+              borderRadius: '1rem',
+              padding: '2rem',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              textAlign: 'center',
+              fontSize: '1.125rem',
+              transform: 'rotateY(180deg)',
+              boxShadow: '0 4px 6px rgba(0,0,0,0.1)',
+            }}
           >
             <div>
               <p>{currentCard.back}</p>
