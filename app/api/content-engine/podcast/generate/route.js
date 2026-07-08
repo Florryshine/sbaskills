@@ -2,7 +2,12 @@ import { NextResponse } from 'next/server';
 import { createAdminClient } from '@/lib/supabase-admin';
 import { generateWithFallback } from '@/lib/llmFallbackChain';
 import { buildPodcastPrompt, parseScriptJson, isValidScript } from '@/lib/podcastPrompt';
-import { synthesizeLine, estimateDurationSeconds, VOICES } from '@/lib/podcastTTS';
+import {
+  synthesizeLine,
+  estimateDurationSeconds,
+  VOICES,
+  getRandomEffect
+} from '@/lib/podcastTTS';
 
 const BUCKET = 'podcast-audio';
 
@@ -100,7 +105,7 @@ ${(asset.common_mistakes || []).map(m => `- ${m}`).join('\n')}
       );
     }
 
-    // 5. Synthesize each line with detailed error logging
+    // 5. Synthesize each line and add effects
     let totalDuration = 0;
     const segmentRows = [];
 
@@ -110,6 +115,7 @@ ${(asset.common_mistakes || []).map(m => `- ${m}`).join('\n')}
       let audioUrl = null;
       let duration = estimateDurationSeconds(line.text);
 
+      // 5a. Synthesize the TTS audio
       try {
         const buffer = await synthesizeLine(line.text, line.speaker, emotion);
         audioUrl = await uploadSegmentAudio(supabase, episodeId, i, buffer);
@@ -121,6 +127,26 @@ ${(asset.common_mistakes || []).map(m => `- ${m}`).join('\n')}
           text: line.text.substring(0, 50)
         });
         // Continue – a missing segment just gets skipped by the player
+      }
+
+      // 5b. Handle effect with random selection
+      let effectUrl = null;
+      if (line.effect && line.effect !== 'none') {
+        const effectPath = getRandomEffect(line.effect);
+        if (effectPath) {
+          try {
+            const baseUrl = process.env.NEXT_PUBLIC_APP_URL || 'https://shineybrainacademy.vercel.app';
+            const effectPublicUrl = `${baseUrl}${effectPath}`;
+            const res = await fetch(effectPublicUrl);
+            if (res.ok) {
+              const effectBuffer = Buffer.from(await res.arrayBuffer());
+              // Upload effect as a separate segment (position i + 0.5)
+              effectUrl = await uploadSegmentAudio(supabase, episodeId, i + 0.5, effectBuffer);
+            }
+          } catch (e) {
+            console.error(`❌ Effect ${line.effect} failed:`, e.message);
+          }
+        }
       }
 
       totalDuration += duration;
@@ -137,6 +163,23 @@ ${(asset.common_mistakes || []).map(m => `- ${m}`).join('\n')}
         exam_tip: line.exam_tip === true,
         difficulty: ['easy', 'medium', 'hard'].includes(line.difficulty) ? line.difficulty : null,
       });
+
+      // If effect was uploaded, add a separate segment for it
+      if (effectUrl) {
+        segmentRows.push({
+          episode_id: episodeId,
+          position: i + 0.5,
+          speaker: 'effect',
+          text: `[${line.effect}]`,
+          emotion_tag: 'neutral',
+          audio_url: effectUrl,
+          duration_seconds: 1,
+          topic: 'effect',
+          keywords: [],
+          exam_tip: false,
+          difficulty: null,
+        });
+      }
     }
 
     // 6. Save segments
