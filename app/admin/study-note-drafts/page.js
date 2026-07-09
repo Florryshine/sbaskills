@@ -7,6 +7,9 @@ export default function StudyNoteDraftsPage() {
   const [drafts, setDrafts] = useState([]);
   const [loading, setLoading] = useState(true);
   const [expandedId, setExpandedId] = useState(null);
+  const [editText, setEditText] = useState('');
+  const [saving, setSaving] = useState(false);
+  const [publishingId, setPublishingId] = useState(null);
   const supabase = createBrowserClient();
 
   useEffect(() => { loadDrafts(); }, []);
@@ -27,12 +30,40 @@ export default function StudyNoteDraftsPage() {
     loadDrafts();
   };
 
-  const updateStatus = async (id, status) => {
-    await supabase.from('study_note_drafts').update({ status }).eq('id', id);
+  const toggleExpand = (draft) => {
+    if (expandedId === draft.id) {
+      setExpandedId(null);
+    } else {
+      setExpandedId(draft.id);
+      setEditText(draft.content || '');
+    }
+  };
+
+  const saveEdit = async (id) => {
+    setSaving(true);
+    const { error } = await supabase
+      .from('study_note_drafts')
+      .update({ content: editText })
+      .eq('id', id);
+    setSaving(false);
+    if (error) { alert(error.message); return; }
     loadDrafts();
   };
 
-  const toggleExpand = (id) => setExpandedId(expandedId === id ? null : id);
+  const publishToLibrary = async (id) => {
+    setPublishingId(id);
+    try {
+      const res = await fetch(`/api/study-notes/${id}/publish`, { method: 'POST' });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || 'Publish failed');
+      alert('Published! It should now appear in the Library.');
+      loadDrafts();
+    } catch (err) {
+      alert(err.message);
+    } finally {
+      setPublishingId(null);
+    }
+  };
 
   return (
     <div className="p-6">
@@ -47,24 +78,45 @@ export default function StudyNoteDraftsPage() {
                 <div>
                   <h3 className="font-bold">{draft.title || draft.keyword}</h3>
                   <p className="text-sm text-gray-500">
-                    Content: {draft.content?.length || 0} characters • Status: <span className={`font-semibold ${draft.status === 'published' ? 'text-green-600' : 'text-yellow-600'}`}>{draft.status}</span>
+                    Content: {draft.content?.length || 0} characters • Status:{' '}
+                    <span className={`font-semibold ${draft.status === 'published' ? 'text-green-600' : 'text-yellow-600'}`}>
+                      {draft.status}
+                    </span>
+                    {draft.book_id && <span className="ml-2 text-blue-600">• In Library</span>}
                   </p>
                 </div>
                 <div className="flex gap-2 flex-wrap">
-                  <button onClick={() => toggleExpand(draft.id)} className="text-brand-blue px-4 py-2 rounded-xl text-sm font-bold hover:bg-blue-50">
-                    {expandedId === draft.id ? 'Hide Content' : 'Preview Content'}
+                  <button onClick={() => toggleExpand(draft)} className="text-brand-blue px-4 py-2 rounded-xl text-sm font-bold hover:bg-blue-50">
+                    {expandedId === draft.id ? 'Close Editor' : 'Edit / Preview'}
                   </button>
-                  {draft.status === 'draft' ? (
-                    <button onClick={() => updateStatus(draft.id, 'published')} className="bg-green-100 text-green-700 px-4 py-2 rounded-xl text-sm font-bold hover:bg-green-200">Publish</button>
-                  ) : (
-                    <button onClick={() => updateStatus(draft.id, 'draft')} className="bg-yellow-100 text-yellow-700 px-4 py-2 rounded-xl text-sm font-bold hover:bg-yellow-200">Unpublish</button>
-                  )}
+                  <button
+                    onClick={() => publishToLibrary(draft.id)}
+                    disabled={publishingId === draft.id}
+                    className="bg-brand-blue text-white px-4 py-2 rounded-xl text-sm font-bold hover:opacity-90 disabled:opacity-50"
+                  >
+                    {publishingId === draft.id ? 'Publishing PDF...' : draft.book_id ? 'Re-publish PDF' : 'Publish to Library (PDF)'}
+                  </button>
                   <button onClick={() => deleteDraft(draft.id)} className="bg-red-100 text-red-600 px-4 py-2 rounded-xl text-sm font-bold hover:bg-red-200">Delete</button>
                 </div>
               </div>
+
               {expandedId === draft.id && (
-                <div className="mt-4 max-h-96 overflow-y-auto bg-slate-50 p-4 rounded-xl prose prose-sm">
-                  <div dangerouslySetInnerHTML={{ __html: draft.content?.replace(/\n/g, '<br />') || '' }} />
+                <div className="mt-4">
+                  <textarea
+                    value={editText}
+                    onChange={(e) => setEditText(e.target.value)}
+                    className="w-full h-96 font-mono text-sm border rounded-xl p-3 bg-slate-50"
+                    placeholder="Markdown content..."
+                  />
+                  <div className="mt-2 flex justify-end">
+                    <button
+                      onClick={() => saveEdit(draft.id)}
+                      disabled={saving}
+                      className="bg-green-600 text-white px-4 py-2 rounded-xl text-sm font-bold hover:bg-green-700 disabled:opacity-50"
+                    >
+                      {saving ? 'Saving...' : 'Save Changes'}
+                    </button>
+                  </div>
                 </div>
               )}
             </div>
