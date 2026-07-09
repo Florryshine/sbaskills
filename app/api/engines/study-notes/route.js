@@ -30,11 +30,81 @@ function parseJsonFromText(text) {
   const cleaned = text.replace(/```json|```/g, '').trim();
   const match = cleaned.match(/\{[\s\S]*\}/);
   if (!match) return null;
-  return JSON.parse(match[0]);
+  try {
+    return JSON.parse(match[0]);
+  } catch {
+    return null;
+  }
 }
 
 function sanitizeJsonString(str) {
-  return str.replace(/[\x00-\x08\x0B\x0C\x0E-\x1F\x7F]/g, '');
+  if (!str) return '';
+  // Remove raw control characters (except newline and tab)
+  let cleaned = str.replace(/[\x00-\x08\x0B\x0C\x0E-\x1F\x7F]/g, '');
+  // Remove Unicode control characters
+  cleaned = cleaned.replace(/[\u200B-\u200F\u2028-\u202F]/g, '');
+  // Escape raw newlines inside JSON strings (this is the key fix)
+  // We'll use a simple approach: replace raw newlines with \n
+  // but only after we've identified the JSON structure
+  return cleaned;
+}
+
+function extractTitleFromContent(content) {
+  const match = content.match(/^#{1,3}\s+(.+)/m);
+  return match ? match[1].trim() : null;
+}
+
+function buildStudyNotesPrompt(asset) {
+  const keyword = asset.keyword || 'this topic';
+  const summary = asset.summary || 'No summary available.';
+  const keyConcepts = (asset.key_concepts || []).map(k => `- ${k}`).join('\n') || '- No key concepts.';
+  const definitions = (asset.definitions || []).map(d => `- **${d.term}**: ${d.definition}`).join('\n') || '- No definitions.';
+  const examples = (asset.examples || []).map(ex => `- ${ex}`).join('\n') || '- No examples.';
+  const facts = (asset.facts || []).map(f => `- ${f}`).join('\n') || '- No facts.';
+  const commonMistakes = (asset.common_mistakes || []).map(m => `- ${m}`).join('\n') || '- No common mistakes.';
+
+  return `You are an expert study note writer for Shiney Brain Academy. Create concise, well‑structured revision notes on the topic: "${keyword}".
+
+The notes should be in **Markdown** and suitable for printing as a PDF.
+
+Sections:
+## Overview
+${summary}
+
+## Key Concepts
+${keyConcepts}
+
+## Important Definitions
+${definitions}
+
+## Examples
+${examples}
+
+## Key Facts
+${facts}
+
+## Common Mistakes to Avoid
+${commonMistakes}
+
+## Exam Tips
+- Look out for questions on [mention specific areas]
+- Practice [specific skill]
+- Use this mnemonic: [suggest one]
+
+## Quick Summary Table
+| Concept | Key Point |
+|---------|-----------|
+| ...     | ...       |
+
+## Review Questions
+- Q1: ... → A1: ...
+
+Return ONLY a JSON object:
+{
+  "title": "A suitable title",
+  "content": "Full Markdown content"
+}
+No markdown fences.`;
 }
 
 async function tryOpenRouter(prompt) {
@@ -78,74 +148,6 @@ async function tryHuggingFace(prompt) {
   return data?.[0]?.generated_text?.trim() || null;
 }
 
-// ── Study Notes prompt ──────────────────────────────────────────────
-function buildStudyNotesPrompt(asset) {
-  const keyword = asset.keyword || 'this topic';
-  const summary = asset.summary || 'No summary available.';
-  const keyConcepts = (asset.key_concepts && asset.key_concepts.length > 0)
-    ? asset.key_concepts.map(k => `- ${k}`).join('\n')
-    : '- No key concepts provided.';
-  const definitions = (asset.definitions && asset.definitions.length > 0)
-    ? asset.definitions.map(d => `- **${d.term}**: ${d.definition}`).join('\n')
-    : '- No definitions provided.';
-  const examples = (asset.examples && asset.examples.length > 0)
-    ? asset.examples.map(ex => `- ${ex}`).join('\n')
-    : '- No examples provided.';
-  const facts = (asset.facts && asset.facts.length > 0)
-    ? asset.facts.map(f => `- ${f}`).join('\n')
-    : '- No facts provided.';
-  const commonMistakes = (asset.common_mistakes && asset.common_mistakes.length > 0)
-    ? asset.common_mistakes.map(m => `- ${m}`).join('\n')
-    : '- No common mistakes provided.';
-
-  return `You are an expert study note writer for Shiney Brain Academy. Create concise, well‑structured revision notes on the topic: "${keyword}".
-
-The notes should be in **Markdown** and suitable for printing as a PDF. Use headings, bullet points, bold for key terms.
-
-Include the following sections:
-
-## Overview
-${summary}
-
-## Key Concepts
-${keyConcepts}
-
-## Important Definitions
-${definitions}
-
-## Examples
-${examples}
-
-## Key Facts
-${facts}
-
-## Common Mistakes to Avoid
-${commonMistakes}
-
-## Exam Tips
-- Look out for questions on [mention specific areas]
-- Practice [specific skill]
-- Use this mnemonic: [suggest one if relevant]
-
-## Quick Summary Table (optional)
-| Concept | Key Point |
-|---------|-----------|
-| ...     | ...       |
-
-## Review Questions (5 short questions with answers)
-- Q1: ... → A1: ...
-
-Keep the language clear and student‑friendly. Aim for about 800–1200 words total.
-
-Return ONLY a JSON object with:
-{
-  "title": "A suitable title for the notes (e.g., 'JAMB Biology: Photosynthesis Revision Notes')",
-  "content": "The full Markdown content as described"
-}
-No markdown fences around the JSON, no extra text.`;
-}
-
-// ── Main POST ──────────────────────────────────────────────────────
 export async function POST(request) {
   try {
     const { knowledgeAssetId } = await request.json();
@@ -166,21 +168,15 @@ export async function POST(request) {
     }
 
     const prompt = buildStudyNotesPrompt(asset);
-
-    // Validate prompt
-    if (!prompt || typeof prompt !== 'string' || prompt.trim().length === 0) {
-      console.error('❌ Study notes prompt is empty or invalid:', { prompt });
-      return NextResponse.json({ error: 'Failed to generate prompt from asset' }, { status: 500 });
+    if (!prompt || prompt.trim().length === 0) {
+      return NextResponse.json({ error: 'Prompt generation failed' }, { status: 500 });
     }
-
-    console.log(`📝 Study notes prompt length: ${prompt.length}`);
-    console.log(`📝 First 200 chars: ${prompt.substring(0, 200)}...`);
 
     let result = null;
     let usedProvider = '';
     const errors = [];
 
-    // ── Gemini ──────────────────────────────────────────────────────
+    // ── GEMINI FIRST (same as podcast, with delay) ────────────────────
     for (const geminiKey of GEMINI_KEYS) {
       if (result) break;
       const client = new GoogleGenerativeAI(geminiKey);
@@ -196,18 +192,23 @@ export async function POST(request) {
           const cleaned = sanitizeJsonString(text);
           const parsed = parseJsonFromText(cleaned);
           if (parsed && typeof parsed.content === 'string' && parsed.content.length > 100) {
+            if (!parsed.title) {
+              parsed.title = extractTitleFromContent(parsed.content) || `${asset.keyword} - Notes`;
+            }
             result = parsed;
             usedProvider = `Gemini (${modelName})`;
           } else {
-            errors.push(`Gemini ${modelName}: insufficient content`);
+            errors.push(`Gemini ${modelName}: invalid content`);
           }
         } catch (e) {
           errors.push(`Gemini ${modelName}: ${e.message}`);
         }
+        // Delay to avoid rate limits
+        await new Promise(resolve => setTimeout(resolve, 1500));
       }
     }
 
-    // ── Groq ────────────────────────────────────────────────────────
+    // ── GROQ FALLBACK ──────────────────────────────────────────────────
     if (!result) {
       for (const groqKey of GROQ_KEYS) {
         if (result) break;
@@ -223,13 +224,17 @@ export async function POST(request) {
           const cleaned = sanitizeJsonString(text);
           const parsed = parseJsonFromText(cleaned);
           if (parsed && typeof parsed.content === 'string' && parsed.content.length > 100) {
+            if (!parsed.title) {
+              parsed.title = extractTitleFromContent(parsed.content) || `${asset.keyword} - Notes`;
+            }
             result = parsed;
             usedProvider = `Groq (${GROQ_KEYS.indexOf(groqKey) + 1})`;
           } else {
-            errors.push('Groq: insufficient content');
+            errors.push('Groq: invalid content');
           }
         } catch (e) {
-          errors.push(`Groq: ${e.message}`);
+          const raw = e.response?.data || e.message || '';
+          errors.push(`Groq: ${e.message} (raw: ${raw.substring(0, 100)})`);
         }
       }
     }
@@ -242,10 +247,13 @@ export async function POST(request) {
           const cleaned = sanitizeJsonString(text);
           const parsed = parseJsonFromText(cleaned);
           if (parsed && typeof parsed.content === 'string' && parsed.content.length > 100) {
+            if (!parsed.title) {
+              parsed.title = extractTitleFromContent(parsed.content) || `${asset.keyword} - Notes`;
+            }
             result = parsed;
             usedProvider = 'OpenRouter';
           } else {
-            errors.push('OpenRouter: insufficient content');
+            errors.push('OpenRouter: invalid content');
           }
         }
       } catch (e) {
@@ -261,10 +269,13 @@ export async function POST(request) {
           const cleaned = sanitizeJsonString(text);
           const parsed = parseJsonFromText(cleaned);
           if (parsed && typeof parsed.content === 'string' && parsed.content.length > 100) {
+            if (!parsed.title) {
+              parsed.title = extractTitleFromContent(parsed.content) || `${asset.keyword} - Notes`;
+            }
             result = parsed;
             usedProvider = 'HuggingFace';
           } else {
-            errors.push('HuggingFace: insufficient content');
+            errors.push('HuggingFace: invalid content');
           }
         }
       } catch (e) {
@@ -279,13 +290,11 @@ export async function POST(request) {
       );
     }
 
-    // ── Insert into study_note_drafts ─────────────────────────────
     const title = result.title || `${asset.keyword} - Revision Notes`;
-    const content = result.content;
+    const content = result.content || '';
 
-    if (!content || content.trim().length === 0) {
-      console.error('❌ Study notes content is empty:', result);
-      return NextResponse.json({ error: 'Generated content is empty' }, { status: 500 });
+    if (!content || content.trim().length < 50) {
+      return NextResponse.json({ error: 'Generated content is too short' }, { status: 500 });
     }
 
     const { data: draft, error: draftError } = await supabase
@@ -303,7 +312,7 @@ export async function POST(request) {
       .single();
 
     if (draftError) {
-      console.error('❌ Study notes insert error:', draftError);
+      console.error('Insert error:', draftError);
       return NextResponse.json({ error: draftError.message }, { status: 500 });
     }
 
@@ -315,7 +324,7 @@ export async function POST(request) {
       usedProvider,
     });
   } catch (error) {
-    console.error('❌ Study notes generation error:', error);
+    console.error('Study notes error:', error);
     return NextResponse.json({ error: error.message }, { status: 500 });
   }
-}
+    }

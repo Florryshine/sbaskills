@@ -220,4 +220,4 @@ ${(asset.common_mistakes || []).map(m => `- ${m}`).join('\n')}
     }
     return NextResponse.json({ error: err.message || 'Internal error' }, { status: 500 });
   }
-}
+  }
