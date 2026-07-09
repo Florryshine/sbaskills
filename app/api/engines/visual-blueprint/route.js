@@ -47,11 +47,16 @@ Plan 4-6 images. For each one, pick ONE visual_type from this EXACT list (no oth
 - "classroom_photo" — students or teachers actively studying/writing/in a classroom
 
 CRITICAL RULES for search_query:
-1. Write a LITERAL, CONCRETE noun phrase — describe the exact visible object, never the lesson concept or teaching purpose. Never write abstract/emotional phrases like "students amazed by" or "why objects refuse to move" — a search engine cannot match feelings, only things it can see.
-2. For "educational_diagram", "process", and "comparison": the query MUST include the word "diagram", "chart", or "labeled" plus the specific named parts/stages/axes involved. Example: NOT "periodic table layout" — INSTEAD "periodic table elements symbols atomic numbers labeled diagram".
-3. For "real_world_example" and "classroom_photo": describe a photo that plausibly exists and could be taken with a camera. Example: NOT "students amazed by cell division" — INSTEAD "student looking through microscope in biology lab".
-4. Never invent a query about an abstract idea, statistic, or emotional hook — every query must be something a photographer or diagram-maker could literally have created.
-5. 3-8 words per query, no filler words like "comprehensive" or "modern" or "professional".
+1. Write it the way an ordinary person would type it into Google Images — SHORT and NATURAL, 2-5 words. This is a search engine query, not a caption or description.
+2. Name the THING itself, not a description of it. Use the common name a file/photo would actually be titled with.
+   - NOT "periodic table elements symbols atomic numbers labeled diagram" — INSTEAD "periodic table chart"
+   - NOT "electronegativity ionization energy labeled diagram" — INSTEAD "periodic trends chart"
+   - NOT "metals nonmetals metalloids labeled comparison chart" — INSTEAD "metals nonmetals periodic table"
+   - NOT "labeled eukaryotic mitosis stages diagram" — INSTEAD "mitosis stages diagram"
+3. Never stack more than ONE technical qualifier onto the core noun. Pick the single most important word (e.g. "diagram", "chart", "poster") and stop there — do not also add "labeled", "detailed", or list every sub-part.
+4. Never write abstract/emotional phrases like "students amazed by" or "why objects refuse to move" — describe a real photographable/drawable thing, not a feeling or idea.
+5. For "real_world_example" and "classroom_photo": describe a simple real photo scene. Example: "student using microscope", "chemistry lab class".
+6. No filler words: never use "comprehensive", "modern", "professional", "detailed", "high resolution".
 
 Return ONLY a JSON array, no markdown fences, no extra text:
 [
@@ -59,7 +64,7 @@ Return ONLY a JSON array, no markdown fences, no extra text:
     "section_title": "the specific sub-topic this image supports",
     "visual_type": "one of the 5 exact values above",
     "purpose": "one short sentence on why a student needs this image",
-    "search_query": "a literal, concrete, 3-8 word noun phrase"
+    "search_query": "a short, natural, 2-5 word search phrase, like you'd type into Google Images"
   }
 ]`;
 }
