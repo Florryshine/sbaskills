@@ -3,6 +3,7 @@ import { useState, useEffect } from 'react';
 import { useRouter, useParams } from 'next/navigation';
 import { supabase } from '@/lib/supabase-client';
 import Link from 'next/link';
+import ImagePicker from '@/components/ImagePicker';
 
 export default function EditBlogPost() {
   const router = useRouter();
@@ -22,6 +23,10 @@ export default function EditBlogPost() {
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [uploading, setUploading] = useState(false);
+
+  // Image picker
+  const [showImagePicker, setShowImagePicker] = useState(false);
+  const [knowledgeAssetId, setKnowledgeAssetId] = useState(null);
 
   // ── Load existing post ──
   useEffect(() => {
@@ -45,6 +50,10 @@ export default function EditBlogPost() {
               category: data.category || '',
             });
             setCoverImageUrl(data.cover_image || '');
+            // If the post has a knowledge_asset_id, store it for image picker
+            if (data.knowledge_asset_id) {
+              setKnowledgeAssetId(data.knowledge_asset_id);
+            }
           }
           setLoading(false);
         });
@@ -66,7 +75,6 @@ export default function EditBlogPost() {
 
     if (error) throw error;
 
-    // Get public URL
     const { data: urlData } = supabase.storage
       .from('blog-images')
       .getPublicUrl(filePath);
@@ -82,8 +90,6 @@ export default function EditBlogPost() {
 
     try {
       let coverUrl = coverImageUrl;
-
-      // If a new file was selected, upload it first
       if (coverFile) {
         coverUrl = await uploadCoverImage(coverFile);
       }
@@ -102,7 +108,7 @@ export default function EditBlogPost() {
           content: form.content,
           tags: form.tags || [],
           category: form.category,
-          cover_image: coverUrl, // save the URL
+          cover_image: coverUrl,
           updated_at: new Date().toISOString(),
         })
         .eq('id', id);
@@ -118,6 +124,29 @@ export default function EditBlogPost() {
       setUploading(false);
     }
   }
+
+  // Insert image into content at cursor position
+  const insertImage = (url) => {
+    const textarea = document.getElementById('content-editor');
+    if (textarea) {
+      const start = textarea.selectionStart;
+      const end = textarea.selectionEnd;
+      const before = form.content.substring(0, start);
+      const after = form.content.substring(end);
+      const newContent = before + `\n\n![Image](${url})\n\n` + after;
+      setForm({ ...form, content: newContent });
+      // Set cursor after inserted text
+      setTimeout(() => {
+        textarea.focus();
+        const newPos = start + `\n\n![Image](${url})\n\n`.length;
+        textarea.setSelectionRange(newPos, newPos);
+      }, 0);
+    } else {
+      // fallback: append
+      setForm({ ...form, content: form.content + `\n\n![Image](${url})\n` });
+    }
+    setShowImagePicker(false);
+  };
 
   if (loading) return <div className="p-6 text-center">Loading...</div>;
 
@@ -165,10 +194,26 @@ export default function EditBlogPost() {
           />
         </div>
 
-        {/* ─── Content ─── */}
+        {/* ─── Content with image insertion button ─── */}
         <div>
-          <label className="block text-sm font-medium mb-1">Content (HTML/Markdown) *</label>
+          <div className="flex justify-between items-center mb-1">
+            <label className="block text-sm font-medium">Content (HTML/Markdown) *</label>
+            <button
+              type="button"
+              onClick={() => {
+                if (!knowledgeAssetId) {
+                  alert('This post is not linked to a knowledge asset. Please link it first to use saved images.');
+                  return;
+                }
+                setShowImagePicker(true);
+              }}
+              className="bg-green-500 text-white px-3 py-1 rounded text-sm hover:bg-green-600"
+            >
+              🖼️ Add Image
+            </button>
+          </div>
           <textarea
+            id="content-editor"
             className="w-full border p-2 rounded font-mono text-sm"
             rows="12"
             value={form.content}
@@ -207,8 +252,6 @@ export default function EditBlogPost() {
         {/* ─── COVER IMAGE ─── */}
         <div className="border-t pt-4">
           <label className="block text-sm font-medium mb-2">Cover Image</label>
-
-          {/* Current cover preview */}
           {coverImageUrl && !coverFile && (
             <div className="mb-3">
               <p className="text-xs text-gray-500 mb-1">Current image:</p>
@@ -219,8 +262,6 @@ export default function EditBlogPost() {
               />
             </div>
           )}
-
-          {/* New file preview */}
           {coverFile && (
             <div className="mb-3">
               <p className="text-xs text-gray-500 mb-1">New image (to be uploaded):</p>
@@ -231,28 +272,20 @@ export default function EditBlogPost() {
               />
             </div>
           )}
-
-          {/* File input */}
           <input
             type="file"
             accept="image/*"
             onChange={(e) => {
               const file = e.target.files[0];
-              if (file) {
-                setCoverFile(file);
-                // Optionally, clear existing URL to show preview
-                // but we keep it until upload
-              }
+              if (file) setCoverFile(file);
             }}
             className="block w-full text-sm text-gray-500 file:mr-4 file:py-2 file:px-4 file:rounded file:border-0 file:text-sm file:font-semibold file:bg-blue-50 file:text-blue-700 hover:file:bg-blue-100"
           />
-
           {coverFile && (
             <button
               type="button"
               onClick={() => {
                 setCoverFile(null);
-                // Reset file input
                 document.querySelector('input[type="file"]').value = '';
               }}
               className="mt-2 text-sm text-red-500 hover:underline"
@@ -260,7 +293,6 @@ export default function EditBlogPost() {
               Remove selected file
             </button>
           )}
-
           {!coverFile && !coverImageUrl && (
             <p className="text-xs text-gray-400 mt-2">No cover image set. Upload one to display on the blog.</p>
           )}
@@ -284,6 +316,28 @@ export default function EditBlogPost() {
           </button>
         </div>
       </form>
+
+      {/* Image Picker Modal */}
+      {showImagePicker && (
+        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
+          <div className="bg-white rounded-2xl p-6 max-w-4xl w-full max-h-[80vh] overflow-y-auto">
+            <div className="flex justify-between items-center mb-4">
+              <h2 className="text-xl font-bold">📸 Saved Images</h2>
+              <button
+                onClick={() => setShowImagePicker(false)}
+                className="text-gray-500 hover:text-gray-700 text-xl"
+              >
+                ✕
+              </button>
+            </div>
+            <ImagePicker
+              knowledgeAssetId={knowledgeAssetId}
+              onSelect={insertImage}
+              onClose={() => setShowImagePicker(false)}
+            />
+          </div>
+        </div>
+      )}
     </div>
   );
 }

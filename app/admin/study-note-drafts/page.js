@@ -1,7 +1,8 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { createBrowserClient } from '@/lib/supabase';
+import ImagePicker from '@/components/ImagePicker';
 
 export default function StudyNoteDraftsPage() {
   const [drafts, setDrafts] = useState([]);
@@ -10,6 +11,12 @@ export default function StudyNoteDraftsPage() {
   const [editText, setEditText] = useState('');
   const [saving, setSaving] = useState(false);
   const [publishingId, setPublishingId] = useState(null);
+  
+  // Image picker
+  const [showImagePicker, setShowImagePicker] = useState(false);
+  const [pickerAssetId, setPickerAssetId] = useState(null);
+  const textareaRef = useRef(null);
+
   const supabase = createBrowserClient();
 
   useEffect(() => { loadDrafts(); }, []);
@@ -36,6 +43,8 @@ export default function StudyNoteDraftsPage() {
     } else {
       setExpandedId(draft.id);
       setEditText(draft.content || '');
+      // Store asset id for image picker
+      setPickerAssetId(draft.knowledge_asset_id || null);
     }
   };
 
@@ -63,6 +72,29 @@ export default function StudyNoteDraftsPage() {
     } finally {
       setPublishingId(null);
     }
+  };
+
+  // Insert image into the editText at cursor position
+  const insertImageIntoNote = (url) => {
+    const textarea = textareaRef.current;
+    if (textarea) {
+      const start = textarea.selectionStart;
+      const end = textarea.selectionEnd;
+      const before = editText.substring(0, start);
+      const after = editText.substring(end);
+      const newContent = before + `\n\n![Image](${url})\n\n` + after;
+      setEditText(newContent);
+      // Update cursor position after the inserted text
+      setTimeout(() => {
+        textarea.focus();
+        const newPos = start + `\n\n![Image](${url})\n\n`.length;
+        textarea.setSelectionRange(newPos, newPos);
+      }, 0);
+    } else {
+      // Fallback append
+      setEditText(prev => prev + `\n\n![Image](${url})\n`);
+    }
+    setShowImagePicker(false);
   };
 
   return (
@@ -102,7 +134,24 @@ export default function StudyNoteDraftsPage() {
 
               {expandedId === draft.id && (
                 <div className="mt-4">
+                  <div className="flex justify-end mb-2">
+                    <button
+                      type="button"
+                      onClick={() => {
+                        if (!draft.knowledge_asset_id) {
+                          alert('This draft is not linked to a knowledge asset. Cannot fetch saved images.');
+                          return;
+                        }
+                        setPickerAssetId(draft.knowledge_asset_id);
+                        setShowImagePicker(true);
+                      }}
+                      className="bg-green-500 text-white px-3 py-1 rounded text-sm hover:bg-green-600"
+                    >
+                      🖼️ Add Image
+                    </button>
+                  </div>
                   <textarea
+                    ref={textareaRef}
                     value={editText}
                     onChange={(e) => setEditText(e.target.value)}
                     className="w-full h-96 font-mono text-sm border rounded-xl p-3 bg-slate-50"
@@ -121,6 +170,28 @@ export default function StudyNoteDraftsPage() {
               )}
             </div>
           ))}
+        </div>
+      )}
+
+      {/* Image Picker Modal */}
+      {showImagePicker && (
+        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
+          <div className="bg-white rounded-2xl p-6 max-w-4xl w-full max-h-[80vh] overflow-y-auto">
+            <div className="flex justify-between items-center mb-4">
+              <h2 className="text-xl font-bold">📸 Saved Images</h2>
+              <button
+                onClick={() => setShowImagePicker(false)}
+                className="text-gray-500 hover:text-gray-700 text-xl"
+              >
+                ✕
+              </button>
+            </div>
+            <ImagePicker
+              knowledgeAssetId={pickerAssetId}
+              onSelect={insertImageIntoNote}
+              onClose={() => setShowImagePicker(false)}
+            />
+          </div>
         </div>
       )}
     </div>
