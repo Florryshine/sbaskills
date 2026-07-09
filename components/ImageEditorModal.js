@@ -11,6 +11,29 @@ const PRESETS = {
 
 const FONTS = ['Arial', 'Georgia', 'Verdana', 'Times New Roman', 'Trebuchet MS'];
 
+// Breaks `text` into lines that each fit within `maxWidth` px, using the
+// canvas context's currently-set font to measure. Also honors manual
+// newlines the user types (\n) as forced line breaks.
+function wrapText(ctx, text, maxWidth) {
+  const paragraphs = text.split('\n');
+  const lines = [];
+  for (const para of paragraphs) {
+    const words = para.split(' ');
+    let current = '';
+    for (const word of words) {
+      const test = current ? `${current} ${word}` : word;
+      if (ctx.measureText(test).width > maxWidth && current) {
+        lines.push(current);
+        current = word;
+      } else {
+        current = test;
+      }
+    }
+    lines.push(current);
+  }
+  return lines;
+}
+
 export default function ImageEditorModal({ image, knowledgeAssetId, onClose, onSaved }) {
   const canvasRef = useRef(null);
   const [presetName, setPresetName] = useState('Blog / Notes Cover (1200x675)');
@@ -18,7 +41,8 @@ export default function ImageEditorModal({ image, knowledgeAssetId, onClose, onS
   const [color, setColor] = useState('#FFFFFF');
   const [font, setFont] = useState('Arial');
   const [fontSize, setFontSize] = useState(48);
-  const [textPos, setTextPos] = useState({ x: 0.08, y: 0.85 }); // fractional position, draggable
+  const [textPos, setTextPos] = useState({ x: 0.08, y: 0.75 }); // fractional position, draggable (top-left of text block)
+  const [textWidthPct, setTextWidthPct] = useState(0.84); // how wide the text block is allowed to be, as % of canvas width
   const [showBrand, setShowBrand] = useState(true);
   const [saving, setSaving] = useState(false);
   const [dragging, setDragging] = useState(false);
@@ -48,14 +72,22 @@ export default function ImageEditorModal({ image, knowledgeAssetId, onClose, onS
     ctx.fillStyle = gradient;
     ctx.fillRect(0, H * 0.5, W, H * 0.5);
 
-    // User text
+    // User text — wrapped across multiple lines instead of one long line
     if (text) {
       ctx.fillStyle = color;
       ctx.font = `bold ${fontSize}px ${font}`;
       ctx.textBaseline = 'top';
       ctx.shadowColor = 'rgba(0,0,0,0.5)';
       ctx.shadowBlur = 8;
-      ctx.fillText(text, W * textPos.x, H * textPos.y);
+
+      const maxWidth = W * textWidthPct;
+      const lines = wrapText(ctx, text, maxWidth);
+      const lineHeight = fontSize * 1.25;
+
+      lines.forEach((line, i) => {
+        ctx.fillText(line, W * textPos.x, H * textPos.y + i * lineHeight);
+      });
+
       ctx.shadowBlur = 0;
     }
 
@@ -66,7 +98,7 @@ export default function ImageEditorModal({ image, knowledgeAssetId, onClose, onS
       ctx.textBaseline = 'bottom';
       ctx.fillText('Shiney Brain Academy', 20, H - 16);
     }
-  }, [preset, text, color, font, fontSize, textPos, showBrand]);
+  }, [preset, text, color, font, fontSize, textPos, textWidthPct, showBrand]);
 
   useEffect(() => {
     const img = new Image();
@@ -110,6 +142,7 @@ export default function ImageEditorModal({ image, knowledgeAssetId, onClose, onS
         url: urlData.publicUrl,
         parent_image_id: image.id,
         purpose: 'general',
+        hosted: true,
       });
       if (insertError) throw insertError;
 
@@ -140,19 +173,19 @@ export default function ImageEditorModal({ image, knowledgeAssetId, onClose, onS
           onTouchEnd={handlePointerUp}
           onTouchMove={handlePointerMove}
         />
-        <p className="text-xs text-gray-400 mt-1">Drag on the image to reposition the text.</p>
+        <p className="text-xs text-gray-400 mt-1">Drag on the image to reposition the text block. Press Enter in the text box for a manual line break.</p>
 
         <div className="grid grid-cols-2 gap-3 mt-4">
           <select value={presetName} onChange={(e) => setPresetName(e.target.value)} className="border rounded-lg p-2 col-span-2">
             {Object.keys(PRESETS).map((name) => <option key={name} value={name}>{name}</option>)}
           </select>
 
-          <input
-            type="text"
-            placeholder="Text to overlay (e.g. a hook or title)"
+          <textarea
+            placeholder="Text to overlay (e.g. a hook or title). Press Enter for a manual line break."
             value={text}
             onChange={(e) => setText(e.target.value)}
-            className="border rounded-lg p-2 col-span-2"
+            rows={2}
+            className="border rounded-lg p-2 col-span-2 resize-y"
           />
 
           <select value={font} onChange={(e) => setFont(e.target.value)} className="border rounded-lg p-2">
@@ -164,6 +197,11 @@ export default function ImageEditorModal({ image, knowledgeAssetId, onClose, onS
           <label className="col-span-2 text-sm text-gray-600">
             Font size: {fontSize}px
             <input type="range" min="20" max="90" value={fontSize} onChange={(e) => setFontSize(Number(e.target.value))} className="w-full" />
+          </label>
+
+          <label className="col-span-2 text-sm text-gray-600">
+            Text block width: {Math.round(textWidthPct * 100)}% of image
+            <input type="range" min="30" max="95" value={Math.round(textWidthPct * 100)} onChange={(e) => setTextWidthPct(Number(e.target.value) / 100)} className="w-full" />
           </label>
 
           <label className="col-span-2 flex items-center gap-2 text-sm text-gray-600">
