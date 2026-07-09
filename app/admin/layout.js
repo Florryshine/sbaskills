@@ -19,6 +19,7 @@ const navItems = [
   { href: '/admin/content-engine', label: 'Content Engine', icon: '⚡' },
   { href: '/admin/generate', label: 'Generate Content', icon: '🚀' }, // NEW
   { href: '/admin/knowledge-assets', label: 'Knowledge Assets', icon: '🧠' },
+  { href: '/admin/asset-images', label: 'Image Engine', icon: '🖼️' },
   { href: '/admin/quiz-drafts', label: 'Quiz Drafts', icon: '❓' },
   { href: '/admin/flashcard-drafts', label: 'Flashcard Drafts', icon: '🃏' },
   { href: '/admin/study-note-drafts', label: 'Study Notes', icon: '📝' },
