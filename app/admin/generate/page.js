@@ -3,9 +3,18 @@
 import { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import { createBrowserClient } from '@/lib/supabase';
-import { 
-  Loader2, CheckCircle, AlertCircle, Image as ImageIcon 
-} from 'lucide-react';
+import { Loader2, CheckCircle, AlertCircle } from 'lucide-react';
+
+// The orchestrator at /api/content-engine/generate-selected expects these
+// EXACT keys (see engineEndpoints in that route). Our checkbox ids are
+// friendlier/plural in the UI, so we translate before sending.
+const ENGINE_ID_MAP = {
+  quiz: 'quiz',
+  boss_battle: 'boss_battle',
+  flashcards: 'flashcard',
+  study_notes: 'study_note',
+  podcast: 'podcast',
+};
 
 export default function GenerateContentPage() {
   const router = useRouter();
@@ -14,24 +23,20 @@ export default function GenerateContentPage() {
   const [assets, setAssets] = useState([]);
   const [selectedAssetId, setSelectedAssetId] = useState('');
   const [selectedContent, setSelectedContent] = useState([]);
-  const [loading, setLoading] = useState(false);
   const [generating, setGenerating] = useState(false);
   const [logs, setLogs] = useState([]);
 
-  // Available content types
   const contentTypes = [
-    { id: 'blog', label: 'Blog Post', icon: '📝' },
+    { id: 'blog', label: 'Blog Post', icon: '📝', disabled: true, note: 'Uses the content queue — generate blog posts from /admin/content-engine/queue for now' },
     { id: 'podcast', label: 'Podcast Episode', icon: '🎙️' },
     { id: 'quiz', label: 'Quiz (20 MCQs)', icon: '🧠' },
     { id: 'boss_battle', label: 'Boss Battle (10 hard)', icon: '👹' },
     { id: 'flashcards', label: 'Flashcards (20-30)', icon: '🃏' },
     { id: 'study_notes', label: 'Study Notes', icon: '📖' },
-    { id: 'images', label: 'Images (10 per asset)', icon: '🖼️' }, // NEW
+    { id: 'images', label: 'Images (10 per asset)', icon: '🖼️' },
   ];
 
-  useEffect(() => {
-    loadAssets();
-  }, []);
+  useEffect(() => { loadAssets(); }, []);
 
   const loadAssets = async () => {
     const { data } = await supabase
@@ -42,54 +47,49 @@ export default function GenerateContentPage() {
     setAssets(data || []);
   };
 
-  const toggleContent = (id) => {
-    setSelectedContent(prev =>
-      prev.includes(id) ? prev.filter(item => item !== id) : [...prev, id]
-    );
+  const toggleContent = (id, disabled) => {
+    if (disabled) return;
+    setSelectedContent((prev) => (prev.includes(id) ? prev.filter((item) => item !== id) : [...prev, id]));
   };
 
   const addLog = (message, type = 'info') => {
-    setLogs(prev => [...prev, { message, type, time: new Date().toLocaleTimeString() }]);
+    setLogs((prev) => [...prev, { message, type, time: new Date().toLocaleTimeString() }]);
   };
 
   const handleGenerate = async () => {
-    if (!selectedAssetId) {
-      alert('Please select a knowledge asset first.');
-      return;
-    }
-    if (selectedContent.length === 0) {
-      alert('Please select at least one content type to generate.');
-      return;
-    }
+    if (!selectedAssetId) { alert('Please select a knowledge asset first.'); return; }
+    if (selectedContent.length === 0) { alert('Please select at least one content type to generate.'); return; }
 
     setGenerating(true);
     setLogs([]);
     addLog(`🚀 Starting generation for asset: ${selectedAssetId}`);
 
     try {
-      // 1. Generate all selected content types (except images)
-      const contentPromises = selectedContent
-        .filter(type => type !== 'images')
-        .map(async (type) => {
-          addLog(`⏳ Generating ${type}...`);
-          const res = await fetch('/api/content-engine/generate', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ 
-              knowledgeAssetId: selectedAssetId, 
-              contentType: type 
-            }),
-          });
-          const data = await res.json();
-          if (!res.ok) throw new Error(`${type} failed: ${data.error || 'Unknown error'}`);
-          addLog(`✅ ${type} generated successfully`, 'success');
-          return data;
+      // 1. Everything except images goes through the ONE orchestrator call
+      // (this is what actually creates the generation_jobs row).
+      const engines = selectedContent
+        .filter((type) => type !== 'images')
+        .map((type) => ENGINE_ID_MAP[type] || type);
+
+      if (engines.length > 0) {
+        addLog(`⏳ Generating: ${engines.join(', ')}...`);
+        const res = await fetch('/api/content-engine/generate-selected', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ knowledgeAssetId: selectedAssetId, engines }),
         });
+        const data = await res.json();
+        if (!res.ok) throw new Error(data.error || 'Generation failed');
 
-      // Wait for all content generation to finish (they run in parallel)
-      await Promise.all(contentPromises);
+        (data.results || []).forEach((r) => {
+          if (r.status === 'completed') addLog(`✅ ${r.engine} generated successfully`, 'success');
+          else if (r.status === 'skipped') addLog(`⏭️ ${r.engine} skipped: ${r.message || ''}`, 'info');
+          else addLog(`❌ ${r.engine} failed: ${r.error || 'Unknown error'}`, 'error');
+        });
+        addLog(`📋 Job ${data.jobId} — ${data.summary.completed}/${data.summary.total} completed`, 'info');
+      }
 
-      // 2. If Images is selected, generate visual blueprint and fetch images
+      // 2. Images — separate two-step flow (planning + fetching), unaffected by the bug above
       if (selectedContent.includes('images')) {
         addLog('🖼️ Generating visual blueprint...');
         const blueprintRes = await fetch('/api/engines/visual-blueprint', {
@@ -99,7 +99,7 @@ export default function GenerateContentPage() {
         });
         const blueprintData = await blueprintRes.json();
         if (!blueprintRes.ok) throw new Error(`Blueprint failed: ${blueprintData.error}`);
-        addLog(`✅ Blueprint generated (${blueprintData.count || 0} sections)`, 'success');
+        addLog(`✅ Blueprint generated (${blueprintData.plan?.length || 0} sections)`, 'success');
 
         addLog('📸 Fetching images from Pixabay/Pexels/Wikimedia...');
         const imagesRes = await fetch('/api/engines/images', {
@@ -111,17 +111,12 @@ export default function GenerateContentPage() {
         if (!imagesRes.ok) throw new Error(`Image fetch failed: ${imagesData.error}`);
         addLog(`✅ ${imagesData.savedCount || 0} images fetched (previews)`, 'success');
 
-        // 3. Redirect to Image Engine page to review & select
-        addLog(`🔗 Redirecting to Image Engine...`);
-        setTimeout(() => {
-          router.push(`/admin/asset-images?asset=${selectedAssetId}`);
-        }, 1000);
-        return; // stop here, we'll redirect
+        addLog('🔗 Redirecting to Image Engine...');
+        setTimeout(() => router.push(`/admin/asset-images?asset=${selectedAssetId}`), 1000);
+        return;
       }
 
-      // If no images selected, just show success and stay
-      addLog('🎉 All selected content generated successfully!', 'success');
-
+      addLog('🎉 Done!', 'success');
     } catch (error) {
       addLog(`❌ Error: ${error.message}`, 'error');
     } finally {
@@ -134,7 +129,6 @@ export default function GenerateContentPage() {
       <div className="max-w-4xl mx-auto">
         <h1 className="text-3xl font-bold text-gray-900 mb-6">🚀 Generate Content</h1>
 
-        {/* Step 1: Pick Asset */}
         <div className="bg-white rounded-2xl p-6 shadow-sm border border-gray-100 mb-6">
           <div className="flex items-center gap-3 mb-4">
             <span className="text-2xl">1️⃣</span>
@@ -147,19 +141,11 @@ export default function GenerateContentPage() {
           >
             <option value="">Select an asset...</option>
             {assets.map((asset) => (
-              <option key={asset.id} value={asset.id}>
-                {asset.subject ? `${asset.subject} — ` : ''}{asset.keyword}
-              </option>
+              <option key={asset.id} value={asset.id}>{asset.subject ? `${asset.subject} — ` : ''}{asset.keyword}</option>
             ))}
           </select>
-          {selectedAssetId && (
-            <div className="mt-2 text-sm text-green-600">
-              ✅ Asset loaded: {assets.find(a => a.id === selectedAssetId)?.keyword}
-            </div>
-          )}
         </div>
 
-        {/* Step 2: Select Content */}
         <div className="bg-white rounded-2xl p-6 shadow-sm border border-gray-100 mb-6">
           <div className="flex items-center gap-3 mb-4">
             <span className="text-2xl">2️⃣</span>
@@ -169,16 +155,18 @@ export default function GenerateContentPage() {
             {contentTypes.map((type) => (
               <label
                 key={type.id}
-                className={`flex items-center gap-3 p-3 rounded-xl border-2 cursor-pointer transition ${
-                  selectedContent.includes(type.id)
-                    ? 'border-brand-blue bg-blue-50'
-                    : 'border-gray-200 hover:border-gray-300'
+                title={type.note || ''}
+                className={`flex items-center gap-3 p-3 rounded-xl border-2 transition ${
+                  type.disabled ? 'opacity-50 cursor-not-allowed border-gray-200'
+                  : selectedContent.includes(type.id) ? 'border-brand-blue bg-blue-50 cursor-pointer'
+                  : 'border-gray-200 hover:border-gray-300 cursor-pointer'
                 }`}
               >
                 <input
                   type="checkbox"
                   checked={selectedContent.includes(type.id)}
-                  onChange={() => toggleContent(type.id)}
+                  onChange={() => toggleContent(type.id, type.disabled)}
+                  disabled={type.disabled}
                   className="w-4 h-4 text-brand-blue focus:ring-brand-blue"
                 />
                 <span className="text-lg">{type.icon}</span>
@@ -188,23 +176,14 @@ export default function GenerateContentPage() {
           </div>
         </div>
 
-        {/* Generate Button */}
         <button
           onClick={handleGenerate}
           disabled={generating || !selectedAssetId || selectedContent.length === 0}
           className="w-full bg-brand-blue text-white py-4 rounded-2xl font-bold text-lg hover:opacity-90 disabled:opacity-50 disabled:cursor-not-allowed transition flex items-center justify-center gap-2"
         >
-          {generating ? (
-            <>
-              <Loader2 className="w-5 h-5 animate-spin" />
-              Generating...
-            </>
-          ) : (
-            '⚡ Generate Selected'
-          )}
+          {generating ? (<><Loader2 className="w-5 h-5 animate-spin" />Generating...</>) : '⚡ Generate Selected'}
         </button>
 
-        {/* Logs */}
         {logs.length > 0 && (
           <div className="mt-6 bg-white rounded-2xl p-4 shadow-sm border border-gray-100">
             <h3 className="font-bold text-gray-700 mb-2">📋 Generation Log</h3>
