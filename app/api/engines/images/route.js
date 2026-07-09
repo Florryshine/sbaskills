@@ -3,16 +3,31 @@ import { NextResponse } from 'next/server';
 import { createAdminClient } from '@/lib/supabase-admin';
 import { searchPixabayMulti, searchPexelsMulti, searchWikimediaMulti } from '@/lib/image-search';
 
-// NOTE: this route does NOT download or upload any image bytes.
-// It only stores the external URL + metadata so you can preview candidates.
-// Nothing touches Supabase Storage until you click "Select" or "Edit" on
-// an image (see app/api/asset-images/[id]/host/route.js).
+// Which sources make sense for each visual type. Wikimedia Commons is full of
+// labeled diagrams/charts but has almost no generic stock photography.
+// Pexels/Pixabay are the opposite — great real photos, no labeled diagrams.
+// Querying the wrong source for a type is exactly what produced irrelevant
+// results (a swimmer photo for "comparison", a man-on-phone for "attention").
+const SOURCE_ROUTING = {
+  educational_diagram: ['wikimedia'],
+  process: ['wikimedia'],
+  comparison: ['wikimedia'],
+  real_world_example: ['pexels', 'pixabay'],
+  classroom_photo: ['pexels', 'pixabay'],
+};
+
+async function runSearch(source, query, count) {
+  if (source === 'wikimedia') return searchWikimediaMulti(query, count);
+  if (source === 'pexels') return searchPexelsMulti(query, count);
+  if (source === 'pixabay') return searchPixabayMulti(query, count);
+  return [];
+}
 
 async function saveCandidateRows(supabase, knowledgeAssetId, candidates, { sectionTitle = null, visualRequestId = null, purposeOverride = null } = {}) {
   const rows = candidates.map((c) => ({
     knowledge_asset_id: knowledgeAssetId,
     source: c.source,
-    url: c.url,              // external URL for now — just a preview
+    url: c.url,
     original_url: c.sourceUrl,
     photographer: c.photographer,
     license: c.license,
@@ -21,9 +36,7 @@ async function saveCandidateRows(supabase, knowledgeAssetId, candidates, { secti
     visual_request_id: visualRequestId,
     hosted: false,
   }));
-
   if (rows.length === 0) return { saved: [], failed: [] };
-
   const { data, error } = await supabase.from('asset_images').insert(rows).select();
   if (error) return { saved: [], failed: [{ error: error.message }] };
   return { saved: data, failed: [] };
@@ -59,12 +72,11 @@ export async function POST(request) {
 
     if (plan && plan.length > 0) {
       for (const item of plan) {
-        const [px, pe, wm] = await Promise.all([
-          searchPixabayMulti(item.search_query, 1),
-          searchPexelsMulti(item.search_query, 1),
-          searchWikimediaMulti(item.search_query, 1),
-        ]);
-        const candidates = [...px, ...pe, ...wm];
+        const sources = SOURCE_ROUTING[item.image_type] || ['pexels', 'pixabay'];
+        // Split ~3 desired candidates across the relevant sources only
+        const perSource = Math.max(1, Math.ceil(3 / sources.length));
+        const results = await Promise.all(sources.map((s) => runSearch(s, item.search_query, perSource)));
+        const candidates = results.flat();
 
         const { saved, failed } = await saveCandidateRows(supabase, knowledgeAssetId, candidates, {
           sectionTitle: item.section_title,
@@ -80,14 +92,14 @@ export async function POST(request) {
           .eq('id', item.id);
       }
     } else {
+      // Fallback: no plan yet — blind keyword search across all sources (old behavior)
       const query = [asset.subject, asset.keyword].filter(Boolean).join(' ');
       const [px, pe, wm] = await Promise.all([
         searchPixabayMulti(query, 3),
         searchPexelsMulti(query, 3),
         searchWikimediaMulti(query, 4),
       ]);
-      const candidates = [...px, ...pe, ...wm];
-      const { saved, failed } = await saveCandidateRows(supabase, knowledgeAssetId, candidates);
+      const { saved, failed } = await saveCandidateRows(supabase, knowledgeAssetId, [...px, ...pe, ...wm]);
       allSaved = saved;
       allFailed = failed;
     }
@@ -96,7 +108,7 @@ export async function POST(request) {
       return NextResponse.json({
         success: true,
         savedCount: 0,
-        message: 'No images found. Try "Generate Visual Blueprint" first, or check a broader subject/topic.',
+        message: 'No images found. Try "Generate Visual Blueprint" again, or check a broader subject/topic.',
       });
     }
 
