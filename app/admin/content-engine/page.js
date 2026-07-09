@@ -4,7 +4,7 @@ import { useState, useEffect } from 'react';
 import Link from 'next/link';
 import { 
   Zap, Upload, FileText, Clock, CheckCircle, 
-  ArrowRight, Layers, Plus 
+  ArrowRight, Layers, Plus, Image as ImageIcon 
 } from 'lucide-react';
 
 export default function ContentEnginePage() {
@@ -64,7 +64,7 @@ export default function ContentEnginePage() {
         ))}
       </div>
 
-      <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-8">
+      <div className="grid grid-cols-1 md:grid-cols-4 gap-4 mb-8">
         <Link href="/admin/content-engine/upload" 
           className="bg-[#1a73e8] text-white rounded-2xl p-6 hover:bg-[#1557b0] transition-colors group">
           <Upload className="w-8 h-8 mb-3 opacity-90" />
@@ -92,6 +92,17 @@ export default function ContentEnginePage() {
           <p className="text-gray-500 text-sm">Review, edit, score, and publish generated articles</p>
           <div className="flex items-center gap-1 mt-4 text-sm font-medium text-[#FFCC00]">
             Review Now <ArrowRight className="w-4 h-4 group-hover:translate-x-1 transition-transform" />
+          </div>
+        </Link>
+
+        {/* NEW: Image Engine Card */}
+        <Link href="/admin/asset-images"
+          className="bg-white rounded-2xl p-6 border border-gray-100 shadow-sm hover:border-[#1a73e8] transition-colors group">
+          <ImageIcon className="w-8 h-8 mb-3 text-[#1a73e8]" />
+          <h3 className="font-bold text-lg text-gray-900 mb-1">Image Engine</h3>
+          <p className="text-gray-500 text-sm">Generate, edit, and manage images for your assets</p>
+          <div className="flex items-center gap-1 mt-4 text-sm font-medium text-[#1a73e8]">
+            Open Image Engine <ArrowRight className="w-4 h-4 group-hover:translate-x-1 transition-transform" />
           </div>
         </Link>
       </div>
