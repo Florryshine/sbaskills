@@ -1,0 +1,23 @@
+diff a/app/api/engines/visual-blueprint/route.js b/app/api/engines/visual-blueprint/route.js	(rejected hunks)
+@@ -2,6 +2,7 @@
+ import { NextResponse } from 'next/server';
+ import { createAdminClient } from '@/lib/supabase-admin';
+ import { generateWithFallback } from '@/lib/llmFallbackChain';
++import { parseJsonFromText as robustParseJsonFromText } from '@/lib/robustJsonParse';
+ 
+ // Fixed vocabulary — the images route uses this to decide WHICH sources to
+ // even query, so the LLM must only ever return one of these.
+@@ -14,11 +15,9 @@ const VALID_TYPES = [
+ ];
+ 
+ function parseJsonFromText(text) {
+-  const cleaned = text.replace(/```json|```/g, '').trim();
+-  const match = cleaned.match(/\{[\s\S]*\}|\[[\s\S]*\]/);
+-  if (!match) return null;
++  // The blueprint response is always a top-level array of plan items.
+   try {
+-    return JSON.parse(match[0]);
++    return robustParseJsonFromText(text, 'array');
+   } catch {
+     return null;
+   }

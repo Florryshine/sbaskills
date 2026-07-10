@@ -17,7 +17,6 @@ export default function AddBook() {
   const [loading, setLoading] = useState(false);
   const [uploading, setUploading] = useState(false);
 
-  // Upload a file to Supabase Storage
   const handleUpload = async (file, folder) => {
     if (!file) return null;
     const fileExt = file.name.split('.').pop();
@@ -45,8 +44,9 @@ export default function AddBook() {
       const { error } = await supabase.from('books').insert([
         {
           ...form,
-          cover_image_url: coverUrl,
-          file_url: fileUrl,
+          cover_url: coverUrl,       // changed from cover_image_url
+          pdf_url: fileUrl,          // changed from file_url
+          is_published: true,        // auto‑publish
         },
       ]);
       if (error) throw error;
@@ -95,7 +95,6 @@ export default function AddBook() {
           }
         />
 
-        {/* Cover Image Upload */}
         <div>
           <label className="block text-sm font-medium mb-1">Book Cover</label>
           <input
@@ -106,7 +105,6 @@ export default function AddBook() {
           />
         </div>
 
-        {/* PDF / eBook Upload */}
         <div>
           <label className="block text-sm font-medium mb-1">PDF / eBook</label>
           <input

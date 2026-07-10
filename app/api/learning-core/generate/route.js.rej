@@ -1,0 +1,21 @@
+diff a/app/api/learning-core/generate/route.js b/app/api/learning-core/generate/route.js	(rejected hunks)
+@@ -2,6 +2,7 @@ import { NextResponse } from 'next/server';
+ import { createRouteHandlerClient } from '@/lib/supabase-server';
+ import { GoogleGenerativeAI } from '@google/generative-ai';
+ import Groq from 'groq-sdk';
++import { parseJsonFromText as robustParseJsonFromText } from '@/lib/robustJsonParse';
+ 
+ // ── Keys and providers ──────────────────────────────────────────────
+ const GEMINI_KEYS = [
+@@ -50,10 +51,7 @@ Return ONLY a JSON object with the following fields – no markdown, no extra te
+ 
+ // ── Helpers ──────────────────────────────────────────────────────────
+ function parseJsonFromText(text) {
+-  const cleaned = text.replace(/```json|```/g, '').trim();
+-  const match = cleaned.match(/\{[\s\S]*\}/);
+-  if (!match) return null;
+-  return JSON.parse(match[0]);
++  return robustParseJsonFromText(text, 'object');
+ }
+ 
+ function isValidKnowledge(r) {
