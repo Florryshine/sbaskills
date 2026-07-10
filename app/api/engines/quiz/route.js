@@ -2,6 +2,7 @@ import { NextResponse } from 'next/server';
 import { createAdminClient } from '@/lib/supabase-admin';
 import { GoogleGenerativeAI } from '@google/generative-ai';
 import Groq from 'groq-sdk';
+import { parseJsonFromText } from '@/lib/robustJsonParse';
 
 // ── Keys ──────────────────────────────────────────────────────────────
 const GEMINI_KEYS = [
@@ -27,17 +28,6 @@ const GEMINI_MODELS = [
 ];
 
 // ── Helpers ──────────────────────────────────────────────────────────
-function parseJsonFromText(text) {
-  const cleaned = text.replace(/```json|```/g, '').trim();
-  const match = cleaned.match(/\{[\s\S]*\}/);
-  if (!match) return null;
-  return JSON.parse(match[0]);
-}
-
-function sanitizeJsonString(str) {
-  // Remove raw control characters (except newline and tab) that break JSON.parse
-  return str.replace(/[\x00-\x08\x0B\x0C\x0E-\x1F\x7F]/g, '');
-}
 
 async function tryOpenRouter(prompt) {
   if (!OPENROUTER_API_KEY) return null;
@@ -170,8 +160,7 @@ export async function POST(request) {
             generationConfig: { maxOutputTokens: 4096, temperature: 0.7 },
           });
           const text = genResult.response.text();
-          const cleaned = sanitizeJsonString(text);
-          const parsed = parseJsonFromText(cleaned);
+          const parsed = parseJsonFromText(text);
           if (parsed && Array.isArray(parsed.questions) && parsed.questions.length >= 10) {
             result = parsed;
             usedProvider = `Gemini (${modelName})`;
@@ -197,8 +186,7 @@ export async function POST(request) {
             temperature: 0.7,
           });
           const text = groqResponse.choices[0].message.content.trim();
-          const cleaned = sanitizeJsonString(text);
-          const parsed = parseJsonFromText(cleaned);
+          const parsed = parseJsonFromText(text);
           if (parsed && Array.isArray(parsed.questions) && parsed.questions.length >= 10) {
             result = parsed;
             usedProvider = `Groq (${GROQ_KEYS.indexOf(groqKey) + 1})`;
@@ -216,8 +204,7 @@ export async function POST(request) {
       try {
         const text = await tryOpenRouter(prompt);
         if (text) {
-          const cleaned = sanitizeJsonString(text);
-          const parsed = parseJsonFromText(cleaned);
+          const parsed = parseJsonFromText(text);
           if (parsed && Array.isArray(parsed.questions) && parsed.questions.length >= 10) {
             result = parsed;
             usedProvider = 'OpenRouter';
@@ -235,8 +222,7 @@ export async function POST(request) {
       try {
         const text = await tryHuggingFace(prompt);
         if (text) {
-          const cleaned = sanitizeJsonString(text);
-          const parsed = parseJsonFromText(cleaned);
+          const parsed = parseJsonFromText(text);
           if (parsed && Array.isArray(parsed.questions) && parsed.questions.length >= 10) {
             result = parsed;
             usedProvider = 'HuggingFace';

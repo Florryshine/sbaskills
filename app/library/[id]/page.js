@@ -57,8 +57,8 @@ export default function BookPage() {
                 <span className="text-2xl font-extrabold text-brand-blue">
                   {book.price === 0 ? 'FREE' : `₦${book.price.toLocaleString()}`}
                 </span>
-                {book.pdf_url && (
-                  <a href={book.pdf_url} target="_blank" rel="noopener noreferrer"
+                {(book.file_url || book.pdf_url) && (
+                  <a href={book.file_url || book.pdf_url} target="_blank" rel="noopener noreferrer"
                     className="ml-4 inline-block bg-brand-blue text-white px-6 py-3 rounded-full font-bold hover:opacity-90 transition">
                     📥 Download PDF
                   </a>

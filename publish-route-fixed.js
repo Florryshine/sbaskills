@@ -54,7 +54,6 @@ export async function POST(request, { params }) {
           title,
           description: draft.summary || `Exam-ready study notes on ${keyword}`,
           file_url: urlData.publicUrl,
-          pdf_url: urlData.publicUrl,
           is_published: true,
         })
         .eq('id', bookId);
@@ -70,7 +69,6 @@ export async function POST(request, { params }) {
           description: draft.summary || `Exam-ready study notes on ${keyword}`,
           price: 0,
           file_url: urlData.publicUrl,
-          pdf_url: urlData.publicUrl,
           is_published: true,
         })
         .select()
