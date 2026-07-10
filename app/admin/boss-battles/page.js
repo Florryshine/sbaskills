@@ -21,6 +21,7 @@ export default function AdminBossBattles() {
     reward_coins: 50,
   });
   const [editing, setEditing] = useState(null);
+  const [publishingId, setPublishingId] = useState(null);
   const supabase = createBrowserClient();
 
   useEffect(() => {
@@ -98,6 +99,26 @@ export default function AdminBossBattles() {
     if (!confirm('Delete this boss?')) return;
     await supabase.from('boss_battle_drafts').delete().eq('id', id);
     setBosses(bosses.filter(b => b.id !== id));
+  };
+
+  const publishBoss = async (id) => {
+    if (!confirm('Publish this boss battle so students can see and play it?')) return;
+    setPublishingId(id);
+    try {
+      const res = await fetch(`/api/boss-battles/${id}/publish`, { method: 'POST' });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || 'Publish failed');
+      alert('Published! It should now appear on the student /boss page.');
+      const { data: bossData } = await supabase
+        .from('boss_battle_drafts')
+        .select('*')
+        .order('created_at', { ascending: false });
+      setBosses(bossData || []);
+    } catch (err) {
+      alert(err.message);
+    } finally {
+      setPublishingId(null);
+    }
   };
 
   const editBoss = (boss) => {
@@ -248,8 +269,16 @@ export default function AdminBossBattles() {
               <div className="flex-1">
                 <p className="font-bold">{b.name || b.keyword} <span className="text-xs text-gray-500">({b.subject})</span></p>
                 <p className="text-sm text-gray-500">Questions: {b.questions?.length || 0} • XP: {b.xp_reward}</p>
+                {b.boss_battle_id && <p className="text-xs text-green-600 font-bold mt-1">✓ Live for students</p>}
               </div>
               <div className="flex gap-2">
+                <button
+                  onClick={() => publishBoss(b.id)}
+                  disabled={publishingId === b.id}
+                  className="text-white bg-brand-blue px-3 py-1.5 rounded-lg text-sm font-bold hover:opacity-90 disabled:opacity-50"
+                >
+                  {publishingId === b.id ? 'Publishing...' : b.boss_battle_id ? 'Re-publish' : 'Publish'}
+                </button>
                 <button onClick={() => editBoss(b)} className="text-blue-600 hover:underline text-sm">Edit</button>
                 <button onClick={() => deleteBoss(b.id)} className="text-red-500 hover:underline text-sm">Delete</button>
               </div>
