@@ -14,8 +14,8 @@ export default function EditBook() {
     author: '',
     description: '',
     price: 0,
-    cover_image_url: '',
-    file_url: '',
+    cover_url: '',      // renamed
+    pdf_url: '',        // renamed
   });
   const [coverFile, setCoverFile] = useState(null);
   const [fileFile, setFileFile] = useState(null);
@@ -55,14 +55,25 @@ export default function EditBook() {
     e.preventDefault();
     setUploading(true);
     try {
-      let coverUrl = form.cover_image_url;
-      let fileUrl = form.file_url;
+      let coverUrl = form.cover_url;
+      let fileUrl = form.pdf_url;
       if (coverFile) coverUrl = await handleUpload(coverFile, 'covers');
       if (fileFile) fileUrl = await handleUpload(fileFile, 'files');
 
+      // Build update object; do NOT change is_published – keep existing value
+      const updateData = {
+        title: form.title,
+        author: form.author,
+        description: form.description,
+        price: form.price,
+        cover_url: coverUrl,
+        pdf_url: fileUrl,
+        // is_published is NOT included – it stays as it is in the DB
+      };
+
       const { error } = await supabase
         .from('books')
-        .update({ ...form, cover_image_url: coverUrl, file_url: fileUrl })
+        .update(updateData)
         .eq('id', id);
       if (error) throw error;
       router.push('/admin/library');
@@ -113,11 +124,11 @@ export default function EditBook() {
         />
 
         {/* Current Cover */}
-        {form.cover_image_url && (
+        {form.cover_url && (
           <div>
             <p className="text-sm font-medium">Current Cover</p>
             <img
-              src={form.cover_image_url}
+              src={form.cover_url}
               alt="Cover"
               className="h-24 w-auto object-cover"
             />
@@ -136,11 +147,11 @@ export default function EditBook() {
         </div>
 
         {/* Current File */}
-        {form.file_url && (
+        {form.pdf_url && (
           <div>
             <p className="text-sm font-medium">Current File</p>
             <a
-              href={form.file_url}
+              href={form.pdf_url}
               target="_blank"
               className="text-blue-600 underline text-sm"
             >

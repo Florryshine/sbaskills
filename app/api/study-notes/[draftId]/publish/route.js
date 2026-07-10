@@ -1,4 +1,3 @@
-// app/api/study-notes/[draftId]/publish/route.js
 import { NextResponse } from 'next/server';
 import { createAdminClient } from '@/lib/supabase-admin';
 import { renderToBuffer } from '@react-pdf/renderer';
@@ -11,7 +10,7 @@ export async function POST(request, { params }) {
   try {
     const supabase = createAdminClient();
 
-    // 1. Fetch the draft (this is the AI's markdown, possibly already hand-edited by you)
+    // 1. Fetch the draft
     const { data: draft, error: draftError } = await supabase
       .from('study_note_drafts')
       .select('*, knowledge_assets(keyword)')
@@ -25,12 +24,17 @@ export async function POST(request, { params }) {
     const title = draft.title || draft.knowledge_assets?.keyword || 'Study Notes';
     const keyword = draft.knowledge_assets?.keyword || '';
 
-    // 2. Render the PDF using the shared branded template
+    // 2. Render PDF (default authorType = 'team'; you can change if needed)
     const pdfBuffer = await renderToBuffer(
-      React.createElement(StudyNoteDocument, { title, keyword, markdown: draft.content })
+      React.createElement(StudyNoteDocument, { 
+        title, 
+        keyword, 
+        markdown: draft.content,
+        authorType: 'team'  // you can make this dynamic later
+      })
     );
 
-    // 3. Upload to the SAME 'books' bucket your manual library uploads already use
+    // 3. Upload to 'books' bucket
     const fileName = `study-notes-${draftId}-${Date.now()}.pdf`;
     const filePath = `files/${fileName}`;
 
@@ -44,7 +48,7 @@ export async function POST(request, { params }) {
 
     const { data: urlData } = supabase.storage.from('books').getPublicUrl(filePath);
 
-    // 4. Insert or update the library entry (avoid duplicates on re-publish)
+    // 4. Insert or update library entry – using ONLY pdf_url
     let bookId = draft.book_id || null;
 
     if (bookId) {
@@ -53,8 +57,7 @@ export async function POST(request, { params }) {
         .update({
           title,
           description: draft.summary || `Exam-ready study notes on ${keyword}`,
-          file_url: urlData.publicUrl,
-          pdf_url: urlData.publicUrl,
+          pdf_url: urlData.publicUrl,   // only this column
           is_published: true,
         })
         .eq('id', bookId);
@@ -69,8 +72,7 @@ export async function POST(request, { params }) {
           author: 'Shiney Brain Academy',
           description: draft.summary || `Exam-ready study notes on ${keyword}`,
           price: 0,
-          file_url: urlData.publicUrl,
-          pdf_url: urlData.publicUrl,
+          pdf_url: urlData.publicUrl,   // only this column
           is_published: true,
         })
         .select()
@@ -82,7 +84,7 @@ export async function POST(request, { params }) {
       bookId = newBook.id;
     }
 
-    // 5. Mark the draft as published and remember which book it maps to
+    // 5. Mark draft as published
     await supabase
       .from('study_note_drafts')
       .update({ status: 'published', book_id: bookId })
