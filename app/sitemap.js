@@ -1,7 +1,8 @@
 import { createServerClient } from '@/lib/supabase-server';
+import { BASE_URL } from '@/lib/seo';
 
 export default async function sitemap() {
-  const baseUrl = 'https://sbaskills.vercel.app';
+  const baseUrl = BASE_URL;
   const supabase = createServerClient();
 
   // Get all published blog posts

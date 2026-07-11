@@ -85,7 +85,11 @@ Write like a brilliant teacher – conversational, encouraging, practical. Use c
 
 Requirements:
 - Length: at least 1200 words (aim for 1500-2000 if possible).
-- Include: H1, H2, H3 headings, bullet lists, a table (if useful), FAQ section (6-10 Q&As), meta description (~155 chars), URL slug.
+- Heading structure is critical for SEO — this is a strict requirement, not a suggestion:
+  - Do NOT put an H1 (a line starting with a single "#") anywhere in the "content" field. The page template already renders one H1 from the "title" field above the content, so a second H1 in the body creates a duplicate-H1 error that hurts SEO. The "content" field must start directly with normal paragraph text or an H2.
+  - Use at least 5-8 H2 ("##") section headings that each target a distinct, real search phrase a student would type (e.g. "## What is Photosynthesis?", "## Photosynthesis Equation", not vague labels like "## Overview").
+  - Break at least 2-3 of those H2 sections into H3 ("###") subsections wherever the topic has natural sub-parts (definitions, stages, types, worked examples).
+  - Bullet lists, a table (if useful), FAQ section (6-10 Q&As), meta description (~155 chars), URL slug.
 - SEO Title: 55-70 characters (up to 90 if needed for clarity). Put the primary keyword near the start, include the exam name (JAMB, WAEC, NECO) or university where relevant, include the year 2026 or 2026/2027 when appropriate, and target real search intent. Avoid vague 1-2 word titles.
 - Structure:
   1. Introduction (hook the reader – question, myth, surprising fact)

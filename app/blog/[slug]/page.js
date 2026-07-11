@@ -5,12 +5,14 @@ import Footer from '@/components/Footer';
 import nextDynamic from 'next/dynamic';
 import Link from 'next/link';
 import { marked } from 'marked';
+import { BASE_URL, generateBlogPostMetadata } from '@/lib/seo';
 
 // ─── Dynamically load interactive components (client-only) ────────────
 const ShareButtons = nextDynamic(() => import('@/components/ShareButtons'), { ssr: false });
 const MarkDoneButton = nextDynamic(() => import('@/components/MarkDoneButton'), { ssr: false });
 const Comments = nextDynamic(() => import('@/components/Comments'), { ssr: false });
 const PodcastPlayer = nextDynamic(() => import('@/components/PodcastPlayer'), { ssr: false });
+const RatingWidget = nextDynamic(() => import('@/components/RatingWidget'), { ssr: false });
 
 export const dynamic = 'force-dynamic';
 
@@ -45,6 +47,27 @@ function safeJsonParse(value, fallback = []) {
     console.warn('safeJsonParse failed, using fallback:', e.message);
     return fallback;
   }
+}
+
+// ─── Per-post SEO metadata ──────────────────────────────────────────────
+// Without this, every post fell back to the generic title/description in
+// app/layout.js and Google showed the exact same title + snippet for every
+// single blog post. This gives each post its own <title>, meta description,
+// canonical URL, and OG/Twitter card image.
+export async function generateMetadata({ params }) {
+  const supabase = createServerClient();
+  const { data: post } = await supabase
+    .from('content_drafts')
+    .select('title, meta_description, url_slug, cover_image, subject, published_at, created_at, updated_at')
+    .eq('url_slug', params.slug)
+    .eq('status', 'published')
+    .maybeSingle();
+
+  if (!post) {
+    return { title: 'Post Not Found | Shiney Brain Academy' };
+  }
+
+  return generateBlogPostMetadata(post);
 }
 
 export default async function BlogPostPage({ params }) {
@@ -134,8 +157,97 @@ export default async function BlogPostPage({ params }) {
       console.warn('Markdown parsing failed, using raw content:', e);
     }
 
+    // ─── Rating aggregate (real data, for both the widget and the schema) ──
+    const { data: ratingRows } = await supabase
+      .from('blog_post_ratings')
+      .select('rating')
+      .eq('post_id', post.id);
+
+    const ratingCount = ratingRows?.length || 0;
+    const ratingAverage =
+      ratingCount > 0
+        ? Math.round((ratingRows.reduce((sum, r) => sum + r.rating, 0) / ratingCount) * 10) / 10
+        : 0;
+
+    // ─── Structured data (JSON-LD) ───────────────────────────────────────
+    // Article schema: tells Google this is an article with a real
+    // published/modified date, author, and publisher — required for most
+    // article-type rich results.
+    // FAQPage schema: turns the FAQ section you already render into an
+    // actual expandable FAQ rich result in search. We only emit this when
+    // there's real FAQ content — never fabricate.
+    // AggregateRating: now backed by the real blog_post_ratings table via
+    // the reader rating widget below. We only add this to the schema once
+    // there are at least MIN_RATINGS_FOR_SCHEMA genuine votes — a "5.0 from
+    // 1 rating" schema looks manipulated and Google can act on fake or
+    // unrepresentative ratings, so we wait for a small real sample first.
+    const MIN_RATINGS_FOR_SCHEMA = 3;
+    const postUrl = `${BASE_URL}/blog/${post.url_slug}`;
+    const articleSchema = {
+      '@context': 'https://schema.org',
+      '@type': 'Article',
+      headline: post.title,
+      description: post.meta_description || undefined,
+      image: post.cover_image ? [post.cover_image] : undefined,
+      datePublished: post.published_at || post.created_at || undefined,
+      dateModified: post.updated_at || post.published_at || post.created_at || undefined,
+      author: {
+        '@type': 'Organization',
+        name: 'Shiney Brain Academy',
+      },
+      publisher: {
+        '@type': 'Organization',
+        name: 'Shiney Brain Academy',
+        logo: {
+          '@type': 'ImageObject',
+          url: `${BASE_URL}/logo.png`,
+        },
+      },
+      mainEntityOfPage: {
+        '@type': 'WebPage',
+        '@id': postUrl,
+      },
+      ...(ratingCount >= MIN_RATINGS_FOR_SCHEMA
+        ? {
+            aggregateRating: {
+              '@type': 'AggregateRating',
+              ratingValue: ratingAverage,
+              reviewCount: ratingCount,
+              bestRating: 5,
+              worstRating: 1,
+            },
+          }
+        : {}),
+    };
+
+    const faqSchema =
+      faq.length > 0
+        ? {
+            '@context': 'https://schema.org',
+            '@type': 'FAQPage',
+            mainEntity: faq.map((item) => ({
+              '@type': 'Question',
+              name: item.question,
+              acceptedAnswer: {
+                '@type': 'Answer',
+                text: item.answer,
+              },
+            })),
+          }
+        : null;
+
     return (
       <>
+        <script
+          type="application/ld+json"
+          dangerouslySetInnerHTML={{ __html: JSON.stringify(articleSchema) }}
+        />
+        {faqSchema && (
+          <script
+            type="application/ld+json"
+            dangerouslySetInnerHTML={{ __html: JSON.stringify(faqSchema) }}
+          />
+        )}
         <Navbar />
         <main className="min-h-screen bg-gray-50">
           <article className="max-w-4xl mx-auto px-4 py-8">
@@ -197,6 +309,9 @@ export default async function BlogPostPage({ params }) {
               className="prose prose-lg max-w-none text-gray-700 leading-relaxed"
               dangerouslySetInnerHTML={{ __html: htmlContent }}
             />
+
+            {/* ─── Reader Rating ─── */}
+            <RatingWidget postId={post.id} initialAverage={ratingAverage} initialCount={ratingCount} />
 
             {/* ─── FAQ Section ─── */}
             {faq.length > 0 && (

@@ -1,0 +1,509 @@
+diff --git a/app/api/blog/rate/route.js b/app/api/blog/rate/route.js
+new file mode 100644
+index 0000000..776b4df
+--- /dev/null
++++ b/app/api/blog/rate/route.js
+@@ -0,0 +1,79 @@
++import { NextResponse } from 'next/server';
++import { createRouteHandlerClient } from '@/lib/supabase-server';
++
++// ─── Shared aggregate helper ────────────────────────────────────────────
++async function getAggregate(supabase, postId) {
++  const { data, error } = await supabase
++    .from('blog_post_ratings')
++    .select('rating')
++    .eq('post_id', postId);
++
++  if (error) throw error;
++
++  const count = data.length;
++  const average = count > 0 ? data.reduce((sum, r) => sum + r.rating, 0) / count : 0;
++
++  return {
++    count,
++    average: Math.round(average * 10) / 10, // one decimal place, e.g. 4.7
++  };
++}
++
++// GET /api/blog/rate?postId=... → { count, average }
++export async function GET(request) {
++  try {
++    const postId = new URL(request.url).searchParams.get('postId');
++    if (!postId) {
++      return NextResponse.json({ success: false, message: 'postId is required' }, { status: 400 });
++    }
++
++    const supabase = createRouteHandlerClient();
++    const aggregate = await getAggregate(supabase, postId);
++
++    return NextResponse.json({ success: true, ...aggregate });
++  } catch (error) {
++    console.error('Rating fetch error:', error);
++    return NextResponse.json({ success: false, message: error.message }, { status: 500 });
++  }
++}
++
++// POST /api/blog/rate  { postId, rating } → { count, average }
++// Anonymous submissions are allowed (rating widgets get almost no votes if
++// login is required) — repeat-vote protection for anonymous users lives in
++// the client widget (localStorage), while logged-in users are deduped at
++// the database level via the unique index on (post_id, user_id).
++export async function POST(request) {
++  try {
++    const { postId, rating } = await request.json();
++
++    if (!postId || !Number.isInteger(rating) || rating < 1 || rating > 5) {
++      return NextResponse.json(
++        { success: false, message: 'A valid postId and a rating from 1-5 are required' },
++        { status: 400 }
++      );
++    }
++
++    const supabase = createRouteHandlerClient();
++    const {
++      data: { user },
++    } = await supabase.auth.getUser();
++
++    const { error: insertError } = await supabase.from('blog_post_ratings').insert({
++      post_id: postId,
++      user_id: user?.id || null,
++      rating,
++    });
++
++    // A logged-in user re-rating the same post hits the unique index —
++    // treat that as "already rated" rather than a hard error.
++    if (insertError && insertError.code !== '23505') {
++      throw insertError;
++    }
++
++    const aggregate = await getAggregate(supabase, postId);
++    return NextResponse.json({ success: true, ...aggregate });
++  } catch (error) {
++    console.error('Rating submit error:', error);
++    return NextResponse.json({ success: false, message: error.message }, { status: 500 });
++  }
++}
+diff --git a/app/api/engines/blog/route.js b/app/api/engines/blog/route.js
+index 52a69c6..e854ffe 100644
+--- a/app/api/engines/blog/route.js
++++ b/app/api/engines/blog/route.js
+@@ -85,7 +85,11 @@ Write like a brilliant teacher – conversational, encouraging, practical. Use c
+ 
+ Requirements:
+ - Length: at least 1200 words (aim for 1500-2000 if possible).
+-- Include: H1, H2, H3 headings, bullet lists, a table (if useful), FAQ section (6-10 Q&As), meta description (~155 chars), URL slug.
++- Heading structure is critical for SEO — this is a strict requirement, not a suggestion:
++  - Do NOT put an H1 (a line starting with a single "#") anywhere in the "content" field. The page template already renders one H1 from the "title" field above the content, so a second H1 in the body creates a duplicate-H1 error that hurts SEO. The "content" field must start directly with normal paragraph text or an H2.
++  - Use at least 5-8 H2 ("##") section headings that each target a distinct, real search phrase a student would type (e.g. "## What is Photosynthesis?", "## Photosynthesis Equation", not vague labels like "## Overview").
++  - Break at least 2-3 of those H2 sections into H3 ("###") subsections wherever the topic has natural sub-parts (definitions, stages, types, worked examples).
++  - Bullet lists, a table (if useful), FAQ section (6-10 Q&As), meta description (~155 chars), URL slug.
+ - SEO Title: 55-70 characters (up to 90 if needed for clarity). Put the primary keyword near the start, include the exam name (JAMB, WAEC, NECO) or university where relevant, include the year 2026 or 2026/2027 when appropriate, and target real search intent. Avoid vague 1-2 word titles.
+ - Structure:
+   1. Introduction (hook the reader – question, myth, surprising fact)
+diff --git a/app/blog/[slug]/page.js b/app/blog/[slug]/page.js
+index 3e1b991..2c2d36d 100644
+--- a/app/blog/[slug]/page.js
++++ b/app/blog/[slug]/page.js
+@@ -5,12 +5,14 @@ import Footer from '@/components/Footer';
+ import nextDynamic from 'next/dynamic';
+ import Link from 'next/link';
+ import { marked } from 'marked';
++import { BASE_URL, generateBlogPostMetadata } from '@/lib/seo';
+ 
+ // ─── Dynamically load interactive components (client-only) ────────────
+ const ShareButtons = nextDynamic(() => import('@/components/ShareButtons'), { ssr: false });
+ const MarkDoneButton = nextDynamic(() => import('@/components/MarkDoneButton'), { ssr: false });
+ const Comments = nextDynamic(() => import('@/components/Comments'), { ssr: false });
+ const PodcastPlayer = nextDynamic(() => import('@/components/PodcastPlayer'), { ssr: false });
++const RatingWidget = nextDynamic(() => import('@/components/RatingWidget'), { ssr: false });
+ 
+ export const dynamic = 'force-dynamic';
+ 
+@@ -47,6 +49,27 @@ function safeJsonParse(value, fallback = []) {
+   }
+ }
+ 
++// ─── Per-post SEO metadata ──────────────────────────────────────────────
++// Without this, every post fell back to the generic title/description in
++// app/layout.js and Google showed the exact same title + snippet for every
++// single blog post. This gives each post its own <title>, meta description,
++// canonical URL, and OG/Twitter card image.
++export async function generateMetadata({ params }) {
++  const supabase = createServerClient();
++  const { data: post } = await supabase
++    .from('content_drafts')
++    .select('title, meta_description, url_slug, cover_image, subject, published_at, created_at, updated_at')
++    .eq('url_slug', params.slug)
++    .eq('status', 'published')
++    .maybeSingle();
++
++  if (!post) {
++    return { title: 'Post Not Found | Shiney Brain Academy' };
++  }
++
++  return generateBlogPostMetadata(post);
++}
++
+ export default async function BlogPostPage({ params }) {
+   try {
+     const supabase = createServerClient();
+@@ -134,8 +157,97 @@ export default async function BlogPostPage({ params }) {
+       console.warn('Markdown parsing failed, using raw content:', e);
+     }
+ 
++    // ─── Rating aggregate (real data, for both the widget and the schema) ──
++    const { data: ratingRows } = await supabase
++      .from('blog_post_ratings')
++      .select('rating')
++      .eq('post_id', post.id);
++
++    const ratingCount = ratingRows?.length || 0;
++    const ratingAverage =
++      ratingCount > 0
++        ? Math.round((ratingRows.reduce((sum, r) => sum + r.rating, 0) / ratingCount) * 10) / 10
++        : 0;
++
++    // ─── Structured data (JSON-LD) ───────────────────────────────────────
++    // Article schema: tells Google this is an article with a real
++    // published/modified date, author, and publisher — required for most
++    // article-type rich results.
++    // FAQPage schema: turns the FAQ section you already render into an
++    // actual expandable FAQ rich result in search. We only emit this when
++    // there's real FAQ content — never fabricate.
++    // AggregateRating: now backed by the real blog_post_ratings table via
++    // the reader rating widget below. We only add this to the schema once
++    // there are at least MIN_RATINGS_FOR_SCHEMA genuine votes — a "5.0 from
++    // 1 rating" schema looks manipulated and Google can act on fake or
++    // unrepresentative ratings, so we wait for a small real sample first.
++    const MIN_RATINGS_FOR_SCHEMA = 3;
++    const postUrl = `${BASE_URL}/blog/${post.url_slug}`;
++    const articleSchema = {
++      '@context': 'https://schema.org',
++      '@type': 'Article',
++      headline: post.title,
++      description: post.meta_description || undefined,
++      image: post.cover_image ? [post.cover_image] : undefined,
++      datePublished: post.published_at || post.created_at || undefined,
++      dateModified: post.updated_at || post.published_at || post.created_at || undefined,
++      author: {
++        '@type': 'Organization',
++        name: 'Shiney Brain Academy',
++      },
++      publisher: {
++        '@type': 'Organization',
++        name: 'Shiney Brain Academy',
++        logo: {
++          '@type': 'ImageObject',
++          url: `${BASE_URL}/logo.png`,
++        },
++      },
++      mainEntityOfPage: {
++        '@type': 'WebPage',
++        '@id': postUrl,
++      },
++      ...(ratingCount >= MIN_RATINGS_FOR_SCHEMA
++        ? {
++            aggregateRating: {
++              '@type': 'AggregateRating',
++              ratingValue: ratingAverage,
++              reviewCount: ratingCount,
++              bestRating: 5,
++              worstRating: 1,
++            },
++          }
++        : {}),
++    };
++
++    const faqSchema =
++      faq.length > 0
++        ? {
++            '@context': 'https://schema.org',
++            '@type': 'FAQPage',
++            mainEntity: faq.map((item) => ({
++              '@type': 'Question',
++              name: item.question,
++              acceptedAnswer: {
++                '@type': 'Answer',
++                text: item.answer,
++              },
++            })),
++          }
++        : null;
++
+     return (
+       <>
++        <script
++          type="application/ld+json"
++          dangerouslySetInnerHTML={{ __html: JSON.stringify(articleSchema) }}
++        />
++        {faqSchema && (
++          <script
++            type="application/ld+json"
++            dangerouslySetInnerHTML={{ __html: JSON.stringify(faqSchema) }}
++          />
++        )}
+         <Navbar />
+         <main className="min-h-screen bg-gray-50">
+           <article className="max-w-4xl mx-auto px-4 py-8">
+@@ -198,6 +310,9 @@ export default async function BlogPostPage({ params }) {
+               dangerouslySetInnerHTML={{ __html: htmlContent }}
+             />
+ 
++            {/* ─── Reader Rating ─── */}
++            <RatingWidget postId={post.id} initialAverage={ratingAverage} initialCount={ratingCount} />
++
+             {/* ─── FAQ Section ─── */}
+             {faq.length > 0 && (
+               <div className="mt-10 border-t pt-6">
+diff --git a/app/sitemap.js b/app/sitemap.js
+index 8e3edfb..9b7c873 100644
+--- a/app/sitemap.js
++++ b/app/sitemap.js
+@@ -1,7 +1,8 @@
+ import { createServerClient } from '@/lib/supabase-server';
++import { BASE_URL } from '@/lib/seo';
+ 
+ export default async function sitemap() {
+-  const baseUrl = 'https://sbaskills.vercel.app';
++  const baseUrl = BASE_URL;
+   const supabase = createServerClient();
+ 
+   // Get all published blog posts
+diff --git a/components/RatingWidget.js b/components/RatingWidget.js
+new file mode 100644
+index 0000000..009fd09
+--- /dev/null
++++ b/components/RatingWidget.js
+@@ -0,0 +1,117 @@
++'use client';
++
++import { useState, useEffect } from 'react';
++
++// Tracks "already voted" per post in this browser so anonymous readers
++// can't just refresh and vote again. Not bulletproof, but it's the same
++// tradeoff every lightweight rating widget makes, and it's enough to keep
++// the aggregate honest for genuine readers.
++function hasAlreadyRated(postId) {
++  try {
++    return localStorage.getItem(`sba-rated-${postId}`) === '1';
++  } catch {
++    return false;
++  }
++}
++
++function markAsRated(postId) {
++  try {
++    localStorage.setItem(`sba-rated-${postId}`, '1');
++  } catch {
++    // localStorage can throw in private-browsing modes — fine to ignore,
++    // worst case a user can rate more than once.
++  }
++}
++
++export default function RatingWidget({ postId, initialAverage = 0, initialCount = 0 }) {
++  const [average, setAverage] = useState(initialAverage);
++  const [count, setCount] = useState(initialCount);
++  const [userRating, setUserRating] = useState(0);
++  const [hoverRating, setHoverRating] = useState(0);
++  const [alreadyRated, setAlreadyRated] = useState(false);
++  const [submitting, setSubmitting] = useState(false);
++  const [error, setError] = useState(null);
++
++  useEffect(() => {
++    setAlreadyRated(hasAlreadyRated(postId));
++  }, [postId]);
++
++  async function submitRating(rating) {
++    if (alreadyRated || submitting) return;
++    setSubmitting(true);
++    setError(null);
++    setUserRating(rating);
++
++    try {
++      const res = await fetch('/api/blog/rate', {
++        method: 'POST',
++        headers: { 'Content-Type': 'application/json' },
++        body: JSON.stringify({ postId, rating }),
++      });
++      const data = await res.json();
++
++      if (!res.ok || !data.success) {
++        throw new Error(data.message || 'Could not submit rating');
++      }
++
++      setAverage(data.average);
++      setCount(data.count);
++      markAsRated(postId);
++      setAlreadyRated(true);
++    } catch (err) {
++      setError('Could not submit your rating. Please try again.');
++      setUserRating(0);
++    } finally {
++      setSubmitting(false);
++    }
++  }
++
++  const displayValue = hoverRating || userRating || Math.round(average);
++
++  return (
++    <div className="mt-8 border-t pt-6">
++      <h3 className="text-lg font-bold text-gray-900 mb-2">Rate this article</h3>
++
++      <div className="flex items-center gap-3 flex-wrap">
++        <div
++          className="flex items-center gap-1"
++          onMouseLeave={() => setHoverRating(0)}
++          role="radiogroup"
++          aria-label="Rate this article from 1 to 5 stars"
++        >
++          {[1, 2, 3, 4, 5].map((star) => (
++            <button
++              key={star}
++              type="button"
++              disabled={alreadyRated || submitting}
++              onClick={() => submitRating(star)}
++              onMouseEnter={() => !alreadyRated && setHoverRating(star)}
++              aria-label={`${star} star${star > 1 ? 's' : ''}`}
++              aria-checked={userRating === star}
++              role="radio"
++              className={`text-2xl leading-none transition ${
++                alreadyRated || submitting ? 'cursor-default' : 'cursor-pointer hover:scale-110'
++              }`}
++              style={{
++                color: star <= displayValue ? '#f5b301' : '#d1d5db',
++              }}
++            >
++              ★
++            </button>
++          ))}
++        </div>
++
++        {count > 0 && (
++          <span className="text-sm text-gray-600">
++            {average.toFixed(1)} out of 5 ({count} rating{count === 1 ? '' : 's'})
++          </span>
++        )}
++      </div>
++
++      {alreadyRated && !error && (
++        <p className="text-sm text-green-600 mt-2">Thanks for rating this article!</p>
++      )}
++      {error && <p className="text-sm text-red-600 mt-2">{error}</p>}
++    </div>
++  );
++}
+diff --git a/lib/seo.js b/lib/seo.js
+index 251e4bc..a11c62f 100644
+--- a/lib/seo.js
++++ b/lib/seo.js
+@@ -1,6 +1,8 @@
+ // lib/seo.js
++export const BASE_URL = 'https://shineybrainacademy.vercel.app';
++
+ export function generateToolMetadata({ title, description, path, keywords = [], image = '/logo.png' }) {
+-  const baseUrl = 'https://shineybrainacademy.vercel.app';
++  const baseUrl = BASE_URL;
+   const url = `${baseUrl}${path}`;
+   
+   return {
+@@ -88,4 +90,49 @@ export const toolsSEO = {
+     keywords: ['daily mentor', 'motivation for students', 'AI motivation', 'study motivation', 'daily goal', 'Mentor Florryshine'],
+     path: '/tools/daily-mentor',
+   },
+-};
+\ No newline at end of file
++};
++
++// ─── Blog post metadata (used by app/blog/[slug]/page.js generateMetadata) ──
++// Every published post needs its OWN title/description/canonical/OG tags —
++// without this, every post falls back to the generic site-wide metadata in
++// app/layout.js and Google shows identical titles/snippets for every post.
++export function generateBlogPostMetadata(post) {
++  const url = `${BASE_URL}/blog/${post.url_slug}`;
++  const description =
++    post.meta_description ||
++    'Read this article on Shiney Brain Academy — JAMB, WAEC and NECO study help for Nigerian students.';
++  const image = post.cover_image || `${BASE_URL}/logo.png`;
++  const publishedTime = post.published_at || post.created_at || undefined;
++  const modifiedTime = post.updated_at || publishedTime;
++
++  return {
++    title: post.title,
++    description,
++    keywords: [post.subject, 'JAMB', 'WAEC', 'NECO', 'Shiney Brain Academy'].filter(Boolean).join(', '),
++    alternates: {
++      canonical: url,
++    },
++    openGraph: {
++      title: post.title,
++      description,
++      url,
++      type: 'article',
++      publishedTime,
++      modifiedTime,
++      images: [
++        {
++          url: image,
++          width: 1200,
++          height: 630,
++          alt: post.title,
++        },
++      ],
++    },
++    twitter: {
++      card: 'summary_large_image',
++      title: post.title,
++      description,
++      images: [image],
++    },
++  };
++}
+\ No newline at end of file
+diff --git a/supabase/migrations/002_blog_post_ratings.sql b/supabase/migrations/002_blog_post_ratings.sql
+new file mode 100644
+index 0000000..d6303e6
+--- /dev/null
++++ b/supabase/migrations/002_blog_post_ratings.sql
+@@ -0,0 +1,42 @@
++-- ─── Blog post ratings ──────────────────────────────────────────────────
++-- Backs the reader rating widget on each blog post. This is what makes the
++-- AggregateRating structured data on blog posts genuine instead of fake:
++-- Google requires that schema to reflect real user ratings, so we only ever
++-- read the average/count from here — nothing is hardcoded.
++--
++-- Run this once in the Supabase SQL editor (Dashboard → SQL Editor → New
++-- query → paste → Run). Safe to re-run: every statement is idempotent.
++
++create table if not exists public.blog_post_ratings (
++  id uuid primary key default gen_random_uuid(),
++  post_id uuid not null references public.content_drafts(id) on delete cascade,
++  user_id uuid references public.profiles(id) on delete set null,
++  rating smallint not null check (rating between 1 and 5),
++  created_at timestamptz not null default now()
++);
++
++create index if not exists blog_post_ratings_post_id_idx
++  on public.blog_post_ratings (post_id);
++
++-- One rating per logged-in user per post. Anonymous votes (user_id null)
++-- aren't deduped at the database level — the rating widget itself guards
++-- against repeat votes from the same browser via localStorage.
++create unique index if not exists blog_post_ratings_unique_user_post
++  on public.blog_post_ratings (post_id, user_id)
++  where user_id is not null;
++
++alter table public.blog_post_ratings enable row level security;
++
++drop policy if exists "Anyone can read ratings" on public.blog_post_ratings;
++create policy "Anyone can read ratings"
++  on public.blog_post_ratings for select
++  using (true);
++
++drop policy if exists "Anyone can submit a rating" on public.blog_post_ratings;
++create policy "Anyone can submit a rating"
++  on public.blog_post_ratings for insert
++  with check (rating between 1 and 5);
++
++-- No update/delete policy on purpose — once cast, a rating is immutable.
++-- This keeps the aggregate honest and avoids a route for tampering with
++-- past votes.
