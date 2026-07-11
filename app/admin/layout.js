@@ -18,6 +18,7 @@ const navItems = [
   { href: '/admin/submissions', label: 'Submissions', icon: '📋' },
   { href: '/admin/daily-challenge', label: 'Daily Challenge', icon: '📅' },
   { href: '/admin/boss-battles', label: 'Boss Battles', icon: '👹' },
+  { href: '/admin/boss-battle-drafts', label: 'Boss Battle Drafts', icon: '🗡️' },
   { href: '/admin/content-engine', label: 'Content Engine', icon: '⚡' },
   { href: '/admin/generate', label: 'Generate Content', icon: '🚀' }, // NEW
   { href: '/admin/knowledge-assets', label: 'Knowledge Assets', icon: '🧠' },
