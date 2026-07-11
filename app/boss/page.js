@@ -1,12 +1,20 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { useEffect, useState, useRef } from 'react';
 import { createBrowserClient } from '@/lib/supabase';
 import { useRouter } from 'next/navigation';
 import Navbar from '@/components/Navbar';
 import Footer from '@/components/Footer';
 import Link from 'next/link';
 import { addPoints } from '@/lib/gamification';
+
+// Harder bosses give you less time per question. Difficulty 1 -> 30s,
+// difficulty 5 -> 10s, in steps of 5, clamped to the 10-30s range.
+function timeForDifficulty(difficulty) {
+  const d = difficulty || 3;
+  const seconds = 30 - (d - 1) * 5;
+  return Math.max(10, Math.min(30, seconds));
+}
 
 export default function BossBattlesPage() {
   const [bosses, setBosses] = useState([]);
@@ -15,6 +23,8 @@ export default function BossBattlesPage() {
   const [selectedBoss, setSelectedBoss] = useState(null);
   const [battleState, setBattleState] = useState(null);
   const [questions, setQuestions] = useState([]);
+  const [timeLeft, setTimeLeft] = useState(null);
+  const timerRef = useRef(null);
   const router = useRouter();
   const supabase = createBrowserClient();
 
@@ -56,6 +66,33 @@ export default function BossBattlesPage() {
     loadData();
   }, []);
 
+  // Countdown timer — resets every time the question changes, cleans up on
+  // unmount / when the battle ends.
+  useEffect(() => {
+    if (!selectedBoss || !battleState || battleState.completed) {
+      clearInterval(timerRef.current);
+      return;
+    }
+
+    const duration = timeForDifficulty(selectedBoss.difficulty);
+    setTimeLeft(duration);
+
+    clearInterval(timerRef.current);
+    timerRef.current = setInterval(() => {
+      setTimeLeft(prev => {
+        if (prev <= 1) {
+          clearInterval(timerRef.current);
+          handleAnswer(null, null); // time's up — counts as a wrong answer
+          return 0;
+        }
+        return prev - 1;
+      });
+    }, 1000);
+
+    return () => clearInterval(timerRef.current);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [selectedBoss, battleState?.currentQuestionIndex]);
+
   const startBattle = async (boss) => {
     // Fetch the full questions from past_questions
     const questionIds = boss.questions || [];
@@ -84,10 +121,12 @@ export default function BossBattlesPage() {
 
   const handleAnswer = async (questionId, selected) => {
     if (!battleState) return;
+    clearInterval(timerRef.current);
     const question = questions[battleState.currentQuestionIndex];
     if (!question) return;
 
-    const isCorrect = selected === question.correct_answer;
+    // selected === null means the timer ran out — always wrong.
+    const isCorrect = selected !== null && selected === question.correct_answer;
     let newState = { ...battleState };
 
     if (isCorrect) {
@@ -158,32 +197,49 @@ export default function BossBattlesPage() {
   if (selectedBoss && battleState && !battleState.completed) {
     const question = questions[battleState.currentQuestionIndex];
     const totalQuestions = questions.length;
+    const duration = timeForDifficulty(selectedBoss.difficulty);
+    const timerPct = timeLeft !== null ? Math.round((timeLeft / duration) * 100) : 100;
+    const timerLow = timeLeft !== null && timeLeft <= 5;
 
     return (
       <>
         <Navbar />
-        <main className="min-h-screen bg-gray-900 text-white py-8">
+        <main className="min-h-screen bg-gray-50 py-8">
           <div className="max-w-3xl mx-auto px-4">
-            <div className="bg-gray-800 rounded-2xl p-6 border border-gray-700">
+            <div className="bg-white rounded-2xl p-6 shadow-sm border border-gray-200">
               <div className="flex justify-between items-center mb-4">
-                <h1 className="text-2xl font-extrabold text-brand-yellow">👹 {selectedBoss.name}</h1>
+                <h1 className="text-2xl font-extrabold text-brand-blue">👹 {selectedBoss.name}</h1>
                 <div className="text-right">
-                  <p className="text-sm">❤️ {battleState.lives} lives</p>
-                  <p className="text-sm">💪 Question {battleState.currentQuestionIndex + 1}/{totalQuestions}</p>
+                  <p className="text-sm text-red-500 font-semibold">❤️ {battleState.lives} lives</p>
+                  <p className="text-sm text-gray-500">💪 Question {battleState.currentQuestionIndex + 1}/{totalQuestions}</p>
                 </div>
               </div>
 
               <div className="mb-4">
-                <p className="text-sm text-gray-400">Boss Health</p>
-                <div className="w-full bg-gray-700 rounded-full h-4">
+                <p className="text-sm text-gray-500">Boss Health</p>
+                <div className="w-full bg-gray-200 rounded-full h-4">
                   <div className="bg-red-500 h-4 rounded-full transition-all" style={{ width: `${battleState.bossHealth}%` }} />
                 </div>
-                <p className="text-xs text-right mt-1">{battleState.bossHealth}%</p>
+                <p className="text-xs text-right mt-1 text-gray-500">{battleState.bossHealth}%</p>
+              </div>
+
+              {/* Countdown timer */}
+              <div className="mb-6">
+                <div className="flex justify-between items-center mb-1">
+                  <p className="text-sm text-gray-500">Time left</p>
+                  <p className={`text-sm font-bold ${timerLow ? 'text-red-500' : 'text-brand-blue'}`}>{timeLeft}s</p>
+                </div>
+                <div className="w-full bg-gray-200 rounded-full h-3">
+                  <div
+                    className={`h-3 rounded-full transition-all ${timerLow ? 'bg-red-500' : 'bg-brand-yellow'}`}
+                    style={{ width: `${timerPct}%` }}
+                  />
+                </div>
               </div>
 
               {question && (
                 <>
-                  <p className="text-lg font-medium mb-6">{question.question}</p>
+                  <p className="text-lg font-medium mb-6 text-gray-900">{question.question}</p>
                   <div className="space-y-3">
                     {['a', 'b', 'c', 'd'].map((letter) => {
                       const option = question[`option_${letter}`];
@@ -192,9 +248,9 @@ export default function BossBattlesPage() {
                         <button
                           key={letter}
                           onClick={() => handleAnswer(question.id, letter)}
-                          className="w-full text-left px-4 py-3 rounded-xl border border-gray-600 hover:border-brand-yellow hover:bg-gray-700 transition"
+                          className="w-full text-left px-4 py-3 rounded-xl border border-gray-200 hover:border-brand-blue hover:bg-blue-50 transition text-gray-800"
                         >
-                          <span className="font-bold mr-2">{letter.toUpperCase()}.</span> {option}
+                          <span className="font-bold mr-2 text-brand-blue">{letter.toUpperCase()}.</span> {option}
                         </button>
                       );
                     })}
@@ -229,6 +285,7 @@ export default function BossBattlesPage() {
                 <div className="mt-3 flex items-center gap-2 text-sm">
                   <span>⚔️ Difficulty {boss.difficulty}</span>
                   <span className="text-brand-yellow">⭐ +{boss.reward_xp} XP</span>
+                  <span className="text-gray-400">⏱️ {timeForDifficulty(boss.difficulty)}s/question</span>
                 </div>
                 <button
                   onClick={() => startBattle(boss)}
