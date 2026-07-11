@@ -2,117 +2,124 @@
 
 import { useState, useEffect } from 'react';
 import { createBrowserClient } from '@/lib/supabase';
-import { useRouter } from 'next/navigation';
 import Link from 'next/link';
+import QuestionPicker from '@/components/admin/QuestionPicker';
 
-export default function AdminBossBattles() {
-  const [bosses, setBosses] = useState([]);
+function todayStr() {
+  return new Date().toISOString().split('T')[0];
+}
+
+const emptyForm = {
+  date: todayStr(),
+  subject: '',
+  difficulty: 'Medium',
+  time_limit_minutes: 10,
+  questions: [],
+};
+
+export default function AdminDailyChallenge() {
+  const [challenges, setChallenges] = useState([]);
   const [subjects, setSubjects] = useState([]);
   const [loading, setLoading] = useState(true);
-  const [form, setForm] = useState({
-    name: '',
-    subject: '',
-    topic: '',
-    difficulty: 1,
-    health: 100,
-    questions: '',
-    required_level: 1,
-    required_xp: 0,
-    reward_xp: 100,
-    reward_coins: 50,
-  });
+  const [form, setForm] = useState(emptyForm);
   const [editing, setEditing] = useState(null);
-  const router = useRouter();
+  const [validity, setValidity] = useState({});
   const supabase = createBrowserClient();
 
   useEffect(() => {
-    async function loadData() {
-      const { data: bossData } = await supabase
-        .from('boss_battles')
-        .select('*')
-        .order('difficulty', { ascending: true });
-
-      setBosses(bossData || []);
-
-      const { data: subjectData } = await supabase
-        .from('past_questions')
-        .select('subject');
-      setSubjects([...new Set((subjectData || []).map(s => s.subject).filter(Boolean))]);
-
-      setLoading(false);
-    }
     loadData();
   }, []);
 
-  const handleSave = async () => {
-    if (!form.name || !form.subject || !form.questions) {
-      alert('Please fill in name, subject, and question IDs.');
-      return;
-    }
+  async function loadData() {
+    const { data: challengeData, error } = await supabase
+      .from('daily_challenges')
+      .select('*')
+      .order('date', { ascending: false });
 
-    const questionIds = form.questions.split(',').map(id => id.trim()).filter(Boolean);
-    if (questionIds.length === 0) {
-      alert('Please enter at least one question ID.');
+    if (error) {
+      console.error('Error loading daily_challenges:', error);
+    }
+    setChallenges(challengeData || []);
+
+    const { data: subjectData } = await supabase
+      .from('past_questions')
+      .select('subject');
+    setSubjects([...new Set((subjectData || []).map(s => s.subject).filter(Boolean))]);
+
+    setLoading(false);
+    checkValidity(challengeData || []);
+  }
+
+  async function checkValidity(list) {
+    const allIds = [...new Set(list.flatMap(c => c.questions || []))];
+    if (allIds.length === 0) return;
+    const { data } = await supabase.from('past_questions').select('id').in('id', allIds);
+    const existing = new Set((data || []).map(q => String(q.id)));
+    const map = {};
+    list.forEach(c => {
+      const ids = c.questions || [];
+      const missing = ids.filter(id => !existing.has(String(id)));
+      map[c.id] = { total: ids.length, missing: missing.length };
+    });
+    setValidity(map);
+  }
+
+  const handleSave = async () => {
+    if (!form.date || form.questions.length === 0) {
+      alert('Please pick a date and select at least one question.');
       return;
     }
 
     const data = {
-      name: form.name,
-      subject: form.subject,
-      topic: form.topic,
-      difficulty: parseInt(form.difficulty),
-      health: parseInt(form.health),
-      questions: questionIds,
-      required_level: parseInt(form.required_level),
-      required_xp: parseInt(form.required_xp),
-      reward_xp: parseInt(form.reward_xp),
-      reward_coins: parseInt(form.reward_coins),
+      date: form.date,
+      subject: form.subject || null,
+      difficulty: form.difficulty,
+      time_limit_minutes: parseInt(form.time_limit_minutes) || 10,
+      questions: form.questions,
     };
 
     if (editing) {
-      const { error } = await supabase
-        .from('boss_battles')
-        .update(data)
-        .eq('id', editing);
+      const { error } = await supabase.from('daily_challenges').update(data).eq('id', editing);
       if (error) { alert(error.message); return; }
     } else {
-      const { error } = await supabase
-        .from('boss_battles')
-        .insert(data)
-        .select();
+      // date has a natural uniqueness constraint (one challenge per day) —
+      // check for an existing challenge on that date first so we don't
+      // silently create a duplicate that never gets picked up.
+      const { data: existing } = await supabase
+        .from('daily_challenges')
+        .select('id')
+        .eq('date', data.date)
+        .maybeSingle();
+      if (existing) {
+        alert(`A challenge for ${data.date} already exists. Edit that one instead, or pick a different date.`);
+        return;
+      }
+      const { error } = await supabase.from('daily_challenges').insert(data).select();
       if (error) { alert(error.message); return; }
     }
 
-    alert('Boss saved!');
+    alert('Daily challenge saved!');
     setEditing(null);
-    setForm({ name: '', subject: '', topic: '', difficulty: 1, health: 100, questions: '', required_level: 1, required_xp: 0, reward_xp: 100, reward_coins: 50 });
-    const { data: bossData } = await supabase
-      .from('boss_battles')
-      .select('*')
-      .order('difficulty', { ascending: true });
-    setBosses(bossData || []);
+    setForm(emptyForm);
+    loadData();
   };
 
-  const deleteBoss = async (id) => {
-    if (!confirm('Delete this boss?')) return;
-    await supabase.from('boss_battles').delete().eq('id', id);
-    setBosses(bosses.filter(b => b.id !== id));
+  const deleteChallenge = async (id) => {
+    if (!confirm('Delete this challenge?')) return;
+    await supabase.from('daily_challenges').delete().eq('id', id);
+    setChallenges(challenges.filter(c => c.id !== id));
   };
 
-  const editBoss = (boss) => {
-    setEditing(boss.id);
+  const editChallenge = (c) => {
+    setEditing(c.id);
     setForm({
-      name: boss.name,
-      subject: boss.subject,
-      topic: boss.topic || '',
-      difficulty: boss.difficulty,
-      health: boss.health,
-      questions: (boss.questions || []).join(', '),
-      required_level: boss.required_level,
-      required_xp: boss.required_xp,
-      reward_xp: boss.reward_xp,
-      reward_coins: boss.reward_coins,
+      date: c.date,
+      subject: c.subject || '',
+      difficulty: c.difficulty || 'Medium',
+      time_limit_minutes: c.time_limit_minutes || 10,
+      questions: c.questions || [],
     });
+    window.scrollTo({ top: 0, behavior: 'smooth' });
   };
 
   if (loading) return <div className="p-8 text-center">Loading...</div>;
@@ -121,113 +128,70 @@ export default function AdminBossBattles() {
     <div className="space-y-6">
       <section className="rounded-2xl bg-white p-6 shadow-sm border">
         <Link href="/admin/dashboard" className="text-sm text-brand-blue underline">← Back to Admin</Link>
-        <h1 className="text-2xl font-extrabold text-brand-blue mt-2">👹 Boss Battles</h1>
-        <p className="text-sm text-gray-500">Manage bosses for students to defeat.</p>
+        <h1 className="text-2xl font-extrabold text-brand-blue mt-2">📅 Daily Challenge</h1>
+        <p className="text-sm text-gray-500">Set up one challenge per day. Students see it at <code>/challenge</code>.</p>
       </section>
 
       <section className="rounded-2xl bg-white p-6 shadow-sm border">
-        <h2 className="font-bold text-lg mb-4">{editing ? 'Edit Boss' : 'Create Boss'}</h2>
+        <h2 className="font-bold text-lg mb-4">{editing ? 'Edit Challenge' : 'Create Challenge'}</h2>
         <div className="grid gap-4 sm:grid-cols-2">
           <div>
-            <label className="block text-sm font-semibold mb-1">Name *</label>
+            <label className="block text-sm font-semibold mb-1">Date *</label>
             <input
-              type="text"
-              value={form.name}
-              onChange={e => setForm({...form, name: e.target.value})}
+              type="date"
+              value={form.date}
+              onChange={e => setForm({...form, date: e.target.value})}
               className="w-full rounded-xl border border-slate-200 px-4 py-2"
             />
           </div>
           <div>
-            <label className="block text-sm font-semibold mb-1">Subject *</label>
+            <label className="block text-sm font-semibold mb-1">Subject label (shown to students)</label>
             <select
               value={form.subject}
               onChange={e => setForm({...form, subject: e.target.value})}
               className="w-full rounded-xl border border-slate-200 px-4 py-2"
             >
-              <option value="">Select subject</option>
+              <option value="">Mixed</option>
               {subjects.map(s => <option key={s} value={s}>{s}</option>)}
             </select>
           </div>
           <div>
-            <label className="block text-sm font-semibold mb-1">Topic</label>
-            <input
-              type="text"
-              value={form.topic}
-              onChange={e => setForm({...form, topic: e.target.value})}
-              className="w-full rounded-xl border border-slate-200 px-4 py-2"
-            />
-          </div>
-          <div>
-            <label className="block text-sm font-semibold mb-1">Difficulty (1-5)</label>
-            <input
-              type="number" min="1" max="5"
+            <label className="block text-sm font-semibold mb-1">Difficulty label</label>
+            <select
               value={form.difficulty}
-              onChange={e => setForm({...form, difficulty: parseInt(e.target.value)})}
+              onChange={e => setForm({...form, difficulty: e.target.value})}
               className="w-full rounded-xl border border-slate-200 px-4 py-2"
-            />
+            >
+              <option>Easy</option>
+              <option>Medium</option>
+              <option>Hard</option>
+            </select>
           </div>
           <div>
-            <label className="block text-sm font-semibold mb-1">Health (HP)</label>
+            <label className="block text-sm font-semibold mb-1">Time limit (minutes)</label>
             <input
-              type="number" min="20"
-              value={form.health}
-              onChange={e => setForm({...form, health: parseInt(e.target.value)})}
-              className="w-full rounded-xl border border-slate-200 px-4 py-2"
-            />
-          </div>
-          <div>
-            <label className="block text-sm font-semibold mb-1">Question IDs (comma separated) *</label>
-            <input
-              type="text"
-              value={form.questions}
-              onChange={e => setForm({...form, questions: e.target.value})}
-              className="w-full rounded-xl border border-slate-200 px-4 py-2"
-              placeholder="e.g. 123,456,789"
-            />
-          </div>
-          <div>
-            <label className="block text-sm font-semibold mb-1">Required Level</label>
-            <input
-              type="number"
-              value={form.required_level}
-              onChange={e => setForm({...form, required_level: parseInt(e.target.value)})}
-              className="w-full rounded-xl border border-slate-200 px-4 py-2"
-            />
-          </div>
-          <div>
-            <label className="block text-sm font-semibold mb-1">Required XP</label>
-            <input
-              type="number"
-              value={form.required_xp}
-              onChange={e => setForm({...form, required_xp: parseInt(e.target.value)})}
-              className="w-full rounded-xl border border-slate-200 px-4 py-2"
-            />
-          </div>
-          <div>
-            <label className="block text-sm font-semibold mb-1">Reward XP</label>
-            <input
-              type="number"
-              value={form.reward_xp}
-              onChange={e => setForm({...form, reward_xp: parseInt(e.target.value)})}
-              className="w-full rounded-xl border border-slate-200 px-4 py-2"
-            />
-          </div>
-          <div>
-            <label className="block text-sm font-semibold mb-1">Reward Coins</label>
-            <input
-              type="number"
-              value={form.reward_coins}
-              onChange={e => setForm({...form, reward_coins: parseInt(e.target.value)})}
+              type="number" min="1"
+              value={form.time_limit_minutes}
+              onChange={e => setForm({...form, time_limit_minutes: e.target.value})}
               className="w-full rounded-xl border border-slate-200 px-4 py-2"
             />
           </div>
         </div>
+
+        <div className="mt-4">
+          <label className="block text-sm font-semibold mb-1">Questions *</label>
+          <QuestionPicker
+            selectedIds={form.questions}
+            onChange={(ids) => setForm({...form, questions: ids})}
+          />
+        </div>
+
         <div className="mt-4 flex gap-3">
           <button onClick={handleSave} className="bg-brand-yellow px-6 py-2 rounded-full font-bold">
-            {editing ? 'Update Boss' : 'Create Boss'}
+            {editing ? 'Update Challenge' : 'Create Challenge'}
           </button>
           {editing && (
-            <button onClick={() => { setEditing(null); setForm({ name: '', subject: '', topic: '', difficulty: 1, health: 100, questions: '', required_level: 1, required_xp: 0, reward_xp: 100, reward_coins: 50 }); }} className="bg-gray-200 px-6 py-2 rounded-full font-bold">
+            <button onClick={() => { setEditing(null); setForm(emptyForm); }} className="bg-gray-200 px-6 py-2 rounded-full font-bold">
               Cancel
             </button>
           )}
@@ -236,19 +200,28 @@ export default function AdminBossBattles() {
 
       <section className="rounded-2xl bg-white shadow-sm border overflow-hidden">
         <div className="divide-y divide-slate-100">
-          {bosses.map(b => (
-            <div key={b.id} className="flex items-center gap-4 p-4 hover:bg-slate-50">
-              <div className="flex-1">
-                <p className="font-bold">{b.name} <span className="text-xs text-gray-500">({b.subject})</span></p>
-                <p className="text-sm text-gray-500">HP: {b.health} • Difficulty: {b.difficulty} • XP: {b.reward_xp}</p>
+          {challenges.map(c => {
+            const v = validity[c.id];
+            const isToday = c.date === todayStr();
+            return (
+              <div key={c.id} className="flex items-center gap-4 p-4 hover:bg-slate-50">
+                <div className="flex-1">
+                  <p className="font-bold">
+                    {c.date} {isToday && <span className="text-xs bg-green-100 text-green-700 rounded-full px-2 py-0.5 ml-1">Today</span>}
+                  </p>
+                  <p className="text-sm text-gray-500">{c.subject || 'Mixed'} • {c.difficulty} • {c.time_limit_minutes}min • {(c.questions || []).length} question(s)</p>
+                  {v && v.missing > 0 && (
+                    <p className="text-xs text-red-600 font-semibold mt-1">⚠️ {v.missing} of {v.total} question(s) missing. Edit to fix.</p>
+                  )}
+                </div>
+                <div className="flex gap-2">
+                  <button onClick={() => editChallenge(c)} className="text-blue-600 hover:underline text-sm">Edit</button>
+                  <button onClick={() => deleteChallenge(c.id)} className="text-red-500 hover:underline text-sm">Delete</button>
+                </div>
               </div>
-              <div className="flex gap-2">
-                <button onClick={() => editBoss(b)} className="text-blue-600 hover:underline text-sm">Edit</button>
-                <button onClick={() => deleteBoss(b.id)} className="text-red-500 hover:underline text-sm">Delete</button>
-              </div>
-            </div>
-          ))}
-          {bosses.length === 0 && <div className="p-8 text-center text-gray-500">No bosses created yet.</div>}
+            );
+          })}
+          {challenges.length === 0 && <div className="p-8 text-center text-gray-500">No daily challenges created yet.</div>}
         </div>
       </section>
     </div>

@@ -8,11 +8,13 @@ const navItems = [
   { href: '/admin/courses', label: 'Courses', icon: '📚' },
   { href: '/admin/students', label: 'Students', icon: '👨‍🎓' },
   { href: '/admin/blog', label: 'Blog', icon: '📝' },
+  { href: '/admin/blog-drafts', label: 'Blog Drafts', icon: '🗒️' },
   { href: '/admin/library', label: 'Library', icon: '📖' },
   { href: '/admin/audio', label: 'Audio', icon: '🎵' },
   { href: '/admin/roles', label: 'Roles', icon: '🔑' },
   { href: '/admin/testimonials', label: 'Testimonials', icon: '💬' },
   { href: '/admin/quizzes', label: 'Quizzes', icon: '🧠' },
+  { href: '/admin/tutor-activity', label: 'Tutor Activity', icon: '👩‍🏫' },
   { href: '/admin/submissions', label: 'Submissions', icon: '📋' },
   { href: '/admin/daily-challenge', label: 'Daily Challenge', icon: '📅' },
   { href: '/admin/boss-battles', label: 'Boss Battles', icon: '👹' },
@@ -31,7 +33,7 @@ const navItems = [
 
 function NavLink({ href, label, icon, mobile }) {
   const pathname = usePathname();
-  const isActive = pathname === href || (href !== '/admin/dashboard' && pathname.startsWith(href));
+  const isActive = pathname === href || (href !== '/admin/dashboard' && pathname.startsWith(href + '/'));
 
   if (mobile) {
     return (
