@@ -164,12 +164,17 @@ ${(asset.common_mistakes || []).map(m => `- ${m}`).join('\n')}
         difficulty: ['easy', 'medium', 'hard'].includes(line.difficulty) ? line.difficulty : null,
       });
 
-      // If effect was uploaded, add a separate segment for it
+      // If effect was uploaded, add a separate segment for it.
+      // NOTE: `speaker` must be one of the values allowed by the
+      // podcast_segments_speaker_check constraint (host_a/host_b) — reuse
+      // the current line's speaker rather than inventing a new 'effect'
+      // value, which was violating that constraint and failing the whole
+      // batch insert for every episode that included a sound effect.
       if (effectUrl) {
         segmentRows.push({
           episode_id: episodeId,
           position: i + 0.5,
-          speaker: 'effect',
+          speaker: line.speaker,
           text: `[${line.effect}]`,
           emotion_tag: 'neutral',
           audio_url: effectUrl,
