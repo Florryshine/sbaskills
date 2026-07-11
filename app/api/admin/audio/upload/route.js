@@ -1,9 +1,15 @@
 import { NextResponse } from 'next/server';
 import { createRouteHandlerClient } from '@/lib/supabase-server';
+import { createAdminClient } from '@/lib/supabase-admin';
 
 export async function POST(request) {
   try {
-    const supabase = createRouteHandlerClient(); // uses service role key
+    // createRouteHandlerClient uses the anon key + user cookies, so it's
+    // subject to RLS. Storage/table writes here need to bypass RLS, so we
+    // use the real service-role client for the writes, and the cookie
+    // client only to identify who's uploading (for created_by).
+    const authClient = createRouteHandlerClient();
+    const supabase = createAdminClient();
 
     const formData = await request.formData();
     const title = formData.get('title');
@@ -78,7 +84,7 @@ export async function POST(request) {
         description: description || null,
         audio_url: audioUrl,
         cover_image: coverImageUrl,
-        created_by: (await supabase.auth.getUser()).data.user?.id || null,
+        created_by: (await authClient.auth.getUser()).data.user?.id || null,
       })
       .select()
       .single();

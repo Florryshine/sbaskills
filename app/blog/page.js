@@ -111,6 +111,17 @@ export default async function BlogPage({ searchParams }) {
 
   const { data: posts } = await query;
 
+  // Get real per-category counts (published posts only)
+  const { data: categoryRows } = await supabase
+    .from('content_drafts')
+    .select('category')
+    .eq('status', 'published');
+
+  const categoryCounts = (categoryRows || []).reduce((acc, row) => {
+    if (row.category) acc[row.category] = (acc[row.category] || 0) + 1;
+    return acc;
+  }, {});
+
   // Get comment counts for each post
   const postIds = posts?.map(p => p.id) || [];
   let commentCounts = {};
@@ -131,12 +142,12 @@ export default async function BlogPage({ searchParams }) {
   // Categories for filter
   const categories = [
     { slug: 'all', label: 'All Posts', count: totalPosts || 0 },
-    { slug: 'jamb', label: 'JAMB', count: 0 },
-    { slug: 'waec', label: 'WAEC', count: 0 },
-    { slug: 'neco', label: 'NECO', count: 0 },
-    { slug: 'study-tips', label: 'Study Tips', count: 0 },
-    { slug: 'admission', label: 'Admission', count: 0 },
-    { slug: 'digital-skills', label: 'Digital Skills', count: 0 },
+    { slug: 'jamb', label: 'JAMB', count: categoryCounts['jamb'] || 0 },
+    { slug: 'waec', label: 'WAEC', count: categoryCounts['waec'] || 0 },
+    { slug: 'neco', label: 'NECO', count: categoryCounts['neco'] || 0 },
+    { slug: 'study-tips', label: 'Study Tips', count: categoryCounts['study-tips'] || 0 },
+    { slug: 'admission', label: 'Admission', count: categoryCounts['admission'] || 0 },
+    { slug: 'digital-skills', label: 'Digital Skills', count: categoryCounts['digital-skills'] || 0 },
   ];
 
   const totalPages = Math.ceil((totalPosts || 0) / pageSize);

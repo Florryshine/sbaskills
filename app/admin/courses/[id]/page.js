@@ -193,17 +193,18 @@ export default function AdminCourseEditorPage() {
     console.log('courseId:', courseId);
     console.log('formData:', formData);
 
-    if (!courseId || courseId === 'new') {
-      alert('No course selected or this is a new course.');
+    if (!formData.title) {
+      alert('Please enter a course title before saving.');
       setSaving(false);
       return;
     }
 
     setSaving(true);
     const supabase = createBrowserClient();
+    const isNew = !courseId || courseId === 'new';
 
     try {
-      const updateData = {
+      const courseData = {
         title: formData.title,
         description: formData.description,
         price: parseInt(formData.price) || 0,
@@ -211,24 +212,37 @@ export default function AdminCourseEditorPage() {
         color: formData.color,
         is_published: formData.is_published,
       };
-      console.log('Updating with:', updateData);
+      console.log(isNew ? 'Inserting with:' : 'Updating with:', courseData);
 
-      const { error } = await supabase
-        .from('courses')
-        .update(updateData)
-        .eq('id', courseId);
+      let updatedCourse, dbError;
 
-      if (error) throw new Error(error.message);
-      console.log('✅ Update successful');
+      if (isNew) {
+        const { data, error } = await supabase
+          .from('courses')
+          .insert(courseData)
+          .select()
+          .single();
+        updatedCourse = data;
+        dbError = error;
+      } else {
+        const { error } = await supabase
+          .from('courses')
+          .update(courseData)
+          .eq('id', courseId);
+        dbError = error;
+        if (!error) {
+          const { data, error: fetchError } = await supabase
+            .from('courses')
+            .select('*')
+            .eq('id', courseId)
+            .single();
+          updatedCourse = data;
+          dbError = fetchError;
+        }
+      }
 
-      // Fetch updated course data
-      const { data: updatedCourse, error: fetchError } = await supabase
-        .from('courses')
-        .select('*')
-        .eq('id', courseId)
-        .single();
-
-      if (fetchError) throw new Error(fetchError.message);
+      if (dbError) throw new Error(dbError.message);
+      console.log(isNew ? '✅ Insert successful' : '✅ Update successful');
 
       // Update local state with fresh data
       setCourse(updatedCourse);
@@ -241,7 +255,12 @@ export default function AdminCourseEditorPage() {
         is_published: updatedCourse.is_published || false,
       });
 
-      alert('✅ Course updated successfully!');
+      alert(isNew ? '✅ Course created successfully!' : '✅ Course updated successfully!');
+
+      // Move from /new to the real course id so lessons/uploads work
+      if (isNew && updatedCourse?.id) {
+        router.replace(`/admin/courses/${updatedCourse.id}`);
+      }
     } catch (error) {
       console.error('❌ Error:', error);
       alert('❌ Error: ' + error.message);

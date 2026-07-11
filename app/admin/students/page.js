@@ -25,6 +25,9 @@ export default function AdminStudentsPage() {
         .from('profiles')
         .select(`
           id, full_name, email, phone, role, created_at,
+          date_of_birth, student_level, target_exams, interests,
+          institution_name, institution_type, state,
+          goal_title, goal_target, onboarding_completed,
           enrollments(course_id, courses(title))
         `)
         .eq('role', 'student')
@@ -78,6 +81,7 @@ export default function AdminStudentsPage() {
               <tr>
                 <th className="px-6 py-4 font-semibold">Student</th>
                 <th className="px-6 py-4 font-semibold">Contact</th>
+                <th className="px-6 py-4 font-semibold">Details</th>
                 <th className="px-6 py-4 font-semibold">Enrolled Courses</th>
                 <th className="px-6 py-4 font-semibold">Joined</th>
               </tr>
@@ -100,6 +104,18 @@ export default function AdminStudentsPage() {
                   </td>
                   <td className="px-6 py-5 text-slate-600">
                     <p>{student.phone || 'No phone'}</p>
+                  </td>
+                  <td className="px-6 py-5 text-slate-600 text-xs space-y-1">
+                    <p>🎂 {student.date_of_birth
+                      ? new Date(student.date_of_birth).toLocaleDateString('en-NG', { day: 'numeric', month: 'short', year: 'numeric' })
+                      : 'No birthday'}</p>
+                    <p>🎓 {student.student_level || 'Level not set'}</p>
+                    <p>📝 {(student.target_exams || []).join(', ') || 'No exam picked'}</p>
+                    <p>📚 {(student.interests || []).join(', ') || 'No subjects picked'}</p>
+                    {student.goal_title && <p>🎯 {student.goal_title}</p>}
+                    {!student.onboarding_completed && (
+                      <p className="text-amber-500 font-semibold">⚠️ Onboarding incomplete</p>
+                    )}
                   </td>
                   <td className="px-6 py-5">
                     <div className="flex flex-wrap gap-2">
@@ -124,7 +140,7 @@ export default function AdminStudentsPage() {
                 </tr>
               )) : (
                 <tr>
-                  <td colSpan="4" className="px-6 py-10 text-center text-slate-500">
+                  <td colSpan="5" className="px-6 py-10 text-center text-slate-500">
                     No students found.
                   </td>
                 </tr>
