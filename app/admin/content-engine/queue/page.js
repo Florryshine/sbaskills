@@ -111,6 +111,7 @@ export default function QueuePage() {
       pending: { cls: 'bg-blue-50 text-blue-600', label: 'Pending' },
       generating: { cls: 'bg-purple-50 text-purple-600', label: 'Generating' },
       draft: { cls: 'bg-yellow-50 text-yellow-600', label: 'Draft Ready' },
+      completed: { cls: 'bg-teal-50 text-teal-600', label: 'Researched' },
       published: { cls: 'bg-green-50 text-green-600', label: 'Published' },
       failed: { cls: 'bg-red-50 text-red-600', label: 'Failed' },
     };
@@ -239,6 +240,14 @@ export default function QueuePage() {
                           className="inline-flex items-center gap-1 bg-green-100 text-green-700 px-4 py-2 rounded-xl text-sm font-medium hover:bg-green-200 transition-colors"
                         >
                           <CheckCircle className="w-4 h-4" /> Review
+                        </Link>
+                      )}
+                      {item.status === 'completed' && item.knowledge_asset_id && (
+                        <Link
+                          href={`/admin/generate?asset=${item.knowledge_asset_id}`}
+                          className="inline-flex items-center gap-1 bg-teal-100 text-teal-700 px-4 py-2 rounded-xl text-sm font-medium hover:bg-teal-200 transition-colors"
+                        >
+                          <CheckCircle className="w-4 h-4" /> Generate Content
                         </Link>
                       )}
                       <button

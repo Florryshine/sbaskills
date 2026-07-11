@@ -68,7 +68,8 @@ export async function POST(request) {
   flashcard: '/api/engines/flashcards',
   study_note: '/api/engines/study-notes',
   social: '/api/engines/social',
-  podcast: '/api/content-engine/podcast/generate', 
+  podcast: '/api/content-engine/podcast/generate',
+  blog: '/api/engines/blog',
 };
 
     const baseUrl = request.nextUrl.origin;
@@ -76,10 +77,6 @@ export async function POST(request) {
     // 4. Run engines
     const results = await Promise.allSettled(
       engines.map(async (engine) => {
-        if (engine === 'blog') {
-  return { engine, status: 'skipped', message: 'Blog generation not implemented yet' };
-}
-
         const endpoint = engineEndpoints[engine];
         if (!endpoint) {
           return { engine, status: 'failed', error: `Unknown engine: ${engine}` };

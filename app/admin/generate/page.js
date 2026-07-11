@@ -1,7 +1,7 @@
 'use client';
 
-import { useState, useEffect } from 'react';
-import { useRouter } from 'next/navigation';
+import { useState, useEffect, Suspense } from 'react';
+import { useRouter, useSearchParams } from 'next/navigation';
 import { createBrowserClient } from '@/lib/supabase';
 import { Loader2, CheckCircle, AlertCircle } from 'lucide-react';
 
@@ -14,10 +14,21 @@ const ENGINE_ID_MAP = {
   flashcards: 'flashcard',
   study_notes: 'study_note',
   podcast: 'podcast',
+  blog: 'blog',
+  social: 'social',
 };
 
 export default function GenerateContentPage() {
+  return (
+    <Suspense fallback={<div className="p-6 text-center text-gray-400">Loading...</div>}>
+      <GenerateContentInner />
+    </Suspense>
+  );
+}
+
+function GenerateContentInner() {
   const router = useRouter();
+  const searchParams = useSearchParams();
   const supabase = createBrowserClient();
 
   const [assets, setAssets] = useState([]);
@@ -27,7 +38,8 @@ export default function GenerateContentPage() {
   const [logs, setLogs] = useState([]);
 
   const contentTypes = [
-    { id: 'blog', label: 'Blog Post', icon: '📝', disabled: true, note: 'Uses the content queue — generate blog posts from /admin/content-engine/queue for now' },
+    { id: 'blog', label: 'Blog Post', icon: '📝' },
+    { id: 'social', label: 'Social Post', icon: '📱' },
     { id: 'podcast', label: 'Podcast Episode', icon: '🎙️' },
     { id: 'quiz', label: 'Quiz (20 MCQs)', icon: '🧠' },
     { id: 'boss_battle', label: 'Boss Battle (10 hard)', icon: '👹' },
@@ -36,7 +48,11 @@ export default function GenerateContentPage() {
     { id: 'images', label: 'Images (10 per asset)', icon: '🖼️' },
   ];
 
-  useEffect(() => { loadAssets(); }, []);
+  useEffect(() => {
+    loadAssets();
+    const assetFromQuery = searchParams.get('asset');
+    if (assetFromQuery) setSelectedAssetId(assetFromQuery);
+  }, []);
 
   const loadAssets = async () => {
     const { data } = await supabase
@@ -89,7 +105,7 @@ export default function GenerateContentPage() {
         addLog(`📋 Job ${data.jobId} — ${data.summary.completed}/${data.summary.total} completed`, 'info');
       }
 
-      // 2. Images — separate two-step flow (planning + fetching), unaffected by the bug above
+      // 2. Images — separate two-step flow (planning + fetching), unaffected by the above
       if (selectedContent.includes('images')) {
         addLog('🖼️ Generating visual blueprint...');
         const blueprintRes = await fetch('/api/engines/visual-blueprint', {
