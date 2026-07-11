@@ -3,6 +3,7 @@ import { createAdminClient } from '@/lib/supabase-admin';
 import { renderToBuffer } from '@react-pdf/renderer';
 import React from 'react';
 import StudyNoteDocument from '@/lib/pdf/StudyNoteDocument';
+import { generatePdfFileName } from '@/lib/seo-utils';
 
 export async function POST(request, { params }) {
   const { draftId } = params;
@@ -24,18 +25,24 @@ export async function POST(request, { params }) {
     const title = draft.title || draft.knowledge_assets?.keyword || 'Study Notes';
     const keyword = draft.knowledge_assets?.keyword || '';
 
-    // 2. Render PDF (default authorType = 'team'; you can change if needed)
-    const pdfBuffer = await renderToBuffer(
-      React.createElement(StudyNoteDocument, { 
-        title, 
-        keyword, 
-        markdown: draft.content,
-        authorType: 'team'  // you can make this dynamic later
-      })
-    );
+    // 2. Render PDF with metadata and SEO-friendly file name
+    let pdfBuffer;
+    try {
+      pdfBuffer = await renderToBuffer(
+        React.createElement(StudyNoteDocument, {
+          title,
+          keyword,
+          markdown: draft.content,
+          authorType: 'team'
+        })
+      );
+    } catch (renderError) {
+      console.error('❌ PDF render error:', renderError);
+      return NextResponse.json({ error: `PDF render failed: ${renderError.message}` }, { status: 500 });
+    }
 
-    // 3. Upload to 'books' bucket
-    const fileName = `study-notes-${draftId}-${Date.now()}.pdf`;
+    // 3. Generate SEO-friendly file name and upload
+    const fileName = generatePdfFileName(title);
     const filePath = `files/${fileName}`;
 
     const { error: uploadError } = await supabase.storage
@@ -57,7 +64,7 @@ export async function POST(request, { params }) {
         .update({
           title,
           description: draft.summary || `Exam-ready study notes on ${keyword}`,
-          pdf_url: urlData.publicUrl,   // only this column
+          pdf_url: urlData.publicUrl,
           is_published: true,
         })
         .eq('id', bookId);
@@ -72,7 +79,7 @@ export async function POST(request, { params }) {
           author: 'Shiney Brain Academy',
           description: draft.summary || `Exam-ready study notes on ${keyword}`,
           price: 0,
-          pdf_url: urlData.publicUrl,   // only this column
+          pdf_url: urlData.publicUrl,
           is_published: true,
         })
         .select()
