@@ -6,7 +6,6 @@ import { createBrowserClient } from '@/lib/supabase';
 import Navbar from '@/components/Navbar';
 import Footer from '@/components/Footer';
 
-// ── Difficulty configuration ──────────────────────────────
 const DIFFICULTY_CONFIG = {
   1: { timePerQuestion: 60, xpMultiplier: 1.0, label: 'Easy' },
   2: { timePerQuestion: 50, xpMultiplier: 1.2, label: 'Moderate' },
@@ -30,7 +29,7 @@ export default function BossBattleDetail() {
   const [showResult, setShowResult] = useState(false);
   const [timeLeft, setTimeLeft] = useState(0);
   const [totalTime, setTotalTime] = useState(0);
-  const [selectedDifficulty, setSelectedDifficulty] = useState(3); // default to Hard
+  const [selectedDifficulty, setSelectedDifficulty] = useState(3);
   const [battleStarted, setBattleStarted] = useState(false);
 
   useEffect(() => {
@@ -47,7 +46,7 @@ export default function BossBattleDetail() {
         setError('Boss not found or not published.');
       } else {
         setBoss(data);
-        // Set default difficulty from boss difficulty if available
+        // Use boss difficulty if available, else default to 3
         if (data.difficulty) {
           setSelectedDifficulty(Math.min(Math.max(data.difficulty, 1), 5));
         }
@@ -57,7 +56,7 @@ export default function BossBattleDetail() {
     loadBoss();
   }, [id]);
 
-  // Timer logic
+  // Timer logic – only run when battle started and not showing result
   useEffect(() => {
     if (!battleStarted || !boss || showResult) return;
 
@@ -70,9 +69,8 @@ export default function BossBattleDetail() {
       setTimeLeft((prev) => {
         if (prev <= 1) {
           clearInterval(timer);
-          // Auto-submit current question if time runs out
           if (!answered) {
-            // Mark as answered (no score)
+            // Time's up: mark as answered (no score)
             setAnswered(true);
           }
           return 0;
