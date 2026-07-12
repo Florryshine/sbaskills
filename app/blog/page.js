@@ -4,6 +4,24 @@ import Footer from '@/components/Footer';
 import Link from 'next/link';
 import SortSelect from '@/components/SortSelect';
 
+// ─── Category mapping ──────────────────────────────────────────────
+// Define a mapping from URL slug → actual stored category name
+const CATEGORY_MAP = {
+  'jamb': 'JAMB',
+  'waec': 'WAEC',
+  'neco': 'NECO',
+  'post-utme': 'Post-UTME',
+  'digital-skills': 'Digital Skills',
+  'study-tips': 'Study Tips',
+  'career': 'Career',
+  'admission': 'Admission',
+};
+
+// Invert mapping for display (stored name → slug)
+const SLUG_MAP = Object.fromEntries(
+  Object.entries(CATEGORY_MAP).map(([slug, name]) => [name, slug])
+);
+
 // ─── Metadata ───────────────────────────────────────────────
 export async function generateMetadata({ searchParams }) {
   const category = searchParams?.category || 'all';
@@ -13,17 +31,9 @@ export async function generateMetadata({ searchParams }) {
   let description = 'Read the latest tips, study guides, and exam preparation advice for Nigerian students.';
 
   if (category !== 'all') {
-    const categoryNames = {
-      jamb: 'JAMB',
-      waec: 'WAEC',
-      neco: 'NECO',
-      'post-utme': 'Post-UTME',
-      'digital-skills': 'Digital Skills',
-      'study-tips': 'Study Tips',
-      career: 'Career'
-    };
-    title = `${categoryNames[category] || category} Posts | Shiney Brain Academy`;
-    description = `Read ${categoryNames[category] || category} exam tips, study guides, and preparation advice.`;
+    const categoryName = CATEGORY_MAP[category] || category;
+    title = `${categoryName} Posts | Shiney Brain Academy`;
+    description = `Read ${categoryName} exam tips, study guides, and preparation advice.`;
   }
 
   if (search) {
@@ -55,7 +65,7 @@ export default async function BlogPage({ searchParams }) {
   const supabase = createServerClient();
 
   // Get filter params
-  const category = searchParams?.category || 'all';
+  const categorySlug = searchParams?.category || 'all';
   const search = searchParams?.search || '';
   const sort = searchParams?.sort || 'newest';
   const page = parseInt(searchParams?.page) || 1;
@@ -77,9 +87,12 @@ export default async function BlogPage({ searchParams }) {
     `)
     .eq('status', 'published');
 
-  // Category filter
-  if (category && category !== 'all') {
-    query = query.eq('category', category);
+  // Category filter — map slug to actual category name
+  if (categorySlug && categorySlug !== 'all') {
+    const categoryName = CATEGORY_MAP[categorySlug];
+    if (categoryName) {
+      query = query.eq('category', categoryName);
+    }
   }
 
   // Search filter
@@ -91,10 +104,8 @@ export default async function BlogPage({ searchParams }) {
   if (sort === 'oldest') {
     query = query.order('published_at', { ascending: true });
   } else if (sort === 'popular') {
-    // This would require a views/comments count column – we'll use created_at as fallback
     query = query.order('created_at', { ascending: false });
   } else {
-    // Newest by default
     query = query.order('published_at', { ascending: false });
   }
 
@@ -111,18 +122,30 @@ export default async function BlogPage({ searchParams }) {
 
   const { data: posts } = await query;
 
-  // Get real per-category counts (published posts only)
+  // ── Get real per‑category counts ──
   const { data: categoryRows } = await supabase
     .from('content_drafts')
     .select('category')
     .eq('status', 'published');
 
-  const categoryCounts = (categoryRows || []).reduce((acc, row) => {
+  // Count by stored category name, then convert to slug for display
+  const rawCounts = (categoryRows || []).reduce((acc, row) => {
     if (row.category) acc[row.category] = (acc[row.category] || 0) + 1;
     return acc;
   }, {});
 
-  // Get comment counts for each post
+  // Build category list for filter bar
+  const categories = [
+    { slug: 'all', label: 'All Posts', count: totalPosts || 0 },
+    ...Object.entries(rawCounts)
+      .map(([name, count]) => {
+        const slug = SLUG_MAP[name];
+        return slug ? { slug, label: name, count } : null;
+      })
+      .filter(Boolean),
+  ];
+
+  // ── Get comment counts ──
   const postIds = posts?.map(p => p.id) || [];
   let commentCounts = {};
   if (postIds.length > 0) {
@@ -139,17 +162,6 @@ export default async function BlogPage({ searchParams }) {
     }
   }
 
-  // Categories for filter
-  const categories = [
-    { slug: 'all', label: 'All Posts', count: totalPosts || 0 },
-    { slug: 'jamb', label: 'JAMB', count: categoryCounts['jamb'] || 0 },
-    { slug: 'waec', label: 'WAEC', count: categoryCounts['waec'] || 0 },
-    { slug: 'neco', label: 'NECO', count: categoryCounts['neco'] || 0 },
-    { slug: 'study-tips', label: 'Study Tips', count: categoryCounts['study-tips'] || 0 },
-    { slug: 'admission', label: 'Admission', count: categoryCounts['admission'] || 0 },
-    { slug: 'digital-skills', label: 'Digital Skills', count: categoryCounts['digital-skills'] || 0 },
-  ];
-
   const totalPages = Math.ceil((totalPosts || 0) / pageSize);
 
   return (
@@ -163,7 +175,7 @@ export default async function BlogPage({ searchParams }) {
             Tips, study guides and insights to help you ace JAMB, WAEC, NECO and beyond
           </p>
           <p className="text-sm text-blue-200 mt-4">
-            {totalPosts || 0} articles • {categories.length} categories
+            {totalPosts || 0} articles • {categories.length - 1} categories
           </p>
         </section>
 
@@ -177,7 +189,7 @@ export default async function BlogPage({ searchParams }) {
                   key={cat.slug}
                   href={`/blog?category=${cat.slug}`}
                   className={`px-4 py-2 rounded-full text-sm font-semibold transition ${
-                    category === cat.slug
+                    categorySlug === cat.slug
                       ? 'bg-brand-blue text-white'
                       : 'bg-white text-gray-600 hover:bg-brand-blue/10 border border-gray-200'
                   }`}
@@ -301,7 +313,7 @@ export default async function BlogPage({ searchParams }) {
                   {Array.from({ length: totalPages }, (_, i) => i + 1).map((p) => (
                     <Link
                       key={p}
-                      href={`/blog?page=${p}&category=${category}&search=${search}&sort=${sort}`}
+                      href={`/blog?page=${p}&category=${categorySlug}&search=${search}&sort=${sort}`}
                       className={`px-4 py-2 rounded-xl text-sm font-bold transition ${
                         p === page
                           ? 'bg-brand-blue text-white'
