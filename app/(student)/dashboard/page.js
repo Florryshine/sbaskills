@@ -8,7 +8,9 @@ import Navbar from '@/components/Navbar';
 import Footer from '@/components/Footer';
 import { addPoints, updateStreak, getUserPoints } from '@/lib/gamification';
 import { awardEligibleBadges } from '@/lib/badges';
+import { getMasteryStats } from '@/lib/mastery';
 import LevelProgress from '@/components/LevelProgress';
+import MasteryChecklist from '@/components/MasteryChecklist';
 
 export default function StudentDashboard() {
   const [user, setUser] = useState(null);
@@ -19,6 +21,7 @@ export default function StudentDashboard() {
   const [quizzes, setQuizzes] = useState([]);
   const [userPoints, setUserPoints] = useState(0);
   const [userStreak, setUserStreak] = useState(0);
+  const [masteryStats, setMasteryStats] = useState(null);
   const [lessonsDone, setLessonsDone] = useState(0);
   const [loading, setLoading] = useState(true);
   const router = useRouter();
@@ -45,6 +48,11 @@ export default function StudentDashboard() {
       const pointsData = await getUserPoints(user.id);
       setUserPoints(pointsData.total_points || 0);
       setUserStreak(pointsData.streak_days || 0);
+
+      // Get 4-pillar mastery stats for the level-up checklist
+      getMasteryStats(supabase, user.id)
+        .then(setMasteryStats)
+        .catch((e) => console.error('Mastery stats failed:', e));
 
       // Get profile
       const { data: profileData } = await supabase
@@ -138,9 +146,14 @@ export default function StudentDashboard() {
           </div>
 
           {/* Level / Rank Progress */}
-          <div className="mb-8">
+          <div className="mb-4">
             <LevelProgress totalPoints={userPoints} />
           </div>
+          {masteryStats && (
+            <div className="mb-8">
+              <MasteryChecklist totalPoints={userPoints} stats={masteryStats} />
+            </div>
+          )}
 
           {/* Refer & Earn Section */}
           <div className="bg-gradient-to-r from-brand-blue to-blue-700 rounded-2xl p-6 mb-8 text-white">

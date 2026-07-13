@@ -1,12 +1,14 @@
 'use client';
 
-import { useState } from 'react';
+import { useState, Suspense } from 'react';
 import { supabase } from '@/lib/supabase-client';
-import { useRouter } from 'next/navigation';
+import { useRouter, useSearchParams } from 'next/navigation';
 import Link from 'next/link';
 
-export default function RegisterPage() {
+function RegisterForm() {
   const router = useRouter();
+  const searchParams = useSearchParams();
+  const refCode = searchParams.get('ref');
   const [loading, setLoading] = useState(false);
   const [form, setForm] = useState({
     email: '',
@@ -41,6 +43,24 @@ export default function RegisterPage() {
     if (authData.user) {
       // Generate referral code
       const code = 'SBA' + Math.random().toString(36).substring(2, 8).toUpperCase();
+
+      // Was previously read nowhere — ?ref=CODE just got dropped on the
+      // floor at signup. Now resolved to the referrer's id and stored,
+      // but points are NOT awarded here — see completeActivity() in
+      // gamification.js, which pays out only once this student finishes
+      // their first real activity (anti-abuse, not raw signup).
+      let referredBy = null;
+      if (refCode) {
+        const { data: referrer } = await supabase
+          .from('profiles')
+          .select('id')
+          .eq('referral_code', refCode)
+          .maybeSingle();
+        if (referrer && referrer.id !== authData.user.id) {
+          referredBy = referrer.id;
+        }
+      }
+
       await supabase
         .from('profiles')
         .update({
@@ -48,6 +68,7 @@ export default function RegisterPage() {
           phone: form.phone,
           date_of_birth: form.date_of_birth || null,
           referral_code: code,
+          referred_by: referredBy,
           onboarding_completed: false,
         })
         .eq('id', authData.user.id);
@@ -154,5 +175,13 @@ export default function RegisterPage() {
         </p>
       </div>
     </div>
+  );
+}
+
+export default function RegisterPage() {
+  return (
+    <Suspense fallback={<div className="min-h-screen flex items-center justify-center">Loading...</div>}>
+      <RegisterForm />
+    </Suspense>
   );
 }

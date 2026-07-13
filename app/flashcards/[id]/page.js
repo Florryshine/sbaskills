@@ -3,6 +3,7 @@
 import { useState, useEffect } from 'react';
 import { createBrowserClient } from '@/lib/supabase';
 import { useParams } from 'next/navigation';
+import MarkDoneButton from '@/components/MarkDoneButton';
 
 export default function FlashcardViewer() {
   const params = useParams();
@@ -155,6 +156,15 @@ export default function FlashcardViewer() {
 
       <div className="mt-4 text-center text-sm text-gray-500">
         Tap card to flip • Use buttons to navigate
+      </div>
+
+      <div className="mt-6 pt-6 border-t border-gray-200">
+        <MarkDoneButton
+          activityType="flashcard"
+          activityId={setData.id}
+          points={15}
+          label="🧠 Mark Set as Reviewed (Earn 15 Points)"
+        />
       </div>
     </div>
   );

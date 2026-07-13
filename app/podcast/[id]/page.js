@@ -5,6 +5,7 @@ import { createBrowserClient } from '@/lib/supabase';
 import { useParams } from 'next/navigation';
 import Navbar from '@/components/Navbar';
 import Footer from '@/components/Footer';
+import { completeActivity } from '@/lib/gamification';
 
 export default function PodcastPlayer() {
   const params = useParams();
@@ -70,6 +71,12 @@ export default function PodcastPlayer() {
         setCurrentIndex(currentIndex + 1);
       } else {
         setIsPlaying(false);
+        // Podcast completion never awarded points before — this closes
+        // that gap the same way blog/audio/course already work, via
+        // the shared completeActivity() ledger (dedupes automatically).
+        supabase.auth.getUser().then(({ data: { user } }) => {
+          if (user) completeActivity(user.id, 'podcast', id, 20);
+        });
       }
     };
 
