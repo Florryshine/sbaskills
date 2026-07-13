@@ -1,4 +1,6 @@
 import { createClient } from '@supabase/supabase-js';
+import { createServerClient } from '@/lib/supabase-server';
+import { formatContentLabel } from '@/lib/examLabel';
 
 export const dynamic = 'force-dynamic';
 
@@ -12,6 +14,28 @@ export default async function FlashcardsPage() {
     .select('id, keyword, cards, created_at')
     .eq('status', 'published')
     .order('created_at', { ascending: false });
+
+  // Exam-type personalization: same flashcard content, labeled per the
+  // logged-in student's own exam track (JAMB/WAEC/NECO/...) from
+  // onboarding — falls back to the generic "SBA:" prefix if signed out
+  // or onboarding hasn't run yet, so nothing looks broken either way.
+  let targetExams = [];
+  try {
+    const authedSupabase = createServerClient();
+    const {
+      data: { user },
+    } = await authedSupabase.auth.getUser();
+    if (user) {
+      const { data: profile } = await authedSupabase
+        .from('profiles')
+        .select('target_exams')
+        .eq('id', user.id)
+        .maybeSingle();
+      targetExams = profile?.target_exams || [];
+    }
+  } catch (e) {
+    console.error('Could not load exam personalization:', e);
+  }
 
   if (error) {
     console.error('Error loading flashcards:', error);
@@ -35,7 +59,7 @@ export default async function FlashcardsPage() {
               className="bg-white rounded-2xl shadow-sm border p-4 flex justify-between items-center"
             >
               <div>
-                <h2 className="font-bold text-lg">{set.keyword}</h2>
+                <h2 className="font-bold text-lg">{formatContentLabel(targetExams, set.keyword)}</h2>
                 <p className="text-sm text-gray-500">
                   {set.cards?.length || 0} cards
                 </p>
