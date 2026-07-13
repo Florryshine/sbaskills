@@ -72,6 +72,7 @@ export default function Navbar() {
           <Link href="/podcasts" className="text-sm font-medium text-slate-600 transition hover:text-brand-blue">🎙️ Podcasts</Link> {/* NEW */}
           <Link href="/flashcards" className="text-sm font-medium text-slate-600 transition hover:text-brand-blue">📚 Flashcards</Link>
           <Link href="/leaderboard" className="text-sm font-medium text-slate-600 transition hover:text-brand-blue">🏅 Board</Link>
+          <Link href="/store" className="text-sm font-medium text-slate-600 transition hover:text-brand-blue">🏪 Store</Link>
           <Link href="/library" className="text-sm font-medium text-slate-600 transition hover:text-brand-blue">📚 Library</Link>
           <Link href="/tools" className="text-sm font-medium text-slate-600 transition hover:text-brand-blue">🛠️ Tools</Link>
           <Link href="/challenge" className="text-sm font-medium text-slate-600 transition hover:text-brand-blue">⚡ Challenge</Link>
@@ -136,6 +137,7 @@ export default function Navbar() {
             <Link href="/podcasts" onClick={() => setMenuOpen(false)} className="text-sm font-semibold text-slate-700 hover:text-brand-blue">🎙️ Podcasts</Link> {/* NEW */}
             <Link href="/flashcards" onClick={() => setMenuOpen(false)} className="text-sm font-semibold text-slate-700 hover:text-brand-blue">📚 Flashcards</Link>
             <Link href="/leaderboard" onClick={() => setMenuOpen(false)} className="text-sm font-semibold text-slate-700 hover:text-brand-blue">🏅 Leaderboard</Link>
+            <Link href="/store" onClick={() => setMenuOpen(false)} className="text-sm font-semibold text-slate-700 hover:text-brand-blue">🏪 Store</Link>
             <Link href="/library" onClick={() => setMenuOpen(false)} className="text-sm font-semibold text-slate-700 hover:text-brand-blue">📚 Library</Link>
             <Link href="/tools" onClick={() => setMenuOpen(false)} className="text-sm font-semibold text-slate-700 hover:text-brand-blue">🛠️ Tools</Link>
             <Link href="/challenge" onClick={() => setMenuOpen(false)} className="text-sm font-semibold text-slate-700 hover:text-brand-blue">⚡ Daily Challenge</Link>

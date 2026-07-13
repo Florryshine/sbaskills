@@ -7,6 +7,7 @@ import Navbar from '@/components/Navbar';
 import Footer from '@/components/Footer';
 import Link from 'next/link';
 import { addPoints } from '@/lib/gamification';
+import { awardEligibleBadges } from '@/lib/badges';
 
 // Harder bosses give you less time per question. Difficulty 1 -> 30s,
 // difficulty 5 -> 10s, in steps of 5, clamped to the 10-30s range.
@@ -155,6 +156,7 @@ export default function BossBattlesPage() {
 
       // Award XP
       await addPoints(user.id, selectedBoss.reward_xp || 100, `Defeated ${selectedBoss.name}`, 'boss_defeated', selectedBoss.id);
+      awardEligibleBadges(supabase, user.id).catch((e) => console.error('Badge check failed:', e));
       alert(`🏆 ${selectedBoss.name} defeated! You earned ${selectedBoss.reward_xp || 100} XP!`);
       setBattleState(newState);
       // Reload to refresh list

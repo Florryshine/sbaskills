@@ -1,0 +1,981 @@
+diff --git a/app/(student)/dashboard/page.js b/app/(student)/dashboard/page.js
+index 12bc9ed..1b39e36 100644
+--- a/app/(student)/dashboard/page.js
++++ b/app/(student)/dashboard/page.js
+@@ -7,6 +7,8 @@ import Link from 'next/link';
+ import Navbar from '@/components/Navbar';
+ import Footer from '@/components/Footer';
+ import { addPoints, updateStreak, getUserPoints } from '@/lib/gamification';
++import { awardEligibleBadges } from '@/lib/badges';
++import LevelProgress from '@/components/LevelProgress';
+ 
+ export default function StudentDashboard() {
+   const [user, setUser] = useState(null);
+@@ -35,6 +37,10 @@ export default function StudentDashboard() {
+       await updateStreak(user.id);
+       await addPoints(user.id, 5, 'Daily login bonus', 'login');
+ 
++      // Check for any badges newly earned since last visit — this is the
++      // fix for the audit finding that user_achievements never got written to.
++      awardEligibleBadges(supabase, user.id).catch((e) => console.error('Badge check failed:', e));
++
+       // Get user points
+       const pointsData = await getUserPoints(user.id);
+       setUserPoints(pointsData.total_points || 0);
+@@ -131,6 +137,11 @@ export default function StudentDashboard() {
+             )}
+           </div>
+ 
++          {/* Level / Rank Progress */}
++          <div className="mb-8">
++            <LevelProgress totalPoints={userPoints} />
++          </div>
++
+           {/* Refer & Earn Section */}
+           <div className="bg-gradient-to-r from-brand-blue to-blue-700 rounded-2xl p-6 mb-8 text-white">
+             <div className="flex flex-col md:flex-row items-center justify-between gap-4">
+@@ -167,15 +178,18 @@ export default function StudentDashboard() {
+               { label: 'Enrolled Courses', value: enrolledCourses.length, emoji: '📚' },
+               { label: 'Available Courses', value: availableCourses.length, emoji: '🎯' },
+               { label: 'Lessons Done', value: lessonsDone, emoji: '✅' },
+-              { label: 'Points', value: userPoints, emoji: '⭐' },
++              { label: 'Points', value: userPoints, emoji: '⭐', href: '/store' },
+               { label: 'Tools', href: '/tools', emoji: '🛠️' },
+             ].map((stat) => (
+-              <div key={stat.label}
+-                className="bg-white rounded-2xl p-4 shadow-sm border border-gray-100 text-center">
++              <Link
++                key={stat.label}
++                href={stat.href || '#'}
++                className={`bg-white rounded-2xl p-4 shadow-sm border border-gray-100 text-center ${stat.href ? 'hover:shadow-md transition' : ''}`}
++              >
+                 <p className="text-2xl mb-1">{stat.emoji}</p>
+                 <p className="text-2xl font-extrabold text-brand-blue">{stat.value}</p>
+                 <p className="text-xs text-gray-500 mt-1">{stat.label}</p>
+-              </div>
++              </Link>
+             ))}
+           </div>
+ 
+diff --git a/app/api/verify-payment/route.js b/app/api/verify-payment/route.js
+index 1d18601..c517b1c 100644
+--- a/app/api/verify-payment/route.js
++++ b/app/api/verify-payment/route.js
+@@ -1,11 +1,68 @@
+ import { NextResponse } from 'next/server';
+ import { createRouteHandlerClient } from '@/lib/supabase-server';
+ 
++// Previously broken end-to-end: EnrollButton.js sent { courseId, reference }
++// but this route read { course_id, student_id, amount } — course_id never
++// matched (camelCase vs snake_case) and student_id was never sent at all,
++// so every paid enrollment silently failed to record after a real charge.
++// Fixed by: accepting courseId as sent, deriving the student from the
++// authenticated session instead of trusting a client-supplied id (also
++// closes a spoofing hole), and looking up price server-side instead of
++// trusting a client-supplied amount.
+ export async function POST(request) {
+   try {
+-    const { reference, course_id, student_id, amount } = await request.json();
++    const { courseId, reference, free } = await request.json();
+     const supabase = createRouteHandlerClient();
+ 
++    const {
++      data: { user },
++    } = await supabase.auth.getUser();
++
++    if (!user) {
++      return NextResponse.json({ success: false, message: 'You must be logged in to enroll.' }, { status: 401 });
++    }
++
++    if (!courseId) {
++      return NextResponse.json({ success: false, message: 'Missing course.' }, { status: 400 });
++    }
++
++    // Don't double-enroll on a retry / page refresh.
++    const { data: existing } = await supabase
++      .from('enrollments')
++      .select('id')
++      .eq('student_id', user.id)
++      .eq('course_id', courseId)
++      .maybeSingle();
++
++    if (existing) {
++      return NextResponse.json({ success: true, alreadyEnrolled: true });
++    }
++
++    const { data: course } = await supabase
++      .from('courses')
++      .select('id, price')
++      .eq('id', courseId)
++      .single();
++
++    if (!course) {
++      return NextResponse.json({ success: false, message: 'Course not found.' }, { status: 404 });
++    }
++
++    if (free || Number(course.price) === 0) {
++      await supabase.from('enrollments').insert({
++        student_id: user.id,
++        course_id: courseId,
++        amount_paid: 0,
++        status: 'active',
++        payment_type: 'free',
++      });
++      return NextResponse.json({ success: true });
++    }
++
++    if (!reference) {
++      return NextResponse.json({ success: false, message: 'Missing payment reference.' }, { status: 400 });
++    }
++
+     // Verify with Paystack
+     const response = await fetch(`https://api.paystack.co/transaction/verify/${reference}`, {
+       headers: {
+@@ -15,13 +72,19 @@ export async function POST(request) {
+ 
+     const data = await response.json();
+ 
+-    if (data.data.status === 'success') {
+-      // Create enrollment
++    if (!data?.data) {
++      return NextResponse.json({ success: false, message: 'Could not verify payment with Paystack.' }, { status: 502 });
++    }
++
++    // Amount actually charged (kobo -> naira) must cover the course price —
++    // never trust a client-supplied amount for what gets recorded.
++    const amountPaid = data.data.amount / 100;
++    if (data.data.status === 'success' && amountPaid >= Number(course.price)) {
+       await supabase.from('enrollments').insert({
+-        student_id: student_id,
+-        course_id: course_id,
++        student_id: user.id,
++        course_id: courseId,
+         payment_reference: reference,
+-        amount_paid: data.data.amount / 100,
++        amount_paid: amountPaid,
+         status: 'active',
+         payment_type: 'paystack',
+       });
+@@ -32,6 +95,6 @@ export async function POST(request) {
+     return NextResponse.json({ success: false, message: 'Payment verification failed' });
+   } catch (error) {
+     console.error('Payment verification error:', error);
+-    return NextResponse.json({ success: false, message: error.message });
++    return NextResponse.json({ success: false, message: error.message }, { status: 500 });
+   }
+ }
+\ No newline at end of file
+diff --git a/app/boss/page.js b/app/boss/page.js
+index 9bb4cb7..9653e49 100644
+--- a/app/boss/page.js
++++ b/app/boss/page.js
+@@ -7,6 +7,7 @@ import Navbar from '@/components/Navbar';
+ import Footer from '@/components/Footer';
+ import Link from 'next/link';
+ import { addPoints } from '@/lib/gamification';
++import { awardEligibleBadges } from '@/lib/badges';
+ 
+ // Harder bosses give you less time per question. Difficulty 1 -> 30s,
+ // difficulty 5 -> 10s, in steps of 5, clamped to the 10-30s range.
+@@ -155,6 +156,7 @@ export default function BossBattlesPage() {
+ 
+       // Award XP
+       await addPoints(user.id, selectedBoss.reward_xp || 100, `Defeated ${selectedBoss.name}`, 'boss_defeated', selectedBoss.id);
++      awardEligibleBadges(supabase, user.id).catch((e) => console.error('Badge check failed:', e));
+       alert(`🏆 ${selectedBoss.name} defeated! You earned ${selectedBoss.reward_xp || 100} XP!`);
+       setBattleState(newState);
+       // Reload to refresh list
+diff --git a/app/challenge/page.js b/app/challenge/page.js
+index 0a15359..4f99673 100644
+--- a/app/challenge/page.js
++++ b/app/challenge/page.js
+@@ -6,7 +6,7 @@ import { useRouter } from 'next/navigation';
+ import Navbar from '@/components/Navbar';
+ import Footer from '@/components/Footer';
+ import Link from 'next/link';
+-import { addPoints } from '@/lib/gamification';
++import { addPoints, updateStreak } from '@/lib/gamification';
+ 
+ export default function DailyChallengePage() {
+   const [challenge, setChallenge] = useState(null);
+@@ -162,11 +162,10 @@ export default function DailyChallengePage() {
+       const xp = score >= 8 ? 50 : score >= 5 ? 25 : 10;
+       await addPoints(user.id, xp, 'Daily Challenge completed', 'daily_challenge', challenge.id);
+ 
+-      // Update streak
+-      await supabase
+-        .from('profiles')
+-        .update({ streak_days: streak + 1 })
+-        .eq('id', user.id);
++      // Update streak — routed through the same update_streak() RPC every
++      // other page uses now, instead of a naive +1 that never resets a
++      // broken streak back to 1.
++      await updateStreak(user.id);
+     } catch (err) {
+       console.error('Error saving attempt:', err);
+     }
+diff --git a/app/leaderboard/page.js b/app/leaderboard/page.js
+index 985f9e5..8f3ca21 100644
+--- a/app/leaderboard/page.js
++++ b/app/leaderboard/page.js
+@@ -2,20 +2,19 @@ import { createServerClient } from '@/lib/supabase-server';
+ import Navbar from '@/components/Navbar';
+ import Footer from '@/components/Footer';
+ import Link from 'next/link';
++import { getLevelInfo } from '@/lib/levels';
+ 
+-const LEVELS = [
+-  { min: 0, name: 'Rookie', emoji: '🥚' },
+-  { min: 100, name: 'Scholar', emoji: '📚' },
+-  { min: 300, name: 'Achiever', emoji: '⭐' },
+-  { min: 600, name: 'Champion', emoji: '🏆' },
+-  { min: 1000, name: 'Legend', emoji: '👑' },
+-];
+-
++// Local getLevel wrapper kept for the tiny emoji lookup this page uses —
++// the actual level/rank name+thresholds now come from lib/levels.js so
++// this page can't drift out of sync with the dashboard/profile again.
+ function getLevel(points) {
+-  for (let i = LEVELS.length - 1; i >= 0; i--) {
+-    if (points >= LEVELS[i].min) return LEVELS[i];
+-  }
+-  return LEVELS[0];
++  const info = getLevelInfo(points);
++  const emojiByLevel = { 1: '🌱', 5: '📚', 10: '⚔️', 15: '🔥', 20: '👑' };
++  const emojiKey = Object.keys(emojiByLevel)
++    .map(Number)
++    .filter((l) => l <= info.level)
++    .sort((a, b) => b - a)[0];
++  return { name: info.name, emoji: emojiByLevel[emojiKey] || '🌱' };
+ }
+ 
+ const MEDAL = ['🥇', '🥈', '🥉'];
+@@ -23,23 +22,23 @@ const MEDAL = ['🥇', '🥈', '🥉'];
+ export default async function LeaderboardPage() {
+   const supabase = createServerClient();
+ 
+-  // Fetch user points
++  // Fetch user points (streak_days no longer read from here — see below)
+   const { data: leaders } = await supabase
+     .from('user_points')
+-    .select('user_id, total_points, level, streak_days')
++    .select('user_id, total_points')
+     .order('total_points', { ascending: false })
+     .limit(20);
+ 
+-  // Fetch user profiles (names)
++  // Fetch user profiles (names + canonical streak_days)
+   const userIds = leaders?.map(l => l.user_id) || [];
+   let usersMap = {};
+   if (userIds.length > 0) {
+-    // Uses leaderboard_profiles (a view exposing only id + full_name)
++    // Uses leaderboard_profiles (a view exposing only public-safe columns)
+     // instead of profiles directly, since profiles' RLS is self-only
+     // and would silently hide every other student's name here.
+     const { data: profiles } = await supabase
+       .from('leaderboard_profiles')
+-      .select('id, full_name')
++      .select('id, full_name, streak_days')
+       .in('id', userIds);
+     usersMap = Object.fromEntries((profiles || []).map(p => [p.id, p]));
+   }
+@@ -59,6 +58,7 @@ export default async function LeaderboardPage() {
+       ...entry,
+       rank: index + 1,
+       full_name: profile.full_name || 'Student',
++      streak_days: profile.streak_days || 0,
+       levelName: level.name,
+       levelEmoji: level.emoji,
+       medal: index < 3 ? MEDAL[index] : null,
+diff --git a/app/quiz/[id]/page.js b/app/quiz/[id]/page.js
+index 4b36158..d0561b3 100644
+--- a/app/quiz/[id]/page.js
++++ b/app/quiz/[id]/page.js
+@@ -6,6 +6,7 @@ import { useParams, useRouter } from 'next/navigation';
+ import Navbar from '@/components/Navbar';
+ import Footer from '@/components/Footer';
+ import { addPoints } from '@/lib/gamification';
++import { awardEligibleBadges } from '@/lib/badges';
+ 
+ export default function TakeQuiz() {
+   const [quiz, setQuiz] = useState(null);
+@@ -104,6 +105,7 @@ export default function TakeQuiz() {
+     // Award points if passing
+     if (scorePercent >= 50) {
+       await addPoints(user.id, quiz.points_reward || 10, `Completed quiz: ${quiz.title}`, 'quiz_complete', id);
++      awardEligibleBadges(supabase, user.id).catch((e) => console.error('Badge check failed:', e));
+     }
+   };
+ 
+diff --git a/app/store/page.js b/app/store/page.js
+new file mode 100644
+index 0000000..f64fa25
+--- /dev/null
++++ b/app/store/page.js
+@@ -0,0 +1,107 @@
++'use client';
++
++import { useEffect, useState } from 'react';
++import { createBrowserClient } from '@/lib/supabase';
++import { useRouter } from 'next/navigation';
++import Navbar from '@/components/Navbar';
++import Footer from '@/components/Footer';
++import { getUserPoints, redeemPoints, getRewards } from '@/lib/gamification';
++
++export default function StorePage() {
++  const [user, setUser] = useState(null);
++  const [available, setAvailable] = useState(0);
++  const [rewards, setRewards] = useState([]);
++  const [loading, setLoading] = useState(true);
++  const [redeemingId, setRedeemingId] = useState(null);
++  const [message, setMessage] = useState(null);
++  const router = useRouter();
++  const supabase = createBrowserClient();
++
++  useEffect(() => {
++    async function load() {
++      const {
++        data: { user },
++      } = await supabase.auth.getUser();
++      if (!user) {
++        router.push('/login?next=/store');
++        return;
++      }
++      setUser(user);
++
++      const [pointsData, rewardsData] = await Promise.all([getUserPoints(user.id), getRewards()]);
++      setAvailable(pointsData.available_points);
++      setRewards(rewardsData);
++      setLoading(false);
++    }
++    load();
++  }, []);
++
++  const handleRedeem = async (reward) => {
++    setRedeemingId(reward.id);
++    setMessage(null);
++    const result = await redeemPoints(user.id, reward.id);
++    if (result.success) {
++      setAvailable(result.remaining);
++      setMessage({ type: 'success', text: `Redeemed "${reward.title}"! 🎉` });
++    } else {
++      setMessage({ type: 'error', text: result.message || 'Could not redeem right now.' });
++    }
++    setRedeemingId(null);
++  };
++
++  if (loading) return <div className="p-8 text-center">Loading store...</div>;
++
++  return (
++    <>
++      <Navbar />
++      <main className="min-h-screen bg-gray-50">
++        <section className="bg-brand-blue py-14 text-center text-white">
++          <h1 className="text-4xl font-extrabold mb-2">🏪 SBA Store</h1>
++          <p className="text-blue-100">Spend the points you've already earned — your XP never goes down.</p>
++          <div className="mt-4 inline-block bg-white/10 rounded-full px-6 py-2 font-bold text-lg">
++            {available.toLocaleString()} points available
++          </div>
++        </section>
++
++        <div className="max-w-4xl mx-auto px-4 py-8">
++          {message && (
++            <div
++              className={`mb-6 rounded-xl px-4 py-3 text-sm font-semibold ${
++                message.type === 'success' ? 'bg-green-50 text-green-700' : 'bg-red-50 text-red-700'
++              }`}
++            >
++              {message.text}
++            </div>
++          )}
++
++          {rewards.length === 0 ? (
++            <p className="text-center text-gray-500 py-12">No rewards available right now — check back soon.</p>
++          ) : (
++            <div className="grid gap-4 sm:grid-cols-2">
++              {rewards.map((reward) => {
++                const canAfford = available >= reward.cost_points;
++                return (
++                  <div key={reward.id} className="rounded-2xl bg-white border border-gray-100 shadow-sm p-5 flex flex-col">
++                    <p className="font-bold text-gray-800">{reward.title}</p>
++                    <p className="text-sm text-gray-500 mt-1 flex-1">{reward.description}</p>
++                    <div className="flex items-center justify-between mt-4">
++                      <span className="text-brand-blue font-extrabold">{reward.cost_points} pts</span>
++                      <button
++                        onClick={() => handleRedeem(reward)}
++                        disabled={!canAfford || redeemingId === reward.id}
++                        className="rounded-full bg-brand-yellow px-4 py-2 text-xs font-bold text-brand-dark disabled:opacity-40 disabled:cursor-not-allowed hover:opacity-90"
++                      >
++                        {redeemingId === reward.id ? 'Redeeming...' : canAfford ? 'Redeem' : 'Not enough points'}
++                      </button>
++                    </div>
++                  </div>
++                );
++              })}
++            </div>
++          )}
++        </div>
++      </main>
++      <Footer />
++    </>
++  );
++}
+diff --git a/components/LevelProgress.js b/components/LevelProgress.js
+new file mode 100644
+index 0000000..2e1f9c3
+--- /dev/null
++++ b/components/LevelProgress.js
+@@ -0,0 +1,37 @@
++'use client';
++
++import { getLevelInfo } from '@/lib/levels';
++
++export default function LevelProgress({ totalPoints = 0, compact = false }) {
++  const info = getLevelInfo(totalPoints);
++
++  if (compact) {
++    return (
++      <span className="inline-flex items-center gap-1 text-xs font-bold text-brand-blue">
++        Lv{info.level} {info.name}
++      </span>
++    );
++  }
++
++  return (
++    <div className="rounded-2xl bg-white border border-gray-100 shadow-sm p-4">
++      <div className="flex items-center justify-between mb-2">
++        <p className="font-extrabold text-brand-blue">
++          Level {info.level} · {info.name}
++        </p>
++        <p className="text-xs text-gray-500">{totalPoints.toLocaleString()} XP</p>
++      </div>
++      <div className="h-2.5 w-full rounded-full bg-gray-100 overflow-hidden">
++        <div
++          className="h-full rounded-full bg-brand-yellow transition-all"
++          style={{ width: `${info.progressPct}%` }}
++        />
++      </div>
++      <p className="text-xs text-gray-400 mt-1">
++        {info.isMaxLevel
++          ? "You've reached the top rank — SBA Legend."
++          : `${info.pointsToNext.toLocaleString()} XP to Level ${info.nextLevel} · ${info.nextLevelName}`}
++      </p>
++    </div>
++  );
++}
+diff --git a/components/Navbar.js b/components/Navbar.js
+index ee1d261..362b5ad 100644
+--- a/components/Navbar.js
++++ b/components/Navbar.js
+@@ -72,6 +72,7 @@ export default function Navbar() {
+           <Link href="/podcasts" className="text-sm font-medium text-slate-600 transition hover:text-brand-blue">🎙️ Podcasts</Link> {/* NEW */}
+           <Link href="/flashcards" className="text-sm font-medium text-slate-600 transition hover:text-brand-blue">📚 Flashcards</Link>
+           <Link href="/leaderboard" className="text-sm font-medium text-slate-600 transition hover:text-brand-blue">🏅 Board</Link>
++          <Link href="/store" className="text-sm font-medium text-slate-600 transition hover:text-brand-blue">🏪 Store</Link>
+           <Link href="/library" className="text-sm font-medium text-slate-600 transition hover:text-brand-blue">📚 Library</Link>
+           <Link href="/tools" className="text-sm font-medium text-slate-600 transition hover:text-brand-blue">🛠️ Tools</Link>
+           <Link href="/challenge" className="text-sm font-medium text-slate-600 transition hover:text-brand-blue">⚡ Challenge</Link>
+@@ -136,6 +137,7 @@ export default function Navbar() {
+             <Link href="/podcasts" onClick={() => setMenuOpen(false)} className="text-sm font-semibold text-slate-700 hover:text-brand-blue">🎙️ Podcasts</Link> {/* NEW */}
+             <Link href="/flashcards" onClick={() => setMenuOpen(false)} className="text-sm font-semibold text-slate-700 hover:text-brand-blue">📚 Flashcards</Link>
+             <Link href="/leaderboard" onClick={() => setMenuOpen(false)} className="text-sm font-semibold text-slate-700 hover:text-brand-blue">🏅 Leaderboard</Link>
++            <Link href="/store" onClick={() => setMenuOpen(false)} className="text-sm font-semibold text-slate-700 hover:text-brand-blue">🏪 Store</Link>
+             <Link href="/library" onClick={() => setMenuOpen(false)} className="text-sm font-semibold text-slate-700 hover:text-brand-blue">📚 Library</Link>
+             <Link href="/tools" onClick={() => setMenuOpen(false)} className="text-sm font-semibold text-slate-700 hover:text-brand-blue">🛠️ Tools</Link>
+             <Link href="/challenge" onClick={() => setMenuOpen(false)} className="text-sm font-semibold text-slate-700 hover:text-brand-blue">⚡ Daily Challenge</Link>
+diff --git a/lib/badges.js b/lib/badges.js
+new file mode 100644
+index 0000000..29c84e0
+--- /dev/null
++++ b/lib/badges.js
+@@ -0,0 +1,56 @@
++// lib/badges.js
++// Fixes the audit finding: achievements were never actually being written
++// to user_achievements. This checks a student's stats against any
++// achievement that has requirement_type/requirement_value set (see
++// migration 003) and awards the ones they newly qualify for.
++//
++// Call awardEligibleBadges(supabase, userId) after any XP-earning action
++// (quiz, boss battle, streak update, etc.) — cheap: one query per pillar,
++// already computed by getMasteryStats.
++
++import { getMasteryStats } from './mastery';
++import { addPoints } from './gamification';
++
++const STAT_KEY_BY_REQUIREMENT = {
++  streak: 'consistency',
++  learning_mastery: 'learningMastery',
++  assessment_champion: 'assessmentChampion',
++  scholar_recognition: 'scholarRecognition',
++};
++
++export async function awardEligibleBadges(supabase, userId) {
++  const [{ data: candidates }, { data: earned }, { data: pointsRow }, stats] = await Promise.all([
++    supabase.from('achievements').select('*').not('requirement_type', 'is', null),
++    supabase.from('user_achievements').select('achievement_id').eq('user_id', userId),
++    supabase.from('user_points').select('total_points').eq('user_id', userId).maybeSingle(),
++    getMasteryStats(supabase, userId),
++  ]);
++
++  const earnedIds = new Set((earned || []).map((e) => e.achievement_id));
++  const totalPoints = pointsRow?.total_points || 0;
++  const newlyAwarded = [];
++
++  for (const ach of candidates || []) {
++    if (earnedIds.has(ach.id)) continue;
++
++    const value =
++      ach.requirement_type === 'xp' ? totalPoints : stats[STAT_KEY_BY_REQUIREMENT[ach.requirement_type]];
++
++    if (value === undefined || ach.requirement_value === null) continue;
++
++    if (value >= ach.requirement_value) {
++      const { error } = await supabase
++        .from('user_achievements')
++        .insert({ user_id: userId, achievement_id: ach.id });
++
++      if (!error) {
++        newlyAwarded.push(ach);
++        if (ach.xp) {
++          await addPoints(userId, ach.xp, `Earned achievement: ${ach.title || ach.name}`, 'achievement', ach.id);
++        }
++      }
++    }
++  }
++
++  return newlyAwarded;
++}
+diff --git a/lib/examLabel.js b/lib/examLabel.js
+new file mode 100644
+index 0000000..d631e91
+--- /dev/null
++++ b/lib/examLabel.js
+@@ -0,0 +1,44 @@
++// lib/examLabel.js
++// Personalization, not content duplication: one topic ("Cell" in Biology)
++// gets labeled per the student's own exam track instead of forking content
++// per exam. Reads profiles.target_exams — already collected at onboarding
++// (JAMB/WAEC/NECO/GCE/BECE/University/Other, multi-select) — no new column.
++//
++// A student can select more than one exam. For a compact label we show
++// their first/primary selection; formatContentLabelMulti() below covers
++// the rare case you want to show all of them (e.g. "JAMB/WAEC: Cell in Biology").
++
++const KNOWN_EXAMS = ['JAMB', 'WAEC', 'NECO', 'GCE', 'BECE'];
++
++function primaryExam(targetExams) {
++  if (!Array.isArray(targetExams) || targetExams.length === 0) return null;
++  // Prefer a recognized core exam over "University"/"Other" if both are selected.
++  return targetExams.find((e) => KNOWN_EXAMS.includes(e)) || targetExams[0];
++}
++
++/**
++ * targetExams=['JAMB','WAEC'], topic="Cell", subject="Biology"
++ * -> "JAMB: Cell in Biology"
++ * Falls back to a generic "SBA:" prefix if onboarding hasn't run yet.
++ */
++export function formatContentLabel(targetExams, topic, subject) {
++  const prefix = primaryExam(targetExams) || 'SBA';
++  if (!topic) return `${prefix}${subject ? `: ${subject}` : ''}`;
++  return `${prefix}: ${topic}${subject ? ` in ${subject}` : ''}`;
++}
++
++/**
++ * Shows every exam the student picked, e.g. "JAMB/WAEC: Cell in Biology" —
++ * use when it matters that the same content counts for all their exams.
++ */
++export function formatContentLabelMulti(targetExams, topic, subject) {
++  const exams = (targetExams || []).filter((e) => KNOWN_EXAMS.includes(e));
++  const prefix = exams.length ? exams.join('/') : 'SBA';
++  if (!topic) return `${prefix}${subject ? `: ${subject}` : ''}`;
++  return `${prefix}: ${topic}${subject ? ` in ${subject}` : ''}`;
++}
++
++/** Compact chip label: "JAMB", "WAEC", etc. */
++export function examBadge(targetExams) {
++  return primaryExam(targetExams) || 'SBA';
++}
+diff --git a/lib/gamification.js b/lib/gamification.js
+index a7bcb96..43c6df8 100644
+--- a/lib/gamification.js
++++ b/lib/gamification.js
+@@ -37,19 +37,54 @@ export async function updateStreak(userId) {
+ 
+ export async function getUserPoints(userId) {
+   const supabase = createBrowserClient();
+-  const { data, error } = await supabase
+-    .from('user_points')
+-    .select('total_points, streak_days')
+-    .eq('user_id', userId)
+-    .maybeSingle();
+-  if (error || !data) return { total_points: 0, streak_days: 0 };
+-  return data;
++  // total_points/redeemed_points live on user_points; streak_days is now
++  // canonical on profiles (see migration 003_progression_system.sql) —
++  // read both and merge so callers don't need to know the split.
++  const [{ data: pointsRow }, { data: profileRow }] = await Promise.all([
++    supabase.from('user_points').select('total_points, redeemed_points').eq('user_id', userId).maybeSingle(),
++    supabase.from('profiles').select('streak_days').eq('id', userId).maybeSingle(),
++  ]);
++
++  const total_points = pointsRow?.total_points || 0;
++  const redeemed_points = pointsRow?.redeemed_points || 0;
++
++  return {
++    total_points,
++    streak_days: profileRow?.streak_days || 0,
++    available_points: Math.max(0, total_points - redeemed_points),
++  };
++}
++
++export async function redeemPoints(userId, rewardId) {
++  const supabase = createBrowserClient();
++  try {
++    const { data, error } = await supabase.rpc('redeem_points', {
++      p_user_id: userId,
++      p_reward_id: rewardId,
++    });
++    if (error) {
++      console.error('Error redeeming points:', error);
++      return { success: false, message: error.message };
++    }
++    return data; // { success, remaining } or { success: false, message }
++  } catch (e) {
++    console.error('Redeem function not available:', e);
++    return { success: false, message: 'Redemption is unavailable right now.' };
++  }
+ }
+ 
+-export async function redeemPoints(userId, points, rewardType, rewardId) {
++export async function getRewards() {
+   const supabase = createBrowserClient();
+-  // Simple placeholder – you can implement later
+-  return { success: true };
++  const { data, error } = await supabase
++    .from('rewards')
++    .select('*')
++    .eq('is_active', true)
++    .order('cost_points', { ascending: true });
++  if (error) {
++    console.error('Error fetching rewards:', error);
++    return [];
++  }
++  return data || [];
+ }
+ 
+ export async function completeActivity(studentId, activityType, activityId, points = 10) {
+diff --git a/lib/levels.js b/lib/levels.js
+new file mode 100644
+index 0000000..580e7c8
+--- /dev/null
++++ b/lib/levels.js
+@@ -0,0 +1,68 @@
++// lib/levels.js
++// Level/Rank layer on top of the existing user_points.total_points.
++// No new table — this is a pure lookup against XP that already exists.
++//
++// Levels 1–10 are the numbers worked out against SBA's real economy
++// (login/quiz/boss/blog/audio/course/streak all feeding one total_points
++// column already). Levels 11–20 use a provisional growth formula —
++// these are placeholders until real usage data tells us how fast
++// students actually accumulate XP; revisit before relying on them.
++
++export const LEVELS = [
++  { level: 1, name: 'New Scholar', minXP: 0 },
++  { level: 2, name: 'Curious Learner', minXP: 1000 },
++  { level: 3, name: 'Active Scholar', minXP: 3000 },
++  { level: 4, name: 'Rising Scholar', minXP: 6000 },
++  { level: 5, name: 'Dedicated Scholar', minXP: 10000 },
++  { level: 6, name: 'Knowledge Explorer', minXP: 15000 },
++  { level: 7, name: 'Learning Warrior', minXP: 25000 },
++  { level: 8, name: 'Question Slayer', minXP: 40000 },
++  { level: 9, name: 'Exam Strategist', minXP: 60000 },
++  { level: 10, name: 'SBA Champion', minXP: 100000 },
++  // Provisional — tune once real level-10+ students exist.
++  { level: 11, name: 'Advanced Scholar', minXP: 140000 },
++  { level: 12, name: 'Master Learner', minXP: 190000 },
++  { level: 13, name: 'Strategic Thinker', minXP: 250000 },
++  { level: 14, name: 'Exam Tactician', minXP: 320000 },
++  { level: 15, name: 'Elite Scholar', minXP: 400000 },
++  { level: 16, name: 'Elite Warrior', minXP: 500000 },
++  { level: 17, name: 'Elite Champion', minXP: 620000 },
++  { level: 18, name: 'Elite Strategist', minXP: 750000 },
++  { level: 19, name: 'Grandmaster Scholar', minXP: 900000 },
++  { level: 20, name: 'SBA Legend', minXP: 1000000 },
++];
++
++/**
++ * Given a student's lifetime XP (total_points), return their level info.
++ */
++export function getLevelInfo(xp = 0) {
++  const points = Number(xp) || 0;
++  let current = LEVELS[0];
++  let next = LEVELS[1] || null;
++
++  for (let i = 0; i < LEVELS.length; i++) {
++    if (points >= LEVELS[i].minXP) {
++      current = LEVELS[i];
++      next = LEVELS[i + 1] || null;
++    } else {
++      break;
++    }
++  }
++
++  const span = next ? next.minXP - current.minXP : 0;
++  const progressIntoLevel = next ? points - current.minXP : 0;
++  const progressPct = next ? Math.min(100, Math.round((progressIntoLevel / span) * 100)) : 100;
++  const pointsToNext = next ? Math.max(0, next.minXP - points) : 0;
++
++  return {
++    level: current.level,
++    name: current.name,
++    minXP: current.minXP,
++    nextLevel: next ? next.level : null,
++    nextLevelName: next ? next.name : null,
++    nextLevelMinXP: next ? next.minXP : null,
++    progressPct,
++    pointsToNext,
++    isMaxLevel: !next,
++  };
++}
+diff --git a/lib/mastery.js b/lib/mastery.js
+new file mode 100644
+index 0000000..dfb9719
+--- /dev/null
++++ b/lib/mastery.js
+@@ -0,0 +1,84 @@
++// lib/mastery.js
++// The 4-pillar level-up system: XP is mandatory, plus 3-of-4 from
++// Learning Mastery, Assessment Champion, Scholar Recognition, Consistency.
++//
++// Every number here reads from tables/columns that already exist —
++// no new schema. Pillar THRESHOLDS below are a working placeholder
++// formula (documented in the design conversation as "still to be
++// worked out level-by-level") — tune once you have real completion
++// data, this just makes the framework functional today.
++
++import { getLevelInfo } from './levels';
++
++export async function getMasteryStats(supabase, userId) {
++  const [{ count: learningCount }, { count: assessmentCount }, { count: recognitionCount }, profile] =
++    await Promise.all([
++      supabase
++        .from('student_progress')
++        .select('id', { count: 'exact', head: true })
++        .eq('student_id', userId)
++        .in('activity_type', ['course', 'blog', 'audio']),
++      supabase
++        .from('points_log')
++        .select('id', { count: 'exact', head: true })
++        .eq('user_id', userId)
++        .in('action_type', ['quiz_complete', 'boss_defeated', 'daily_challenge']),
++      supabase
++        .from('points_log')
++        .select('id', { count: 'exact', head: true })
++        .eq('user_id', userId)
++        .eq('action_type', 'tutor_bonus'),
++      supabase.from('profiles').select('streak_days').eq('id', userId).single(),
++    ]);
++
++  return {
++    learningMastery: learningCount || 0,
++    assessmentChampion: assessmentCount || 0,
++    scholarRecognition: recognitionCount || 0,
++    consistency: profile?.data?.streak_days || 0,
++  };
++}
++
++// Provisional per-level pillar targets — scale with level index.
++// Placeholder formula, not a finalized design.
++function pillarTargetsForLevel(level) {
++  return {
++    learningMastery: level * 3,
++    assessmentChampion: level * 5,
++    scholarRecognition: Math.ceil(level / 3),
++    consistency: Math.min(level * 2, 30), // cap streak requirement at 30 days
++  };
++}
++
++/**
++ * Returns whether a student meets the requirements to advance past
++ * their current level: mandatory XP + at least 3 of the 4 pillars.
++ */
++export function evaluateLevelUp(totalPoints, stats) {
++  const { nextLevel, nextLevelMinXP, level } = getLevelInfo(totalPoints);
++
++  if (!nextLevel) {
++    return { canLevelUp: false, atMaxLevel: true };
++  }
++
++  const xpMet = totalPoints >= nextLevelMinXP;
++  const targets = pillarTargetsForLevel(level);
++
++  const pillarResults = {
++    learningMastery: stats.learningMastery >= targets.learningMastery,
++    assessmentChampion: stats.assessmentChampion >= targets.assessmentChampion,
++    scholarRecognition: stats.scholarRecognition >= targets.scholarRecognition,
++    consistency: stats.consistency >= targets.consistency,
++  };
++
++  const pillarsMet = Object.values(pillarResults).filter(Boolean).length;
++
++  return {
++    canLevelUp: xpMet && pillarsMet >= 3,
++    xpMet,
++    pillarsMet,
++    pillarResults,
++    targets,
++    nextLevel,
++  };
++}
+diff --git a/supabase/migrations/003_progression_system.sql b/supabase/migrations/003_progression_system.sql
+new file mode 100644
+index 0000000..88065a0
+--- /dev/null
++++ b/supabase/migrations/003_progression_system.sql
+@@ -0,0 +1,145 @@
++-- 003_progression_system.sql
++-- Safe to run multiple times. Run in Supabase SQL editor.
++-- Covers: canonical streak, spendable points ledger, exam_type personalization,
++-- badges wiring, and mastery-pillar source data.
++
++-- 1) STREAK: profiles.streak_days becomes the single source of truth.
++alter table public.profiles add column if not exists streak_days integer not null default 0;
++alter table public.profiles add column if not exists last_active date;
++
++-- Backfill from whichever table currently has the higher value, so nobody's streak resets to 0.
++update public.profiles p
++set streak_days = greatest(p.streak_days, coalesce(up.streak_days, 0))
++from public.user_points up
++where up.user_id = p.id;
++
++-- Canonical streak function: profiles is now the only writer.
++create or replace function update_streak(p_user_id uuid)
++returns void
++language plpgsql
++security definer
++set search_path = public
++as $$
++declare
++  v_last_date date;
++begin
++  select last_active into v_last_date from public.profiles where id = p_user_id;
++
++  update public.profiles
++  set streak_days = case
++        when last_active = current_date then streak_days
++        when last_active = current_date - 1 then streak_days + 1
++        else 1
++      end,
++      last_active = current_date
++  where id = p_user_id;
++end;
++$$;
++
++grant execute on function update_streak(uuid) to authenticated;
++
++-- 2) SPENDABLE POINTS: total_points stays lifetime/never-decreasing (it drives levels).
++-- Spending is tracked separately so level progress is never touched by redemptions.
++alter table public.user_points add column if not exists redeemed_points integer not null default 0;
++
++create table if not exists public.rewards (
++  id uuid primary key default gen_random_uuid(),
++  title text not null,
++  description text,
++  cost_points integer not null check (cost_points > 0),
++  reward_type text not null default 'digital',
++  is_active boolean not null default true,
++  created_at timestamptz default now()
++);
++
++create table if not exists public.redemptions (
++  id uuid primary key default gen_random_uuid(),
++  user_id uuid not null references auth.users(id) on delete cascade,
++  reward_id uuid not null references public.rewards(id),
++  cost_points integer not null,
++  status text not null default 'fulfilled' check (status in ('pending', 'fulfilled', 'cancelled')),
++  created_at timestamptz default now()
++);
++
++alter table public.rewards enable row level security;
++alter table public.redemptions enable row level security;
++
++drop policy if exists "Anyone can view active rewards" on public.rewards;
++create policy "Anyone can view active rewards" on public.rewards for select to authenticated using (is_active = true);
++
++drop policy if exists "Users can view own redemptions" on public.redemptions;
++create policy "Users can view own redemptions" on public.redemptions for select to authenticated using (auth.uid() = user_id);
++
++create or replace function redeem_points(p_user_id uuid, p_reward_id uuid)
++returns jsonb
++language plpgsql
++security definer
++set search_path = public
++as $$
++declare
++  v_cost integer;
++  v_available integer;
++  v_active boolean;
++begin
++  select cost_points, is_active into v_cost, v_active from public.rewards where id = p_reward_id;
++
++  if v_cost is null then
++    return jsonb_build_object('success', false, 'message', 'Reward not found');
++  end if;
++  if not v_active then
++    return jsonb_build_object('success', false, 'message', 'Reward is no longer available');
++  end if;
++
++  select (total_points - redeemed_points) into v_available from public.user_points where user_id = p_user_id;
++  v_available := coalesce(v_available, 0);
++
++  if v_available < v_cost then
++    return jsonb_build_object('success', false, 'message', 'Not enough points', 'available', v_available, 'cost', v_cost);
++  end if;
++
++  update public.user_points set redeemed_points = redeemed_points + v_cost, updated_at = now() where user_id = p_user_id;
++
++  insert into public.redemptions (user_id, reward_id, cost_points) values (p_user_id, p_reward_id, v_cost);
++
++  insert into public.points_log (user_id, points, reason, action_type, reference_id)
++  values (p_user_id, -v_cost, 'Redeemed reward', 'redemption', p_reward_id);
++
++  return jsonb_build_object('success', true, 'remaining', v_available - v_cost);
++end;
++$$;
++
++grant execute on function redeem_points(uuid, uuid) to authenticated;
++
++-- Seed a starter set of rewards so the store isn't empty on launch.
++insert into public.rewards (title, description, cost_points, reward_type)
++select * from (values
++  ('Boss Battle Extra Hint', 'Reveal one hint during any boss battle attempt.', 50, 'digital'),
++  ('Extra Quiz Attempt', 'Unlock one additional attempt on a completed quiz.', 75, 'digital'),
++  ('SBA Profile Frame', 'A special profile frame shown on the leaderboard.', 150, 'cosmetic'),
++  ('Premium Study Pack Unlock', 'Unlock one premium revision pack for 7 days.', 400, 'academic')
++) as v(title, description, cost_points, reward_type)
++where not exists (select 1 from public.rewards);
++
++-- 3) EXAM-TYPE PERSONALIZATION: same content, labeled per the student's exam track.
++-- Onboarding already collects this into profiles.target_exams (text[]) —
++-- no new column needed, just a read helper (see lib/examLabel.js).
++
++-- 4) MASTERY PILLARS / BADGES source data (levels are computed in app code from these).
++-- points_log.action_type already distinguishes 'quiz', 'boss_battle', 'tutor_bonus', etc.,
++-- and student_progress already distinguishes activity_type, so no new tables are needed
++-- for Learning Mastery / Assessment Champion / Scholar Recognition — just queries.
++-- user_achievements already exists per prior audit; the bug was that nothing
++-- ever wrote to it. Fix is in application code (lib/badges.js). Adding
++-- requirement columns here so auto-award has something to evaluate against —
++-- existing manually-curated achievement rows are untouched (requirement_type
++-- stays null on those, so they're simply skipped by auto-award, not broken).
++alter table public.achievements add column if not exists requirement_type text
++  check (requirement_type in ('streak', 'xp', 'learning_mastery', 'assessment_champion', 'scholar_recognition') or requirement_type is null);
++alter table public.achievements add column if not exists requirement_value integer;
++
++-- 5) leaderboard_profiles view now also exposes canonical streak_days,
++-- since the leaderboard previously read the stale user_points copy.
++-- (Appending a column at the end is safe for CREATE OR REPLACE VIEW.)
++create or replace view public.leaderboard_profiles as
++select id, full_name, streak_days
++from public.profiles;

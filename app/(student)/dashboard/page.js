@@ -7,6 +7,8 @@ import Link from 'next/link';
 import Navbar from '@/components/Navbar';
 import Footer from '@/components/Footer';
 import { addPoints, updateStreak, getUserPoints } from '@/lib/gamification';
+import { awardEligibleBadges } from '@/lib/badges';
+import LevelProgress from '@/components/LevelProgress';
 
 export default function StudentDashboard() {
   const [user, setUser] = useState(null);
@@ -34,6 +36,10 @@ export default function StudentDashboard() {
       // Update streak and add daily login bonus
       await updateStreak(user.id);
       await addPoints(user.id, 5, 'Daily login bonus', 'login');
+
+      // Check for any badges newly earned since last visit — this is the
+      // fix for the audit finding that user_achievements never got written to.
+      awardEligibleBadges(supabase, user.id).catch((e) => console.error('Badge check failed:', e));
 
       // Get user points
       const pointsData = await getUserPoints(user.id);
@@ -131,6 +137,11 @@ export default function StudentDashboard() {
             )}
           </div>
 
+          {/* Level / Rank Progress */}
+          <div className="mb-8">
+            <LevelProgress totalPoints={userPoints} />
+          </div>
+
           {/* Refer & Earn Section */}
           <div className="bg-gradient-to-r from-brand-blue to-blue-700 rounded-2xl p-6 mb-8 text-white">
             <div className="flex flex-col md:flex-row items-center justify-between gap-4">
@@ -167,15 +178,18 @@ export default function StudentDashboard() {
               { label: 'Enrolled Courses', value: enrolledCourses.length, emoji: '📚' },
               { label: 'Available Courses', value: availableCourses.length, emoji: '🎯' },
               { label: 'Lessons Done', value: lessonsDone, emoji: '✅' },
-              { label: 'Points', value: userPoints, emoji: '⭐' },
+              { label: 'Points', value: userPoints, emoji: '⭐', href: '/store' },
               { label: 'Tools', href: '/tools', emoji: '🛠️' },
             ].map((stat) => (
-              <div key={stat.label}
-                className="bg-white rounded-2xl p-4 shadow-sm border border-gray-100 text-center">
+              <Link
+                key={stat.label}
+                href={stat.href || '#'}
+                className={`bg-white rounded-2xl p-4 shadow-sm border border-gray-100 text-center ${stat.href ? 'hover:shadow-md transition' : ''}`}
+              >
                 <p className="text-2xl mb-1">{stat.emoji}</p>
                 <p className="text-2xl font-extrabold text-brand-blue">{stat.value}</p>
                 <p className="text-xs text-gray-500 mt-1">{stat.label}</p>
-              </div>
+              </Link>
             ))}
           </div>
 

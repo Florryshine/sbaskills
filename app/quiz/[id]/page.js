@@ -6,6 +6,7 @@ import { useParams, useRouter } from 'next/navigation';
 import Navbar from '@/components/Navbar';
 import Footer from '@/components/Footer';
 import { addPoints } from '@/lib/gamification';
+import { awardEligibleBadges } from '@/lib/badges';
 
 export default function TakeQuiz() {
   const [quiz, setQuiz] = useState(null);
@@ -104,6 +105,7 @@ export default function TakeQuiz() {
     // Award points if passing
     if (scorePercent >= 50) {
       await addPoints(user.id, quiz.points_reward || 10, `Completed quiz: ${quiz.title}`, 'quiz_complete', id);
+      awardEligibleBadges(supabase, user.id).catch((e) => console.error('Badge check failed:', e));
     }
   };
 

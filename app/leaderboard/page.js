@@ -2,20 +2,19 @@ import { createServerClient } from '@/lib/supabase-server';
 import Navbar from '@/components/Navbar';
 import Footer from '@/components/Footer';
 import Link from 'next/link';
+import { getLevelInfo } from '@/lib/levels';
 
-const LEVELS = [
-  { min: 0, name: 'Rookie', emoji: '🥚' },
-  { min: 100, name: 'Scholar', emoji: '📚' },
-  { min: 300, name: 'Achiever', emoji: '⭐' },
-  { min: 600, name: 'Champion', emoji: '🏆' },
-  { min: 1000, name: 'Legend', emoji: '👑' },
-];
-
+// Local getLevel wrapper kept for the tiny emoji lookup this page uses —
+// the actual level/rank name+thresholds now come from lib/levels.js so
+// this page can't drift out of sync with the dashboard/profile again.
 function getLevel(points) {
-  for (let i = LEVELS.length - 1; i >= 0; i--) {
-    if (points >= LEVELS[i].min) return LEVELS[i];
-  }
-  return LEVELS[0];
+  const info = getLevelInfo(points);
+  const emojiByLevel = { 1: '🌱', 5: '📚', 10: '⚔️', 15: '🔥', 20: '👑' };
+  const emojiKey = Object.keys(emojiByLevel)
+    .map(Number)
+    .filter((l) => l <= info.level)
+    .sort((a, b) => b - a)[0];
+  return { name: info.name, emoji: emojiByLevel[emojiKey] || '🌱' };
 }
 
 const MEDAL = ['🥇', '🥈', '🥉'];
@@ -23,23 +22,23 @@ const MEDAL = ['🥇', '🥈', '🥉'];
 export default async function LeaderboardPage() {
   const supabase = createServerClient();
 
-  // Fetch user points
+  // Fetch user points (streak_days no longer read from here — see below)
   const { data: leaders } = await supabase
     .from('user_points')
-    .select('user_id, total_points, level, streak_days')
+    .select('user_id, total_points')
     .order('total_points', { ascending: false })
     .limit(20);
 
-  // Fetch user profiles (names)
+  // Fetch user profiles (names + canonical streak_days)
   const userIds = leaders?.map(l => l.user_id) || [];
   let usersMap = {};
   if (userIds.length > 0) {
-    // Uses leaderboard_profiles (a view exposing only id + full_name)
+    // Uses leaderboard_profiles (a view exposing only public-safe columns)
     // instead of profiles directly, since profiles' RLS is self-only
     // and would silently hide every other student's name here.
     const { data: profiles } = await supabase
       .from('leaderboard_profiles')
-      .select('id, full_name')
+      .select('id, full_name, streak_days')
       .in('id', userIds);
     usersMap = Object.fromEntries((profiles || []).map(p => [p.id, p]));
   }
@@ -59,6 +58,7 @@ export default async function LeaderboardPage() {
       ...entry,
       rank: index + 1,
       full_name: profile.full_name || 'Student',
+      streak_days: profile.streak_days || 0,
       levelName: level.name,
       levelEmoji: level.emoji,
       medal: index < 3 ? MEDAL[index] : null,
