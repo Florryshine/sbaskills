@@ -1,3 +1,4 @@
+import { cache } from 'react';
 import { createServerClient } from '@/lib/supabase-server';
 import { notFound } from 'next/navigation';
 import Navbar from '@/components/Navbar';
@@ -15,6 +16,29 @@ const PodcastPlayer = nextDynamic(() => import('@/components/PodcastPlayer'), { 
 const RatingWidget = nextDynamic(() => import('@/components/RatingWidget'), { ssr: false });
 
 export const dynamic = 'force-dynamic';
+
+// ─── Single, deduped post fetch ─────────────────────────────────────────
+// generateMetadata() and the page component used to each run their own
+// independent Supabase query for the same slug. Two separate queries in
+// the same request could disagree (one finding the post, one not) —
+// which is why some posts rendered a real body but showed a
+// "Post Not Found" <title>. Wrapping the fetch in React's cache() means
+// both call sites share the exact same result within a request.
+const getPost = cache(async (slug) => {
+  const supabase = createServerClient();
+  const { data: post, error } = await supabase
+    .from('content_drafts')
+    .select('*')
+    .eq('url_slug', slug)
+    .eq('status', 'published')
+    .maybeSingle();
+
+  if (error) {
+    console.error('Supabase error:', error);
+    throw new Error(error.message);
+  }
+  return post;
+});
 
 // ─── Tool URL Mapping (fixes internal 404s) ────────────────────────────
 // Keep this in sync with AVAILABLE_TOOLS in app/api/content-engine/generate/route.js
@@ -55,13 +79,7 @@ function safeJsonParse(value, fallback = []) {
 // single blog post. This gives each post its own <title>, meta description,
 // canonical URL, and OG/Twitter card image.
 export async function generateMetadata({ params }) {
-  const supabase = createServerClient();
-  const { data: post } = await supabase
-    .from('content_drafts')
-    .select('title, meta_description, url_slug, cover_image, subject, published_at, created_at, updated_at')
-    .eq('url_slug', params.slug)
-    .eq('status', 'published')
-    .maybeSingle();
+  const post = await getPost(params.slug);
 
   if (!post) {
     return { title: 'Post Not Found | Shiney Brain Academy' };
@@ -73,18 +91,7 @@ export async function generateMetadata({ params }) {
 export default async function BlogPostPage({ params }) {
   try {
     const supabase = createServerClient();
-
-    const { data: post, error } = await supabase
-      .from('content_drafts')
-      .select('*')
-      .eq('url_slug', params.slug)
-      .eq('status', 'published')
-      .maybeSingle();
-
-    if (error) {
-      console.error('Supabase error:', error);
-      throw new Error(error.message);
-    }
+    const post = await getPost(params.slug);
     if (!post) notFound();
 
     // ─── Parse JSON fields (safely, regardless of column type) ─────────
