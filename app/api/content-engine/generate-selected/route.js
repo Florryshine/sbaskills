@@ -68,6 +68,12 @@ export async function POST(request) {
   flashcard: '/api/engines/flashcards',
   study_note: '/api/engines/study-notes',
   social: '/api/engines/social',
+  // The new multi-platform pipeline. This route accepts { knowledgeAssetId }
+  // (platforms optional, defaults to every registered platform) and, as a
+  // side effect of its own generators, renders carousels into media_files
+  // and queues video scripts into video_scripts — see
+  // lib/content-factory/index.js and lib/content-factory/media-attach.js.
+  social_engine: '/api/content-factory/generate',
   podcast: '/api/content-engine/podcast/generate',
   blog: '/api/engines/blog',
 };

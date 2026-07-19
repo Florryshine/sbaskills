@@ -35,6 +35,9 @@ const navItems = [
   { href: '/admin/podcasts', label: 'Podcasts', icon: '🎙️' },
   { href: '/admin/audio', label: 'Audio', icon: '🎵' },
   { href: '/admin/asset-images', label: 'Asset Images', icon: '🖼️' },
+  { href: '/admin/social-engine', label: 'Social Engine', icon: '🚀' },
+  { href: '/admin/carousel-drafts', label: 'Carousel Drafts', icon: '🎠' },
+  { href: '/admin/video-scripts', label: 'Video Scripts', icon: '🎬' },
   { href: '/admin/social-post-drafts', label: 'Social Post Drafts (old)', icon: '📣' },
 
   { href: '/admin/past-questions/upload', label: 'Upload Past Qs', icon: '📤' },

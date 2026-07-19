@@ -16,6 +16,10 @@ const ENGINE_ID_MAP = {
   podcast: 'podcast',
   blog: 'blog',
   social: 'social',
+  // The new multi-platform pipeline (Instagram/Facebook/TikTok/etc.) — also
+  // auto-renders Instagram carousels and queues TikTok/YouTube video scripts.
+  // Kept separate from 'social' above, which is the older single-post engine.
+  social_engine: 'social_engine',
 };
 
 export default function GenerateContentPage() {
@@ -39,7 +43,8 @@ function GenerateContentInner() {
 
   const contentTypes = [
     { id: 'blog', label: 'Blog Post', icon: '📝' },
-    { id: 'social', label: 'Social Post', icon: '📱' },
+    { id: 'social', label: 'Social Post (old, single)', icon: '📱' },
+    { id: 'social_engine', label: 'Social Engine (all platforms + carousel + video script)', icon: '🚀' },
     { id: 'podcast', label: 'Podcast Episode', icon: '🎙️' },
     { id: 'quiz', label: 'Quiz (20 MCQs)', icon: '🧠' },
     { id: 'boss_battle', label: 'Boss Battle (10 hard)', icon: '👹' },
