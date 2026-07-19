@@ -6,19 +6,40 @@ import LogoutButton from '@/components/LogoutButton';
 
 const navItems = [
   { href: '/admin/dashboard', label: 'Overview', icon: '📊' },
-  { href: '/admin/courses', label: 'Courses', icon: '📚' },
   { href: '/admin/students', label: 'Students', icon: '👨‍🎓' },
-  { href: '/admin/blog', label: 'Blog', icon: '📝' },
-  { href: '/admin/library', label: 'Library', icon: '📖' },   // <-- Added
-  { href: '/admin/audio', label: 'Audio', icon: '🎵' },
+  { href: '/admin/tutor-activity', label: 'Tutor Activity', icon: '🧑‍🏫' },
   { href: '/admin/roles', label: 'Roles', icon: '🔑' },
-  { href: '/admin/testimonials', label: 'Testimonials', icon: '💬' },
-  { href: '/admin/quizzes', label: 'Quizzes', icon: '🧠' },
-  { href: '/admin/submissions', label: 'Submissions', icon: '📋' },
-  { href: '/admin/daily-challenge', label: 'Daily Challenge', icon: '📅' },
-  { href: '/admin/boss-battles', label: 'Boss Battles', icon: '👹' },
+
+  { href: '/admin/knowledge-assets', label: 'Knowledge Assets', icon: '🧠' },
   { href: '/admin/content-engine', label: 'Content Engine', icon: '⚡' },
+  { href: '/admin/content-engine/queue', label: 'Content Queue', icon: '📥' },
+  { href: '/admin/content-engine/drafts', label: 'Content Drafts', icon: '🗒️' },
+  { href: '/admin/content-engine/upload', label: 'Content Upload', icon: '📤' },
+  { href: '/admin/generation-jobs', label: 'Generation Jobs', icon: '⚙️' },
+  { href: '/admin/generate', label: 'Generate', icon: '✨' },
+
+  { href: '/admin/courses', label: 'Courses', icon: '📚' },
+  { href: '/admin/library', label: 'Library', icon: '📖' },
+  { href: '/admin/books', label: 'Books', icon: '📕' },
+  { href: '/admin/quizzes', label: 'Quizzes', icon: '🧩' },
+  { href: '/admin/quiz-drafts', label: 'Quiz Drafts', icon: '📋' },
+  { href: '/admin/flashcard-drafts', label: 'Flashcard Drafts', icon: '🗂️' },
+  { href: '/admin/study-note-drafts', label: 'Study Note Drafts', icon: '📝' },
+  { href: '/admin/boss-battles', label: 'Boss Battles', icon: '👹' },
+  { href: '/admin/boss-battle-drafts', label: 'Boss Battle Drafts', icon: '⚔️' },
+  { href: '/admin/daily-challenge', label: 'Daily Challenge', icon: '📅' },
+  { href: '/admin/achievements', label: 'Achievements', icon: '🏆' },
+
+  { href: '/admin/blog', label: 'Blog', icon: '📰' },
+  { href: '/admin/blog-drafts', label: 'Blog Drafts', icon: '✏️' },
+  { href: '/admin/podcasts', label: 'Podcasts', icon: '🎙️' },
+  { href: '/admin/audio', label: 'Audio', icon: '🎵' },
+  { href: '/admin/asset-images', label: 'Asset Images', icon: '🖼️' },
+  { href: '/admin/social-post-drafts', label: 'Social Post Drafts (old)', icon: '📣' },
+
   { href: '/admin/past-questions/upload', label: 'Upload Past Qs', icon: '📤' },
+  { href: '/admin/submissions', label: 'Submissions', icon: '📮' },
+  { href: '/admin/testimonials', label: 'Testimonials', icon: '💬' },
 ];
 
 export default function AdminSidebar() {
@@ -30,7 +51,7 @@ export default function AdminSidebar() {
         <p className="text-sm font-semibold uppercase tracking-[0.3em] text-blue-100">Admin Panel</p>
         <h2 className="mt-2 text-2xl font-bold">Shiney Brain Academy</h2>
       </div>
-      <nav className="mt-10 space-y-2">
+      <nav className="mt-10 space-y-2 overflow-y-auto">
         {navItems.map((link) => {
           const active = pathname === link.href || pathname.startsWith(`${link.href}/`);
           return (
