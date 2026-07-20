@@ -15,6 +15,9 @@ export default function SocialEnginePage() {
   const [platformFilter, setPlatformFilter] = useState('all');
   const [expandedId, setExpandedId] = useState(null);
   const [error, setError] = useState(null);
+  // knowledge_assets has an anon-readable policy elsewhere in the app, so
+  // this one still goes through the browser client — only content_assets /
+  // media_files / video_scripts are service_role-only.
   const supabase = createBrowserClient();
 
   useEffect(() => {
@@ -31,14 +34,20 @@ export default function SocialEnginePage() {
     setAssets(data || []);
   };
 
+  // content_assets/media_files/video_scripts are locked to service_role by
+  // RLS (see supabase/migrations/20260718_social_engine_v2.sql) — the
+  // anon/browser client gets an empty result back, silently. This must go
+  // through /api/admin/content-assets, which uses createAdminClient().
   const loadDrafts = async () => {
     setLoading(true);
-    const { data, error } = await supabase
-      .from('content_assets')
-      .select('*, knowledge_assets(keyword), media_files(*), video_scripts(*)')
-      .order('created_at', { ascending: false })
-      .limit(200);
-    if (!error) setDrafts(data || []);
+    try {
+      const res = await fetch('/api/admin/content-assets');
+      const json = await res.json();
+      if (!res.ok) throw new Error(json.error || 'Failed to load drafts');
+      setDrafts(json.data || []);
+    } catch (e) {
+      setError(e.message);
+    }
     setLoading(false);
   };
 
@@ -69,13 +78,27 @@ export default function SocialEnginePage() {
   };
 
   const updateStatus = async (id, status) => {
-    await supabase.from('content_assets').update({ status }).eq('id', id);
+    const res = await fetch('/api/admin/content-assets', {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ id, status }),
+    });
+    if (!res.ok) {
+      const json = await res.json().catch(() => ({}));
+      alert(json.error || 'Failed to update status');
+      return;
+    }
     loadDrafts();
   };
 
   const deleteDraft = async (id) => {
     if (!confirm('Delete this social engine draft (and its media)?')) return;
-    await supabase.from('content_assets').delete().eq('id', id);
+    const res = await fetch(`/api/admin/content-assets?id=${id}`, { method: 'DELETE' });
+    if (!res.ok) {
+      const json = await res.json().catch(() => ({}));
+      alert(json.error || 'Failed to delete');
+      return;
+    }
     loadDrafts();
   };
 
@@ -162,7 +185,7 @@ export default function SocialEnginePage() {
             const carouselSlides = (draft.media_files || [])
               .filter((m) => m.role === 'carousel_slide')
               .sort((a, b) => a.position - b.position);
-            const heroImage = (draft.media_files || []).find((m) => m.role === 'hero_image');
+            const heroImage = (draft.media_files || []).find((m) => m.role === 'hero_image' || m.role === 'primary');
             const videoScript = (draft.video_scripts || [])[0];
 
             return (
@@ -170,7 +193,7 @@ export default function SocialEnginePage() {
                 <div className="flex flex-col md:flex-row md:items-center justify-between gap-3">
                   <div>
                     <span className="inline-block text-xs font-bold uppercase tracking-wide text-brand-blue bg-blue-50 rounded-full px-2 py-0.5 mr-2">
-                      {draft.platform}
+                      {draft.platform || draft.asset_type}
                     </span>
                     <span className="font-bold">{draft.title || draft.knowledge_assets?.keyword}</span>
                     <p className="text-sm text-gray-500 mt-1">
@@ -195,8 +218,8 @@ export default function SocialEnginePage() {
 
                 {expandedId === draft.id && (
                   <div className="mt-4 bg-slate-50 p-4 rounded-xl space-y-4">
-                    {draft.caption && (
-                      <p className="text-sm whitespace-pre-wrap">{draft.caption}</p>
+                    {draft.body && (
+                      <p className="text-sm whitespace-pre-wrap">{draft.body}</p>
                     )}
                     {heroImage && (
                       <img src={heroImage.url} alt={draft.title} className="rounded-lg max-h-64 object-cover" />

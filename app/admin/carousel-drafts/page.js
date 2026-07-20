@@ -1,43 +1,46 @@
 'use client';
 
 import { useState, useEffect } from 'react';
-import { createBrowserClient } from '@/lib/supabase';
 
-// Carousels aren't their own table — attachCarouselMedia() (in
-// lib/content-factory/media-attach.js) writes one media_files row per slide
-// (role='carousel_slide') against a content_assets row. This page groups
-// those rows back up by content_asset_id for review.
+// media_files is service_role-only by RLS (see
+// supabase/migrations/20260718_social_engine_v2.sql) — must go through
+// /api/admin/carousel-drafts (createAdminClient()), never the browser client.
 export default function CarouselDraftsPage() {
   const [groups, setGroups] = useState([]);
   const [loading, setLoading] = useState(true);
-  const supabase = createBrowserClient();
+  const [error, setError] = useState(null);
 
   useEffect(() => { load(); }, []);
 
   const load = async () => {
     setLoading(true);
-    const { data, error } = await supabase
-      .from('media_files')
-      .select('*, content_assets(id, title, platform, status, knowledge_assets(keyword))')
-      .eq('role', 'carousel_slide')
-      .order('content_asset_id', { ascending: true })
-      .order('position', { ascending: true });
+    setError(null);
+    try {
+      const res = await fetch('/api/admin/carousel-drafts');
+      const json = await res.json();
+      if (!res.ok) throw new Error(json.error || 'Failed to load carousels');
 
-    if (!error) {
       const byAsset = {};
-      (data || []).forEach((row) => {
+      (json.data || []).forEach((row) => {
         const key = row.content_asset_id;
         if (!byAsset[key]) byAsset[key] = { asset: row.content_assets, slides: [] };
         byAsset[key].slides.push(row);
       });
       setGroups(Object.values(byAsset));
+    } catch (e) {
+      setError(e.message);
     }
     setLoading(false);
   };
 
   const deleteCarousel = async (contentAssetId) => {
     if (!confirm('Delete this entire carousel (all slides)?')) return;
-    await supabase.from('media_files').delete().eq('content_asset_id', contentAssetId).eq('role', 'carousel_slide');
+    const res = await fetch(`/api/admin/carousel-drafts?contentAssetId=${contentAssetId}`, { method: 'DELETE' });
+    if (!res.ok) {
+      const json = await res.json().catch(() => ({}));
+      alert(json.error || 'Failed to delete');
+      return;
+    }
     load();
   };
 
@@ -47,6 +50,8 @@ export default function CarouselDraftsPage() {
       <p className="text-sm text-gray-500 mb-6">
         Instagram carousels rendered by the carousel-engine as part of a Social Engine run.
       </p>
+
+      {error && <p className="text-sm text-red-600 mb-4">{error}</p>}
 
       {loading ? (
         <div className="text-center py-8">Loading…</div>

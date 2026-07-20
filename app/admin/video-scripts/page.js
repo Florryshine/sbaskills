@@ -1,37 +1,49 @@
 'use client';
 
 import { useState, useEffect } from 'react';
-import { createBrowserClient } from '@/lib/supabase';
 
 const STATUS_COLORS = {
   pending: 'text-yellow-600',
   rendering: 'text-blue-600',
+  completed: 'text-green-600',
   ready: 'text-green-600',
   failed: 'text-red-600',
 };
 
+// video_scripts is service_role-only by RLS (see
+// supabase/migrations/20260719_video_scripts.sql) — must go through
+// /api/admin/video-scripts (createAdminClient()), never the browser client.
 export default function VideoScriptsPage() {
   const [scripts, setScripts] = useState([]);
   const [loading, setLoading] = useState(true);
   const [expandedId, setExpandedId] = useState(null);
   const [statusFilter, setStatusFilter] = useState('all');
-  const supabase = createBrowserClient();
+  const [error, setError] = useState(null);
 
   useEffect(() => { load(); }, []);
 
   const load = async () => {
     setLoading(true);
-    const { data, error } = await supabase
-      .from('video_scripts')
-      .select('*, content_assets(platform, title, knowledge_assets(keyword))')
-      .order('created_at', { ascending: false });
-    if (!error) setScripts(data || []);
+    setError(null);
+    try {
+      const res = await fetch('/api/admin/video-scripts');
+      const json = await res.json();
+      if (!res.ok) throw new Error(json.error || 'Failed to load video scripts');
+      setScripts(json.data || []);
+    } catch (e) {
+      setError(e.message);
+    }
     setLoading(false);
   };
 
   const deleteScript = async (id) => {
     if (!confirm('Delete this video script?')) return;
-    await supabase.from('video_scripts').delete().eq('id', id);
+    const res = await fetch(`/api/admin/video-scripts?id=${id}`, { method: 'DELETE' });
+    if (!res.ok) {
+      const json = await res.json().catch(() => ({}));
+      alert(json.error || 'Failed to delete');
+      return;
+    }
     load();
   };
 
@@ -45,8 +57,10 @@ export default function VideoScriptsPage() {
         via local-video-renderer/worker.js, which updates render_status here as it progresses.
       </p>
 
+      {error && <p className="text-sm text-red-600 mb-4">{error}</p>}
+
       <div className="flex flex-wrap gap-2 mb-4">
-        {['all', 'pending', 'rendering', 'ready', 'failed'].map((s) => (
+        {['all', 'pending', 'rendering', 'completed', 'failed'].map((s) => (
           <button
             key={s}
             onClick={() => setStatusFilter(s)}
