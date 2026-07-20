@@ -1,16 +1,18 @@
 import { NextResponse } from 'next/server';
 import { createAdminClient } from '@/lib/supabase-admin';
 
-// content_assets/media_files/video_scripts are service_role-only by RLS
-// (see supabase/migrations/20260718_social_engine_v2.sql) — the browser's
-// anon key gets zero rows back, silently, no error. This route is the
-// server-side door the admin UI is supposed to go through instead.
+// content_assets/media_files/video_scripts/publish_jobs are service_role-only
+// by RLS (see supabase/migrations/20260718_social_engine_v2.sql) — the
+// browser's anon key gets zero rows back, silently, no error. This route is
+// the server-side door the admin UI is supposed to go through instead.
 
 export async function GET() {
   const supabase = createAdminClient();
   const { data, error } = await supabase
     .from('content_assets')
-    .select('*, knowledge_assets(keyword), media_files(*), video_scripts(*)')
+    .select(
+      '*, knowledge_assets(keyword), media_files(*), video_scripts(*), publish_jobs(id, status, external_url, last_error, social_channels_v2(platform, label))'
+    )
     .order('created_at', { ascending: false })
     .limit(200);
 

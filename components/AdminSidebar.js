@@ -37,6 +37,7 @@ const navItems = [
   { href: '/admin/audio', label: 'Audio', icon: '🎵' },
   { href: '/admin/asset-images', label: 'Asset Images', icon: '🖼️' },
   { href: '/admin/social-engine', label: 'Social Engine', icon: '🚀' },
+  { href: '/admin/channels', label: 'Channels', icon: '🔌' },
   { href: '/admin/carousel-drafts', label: 'Carousel Drafts', icon: '🎠' },
   { href: '/admin/video-scripts', label: 'Video Scripts', icon: '🎬' },
   { href: '/admin/social-post-drafts', label: 'Social Post Drafts (old)', icon: '📣' },
