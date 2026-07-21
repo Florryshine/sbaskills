@@ -54,7 +54,20 @@ export default function QuizAttempt() {
           setLoading(false);
           return;
         }
-        data = { ...quizData, questions };
+        // Manual quiz_questions rows use flat option_a-d columns and store
+        // correct_answer as a letter ('a'/'b'/'c'/'d'), not the option text.
+        // The render below only reads q.options (an array) and compares
+        // answers against option TEXT, so without this normalization every
+        // manually-uploaded quiz taken from this page showed no options at
+        // all, and even if it had, scoring would have compared a letter
+        // against full option text and always come out wrong.
+        const normalizedQuestions = (questions || []).map((q) => {
+          const options = [q.option_a, q.option_b, q.option_c, q.option_d].filter(Boolean);
+          const letter = (q.correct_answer || '').trim().toLowerCase();
+          const correctText = q[`option_${letter}`] || q.correct_answer;
+          return { ...q, options, correct_answer: correctText };
+        });
+        data = { ...quizData, questions: normalizedQuestions };
         error = null;
       }
 
