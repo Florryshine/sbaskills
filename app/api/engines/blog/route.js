@@ -167,7 +167,12 @@ export async function POST(request) {
       prompt,
       parseJsonFromText,
       isValidResult,
-      8192
+      16000 // was 8192 — a 1500-2000 word article as escaped JSON routinely
+            // exceeded that, truncating the JSON mid-string (no closing
+            // brace/quote), which made every parse strategy in
+            // robustJsonParse.js fail on every provider at once — that's
+            // why blog showed "response failed validation" from BOTH
+            // Gemini and Groq on the same call instead of a real API error.
     );
 
     if (!result) {
