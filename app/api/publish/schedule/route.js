@@ -1,11 +1,15 @@
 // app/api/publish/schedule/route.js
 import { NextResponse } from 'next/server';
-import { createRouteHandlerClient } from '@supabase/auth-helpers-nextjs';
-import { cookies } from 'next/headers';
+import { createRouteHandlerClient } from '@/lib/supabase-server';
 import { createAdminClient } from '@/lib/supabase-admin';
 
 export async function POST(request) {
-  const routeSupabase = createRouteHandlerClient({ cookies });
+  // Was importing createRouteHandlerClient from @supabase/auth-helpers-nextjs,
+  // a different (legacy) cookie format than the @supabase/ssr client the rest
+  // of the app's auth (login, middleware) actually uses — auth.getUser()
+  // could never see a real session here, so every call 401'd regardless of
+  // login state.
+  const routeSupabase = createRouteHandlerClient();
   const { data: { user } } = await routeSupabase.auth.getUser();
   if (!user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
 

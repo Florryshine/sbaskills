@@ -1,11 +1,15 @@
 // app/api/publish/now/route.js
 import { NextResponse } from 'next/server';
-import { createRouteHandlerClient } from '@supabase/auth-helpers-nextjs';
-import { cookies } from 'next/headers';
+import { createRouteHandlerClient } from '@/lib/supabase-server';
 import { executePublishJob } from '@/lib/publish-engine';
 
 export async function POST(request) {
-  const supabase = createRouteHandlerClient({ cookies });
+  // Was importing createRouteHandlerClient from @supabase/auth-helpers-nextjs,
+  // a different (legacy) cookie format than the @supabase/ssr client the rest
+  // of the app's auth (login, middleware) actually uses. That mismatch meant
+  // auth.getUser() here could never see a real, logged-in admin session —
+  // every request came back 401 Unauthorized regardless of login state.
+  const supabase = createRouteHandlerClient();
   const { data: { user } } = await supabase.auth.getUser();
   if (!user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
 
