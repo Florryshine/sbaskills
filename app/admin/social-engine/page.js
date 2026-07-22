@@ -29,6 +29,7 @@ export default function SocialEnginePage() {
   const [pickedChannelIds, setPickedChannelIds] = useState([]);
   const [busyId, setBusyId] = useState(null);
   const [error, setError] = useState(null);
+  const [lastResults, setLastResults] = useState(null);
   // knowledge_assets has an anon-readable policy elsewhere in the app, so
   // this one still goes through the browser client — content_assets /
   // media_files / video_scripts / social_channels_v2 / publish_jobs are the
@@ -81,6 +82,7 @@ export default function SocialEnginePage() {
     if (!selectedAssetId) { alert('Pick a knowledge asset first.'); return; }
     setGenerating(true);
     setError(null);
+    setLastResults(null);
     try {
       const res = await fetch('/api/content-factory/generate', {
         method: 'POST',
@@ -92,6 +94,12 @@ export default function SocialEnginePage() {
       });
       const data = await res.json();
       if (!res.ok) throw new Error(data.error || 'Generation failed');
+      // runContentFactory() never throws for a failed carousel/hero-image
+      // attach — it records it in results.succeeded[].mediaErrors instead,
+      // by design, so one bad image doesn't block the whole draft. But
+      // nothing was ever surfacing that here, so a draft could come back
+      // with real text and silently no media, with no visible reason why.
+      setLastResults(data.results || null);
       await loadDrafts();
     } catch (e) {
       setError(e.message);
@@ -218,6 +226,28 @@ export default function SocialEnginePage() {
           Leave all unchecked to generate every platform.
         </p>
         {error && <p className="text-sm text-red-600 mt-3">{error}</p>}
+
+        {lastResults && (
+          <div className="mt-4 space-y-2">
+            {lastResults.succeeded?.map((r) => (
+              <div key={r.platform} className="text-xs bg-gray-50 border rounded-lg px-3 py-2">
+                <span className="font-semibold text-green-700">✓ {r.platform}</span>
+                <span className="text-gray-500"> — {r.count} row(s) created</span>
+                {r.mediaErrors?.length > 0 && (
+                  <div className="mt-1 text-red-600">
+                    ⚠ Media failed to attach: {r.mediaErrors.map((m) => m.error).join('; ')}
+                  </div>
+                )}
+              </div>
+            ))}
+            {lastResults.failed?.map((r) => (
+              <div key={r.platform} className="text-xs bg-red-50 border border-red-200 rounded-lg px-3 py-2">
+                <span className="font-semibold text-red-700">✗ {r.platform} failed</span>
+                <span className="text-red-600"> — {r.error}</span>
+              </div>
+            ))}
+          </div>
+        )}
       </div>
 
       {/* ── Filter ── */}
