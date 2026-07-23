@@ -98,14 +98,48 @@ export default function StudentDashboard() {
         .eq('completed', true);
       setLessonsDone(progress?.length || 0);
 
-      // Fetch published quizzes
-      const { data: pubQuizzes } = await supabase
+      // Fetch published quizzes — both manually-uploaded ones (quizzes
+      // table) and AI-generated ones (quiz_drafts table). Previously this
+      // only queried `quizzes`, so any AI-generated quiz (the majority of
+      // content on the platform) never appeared on the dashboard at all,
+      // even once published — students could only find them via the
+      // /quizzes browse page linked from the navbar.
+      const { data: manualQuizzes } = await supabase
         .from('quizzes')
-        .select('*')
+        .select('id, title, description, points_reward, created_at')
         .eq('is_published', true)
         .order('created_at', { ascending: false })
         .limit(5);
-      setQuizzes(pubQuizzes || []);
+
+      const { data: draftQuizzes } = await supabase
+        .from('quiz_drafts')
+        .select('id, keyword, questions, created_at')
+        .eq('status', 'published')
+        .order('created_at', { ascending: false })
+        .limit(5);
+
+      const combinedQuizzes = [
+        ...(manualQuizzes || []).map((q) => ({
+          id: q.id,
+          title: q.title,
+          description: q.description,
+          points_reward: q.points_reward,
+          created_at: q.created_at,
+          href: `/quiz/${q.id}`,
+        })),
+        ...(draftQuizzes || []).map((q) => ({
+          id: q.id,
+          title: q.keyword,
+          description: `${q.questions?.length || 0} questions`,
+          points_reward: 10,
+          created_at: q.created_at,
+          href: `/quizzes/${q.id}?draft=true`,
+        })),
+      ]
+        .sort((a, b) => new Date(b.created_at) - new Date(a.created_at))
+        .slice(0, 5);
+
+      setQuizzes(combinedQuizzes);
 
       setLoading(false);
     }
@@ -284,7 +318,7 @@ export default function StudentDashboard() {
           <div className="mb-10">
             <div className="flex items-center justify-between mb-4">
               <h2 className="text-xl font-extrabold text-gray-800">📝 Available Quizzes</h2>
-              <Link href="/dashboard" className="text-sm font-bold text-brand-blue hover:underline">
+              <Link href="/quizzes" className="text-sm font-bold text-brand-blue hover:underline">
                 View All →
               </Link>
             </div>
@@ -301,7 +335,7 @@ export default function StudentDashboard() {
                     <div className="flex items-center justify-between mt-3">
                       <span className="text-xs font-bold text-brand-blue">+{quiz.points_reward || 10} points</span>
                       <Link
-                        href={`/quiz/${quiz.id}`}
+                        href={quiz.href}
                         className="bg-brand-yellow text-brand-dark px-4 py-2 rounded-full text-xs font-bold hover:opacity-90 transition"
                       >
                         Take Quiz →
