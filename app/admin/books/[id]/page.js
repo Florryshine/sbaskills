@@ -1,159 +1,144 @@
 'use client';
 
+import { useState, useEffect } from 'react';
+import { useRouter, useParams } from 'next/navigation';
 import Link from 'next/link';
-import { useState } from 'react';
+import { createBrowserClient } from '@/lib/supabase';
 
-export default function Navbar() {
-  const [menuOpen, setMenuOpen] = useState(false);
+// This file previously contained a stray, unrelated copy of the public
+// site Navbar component instead of a book-edit page — clicking "Edit" on
+// any book rendered the site nav, not an editor, and there was no way to
+// actually update a book's details. Rebuilt to match the same fields
+// used by /admin/books/new.
+export default function EditBookPage() {
+  const router = useRouter();
+  const { id } = useParams();
+  const supabase = createBrowserClient();
+
+  const [formData, setFormData] = useState({
+    title: '',
+    description: '',
+    author: '',
+    price: '',
+    cover_url: '',
+    pdf_url: '',
+    is_published: false,
+  });
+  const [loading, setLoading] = useState(true);
+  const [saving, setSaving] = useState(false);
+  const [error, setError] = useState(null);
+
+  useEffect(() => {
+    async function loadBook() {
+      const { data, error } = await supabase
+        .from('books')
+        .select('*')
+        .eq('id', id)
+        .single();
+      if (error || !data) {
+        setError('Book not found.');
+      } else {
+        setFormData({
+          title: data.title || '',
+          description: data.description || '',
+          author: data.author || '',
+          price: data.price ?? '',
+          cover_url: data.cover_url || '',
+          pdf_url: data.pdf_url || '',
+          is_published: !!data.is_published,
+        });
+      }
+      setLoading(false);
+    }
+    if (id) loadBook();
+  }, [id]);
+
+  const handleSubmit = async (e) => {
+    e.preventDefault();
+    setSaving(true);
+    const { error } = await supabase
+      .from('books')
+      .update({
+        title: formData.title,
+        description: formData.description,
+        author: formData.author,
+        price: parseInt(formData.price) || 0,
+        cover_url: formData.cover_url,
+        pdf_url: formData.pdf_url,
+        is_published: formData.is_published,
+      })
+      .eq('id', id);
+    if (error) alert(error.message);
+    else router.push('/admin/books');
+    setSaving(false);
+  };
+
+  const handleDelete = async () => {
+    if (!confirm('Delete this book? This cannot be undone.')) return;
+    const { error } = await supabase.from('books').delete().eq('id', id);
+    if (error) alert(error.message);
+    else router.push('/admin/books');
+  };
+
+  if (loading) return <div className="p-6">Loading...</div>;
+  if (error) return <div className="p-6 text-red-600">{error}</div>;
 
   return (
-    <header className="sticky top-0 z-50 border-b border-blue-100 bg-white/95 backdrop-blur shadow-sm">
-      <div className="mx-auto flex max-w-7xl items-center justify-between px-4 py-3 sm:px-6 lg:px-8">
+    <div className="space-y-6">
+      <section className="rounded-2xl bg-white p-6 shadow-sm border border-slate-100">
+        <Link href="/admin/books" className="text-sm text-brand-blue underline">← Back to Books</Link>
+        <h1 className="text-2xl font-extrabold text-brand-blue mt-2">Edit Book</h1>
+      </section>
 
-        {/* Logo */}
-        <Link href="/" className="flex flex-col leading-tight">
-          <span className="text-xl font-extrabold tracking-tight text-brand-blue">
-            Shiney Brain Academy
-          </span>
-          <span className="text-xs font-bold uppercase tracking-widest text-brand-yellow">
-            Skills · Success · Excellence
-          </span>
-        </Link>
-
-        {/* Desktop Nav */}
-        <nav className="hidden items-center gap-6 md:flex">
-          <Link href="/" className="text-sm font-medium text-slate-600 transition hover:text-brand-blue">
-            Home
-          </Link>
-          <Link href="/courses" className="text-sm font-medium text-slate-600 transition hover:text-brand-blue">
-            Courses
-          </Link>
-          <Link href="/blog" className="text-sm font-medium text-slate-600 transition hover:text-brand-blue">
-            Blog
-          </Link>
-          <Link href="/audio" className="text-sm font-medium text-slate-600 transition hover:text-brand-blue">
-            Audio
-          </Link>
-          <Link href="/leaderboard" className="text-sm font-medium text-slate-600 transition hover:text-brand-blue">
-            🏆 Board
-          </Link>
-          <Link href="/library" className="text-sm font-medium text-slate-600 transition hover:text-brand-blue">
-            📚 Library
-          </Link>
-          <Link href="/about" className="text-sm font-medium text-slate-600 transition hover:text-brand-blue">
-            About
-          </Link>
-          <Link href="/contact" className="text-sm font-medium text-slate-600 transition hover:text-brand-blue">
-            Contact
-          </Link>
-          <Link
-            href="/login"
-            className="rounded-full border border-brand-blue px-4 py-2 text-sm font-semibold text-brand-blue transition hover:bg-brand-blue hover:text-white"
-          >
-            Login
-          </Link>
-          <Link
-            href="/register"
-            className="rounded-full bg-brand-yellow px-4 py-2 text-sm font-bold text-brand-dark transition hover:opacity-90 shadow-sm"
-          >
-            Get Started
-          </Link>
-        </nav>
-
-        {/* Mobile hamburger */}
-        <button
-          className="flex flex-col gap-1.5 md:hidden p-2"
-          onClick={() => setMenuOpen(!menuOpen)}
-          aria-label="Toggle menu"
-        >
-          <span className={`block h-0.5 w-6 bg-brand-blue transition-all ${menuOpen ? 'rotate-45 translate-y-2' : ''}`} />
-          <span className={`block h-0.5 w-6 bg-brand-blue transition-all ${menuOpen ? 'opacity-0' : ''}`} />
-          <span className={`block h-0.5 w-6 bg-brand-blue transition-all ${menuOpen ? '-rotate-45 -translate-y-2' : ''}`} />
-        </button>
-      </div>
-
-      {/* Mobile Menu */}
-      {menuOpen && (
-        <div className="border-t border-blue-100 bg-white px-4 pb-6 pt-4 md:hidden shadow-lg">
-          <nav className="flex flex-col gap-4">
-            <Link
-              href="/"
-              onClick={() => setMenuOpen(false)}
-              className="text-sm font-semibold text-slate-700 hover:text-brand-blue"
-            >
-              🏠 Home
-            </Link>
-            <Link
-              href="/courses"
-              onClick={() => setMenuOpen(false)}
-              className="text-sm font-semibold text-slate-700 hover:text-brand-blue"
-            >
-              📚 Courses
-            </Link>
-            <Link
-              href="/blog"
-              onClick={() => setMenuOpen(false)}
-              className="text-sm font-semibold text-slate-700 hover:text-brand-blue"
-            >
-              📝 Blog
-            </Link>
-            <Link
-              href="/audio"
-              onClick={() => setMenuOpen(false)}
-              className="text-sm font-semibold text-slate-700 hover:text-brand-blue"
-            >
-              🎵 Audio
-            </Link>
-            <Link
-              href="/leaderboard"
-              onClick={() => setMenuOpen(false)}
-              className="text-sm font-semibold text-slate-700 hover:text-brand-blue"
-            >
-              🏆 Leaderboard
-            </Link>
-            <Link
-              href="/library"
-              onClick={() => setMenuOpen(false)}
-              className="text-sm font-semibold text-slate-700 hover:text-brand-blue"
-            >
-              📚 Library
-            </Link>
-            <Link
-              href="/about"
-              onClick={() => setMenuOpen(false)}
-              className="text-sm font-semibold text-slate-700 hover:text-brand-blue"
-            >
-              ℹ️ About
-            </Link>
-            <Link
-              href="/contact"
-              onClick={() => setMenuOpen(false)}
-              className="text-sm font-semibold text-slate-700 hover:text-brand-blue"
-            >
-              📞 Contact
-            </Link>
-            <div className="mt-2 flex flex-col gap-3">
-              <Link
-                href="/login"
-                onClick={() => setMenuOpen(false)}
-                className="rounded-full border border-brand-blue px-4 py-3 text-center text-sm font-bold text-brand-blue hover:bg-brand-blue hover:text-white transition"
-              >
-                Login
-              </Link>
-              <Link
-                href="/register"
-                onClick={() => setMenuOpen(false)}
-                className="rounded-full bg-brand-yellow px-4 py-3 text-center text-sm font-bold text-brand-dark hover:opacity-90 transition"
-              >
-                Get Started Free
-              </Link>
-            </div>
-            <div className="mt-2 border-t border-slate-100 pt-4">
-              <p className="text-xs text-slate-400">📞 08138082009 · 09053626207</p>
-            </div>
-          </nav>
+      <form onSubmit={handleSubmit} className="space-y-6 bg-white rounded-2xl p-6 shadow-sm border">
+        <div className="grid gap-4 sm:grid-cols-2">
+          <div>
+            <label className="block text-sm font-semibold mb-1">Title *</label>
+            <input type="text" required value={formData.title} onChange={e => setFormData({...formData, title: e.target.value})}
+              className="w-full rounded-xl border border-slate-200 px-4 py-2" />
+          </div>
+          <div>
+            <label className="block text-sm font-semibold mb-1">Author</label>
+            <input type="text" value={formData.author} onChange={e => setFormData({...formData, author: e.target.value})}
+              className="w-full rounded-xl border border-slate-200 px-4 py-2" />
+          </div>
+          <div>
+            <label className="block text-sm font-semibold mb-1">Price (₦) - 0 for free</label>
+            <input type="number" value={formData.price} onChange={e => setFormData({...formData, price: e.target.value})}
+              className="w-full rounded-xl border border-slate-200 px-4 py-2" />
+          </div>
+          <div className="flex items-center gap-3">
+            <input type="checkbox" checked={formData.is_published} onChange={e => setFormData({...formData, is_published: e.target.checked})}
+              className="w-5 h-5" />
+            <label className="text-sm font-semibold">Published</label>
+          </div>
+          <div className="sm:col-span-2">
+            <label className="block text-sm font-semibold mb-1">Description</label>
+            <textarea rows="3" value={formData.description} onChange={e => setFormData({...formData, description: e.target.value})}
+              className="w-full rounded-xl border border-slate-200 px-4 py-2" />
+          </div>
+          <div>
+            <label className="block text-sm font-semibold mb-1">Cover Image URL</label>
+            <input type="url" value={formData.cover_url} onChange={e => setFormData({...formData, cover_url: e.target.value})}
+              className="w-full rounded-xl border border-slate-200 px-4 py-2" placeholder="https://..." />
+          </div>
+          <div>
+            <label className="block text-sm font-semibold mb-1">PDF File URL</label>
+            <input type="url" value={formData.pdf_url} onChange={e => setFormData({...formData, pdf_url: e.target.value})}
+              className="w-full rounded-xl border border-slate-200 px-4 py-2" placeholder="https://..." />
+          </div>
         </div>
-      )}
-    </header>
+        <div className="flex items-center gap-4">
+          <button type="submit" disabled={saving}
+            className="rounded-full bg-brand-yellow px-6 py-3 font-bold text-brand-dark hover:opacity-90">
+            {saving ? 'Saving...' : 'Save Changes'}
+          </button>
+          <button type="button" onClick={handleDelete}
+            className="rounded-full border border-red-300 px-6 py-3 font-bold text-red-600 hover:bg-red-50">
+            Delete Book
+          </button>
+        </div>
+      </form>
+    </div>
   );
 }
