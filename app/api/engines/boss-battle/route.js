@@ -18,8 +18,28 @@ function parseQuestions(text) {
   return parseJsonFromText(text, 'object');
 }
 
+function isValidQuestion(q) {
+  return (
+    q &&
+    typeof q.question === 'string' &&
+    q.question.trim().length > 0 &&
+    Array.isArray(q.options) &&
+    q.options.filter((o) => typeof o === 'string' && o.trim().length > 0).length >= 2 &&
+    typeof q.correct_answer === 'string' &&
+    q.correct_answer.trim().length > 0
+  );
+}
+
+// Previously only checked parsed.questions.length >= 8 — a batch with
+// some malformed questions (missing/empty options) still passed and got
+// saved, showing up with no options for those specific questions when a
+// student took the boss battle. Now filters in place so only the
+// actually-valid questions are kept and counted.
 function hasEnoughQuestions(parsed) {
-  return Boolean(parsed && Array.isArray(parsed.questions) && parsed.questions.length >= 8);
+  if (!parsed || !Array.isArray(parsed.questions)) return false;
+  const validQuestions = parsed.questions.filter(isValidQuestion);
+  parsed.questions = validQuestions;
+  return validQuestions.length >= 8;
 }
 
 function buildBossBattlePrompt(asset) {

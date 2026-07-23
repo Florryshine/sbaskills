@@ -122,6 +122,32 @@ Example format:
 }`;
 }
 
+function isValidQuestion(q) {
+  return (
+    q &&
+    typeof q.question === 'string' &&
+    q.question.trim().length > 0 &&
+    Array.isArray(q.options) &&
+    q.options.filter((o) => typeof o === 'string' && o.trim().length > 0).length >= 2 &&
+    typeof q.correct_answer === 'string' &&
+    q.correct_answer.trim().length > 0
+  );
+}
+
+// Filters a raw parsed response down to only the questions that actually
+// have usable options/answers, rather than trusting the array length
+// alone. Previously every provider attempt only checked
+// `parsed.questions.length >= 10` — if the model returned 10 items but
+// a few had a missing or empty `options` array (common with truncated
+// or slightly-malformed JSON), the whole batch still passed and got
+// saved, and those specific questions showed with no options when a
+// student took the quiz. Now each question is checked individually and
+// only the valid ones count toward the required minimum.
+function extractValidQuestions(parsed) {
+  if (!parsed || !Array.isArray(parsed.questions)) return [];
+  return parsed.questions.filter(isValidQuestion);
+}
+
 export async function POST(request) {
   try {
     const { knowledgeAssetId } = await request.json();
@@ -160,11 +186,12 @@ export async function POST(request) {
           });
           const text = genResult.response.text();
           const parsed = parseJsonFromText(text);
-          if (parsed && Array.isArray(parsed.questions) && parsed.questions.length >= 10) {
-            result = parsed;
+          const validQuestions = extractValidQuestions(parsed);
+          if (validQuestions.length >= 10) {
+            result = { questions: validQuestions };
             usedProvider = `Gemini (${modelName})`;
           } else {
-            errors.push(`Gemini ${modelName}: insufficient questions`);
+            errors.push(`Gemini ${modelName}: only ${validQuestions.length}/10 valid questions`);
           }
         } catch (e) {
           errors.push(`Gemini ${modelName}: ${e.message}`);
@@ -190,11 +217,12 @@ export async function POST(request) {
           });
           const text = groqResponse.choices[0].message.content.trim();
           const parsed = parseJsonFromText(text);
-          if (parsed && Array.isArray(parsed.questions) && parsed.questions.length >= 10) {
-            result = parsed;
+          const validQuestions = extractValidQuestions(parsed);
+          if (validQuestions.length >= 10) {
+            result = { questions: validQuestions };
             usedProvider = `Groq (${GROQ_KEYS.indexOf(groqKey) + 1})`;
           } else {
-            errors.push('Groq: insufficient questions');
+            errors.push(`Groq: only ${validQuestions.length}/10 valid questions`);
           }
         } catch (e) {
           errors.push(`Groq: ${e.message}`);
@@ -208,11 +236,12 @@ export async function POST(request) {
         const text = await tryOpenRouter(prompt);
         if (text) {
           const parsed = parseJsonFromText(text);
-          if (parsed && Array.isArray(parsed.questions) && parsed.questions.length >= 10) {
-            result = parsed;
+          const validQuestions = extractValidQuestions(parsed);
+          if (validQuestions.length >= 10) {
+            result = { questions: validQuestions };
             usedProvider = 'OpenRouter';
           } else {
-            errors.push('OpenRouter: insufficient questions');
+            errors.push(`OpenRouter: only ${validQuestions.length}/10 valid questions`);
           }
         }
       } catch (e) {
@@ -226,11 +255,12 @@ export async function POST(request) {
         const text = await tryHuggingFace(prompt);
         if (text) {
           const parsed = parseJsonFromText(text);
-          if (parsed && Array.isArray(parsed.questions) && parsed.questions.length >= 10) {
-            result = parsed;
+          const validQuestions = extractValidQuestions(parsed);
+          if (validQuestions.length >= 10) {
+            result = { questions: validQuestions };
             usedProvider = 'HuggingFace';
           } else {
-            errors.push('HuggingFace: insufficient questions');
+            errors.push(`HuggingFace: only ${validQuestions.length}/10 valid questions`);
           }
         }
       } catch (e) {
