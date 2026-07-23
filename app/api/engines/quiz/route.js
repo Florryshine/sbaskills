@@ -22,9 +22,8 @@ const HUGGINGFACE_API_KEY = process.env.HUGGINGFACE_API_KEY;
 
 const GEMINI_MODELS = [
   'gemini-3.5-flash',
-  'gemini-3.5-pro',
   'gemini-2.5-flash',
-  'gemini-2.0-flash',
+  'gemini-2.5-flash-lite',
 ];
 
 // ── Helpers ──────────────────────────────────────────────────────────
@@ -169,6 +168,10 @@ export async function POST(request) {
           }
         } catch (e) {
           errors.push(`Gemini ${modelName}: ${e.message}`);
+          // A quota/rate-limit error means this key is rate-limited
+          // project-wide — move to the next key instead of burning the
+          // rest of the model list on requests that will fail the same way.
+          if (/429|quota|rate.?limit/i.test(e.message || '')) break;
         }
       }
     }
