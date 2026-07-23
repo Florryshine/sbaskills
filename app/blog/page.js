@@ -29,25 +29,35 @@ export async function generateMetadata({ searchParams }) {
 
   let title = 'Blog | Shiney Brain Academy';
   let description = 'Read the latest tips, study guides, and exam preparation advice for Nigerian students.';
+  let canonicalUrl = 'https://shineybrainacademy.vercel.app/blog';
+  let robots;
 
   if (category !== 'all') {
     const categoryName = CATEGORY_MAP[category] || category;
     title = `${categoryName} Posts | Shiney Brain Academy`;
     description = `Read ${categoryName} exam tips, study guides, and preparation advice.`;
+    canonicalUrl = `https://shineybrainacademy.vercel.app/blog?category=${category}`;
   }
 
   if (search) {
+    // Search-query pages are thin/duplicate content — keep them out of the
+    // index and point back to the plain blog index instead of fighting it
+    // with a self canonical.
     title = `Search: ${search} | Shiney Brain Academy`;
     description = `Search results for "${search}" on Shiney Brain Academy.`;
+    canonicalUrl = 'https://shineybrainacademy.vercel.app/blog';
+    robots = { index: false, follow: true };
   }
 
   return {
     title,
     description,
+    alternates: { canonical: canonicalUrl },
+    ...(robots ? { robots } : {}),
     openGraph: {
       title,
       description,
-      url: `https://shineybrainacademy.vercel.app/blog${searchParams?.category ? `?category=${searchParams.category}` : ''}`,
+      url: canonicalUrl,
       type: 'website',
     },
   };

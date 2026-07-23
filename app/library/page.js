@@ -3,6 +3,12 @@ import Navbar from '@/components/Navbar';
 import Footer from '@/components/Footer';
 import Link from 'next/link';
 
+export const metadata = {
+  title: 'Library | Shiney Brain Academy',
+  description: 'Download exam prep books, past questions, and study guides for JAMB, WAEC, and NECO.',
+  alternates: { canonical: 'https://shineybrainacademy.vercel.app/library' },
+};
+
 export default async function LibraryPage() {
   const supabase = createServerClient();
   const { data: books } = await supabase

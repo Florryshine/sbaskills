@@ -2,6 +2,7 @@ import './globals.css';
 import Script from 'next/script';
 
 export const metadata = {
+  metadataBase: new URL('https://shineybrainacademy.vercel.app'),
   title: 'Shiney Brain Academy',
   description: 'Where Champions Are Made – JAMB, Tech Skills, and Career Development for Nigerian students.',
 };

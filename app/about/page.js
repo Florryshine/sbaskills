@@ -4,6 +4,7 @@ import Footer from '@/components/Footer';
 export const metadata = {
   title: 'About Us | Shiney Brain Academy',
   description: 'Learn about Shiney Brain Academy - Nigeria\'s learning platform for skills, success and academic excellence',
+  alternates: { canonical: 'https://shineybrainacademy.vercel.app/about' },
 };
 
 const team = [
