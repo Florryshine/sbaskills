@@ -19,6 +19,17 @@ const VOICE_MODES = [
   { value: 'reflective', label: 'Reflective' },
 ];
 
+// Mirrors GRADIENT_PRESETS in lib/carousel-engine/render-canvas.js — kept in
+// sync manually since one is canvas gradient stops and the other is CSS.
+const GRADIENT_CSS = {
+  ocean: 'linear-gradient(135deg, #0f4c81, #1a73e8)',
+  sunrise: 'linear-gradient(135deg, #ff6b6b, #FFCC00)',
+  violet: 'linear-gradient(135deg, #4c1d95, #7c3aed)',
+  forest: 'linear-gradient(135deg, #064e3b, #10b981)',
+  midnight: 'linear-gradient(180deg, #0f172a, #1e293b)',
+  candy: 'linear-gradient(135deg, #ec4899, #8b5cf6)',
+};
+
 // Mirrored in app/api/admin/content-assets/route.js for server-side validation.
 const PLATFORM_LIMITS = {
   x: 280,
@@ -73,6 +84,36 @@ export default function SocialEnginePage() {
   const [editError, setEditError] = useState(null);
   const [voiceMode, setVoiceMode] = useState('founder');
   const [founderContext, setFounderContext] = useState('');
+  const [bgBusyId, setBgBusyId] = useState(null);
+  const [bgError, setBgError] = useState(null);
+
+  const GRADIENTS = ['ocean', 'sunrise', 'violet', 'forest', 'midnight', 'candy'];
+  const PATTERNS = ['dots', 'grid', 'diagonal'];
+
+  const applyBackground = async (draftId, background) => {
+    setBgBusyId(draftId);
+    setBgError(null);
+    try {
+      const res = await fetch(`/api/admin/content-assets/${draftId}/carousel-background`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ background }),
+      });
+      const json = await res.json();
+      if (!res.ok) throw new Error(json.error || 'Background update failed');
+      await loadDrafts();
+    } catch (e) {
+      setBgError(e.message);
+    }
+    setBgBusyId(null);
+  };
+
+  const handleBackgroundImageUpload = (draftId, file) => {
+    if (!file) return;
+    const reader = new FileReader();
+    reader.onload = () => applyBackground(draftId, { type: 'image', imageBase64: reader.result });
+    reader.readAsDataURL(file);
+  };
   // knowledge_assets has an anon-readable policy elsewhere in the app, so
   // this one still goes through the browser client — content_assets /
   // media_files / video_scripts / social_channels_v2 / publish_jobs are the
@@ -562,6 +603,54 @@ export default function SocialEnginePage() {
                         {carouselSlides.map((s) => (
                           <img key={s.id} src={s.url} alt={`Slide ${s.position + 1}`} className="h-48 rounded-lg border" />
                         ))}
+                      </div>
+                    )}
+                    {carouselSlides.length > 0 && ['instagram', 'facebook'].includes(draft.platform) && (
+                      <div className="bg-white border rounded-xl p-3">
+                        <p className="text-xs font-bold text-gray-500 uppercase mb-2">
+                          Background (cover + CTA slide)
+                        </p>
+                        <div className="flex flex-wrap gap-2 mb-2">
+                          {GRADIENTS.map((g) => (
+                            <button
+                              key={g}
+                              title={g}
+                              onClick={() => applyBackground(draft.id, { type: 'gradient', value: g })}
+                              disabled={bgBusyId === draft.id}
+                              style={{ background: GRADIENT_CSS[g] }}
+                              className="h-8 w-8 rounded-full border-2 border-white ring-1 ring-gray-200 disabled:opacity-40"
+                            />
+                          ))}
+                          {PATTERNS.map((p) => (
+                            <button
+                              key={p}
+                              onClick={() => applyBackground(draft.id, { type: 'pattern', value: p })}
+                              disabled={bgBusyId === draft.id}
+                              className="px-3 py-1.5 rounded-full text-xs font-semibold border text-gray-600 hover:bg-gray-50 disabled:opacity-40"
+                            >
+                              {p}
+                            </button>
+                          ))}
+                          <input
+                            type="color"
+                            onChange={(e) => applyBackground(draft.id, { type: 'solid', value: e.target.value })}
+                            disabled={bgBusyId === draft.id}
+                            className="h-8 w-8 rounded-full border cursor-pointer disabled:opacity-40"
+                            title="Custom solid color"
+                          />
+                          <label className="px-3 py-1.5 rounded-full text-xs font-semibold border text-indigo-700 border-indigo-200 hover:bg-indigo-50 cursor-pointer">
+                            Upload image
+                            <input
+                              type="file"
+                              accept="image/png,image/jpeg,image/webp"
+                              className="hidden"
+                              disabled={bgBusyId === draft.id}
+                              onChange={(e) => handleBackgroundImageUpload(draft.id, e.target.files?.[0])}
+                            />
+                          </label>
+                        </div>
+                        {bgBusyId === draft.id && <p className="text-xs text-gray-400">Rendering new background…</p>}
+                        {bgError && bgBusyId !== draft.id && <p className="text-xs text-red-600">{bgError}</p>}
                       </div>
                     )}
                     {videoScript && (
