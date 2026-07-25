@@ -1,18 +1,149 @@
 'use client';
-import React from "react";
+import React, { useState } from "react";
 import { 
   Heart, MessageCircle, Repeat2, Send, Share, ThumbsUp, MoreHorizontal, Bookmark, Eye, BookmarkIcon,
-  CheckCircle2, Users, Pin, ArrowRight, ExternalLink, MessageSquare
+  CheckCircle2, Users, Pin, ArrowRight, ExternalLink, MessageSquare, Pencil, Check, X
 } from "lucide-react";
 import { SocialPlatform } from "../types";
 
+// Mirrors PLATFORM_LIMITS in app/api/social/post/[id]/route.js — keep in sync.
+const PLATFORM_LIMITS: Record<string, number> = {
+  X: 280,
+  Threads: 500,
+  LinkedIn: 3000,
+  Facebook: 63206,
+  Instagram: 2200,
+  Telegram: 4096,
+};
+
 interface PostPreviewerProps {
   post: any;
+  onSaved?: (updatedPost: any) => void;
 }
 
-export function PostPreviewer({ post }: PostPreviewerProps) {
-  const { platform, content, mediaUrls, imagePrompt, callToAction, altText } = post;
+function CharCounter({ platform, length }: { platform: string; length: number }) {
+  const limit = PLATFORM_LIMITS[platform];
+  if (!limit) return null;
+  const pct = length / limit;
+  const color = pct > 1 ? "text-rose-400" : pct >= 0.9 ? "text-amber-400" : "text-slate-500";
+  return (
+    <div className={`text-[10px] font-mono ${color} flex items-center gap-1.5`}>
+      <span>{length} / {limit}</span>
+      {pct > 1 && <span>✂ over by {length - limit}</span>}
+    </div>
+  );
+}
+
+function EditControls({
+  editing, saving, error, onEdit, onSave, onCancel,
+}: {
+  editing: boolean; saving: boolean; error: string | null;
+  onEdit: () => void; onSave: () => void; onCancel: () => void;
+}) {
+  if (!editing) {
+    return (
+      <button
+        onClick={onEdit}
+        className="flex items-center gap-1 text-[10px] font-mono text-slate-400 hover:text-slate-200 transition-colors"
+      >
+        <Pencil size={11} /> Edit
+      </button>
+    );
+  }
+  return (
+    <div className="flex flex-col items-end gap-1">
+      <div className="flex items-center gap-2">
+        <button
+          onClick={onCancel}
+          disabled={saving}
+          className="flex items-center gap-1 text-[10px] font-mono text-slate-400 hover:text-slate-200 transition-colors disabled:opacity-50"
+        >
+          <X size={11} /> Cancel
+        </button>
+        <button
+          onClick={onSave}
+          disabled={saving}
+          className="flex items-center gap-1 text-[10px] font-mono text-emerald-400 hover:text-emerald-300 transition-colors disabled:opacity-50"
+        >
+          <Check size={11} /> {saving ? "Saving..." : "Save"}
+        </button>
+      </div>
+      {error && <span className="text-[10px] font-mono text-rose-400">{error}</span>}
+    </div>
+  );
+}
+
+export function PostPreviewer({ post, onSaved }: PostPreviewerProps) {
+  const { id, platform, caption, mediaUrls, imagePrompt, callToAction, altText } = post;
   const imageAttach = mediaUrls && mediaUrls.length > 0 ? mediaUrls[0] : null;
+
+  const [editing, setEditing] = useState(false);
+  const [draft, setDraft] = useState(caption || "");
+  const [saving, setSaving] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  const startEdit = () => {
+    setDraft(caption || "");
+    setError(null);
+    setEditing(true);
+  };
+
+  const cancelEdit = () => {
+    setDraft(caption || "");
+    setError(null);
+    setEditing(false);
+  };
+
+  const saveEdit = async () => {
+    if (!draft.trim()) {
+      setError("Caption cannot be empty");
+      return;
+    }
+    setSaving(true);
+    setError(null);
+    try {
+      const res = await fetch(`/api/social/post/${id}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ caption: draft }),
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || "Save failed");
+      setEditing(false);
+      onSaved?.(data.post);
+    } catch (err: any) {
+      setError(err.message);
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const editBar = (
+    <div className="flex items-center justify-between gap-2">
+      <CharCounter platform={platform} length={(editing ? draft : caption || "").length} />
+      <EditControls
+        editing={editing}
+        saving={saving}
+        error={error}
+        onEdit={startEdit}
+        onSave={saveEdit}
+        onCancel={cancelEdit}
+      />
+    </div>
+  );
+
+  const captionBlock = (className: string) =>
+    editing ? (
+      <textarea
+        value={draft}
+        onChange={(e) => setDraft(e.target.value)}
+        rows={5}
+        autoFocus
+        className={`${className} w-full bg-slate-900 border border-slate-700 rounded-lg p-2 focus:outline-none focus:border-indigo-500 resize-none`}
+      />
+    ) : (
+      <p className={className}>{caption}</p>
+    );
 
   switch (platform) {
     case "X":
@@ -37,7 +168,8 @@ export function PostPreviewer({ post }: PostPreviewerProps) {
           </div>
 
           {/* Text Content */}
-          <p className="text-sm text-slate-200 leading-relaxed whitespace-pre-wrap font-sans">{content}</p>
+          {editBar}
+          {captionBlock("text-sm text-slate-200 leading-relaxed whitespace-pre-wrap font-sans")}
 
           {/* Attachment */}
           {imageAttach && (
@@ -92,7 +224,8 @@ export function PostPreviewer({ post }: PostPreviewerProps) {
           </div>
 
           {/* Text Content */}
-          <p className="text-sm text-slate-300 leading-relaxed whitespace-pre-wrap font-sans">{content}</p>
+          {editBar}
+          {captionBlock("text-sm text-slate-300 leading-relaxed whitespace-pre-wrap font-sans")}
 
           {/* Attachment */}
           {imageAttach && (
@@ -149,7 +282,8 @@ export function PostPreviewer({ post }: PostPreviewerProps) {
           </div>
 
           {/* Text Content */}
-          <p className="text-sm text-slate-300 leading-relaxed whitespace-pre-wrap font-sans">{content}</p>
+          {editBar}
+          {captionBlock("text-sm text-slate-300 leading-relaxed whitespace-pre-wrap font-sans")}
 
           {/* Attachment */}
           {imageAttach && (
@@ -224,10 +358,15 @@ export function PostPreviewer({ post }: PostPreviewerProps) {
               <Bookmark size={18} className="hover:text-slate-300 cursor-pointer" />
             </div>
 
-            <div className="text-xs text-slate-200 leading-relaxed font-sans mt-2">
-              <span className="font-bold mr-1.5">shiney_brain_academy</span>
-              <span className="whitespace-pre-wrap">{content}</span>
-            </div>
+            {editBar}
+            {editing ? (
+              captionBlock("text-xs")
+            ) : (
+              <div className="text-xs text-slate-200 leading-relaxed font-sans mt-2">
+                <span className="font-bold mr-1.5">shiney_brain_academy</span>
+                <span className="whitespace-pre-wrap">{caption}</span>
+              </div>
+            )}
 
             {callToAction && (
               <div className="text-[10px] text-indigo-400 font-mono pt-1">
@@ -263,9 +402,14 @@ export function PostPreviewer({ post }: PostPreviewerProps) {
               </div>
             )}
             
-            <p className="text-xs text-slate-300 leading-relaxed whitespace-pre-wrap font-sans bg-slate-900/60 p-3 rounded-lg border border-slate-850">
-              {content}
-            </p>
+            {editBar}
+            {editing ? (
+              captionBlock("text-xs bg-slate-900/60 p-3 border-slate-850")
+            ) : (
+              <p className="text-xs text-slate-300 leading-relaxed whitespace-pre-wrap font-sans bg-slate-900/60 p-3 rounded-lg border border-slate-850">
+                {caption}
+              </p>
+            )}
 
             {callToAction && (
               <button className="w-full bg-blue-600 hover:bg-blue-500 text-white font-semibold text-xs py-2 rounded-xl transition-all flex items-center justify-center gap-1.5">
@@ -287,7 +431,8 @@ export function PostPreviewer({ post }: PostPreviewerProps) {
           <span className="bg-slate-800 text-slate-300 text-[10px] font-mono px-2 py-0.5 rounded uppercase font-bold">
             {platform} Channel Post
           </span>
-          <p className="text-xs text-slate-300 leading-relaxed whitespace-pre-wrap font-sans">{content}</p>
+          {editBar}
+          {captionBlock("text-xs text-slate-300 leading-relaxed whitespace-pre-wrap font-sans")}
           {imageAttach && (
             <div className="rounded-xl overflow-hidden border border-slate-800 bg-slate-900">
               <img src={imageAttach} alt={platform} className="w-full object-cover max-h-48" />
