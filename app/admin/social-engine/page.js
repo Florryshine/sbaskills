@@ -86,6 +86,69 @@ export default function SocialEnginePage() {
   const [founderContext, setFounderContext] = useState('');
   const [bgBusyId, setBgBusyId] = useState(null);
   const [bgError, setBgError] = useState(null);
+  const [copiedId, setCopiedId] = useState(null);
+  const [zipBusyId, setZipBusyId] = useState(null);
+  const [actionError, setActionError] = useState(null);
+
+  const copyText = async (text, key) => {
+    try {
+      await navigator.clipboard.writeText(text || '');
+      setCopiedId(key);
+      setTimeout(() => setCopiedId((c) => (c === key ? null : c)), 1500);
+    } catch {
+      setActionError('Clipboard blocked by the browser — try selecting the text manually.');
+    }
+  };
+
+  // Cross-origin Supabase storage URLs won't respect a plain <a download>,
+  // so we fetch the bytes ourselves and trigger the download from a blob
+  // URL. Falls back to opening the file in a new tab if the fetch fails
+  // (e.g. a storage CORS policy change) so the user is never stuck.
+  const downloadUrl = async (url, filename) => {
+    try {
+      const res = await fetch(url);
+      const blob = await res.blob();
+      const objectUrl = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = objectUrl;
+      a.download = filename;
+      document.body.appendChild(a);
+      a.click();
+      a.remove();
+      URL.revokeObjectURL(objectUrl);
+    } catch {
+      window.open(url, '_blank');
+    }
+  };
+
+  // JSZip is loaded from a CDN at click time instead of being an npm
+  // dependency — this is a rarely-used admin action, not worth bundling
+  // into every page load.
+  const downloadZip = async (draft, slides) => {
+    setZipBusyId(draft.id);
+    setActionError(null);
+    try {
+      const { default: JSZip } = await import('https://cdn.jsdelivr.net/npm/jszip@3.10.1/+esm');
+      const zip = new JSZip();
+      for (const s of slides) {
+        const res = await fetch(s.url);
+        const blob = await res.blob();
+        zip.file(`slide-${s.position + 1}.png`, blob);
+      }
+      const content = await zip.generateAsync({ type: 'blob' });
+      const objectUrl = URL.createObjectURL(content);
+      const a = document.createElement('a');
+      a.href = objectUrl;
+      a.download = `${(draft.title || 'carousel').replace(/[^a-z0-9]+/gi, '-').toLowerCase()}.zip`;
+      document.body.appendChild(a);
+      a.click();
+      a.remove();
+      URL.revokeObjectURL(objectUrl);
+    } catch (e) {
+      setActionError(`ZIP download failed: ${e.message}`);
+    }
+    setZipBusyId(null);
+  };
 
   const GRADIENTS = ['ocean', 'sunrise', 'violet', 'forest', 'midnight', 'candy'];
   const PATTERNS = ['dots', 'grid', 'diagonal'];
@@ -479,6 +542,15 @@ export default function SocialEnginePage() {
                       {expandedId === draft.id ? 'Hide' : 'Preview'}
                     </button>
 
+                    {draft.body && (
+                      <button
+                        onClick={() => copyText(draft.body, `text-${draft.id}`)}
+                        className="text-gray-600 px-4 py-2 rounded-xl text-sm font-bold hover:bg-gray-100 border border-gray-200"
+                      >
+                        {copiedId === `text-${draft.id}` ? '✓ Copied' : '📋 Copy Text'}
+                      </button>
+                    )}
+
                     {editingId !== draft.id && (
                       <button
                         onClick={() => {
@@ -596,13 +668,66 @@ export default function SocialEnginePage() {
                       )
                     )}
                     {heroImage && (
-                      <img src={heroImage.url} alt={draft.title} className="rounded-lg max-h-64 object-cover" />
+                      <div>
+                        <img src={heroImage.url} alt={draft.title} className="rounded-lg max-h-64 object-cover" />
+                        <div className="flex gap-2 mt-2">
+                          <button
+                            onClick={() => downloadUrl(heroImage.url, `${(draft.title || 'hero').replace(/[^a-z0-9]+/gi, '-').toLowerCase()}.jpg`)}
+                            className="text-xs font-semibold text-gray-600 border rounded-full px-3 py-1 hover:bg-gray-50"
+                          >
+                            ⬇ Download
+                          </button>
+                          <a
+                            href={heroImage.url}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            className="text-xs font-semibold text-gray-600 border rounded-full px-3 py-1 hover:bg-gray-50"
+                          >
+                            ↗ Open
+                          </a>
+                          <button
+                            onClick={() => copyText(heroImage.url, `hero-url-${draft.id}`)}
+                            className="text-xs font-semibold text-gray-600 border rounded-full px-3 py-1 hover:bg-gray-50"
+                          >
+                            {copiedId === `hero-url-${draft.id}` ? '✓ Copied' : '🔗 Copy URL'}
+                          </button>
+                        </div>
+                      </div>
                     )}
                     {carouselSlides.length > 0 && (
-                      <div className="flex gap-2 overflow-x-auto pb-2">
-                        {carouselSlides.map((s) => (
-                          <img key={s.id} src={s.url} alt={`Slide ${s.position + 1}`} className="h-48 rounded-lg border" />
-                        ))}
+                      <div>
+                        <div className="flex justify-end mb-1">
+                          <button
+                            onClick={() => downloadZip(draft, carouselSlides)}
+                            disabled={zipBusyId === draft.id}
+                            className="text-xs font-semibold text-indigo-700 border border-indigo-200 rounded-full px-3 py-1 hover:bg-indigo-50 disabled:opacity-50"
+                          >
+                            {zipBusyId === draft.id ? 'Zipping…' : `📥 Download all (${carouselSlides.length}) as ZIP`}
+                          </button>
+                        </div>
+                        <div className="flex gap-2 overflow-x-auto pb-2">
+                          {carouselSlides.map((s) => (
+                            <div key={s.id} className="relative group">
+                              <img src={s.url} alt={`Slide ${s.position + 1}`} className="h-48 rounded-lg border" />
+                              <div className="absolute bottom-1 left-1 right-1 flex gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
+                                <button
+                                  onClick={() => downloadUrl(s.url, `slide-${s.position + 1}.png`)}
+                                  title="Download"
+                                  className="bg-black/70 text-white text-xs rounded px-2 py-1"
+                                >
+                                  ⬇
+                                </button>
+                                <button
+                                  onClick={() => copyText(s.url, `slide-url-${s.id}`)}
+                                  title="Copy URL"
+                                  className="bg-black/70 text-white text-xs rounded px-2 py-1"
+                                >
+                                  {copiedId === `slide-url-${s.id}` ? '✓' : '🔗'}
+                                </button>
+                              </div>
+                            </div>
+                          ))}
+                        </div>
                       </div>
                     )}
                     {carouselSlides.length > 0 && ['instagram', 'facebook'].includes(draft.platform) && (
@@ -651,6 +776,7 @@ export default function SocialEnginePage() {
                         </div>
                         {bgBusyId === draft.id && <p className="text-xs text-gray-400">Rendering new background…</p>}
                         {bgError && bgBusyId !== draft.id && <p className="text-xs text-red-600">{bgError}</p>}
+                        {actionError && <p className="text-xs text-red-600 mt-1">{actionError}</p>}
                       </div>
                     )}
                     {videoScript && (
