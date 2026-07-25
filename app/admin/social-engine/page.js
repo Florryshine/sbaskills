@@ -5,6 +5,29 @@ import { createBrowserClient } from '@/lib/supabase';
 
 const PLATFORMS = ['instagram', 'facebook', 'telegram', 'linkedin', 'x', 'pinterest', 'youtube', 'tiktok'];
 
+// Mirrored in app/api/admin/content-assets/route.js for server-side validation.
+const PLATFORM_LIMITS = {
+  x: 280,
+  threads: 500,
+  linkedin: 3000,
+  facebook: 63206,
+  instagram: 2200,
+  telegram: 4096,
+};
+
+function CharCounter({ platform, length }) {
+  const limit = PLATFORM_LIMITS[platform];
+  if (!limit) return null;
+  const pct = length / limit;
+  const color = pct > 1 ? 'text-red-600' : pct > 0.9 ? 'text-amber-600' : 'text-gray-400';
+  return (
+    <span className={`text-xs font-semibold ${color}`}>
+      {length} / {limit}
+      {pct > 1 && <span> — over by {length - limit}</span>}
+    </span>
+  );
+}
+
 const JOB_STATUS_COLORS = {
   queued: 'text-yellow-600',
   scheduled: 'text-yellow-600',
@@ -30,6 +53,10 @@ export default function SocialEnginePage() {
   const [busyId, setBusyId] = useState(null);
   const [error, setError] = useState(null);
   const [lastResults, setLastResults] = useState(null);
+  const [editingId, setEditingId] = useState(null);
+  const [editDraft, setEditDraft] = useState('');
+  const [savingId, setSavingId] = useState(null);
+  const [editError, setEditError] = useState(null);
   // knowledge_assets has an anon-readable policy elsewhere in the app, so
   // this one still goes through the browser client — content_assets /
   // media_files / video_scripts / social_channels_v2 / publish_jobs are the
@@ -116,6 +143,38 @@ export default function SocialEnginePage() {
       return;
     }
     loadDrafts();
+  };
+
+  const startEdit = (draft) => {
+    setEditingId(draft.id);
+    setEditDraft(draft.body || '');
+    setEditError(null);
+  };
+
+  const cancelEdit = () => {
+    setEditingId(null);
+    setEditDraft('');
+    setEditError(null);
+  };
+
+  const saveEdit = async (id) => {
+    setSavingId(id);
+    setEditError(null);
+    try {
+      const res = await fetch('/api/admin/content-assets', {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ id, body: editDraft }),
+      });
+      const json = await res.json();
+      if (!res.ok) throw new Error(json.error || 'Save failed');
+      setEditingId(null);
+      setEditDraft('');
+      await loadDrafts();
+    } catch (e) {
+      setEditError(e.message);
+    }
+    setSavingId(null);
   };
 
   // Opens the inline channel picker for a draft, pre-filtered to channels
@@ -315,6 +374,18 @@ export default function SocialEnginePage() {
                       {expandedId === draft.id ? 'Hide' : 'Preview'}
                     </button>
 
+                    {editingId !== draft.id && (
+                      <button
+                        onClick={() => {
+                          setExpandedId(draft.id);
+                          startEdit(draft);
+                        }}
+                        className="text-indigo-600 px-4 py-2 rounded-xl text-sm font-bold hover:bg-indigo-50"
+                      >
+                        Edit
+                      </button>
+                    )}
+
                     {jobs.length === 0 && (
                       <button
                         onClick={() => openChannelPicker(draft)}
@@ -384,8 +455,40 @@ export default function SocialEnginePage() {
 
                 {expandedId === draft.id && (
                   <div className="mt-4 bg-slate-50 p-4 rounded-xl space-y-4">
-                    {draft.body && (
-                      <p className="text-sm whitespace-pre-wrap">{draft.body}</p>
+                    {editingId === draft.id ? (
+                      <div>
+                        <textarea
+                          value={editDraft}
+                          onChange={(e) => setEditDraft(e.target.value)}
+                          rows={6}
+                          className="w-full text-sm border rounded-lg p-3 font-sans"
+                          autoFocus
+                        />
+                        <div className="flex items-center justify-between mt-2">
+                          <CharCounter platform={draft.platform} length={editDraft.length} />
+                          <div className="flex gap-2">
+                            <button
+                              onClick={cancelEdit}
+                              disabled={savingId === draft.id}
+                              className="px-3 py-1.5 rounded-lg text-sm font-bold text-gray-600 hover:bg-gray-100 disabled:opacity-50"
+                            >
+                              Cancel
+                            </button>
+                            <button
+                              onClick={() => saveEdit(draft.id)}
+                              disabled={savingId === draft.id}
+                              className="bg-brand-blue text-white px-4 py-1.5 rounded-lg text-sm font-bold disabled:opacity-50"
+                            >
+                              {savingId === draft.id ? 'Saving…' : 'Save'}
+                            </button>
+                          </div>
+                        </div>
+                        {editError && <p className="text-xs text-red-600 mt-2">{editError}</p>}
+                      </div>
+                    ) : (
+                      draft.body && (
+                        <p className="text-sm whitespace-pre-wrap">{draft.body}</p>
+                      )
                     )}
                     {heroImage && (
                       <img src={heroImage.url} alt={draft.title} className="rounded-lg max-h-64 object-cover" />
