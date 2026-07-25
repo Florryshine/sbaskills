@@ -4,11 +4,15 @@ import { runContentFactory } from '@/lib/content-factory';
 
 export async function POST(request) {
   try {
-    const { knowledgeAssetId, platforms } = await request.json();
+    const { knowledgeAssetId, platforms, voiceMode, founderContext } = await request.json();
     if (!knowledgeAssetId) {
       return NextResponse.json({ error: 'knowledgeAssetId is required' }, { status: 400 });
     }
-    const results = await runContentFactory(knowledgeAssetId, platforms);
+    const options = {};
+    if (platforms?.includes('founder')) {
+      options.founder = { voiceMode, founderContext };
+    }
+    const results = await runContentFactory(knowledgeAssetId, platforms, options);
     return NextResponse.json({ success: true, results });
   } catch (error) {
     console.error('Content factory generate error:', error);

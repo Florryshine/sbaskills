@@ -5,6 +5,20 @@ import { createBrowserClient } from '@/lib/supabase';
 
 const PLATFORMS = ['instagram', 'facebook', 'telegram', 'linkedin', 'x', 'pinterest', 'youtube', 'tiktok'];
 
+// Founder posts aren't a real target platform — they're generated onto
+// linkedin/facebook/instagram rows (see lib/content-factory/generators/founder.js)
+// so char limits and existing platform filters still work, marked via an
+// asset_type prefix instead. This list is only for the generation picker;
+// PLATFORMS above stays the real filter-tab / content_assets.platform list.
+const GENERATE_PLATFORMS = [...PLATFORMS, 'founder'];
+
+const VOICE_MODES = [
+  { value: 'founder', label: 'Founder' },
+  { value: 'mentor', label: 'Mentor' },
+  { value: 'funny', label: 'Funny Florry' },
+  { value: 'reflective', label: 'Reflective' },
+];
+
 // Mirrored in app/api/admin/content-assets/route.js for server-side validation.
 const PLATFORM_LIMITS = {
   x: 280,
@@ -57,6 +71,8 @@ export default function SocialEnginePage() {
   const [editDraft, setEditDraft] = useState('');
   const [savingId, setSavingId] = useState(null);
   const [editError, setEditError] = useState(null);
+  const [voiceMode, setVoiceMode] = useState('founder');
+  const [founderContext, setFounderContext] = useState('');
   // knowledge_assets has an anon-readable policy elsewhere in the app, so
   // this one still goes through the browser client — content_assets /
   // media_files / video_scripts / social_channels_v2 / publish_jobs are the
@@ -117,6 +133,7 @@ export default function SocialEnginePage() {
         body: JSON.stringify({
           knowledgeAssetId: selectedAssetId,
           platforms: selectedPlatforms.length > 0 ? selectedPlatforms : undefined,
+          ...(selectedPlatforms.includes('founder') ? { voiceMode, founderContext } : {}),
         }),
       });
       const data = await res.json();
@@ -231,7 +248,12 @@ export default function SocialEnginePage() {
     setBusyId(null);
   };
 
-  const filtered = platformFilter === 'all' ? drafts : drafts.filter((d) => d.platform === platformFilter);
+  const filtered =
+    platformFilter === 'all'
+      ? drafts
+      : platformFilter === 'founder'
+      ? drafts.filter((d) => d.asset_type?.startsWith('founder_'))
+      : drafts.filter((d) => d.platform === platformFilter && !d.asset_type?.startsWith('founder_'));
 
   return (
     <div className="p-6">
@@ -267,23 +289,54 @@ export default function SocialEnginePage() {
           </button>
         </div>
         <div className="flex flex-wrap gap-2">
-          {PLATFORMS.map((p) => (
+          {GENERATE_PLATFORMS.map((p) => (
             <button
               key={p}
               onClick={() => togglePlatform(p)}
               className={`px-3 py-1.5 rounded-full text-xs font-semibold border ${
                 selectedPlatforms.includes(p)
-                  ? 'bg-brand-blue text-white border-brand-blue'
+                  ? p === 'founder'
+                    ? 'bg-indigo-600 text-white border-indigo-600'
+                    : 'bg-brand-blue text-white border-brand-blue'
                   : 'text-gray-600 border-gray-300 hover:bg-gray-50'
               }`}
             >
-              {p}
+              {p === 'founder' ? 'Founder Post' : p}
             </button>
           ))}
         </div>
         <p className="text-xs text-gray-400 mt-2">
-          Leave all unchecked to generate every platform.
+          Leave all unchecked to generate every platform (Founder Post is opt-in only, never included by default).
         </p>
+
+        {selectedPlatforms.includes('founder') && (
+          <div className="mt-3 bg-indigo-50 border border-indigo-100 rounded-xl p-3 space-y-2">
+            <div className="flex flex-wrap gap-2 items-center">
+              <span className="text-xs font-bold text-indigo-700">Voice:</span>
+              {VOICE_MODES.map((v) => (
+                <button
+                  key={v.value}
+                  onClick={() => setVoiceMode(v.value)}
+                  className={`px-3 py-1 rounded-full text-xs font-semibold border ${
+                    voiceMode === v.value
+                      ? 'bg-indigo-600 text-white border-indigo-600'
+                      : 'text-indigo-700 border-indigo-200 bg-white hover:bg-indigo-100'
+                  }`}
+                >
+                  {v.label}
+                </button>
+              ))}
+            </div>
+            <textarea
+              value={founderContext}
+              onChange={(e) => setFounderContext(e.target.value)}
+              placeholder="Anything on your mind today? (optional — leave blank most of the time)"
+              rows={2}
+              className="w-full text-sm border border-indigo-200 rounded-lg p-2 font-sans"
+            />
+          </div>
+        )}
+
         {error && <p className="text-sm text-red-600 mt-3">{error}</p>}
 
         {lastResults && (
@@ -326,6 +379,12 @@ export default function SocialEnginePage() {
             {p}
           </button>
         ))}
+        <button
+          onClick={() => setPlatformFilter('founder')}
+          className={`px-3 py-1.5 rounded-full text-xs font-semibold ${platformFilter === 'founder' ? 'bg-indigo-600 text-white' : 'bg-indigo-50 text-indigo-700'}`}
+        >
+          Founder
+        </button>
       </div>
 
       {/* ── Drafts ── */}
@@ -351,6 +410,11 @@ export default function SocialEnginePage() {
                     <span className="inline-block text-xs font-bold uppercase tracking-wide text-brand-blue bg-blue-50 rounded-full px-2 py-0.5 mr-2">
                       {draft.platform || draft.asset_type}
                     </span>
+                    {draft.asset_type?.startsWith('founder_') && (
+                      <span className="inline-block text-xs font-bold uppercase tracking-wide text-indigo-700 bg-indigo-50 rounded-full px-2 py-0.5 mr-2">
+                        Founder{draft.metadata?.voiceMode ? ` · ${draft.metadata.voiceMode}` : ''}
+                      </span>
+                    )}
                     <span className="font-bold">{draft.title || draft.knowledge_assets?.keyword}</span>
                     <p className="text-sm text-gray-500 mt-1">
                       Status: <span className={`font-semibold ${draft.status === 'approved' || draft.status === 'published' ? 'text-green-600' : 'text-yellow-600'}`}>{draft.status}</span>
