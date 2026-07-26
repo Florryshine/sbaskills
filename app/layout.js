@@ -1,5 +1,7 @@
 import './globals.css';
 import Script from 'next/script';
+import { UnlockSystemProvider } from '@/context/UnlockSystemContext';
+import NotificationContainer from '@/components/NotificationContainer';
 
 export const metadata = {
   metadataBase: new URL('https://shineybrainacademy.vercel.app'),
@@ -20,7 +22,10 @@ export default function RootLayout({ children }) {
         <link rel="apple-touch-icon" href="/logo.png" />
       </head>
       <body>
-        {children}
+        <UnlockSystemProvider>
+          {children}
+          <NotificationContainer />
+        </UnlockSystemProvider>
         {/* Load Paystack before the page becomes interactive */}
         <Script
           src="https://js.paystack.co/v1/inline.js"
