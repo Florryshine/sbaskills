@@ -23,5 +23,19 @@ const nextConfig = withPWA({
       '/api/**/*': ['./public/fonts/**'],
     },
   },
+  webpack: (config, { isServer }) => {
+    // Fix for external HTTPS imports (e.g., jszip from CDN)
+    // Some dependencies may try to import from CDN URLs which webpack can't handle by default
+    // Redirect CDN imports to local packages
+    if (!isServer) {
+      config.plugins.push(
+        new (require('webpack').NormalModuleReplacementPlugin)(
+          /^https:\/\/cdn\.jsdelivr\.net\/npm\/jszip@3\.10\.1\/+esm$/,
+          require.resolve('jszip')
+        )
+      )
+    }
+    return config
+  },
 })
 module.exports = nextConfig
