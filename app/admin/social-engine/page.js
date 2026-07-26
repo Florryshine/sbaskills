@@ -128,7 +128,7 @@ export default function SocialEnginePage() {
     setZipBusyId(draft.id);
     setActionError(null);
     try {
-      const { default: JSZip } = await import('https://cdn.jsdelivr.net/npm/jszip@3.10.1/+esm');
+      const { default: JSZip } = await import('jszip');
       const zip = new JSZip();
       for (const s of slides) {
         const res = await fetch(s.url);
