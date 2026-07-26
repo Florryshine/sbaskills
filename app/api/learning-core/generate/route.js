@@ -45,7 +45,10 @@ Return ONLY a JSON object with the following fields – no markdown, no extra te
   "facts": ["fact1", "fact2", ...],
   "common_mistakes": ["mistake1", "mistake2", ...],
   "difficulty": 1-5 (1=easy, 5=advanced),
-  "tags": ["tag1", "tag2", ...]
+  "tags": ["tag1", "tag2", ...],
+  "learning_objectives": ["Define isotopes.", "Differentiate isotopes from isobars.", ...],
+  "exam_type": ["JAMB", "WAEC"],
+  "estimated_duration_minutes": 20
 }`;
 }
 
@@ -62,6 +65,17 @@ function isValidKnowledge(r) {
     Array.isArray(r.key_concepts) &&
     r.key_concepts.length > 0
   );
+}
+
+// Keeps exam_type values consistent (uppercase, deduped, only known codes)
+// regardless of how the model formats them ("jamb", "Post-UTME", etc).
+const KNOWN_EXAM_TYPES = ['JAMB', 'WAEC', 'NECO', 'POST_UTME'];
+function normalizeExamType(value) {
+  if (!Array.isArray(value)) return [];
+  const normalized = value
+    .map((v) => String(v).trim().toUpperCase().replace(/[\s-]+/g, '_'))
+    .map((v) => (v === 'POSTUTME' ? 'POST_UTME' : v));
+  return [...new Set(normalized.filter((v) => KNOWN_EXAM_TYPES.includes(v)))];
 }
 
 async function tryOpenRouter(prompt) {
@@ -251,6 +265,11 @@ export async function POST(request) {
         common_mistakes: result.common_mistakes || [],
         difficulty: result.difficulty || 3,
         tags: result.tags || [],
+        learning_objectives: Array.isArray(result.learning_objectives) ? result.learning_objectives : [],
+        exam_type: normalizeExamType(result.exam_type),
+        estimated_duration_minutes: Number.isFinite(result.estimated_duration_minutes)
+          ? result.estimated_duration_minutes
+          : null,
         source: 'ai_generated',
         status: 'approved',
       })

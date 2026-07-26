@@ -24,6 +24,17 @@ function isValidKnowledge(r) {
   );
 }
 
+// Keeps exam_type values consistent (uppercase, deduped, only known codes)
+// regardless of how the model formats them ("jamb", "Post-UTME", etc).
+const KNOWN_EXAM_TYPES = ['JAMB', 'WAEC', 'NECO', 'POST_UTME'];
+function normalizeExamType(value) {
+  if (!Array.isArray(value)) return [];
+  const normalized = value
+    .map((v) => String(v).trim().toUpperCase().replace(/[\s-]+/g, '_'))
+    .map((v) => (v === 'POSTUTME' ? 'POST_UTME' : v));
+  return [...new Set(normalized.filter((v) => KNOWN_EXAM_TYPES.includes(v)))];
+}
+
 function buildDeepResearchPrompt(item) {
   return `You are an expert educational researcher for Shiney Brain Academy, going deep on ONE exam topic. Every other content type (study notes, quiz, flashcards, blog, images) will be built later from your research alone — you will not see this topic again, so extract everything relevant now.
 
@@ -39,6 +50,9 @@ Be exhaustive:
 - List common mistakes/misconceptions students actually make on this exact topic.
 - If the topic is broad enough to have distinct sub-topics, break it into those sub-topics with a short explanation each.
 - Do not artificially limit list lengths — include as many genuinely distinct items as apply.
+- Write 3-6 learning objectives: short, student-facing statements of what they should be able to DO after studying this (start each with a verb — "Define...", "Differentiate...", "Solve...", "Explain...").
+- Identify which Nigerian exams this topic is relevant for (JAMB, WAEC, NECO, POST_UTME) — most topics apply to more than one.
+- Estimate how many minutes a focused student needs to work through this topic's lesson + quiz.
 
 Return ONLY this JSON object — no markdown fences, no extra text:
 {
@@ -46,6 +60,9 @@ Return ONLY this JSON object — no markdown fences, no extra text:
   "subject": "Biology|Chemistry|Physics|Mathematics|... or General",
   "summary": "A thorough overview, 100-200 words, covering what the topic is and why it matters for the exam — plain research language, not a blog hook",
   "sub_topics": [{"title": "sub-topic name", "explanation": "2-4 sentence explanation of this sub-topic"}],
+  "learning_objectives": ["Define isotopes.", "Differentiate isotopes from isobars.", ...],
+  "exam_type": ["JAMB", "WAEC"],
+  "estimated_duration_minutes": 20,
   "key_concepts": ["as many distinct concepts as genuinely apply"],
   "definitions": [{"term": "term", "definition": "precise, exam-ready definition"}],
   "examples": ["concrete real examples, including exam-style scenarios where relevant"],
@@ -124,6 +141,11 @@ export async function POST(request) {
         subject: result.subject || null,
         summary: result.summary,
         sub_topics: result.sub_topics || [],
+        learning_objectives: Array.isArray(result.learning_objectives) ? result.learning_objectives : [],
+        exam_type: normalizeExamType(result.exam_type),
+        estimated_duration_minutes: Number.isFinite(result.estimated_duration_minutes)
+          ? result.estimated_duration_minutes
+          : null,
         key_concepts: result.key_concepts || [],
         definitions: result.definitions || [],
         examples: result.examples || [],
