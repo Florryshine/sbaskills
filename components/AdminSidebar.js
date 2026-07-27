@@ -10,6 +10,7 @@ const navItems = [
   { href: '/admin/students', label: 'Students', icon: '\ud83d\udc68\u200d\ud83c\udf93' },
   { href: '/admin/tutor-activity', label: 'Tutor Activity', icon: '\ud83e\uddd1\u200d\ud83c\udfeb' },
   { href: '/admin/roles', label: 'Roles', icon: '\ud83d\udd11' },
+  { href: '/admin/schools', label: 'Schools', icon: '🏫' },
   { href: '/admin/feature-unlocks', label: 'Feature Unlocks', icon: '\ud83d\udd12' },
 
   { href: '/admin/knowledge-assets', label: 'Knowledge Assets', icon: '\ud83e\udde0' },
