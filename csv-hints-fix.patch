@@ -1,0 +1,278 @@
+diff --git a/app/admin/content-engine/upload/page.js b/app/admin/content-engine/upload/page.js
+index 873a93d..8a69adb 100644
+--- a/app/admin/content-engine/upload/page.js
++++ b/app/admin/content-engine/upload/page.js
+@@ -52,8 +52,14 @@ export default function UploadPage() {
+   };
+ 
+   const downloadTemplate = () => {
+-    const headers = 'keyword,category,priority\n';
+-    const sample = 'JAMB Aggregate Calculator,JAMB,High\nWAEC Grade Calculator,WAEC,High\nUNILAG Cut-off Mark,University,Medium\nHow to Study for JAMB,Study Tips,High\nBest AI Tools for Students,Digital Skills,Low\n';
++    const headers = 'keyword,category,priority,subject,exam_type,learning_objectives\n';
++    const sample = [
++      'JAMB Aggregate Calculator,JAMB,High,,,',
++      'WAEC Grade Calculator,WAEC,High,,,',
++      '"Isotopes and Isobars",Chemistry,High,Chemistry,JAMB;WAEC,"Define isotopes.;Differentiate isotopes from isobars.;Solve isotope questions."',
++      'How to Study for JAMB,Study Tips,High,,,',
++      'Best AI Tools for Students,Digital Skills,Low,,,',
++    ].join('\n') + '\n';
+     const csv = headers + sample;
+ 
+     const blob = new Blob([csv], { type: 'text/csv' });
+@@ -164,11 +170,21 @@ export default function UploadPage() {
+           <div className="mt-8 pt-6 border-t border-gray-100">
+             <h3 className="text-sm font-semibold text-gray-700 mb-2">CSV Format</h3>
+             <div className="bg-gray-50 rounded-xl p-4 text-xs font-mono text-gray-600 overflow-x-auto">
+-              <div>keyword,category,priority</div>
+-              <div className="text-[#1a73e8]">JAMB Aggregate Calculator,JAMB,High</div>
+-              <div className="text-[#1a73e8]">WAEC Grade Calculator,WAEC,High</div>
+-              <div className="text-[#1a73e8]">UNILAG Cut-off Mark,University,Medium</div>
++              <div>keyword,category,priority,subject,exam_type,learning_objectives</div>
++              <div className="text-[#1a73e8]">JAMB Aggregate Calculator,JAMB,High,,,</div>
++              <div className="text-[#1a73e8]">
++                {'"Isotopes and Isobars",Chemistry,High,Chemistry,JAMB;WAEC,"Define isotopes.;Differentiate isotopes from isobars."'}
++              </div>
+             </div>
++            <p className="text-xs text-gray-400 mt-3">
++              Only <span className="font-semibold text-gray-500">keyword</span> is required. <span className="font-semibold text-gray-500">category</span> and <span className="font-semibold text-gray-500">priority</span> control queue sorting.
++            </p>
++            <p className="text-xs text-gray-400 mt-1">
++              <span className="font-semibold text-gray-500">subject</span>, <span className="font-semibold text-gray-500">exam_type</span>, and <span className="font-semibold text-gray-500">learning_objectives</span> are optional AI hints — the model still researches the topic itself, but these anchor it to the exact exam context you specify instead of generic coverage.
++            </p>
++            <p className="text-xs text-gray-400 mt-1">
++              For <span className="font-semibold text-gray-500">exam_type</span> and <span className="font-semibold text-gray-500">learning_objectives</span> with multiple values, separate them with <code className="bg-gray-100 px-1 rounded">;</code> and wrap the whole field in quotes, e.g. <code className="bg-gray-100 px-1 rounded">"JAMB;WAEC"</code>.
++            </p>
+             <p className="text-xs text-gray-400 mt-3">
+               Categories: JAMB, WAEC, NECO, University, Post-UTME, Career, Study Tips, Digital Skills
+             </p>
+diff --git a/app/api/content-engine/generate/route.js b/app/api/content-engine/generate/route.js
+index 31f4975..54ddfb4 100644
+--- a/app/api/content-engine/generate/route.js
++++ b/app/api/content-engine/generate/route.js
+@@ -24,21 +24,59 @@ function isValidKnowledge(r) {
+   );
+ }
+ 
++// Keeps exam_type values consistent (uppercase, deduped, only known codes)
++// regardless of how the model formats them ("jamb", "Post-UTME", etc).
++const KNOWN_EXAM_TYPES = ['JAMB', 'WAEC', 'NECO', 'POST_UTME'];
++function normalizeExamType(value) {
++  if (!Array.isArray(value)) return [];
++  const normalized = value
++    .map((v) => String(v).trim().toUpperCase().replace(/[\s-]+/g, '_'))
++    .map((v) => (v === 'POSTUTME' ? 'POST_UTME' : v));
++  return [...new Set(normalized.filter((v) => KNOWN_EXAM_TYPES.includes(v)))];
++}
++
++// Builds an optional block surfacing admin-provided hints from the CSV
++// upload (subject_hint, exam_type_hint, learning_objectives_hint). These
++// are guidance, not ground truth — the model still does full research —
++// but they anchor it to the exact exam framing the admin already knows,
++// instead of the model guessing generically from just the keyword.
++function buildHintsBlock(item) {
++  const lines = [];
++  if (item.subject_hint) {
++    lines.push(`- Likely subject: ${item.subject_hint}`);
++  }
++  if (Array.isArray(item.exam_type_hint) && item.exam_type_hint.length > 0) {
++    lines.push(`- Focus on these exams specifically: ${item.exam_type_hint.join(', ')}`);
++  }
++  if (Array.isArray(item.learning_objectives_hint) && item.learning_objectives_hint.length > 0) {
++    lines.push(`- The admin wants these exact objectives covered (treat as required, then add more if the topic needs it):`);
++    item.learning_objectives_hint.forEach((obj) => lines.push(`  * ${obj}`));
++  }
++
++  if (lines.length === 0) return '';
++
++  return `\nAdmin-provided context — use this to anchor your research to the EXACT exam framing below rather than generic coverage of the topic. Still verify and expand on it with real research; don't just restate it back:\n${lines.join('\n')}\n`;
++}
++
+ function buildDeepResearchPrompt(item) {
+   return `You are an expert educational researcher for Shiney Brain Academy, going deep on ONE exam topic. Every other content type (study notes, quiz, flashcards, blog, images) will be built later from your research alone — you will not see this topic again, so extract everything relevant now.
+ 
+ Topic: "${item.keyword}"
+ Category: ${item.category || 'General'}
+-
++${buildHintsBlock(item)}
+ Do NOT write in blog/article voice. Do NOT write an introduction, hook, or narrative. This is a structured research extraction, not prose for a reader.
+ 
+ Be exhaustive:
+ - Cover every sub-topic, sub-concept, and angle a student would need for JAMB/WAEC/NECO/Post-UTME on this topic — do not stop at a surface-level summary.
++- If admin-provided context above names specific exams or objectives, treat those as the required minimum bar — don't default to generic textbook coverage instead of the exact exam framing given.
+ - List every important term with a precise, exam-ready definition.
+ - Include real, concrete examples and facts — not generic filler.
+ - List common mistakes/misconceptions students actually make on this exact topic.
+ - If the topic is broad enough to have distinct sub-topics, break it into those sub-topics with a short explanation each.
+ - Do not artificially limit list lengths — include as many genuinely distinct items as apply.
++- Write 3-6 learning objectives: short, student-facing statements of what they should be able to DO after studying this (start each with a verb — "Define...", "Differentiate...", "Solve...", "Explain...").
++- Identify which Nigerian exams this topic is relevant for (JAMB, WAEC, NECO, POST_UTME) — most topics apply to more than one.
++- Estimate how many minutes a focused student needs to work through this topic's lesson + quiz.
+ 
+ Return ONLY this JSON object — no markdown fences, no extra text:
+ {
+@@ -46,6 +84,9 @@ Return ONLY this JSON object — no markdown fences, no extra text:
+   "subject": "Biology|Chemistry|Physics|Mathematics|... or General",
+   "summary": "A thorough overview, 100-200 words, covering what the topic is and why it matters for the exam — plain research language, not a blog hook",
+   "sub_topics": [{"title": "sub-topic name", "explanation": "2-4 sentence explanation of this sub-topic"}],
++  "learning_objectives": ["Define isotopes.", "Differentiate isotopes from isobars.", ...],
++  "exam_type": ["JAMB", "WAEC"],
++  "estimated_duration_minutes": 20,
+   "key_concepts": ["as many distinct concepts as genuinely apply"],
+   "definitions": [{"term": "term", "definition": "precise, exam-ready definition"}],
+   "examples": ["concrete real examples, including exam-style scenarios where relevant"],
+@@ -124,6 +165,11 @@ export async function POST(request) {
+         subject: result.subject || null,
+         summary: result.summary,
+         sub_topics: result.sub_topics || [],
++        learning_objectives: Array.isArray(result.learning_objectives) ? result.learning_objectives : [],
++        exam_type: normalizeExamType(result.exam_type),
++        estimated_duration_minutes: Number.isFinite(result.estimated_duration_minutes)
++          ? result.estimated_duration_minutes
++          : null,
+         key_concepts: result.key_concepts || [],
+         definitions: result.definitions || [],
+         examples: result.examples || [],
+diff --git a/app/api/content-engine/queue/route.js b/app/api/content-engine/queue/route.js
+index adfa3e1..7d77a2a 100644
+--- a/app/api/content-engine/queue/route.js
++++ b/app/api/content-engine/queue/route.js
+@@ -1,6 +1,46 @@
+ import { NextResponse } from 'next/server';
+ import { createRouteHandlerClient } from '@/lib/supabase-server';
+ 
++// Minimal CSV line parser that respects double-quoted fields (so commas
++// inside a quoted "learning objective, with a comma" don't split the row,
++// and "" inside a quoted field becomes a literal ").
++function parseCsvLine(line) {
++  const values = [];
++  let current = '';
++  let inQuotes = false;
++
++  for (let i = 0; i < line.length; i++) {
++    const char = line[i];
++    if (inQuotes) {
++      if (char === '"' && line[i + 1] === '"') {
++        current += '"';
++        i++;
++      } else if (char === '"') {
++        inQuotes = false;
++      } else {
++        current += char;
++      }
++    } else if (char === '"') {
++      inQuotes = true;
++    } else if (char === ',') {
++      values.push(current.trim());
++      current = '';
++    } else {
++      current += char;
++    }
++  }
++  values.push(current.trim());
++  return values;
++}
++
++// Multi-value hint cells (exam_type, learning_objectives) are semicolon-
++// separated within their single CSV field, e.g. "JAMB;WAEC" or
++// "Define isotopes.;Differentiate isotopes from isobars."
++function parseMultiValue(raw) {
++  if (!raw) return [];
++  return raw.split(';').map((v) => v.trim()).filter(Boolean);
++}
++
+ export async function GET(request) {
+   try {
+     const supabase = createRouteHandlerClient();
+@@ -38,19 +78,51 @@ export async function POST(request) {
+ 
+     const text = await file.text();
+     const lines = text.split('\n').filter(line => line.trim());
+-    const headers = lines[0].split(',').map(h => h.trim().toLowerCase());
++    const headers = parseCsvLine(lines[0]).map(h => h.toLowerCase());
++
++    // Required: keyword. Everything else is optional and matched by header
++    // name so column order doesn't matter and old 3-column CSVs still work.
++    const keywordIdx = headers.indexOf('keyword');
++    const categoryIdx = headers.indexOf('category');
++    const priorityIdx = headers.indexOf('priority');
++    const subjectIdx = headers.indexOf('subject');
++    const examTypeIdx = headers.indexOf('exam_type');
++    const objectivesIdx = headers.indexOf('learning_objectives');
++
++    if (keywordIdx === -1) {
++      return NextResponse.json(
++        { error: 'CSV must include a "keyword" column' },
++        { status: 400 }
++      );
++    }
+ 
+     const items = [];
+     for (let i = 1; i < lines.length; i++) {
+-      const values = lines[i].split(',').map(v => v.trim());
+-      if (values.length < 2) continue;
++      const values = parseCsvLine(lines[i]);
++      const keyword = values[keywordIdx];
++      if (!keyword) continue;
++
+       const item = {
+-        keyword: values[0],
+-        category: values[1] || 'General',
+-        priority: values[2] || 'Medium',
++        keyword,
++        category: (categoryIdx > -1 && values[categoryIdx]) || 'General',
++        priority: (priorityIdx > -1 && values[priorityIdx]) || 'Medium',
+         priority_order: i,
+         status: 'pending',
+       };
++
++      // Optional AI-hint fields — steer generation toward exact exam
++      // context instead of the model guessing cold. Left blank/omitted is
++      // fine; the generate step still does full independent research.
++      if (subjectIdx > -1 && values[subjectIdx]) {
++        item.subject_hint = values[subjectIdx];
++      }
++      if (examTypeIdx > -1 && values[examTypeIdx]) {
++        item.exam_type_hint = parseMultiValue(values[examTypeIdx]);
++      }
++      if (objectivesIdx > -1 && values[objectivesIdx]) {
++        item.learning_objectives_hint = parseMultiValue(values[objectivesIdx]);
++      }
++
+       items.push(item);
+     }
+ 
+diff --git a/supabase/migrations/20260727_content_queue_hints.sql b/supabase/migrations/20260727_content_queue_hints.sql
+new file mode 100644
+index 0000000..a71b69f
+--- /dev/null
++++ b/supabase/migrations/20260727_content_queue_hints.sql
+@@ -0,0 +1,29 @@
++-- 20260727_content_queue_hints.sql
++-- Adds optional admin-provided hint columns to content_queue.
++-- These are NOT authoritative — the generation step still does full
++-- research and writes its own subject/exam_type/learning_objectives to
++-- knowledge_assets. These hints just steer that research toward the exact
++-- exam context the admin already knows, instead of the AI guessing cold
++-- from keyword + category alone.
++--
++-- All columns nullable/default-empty so existing rows and the old
++-- 3-column CSV format keep working unchanged.
++-- Safe to run multiple times.
++
++alter table content_queue
++  add column if not exists subject_hint text;
++
++alter table content_queue
++  add column if not exists exam_type_hint text[] not null default '{}';
++
++alter table content_queue
++  add column if not exists learning_objectives_hint text[] not null default '{}';
++
++comment on column content_queue.subject_hint is
++  'Optional admin-provided subject hint (e.g. Chemistry) to steer AI research. Not authoritative — AI still determines final subject.';
++
++comment on column content_queue.exam_type_hint is
++  'Optional admin-provided exam type hint(s) (e.g. {JAMB,WAEC}) to steer AI research. Not authoritative — AI still determines final exam_type.';
++
++comment on column content_queue.learning_objectives_hint is
++  'Optional admin-provided learning objective hints to steer AI research toward exact exam context instead of generic coverage. AI still writes its own final learning_objectives.';
