@@ -2,6 +2,7 @@ import { createServerClient } from '@/lib/supabase-server';
 import Navbar from '@/components/Navbar';
 import Footer from '@/components/Footer';
 import Link from 'next/link';
+import Image from 'next/image';
 
 export const metadata = {
   title: 'Library | Shiney Brain Academy',
@@ -38,7 +39,9 @@ export default async function LibraryPage() {
                 <Link key={book.id} href={`/library/${book.id}`}
                   className="bg-white rounded-2xl shadow-sm border border-gray-100 overflow-hidden hover:shadow-md transition group">
                   {book.cover_url ? (
-                    <img src={book.cover_url} alt={book.title} className="w-full h-48 object-cover" />
+                    <div className="relative w-full h-48">
+                      <Image src={book.cover_url} alt={book.title} fill className="object-cover" sizes="(max-width: 768px) 100vw, 33vw" />
+                    </div>
                   ) : (
                     <div className="w-full h-48 bg-brand-blue flex items-center justify-center text-5xl">📘</div>
                   )}

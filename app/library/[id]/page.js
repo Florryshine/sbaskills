@@ -6,6 +6,7 @@ import { useParams, useRouter } from 'next/navigation';
 import { initializePayment } from '@/lib/paystack';
 import Navbar from '@/components/Navbar';
 import Footer from '@/components/Footer';
+import Image from 'next/image';
 
 export default function BookPage() {
   const [book, setBook] = useState(null);
@@ -120,7 +121,11 @@ export default function BookPage() {
       <main className="min-h-screen bg-gray-50 py-8">
         <div className="max-w-4xl mx-auto px-4">
           <div className="bg-white rounded-2xl shadow-sm border border-gray-100 overflow-hidden">
-            {book.cover_url && <img src={book.cover_url} alt={book.title} className="w-full max-h-96 object-cover" />}
+            {book.cover_url && (
+              <div className="relative w-full h-64 sm:h-96">
+                <Image src={book.cover_url} alt={book.title} fill className="object-cover" sizes="(max-width: 768px) 100vw, 800px" priority />
+              </div>
+            )}
             <div className="p-8">
               <h1 className="text-3xl font-extrabold text-gray-900">{book.title}</h1>
               {book.author && <p className="text-gray-500 mt-1">by {book.author}</p>}

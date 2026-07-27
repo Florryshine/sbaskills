@@ -2,6 +2,7 @@ import { createServerClient } from '@/lib/supabase-server';
 import Navbar from '@/components/Navbar';
 import Footer from '@/components/Footer';
 import Link from 'next/link';
+import Image from 'next/image';
 import SortSelect from '@/components/SortSelect';
 
 // ─── Category mapping ──────────────────────────────────────────────
@@ -257,10 +258,12 @@ export default async function BlogPage({ searchParams }) {
                       {/* Cover Image */}
                       <div className="relative h-48 overflow-hidden">
                         {post.cover_image ? (
-                          <img
+                          <Image
                             src={post.cover_image}
                             alt={post.title}
-                            className="w-full h-full object-cover group-hover:scale-105 transition duration-300"
+                            fill
+                            className="object-cover group-hover:scale-105 transition duration-300"
+                            sizes="(max-width: 768px) 100vw, 33vw"
                           />
                         ) : (
                           <div className="w-full h-full bg-brand-blue flex items-center justify-center text-5xl">
