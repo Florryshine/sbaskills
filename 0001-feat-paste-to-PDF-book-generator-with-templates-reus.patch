@@ -1,0 +1,1205 @@
+From 0a48f5c9d53203e130e2858e6527912f578667b0 Mon Sep 17 00:00:00 2001
+From: Claude <assistant@local>
+Date: Mon, 27 Jul 2026 11:17:25 +0000
+Subject: [PATCH] feat: paste-to-PDF book generator with templates, reusable
+ blocks, and YouTube cards
+
+New /admin/books/from-text page: paste markdown, pick a template,
+click Generate -- reuses the existing StudyNoteDocument rendering
+pipeline (react-pdf + Supabase storage upload + books table insert)
+instead of building a new one.
+
+- lib/pdf/themes.js: 6 templates (Brand, Modern, Workbook, Premium,
+  Minimal, Dark) as color overrides on top of the existing brand.js
+  info. Header/Footer/BrandLayout/CoverPage all take an optional
+  'theme' prop defaulting to 'brand', so StudyNoteDocument (unchanged)
+  renders exactly as before.
+- lib/pdf/calloutTypes.js + parseMarkdown.js: adds ":::type ... :::"
+  fenced blocks (summary, tip, warning, memory, challenge, exercise,
+  takeaway, further) and ":::checklist" as new parseable block types,
+  alongside the existing headings/lists/tables/images.
+- lib/pdf/youtube.js: detects bare YouTube URLs and enriches them via
+  YouTube's public oEmbed endpoint (title/channel/thumbnail, no API key)
+  into video cards. Runs before rendering since react-pdf builds its
+  tree synchronously.
+- lib/pdf/BookDocument.js: generalized sibling of StudyNoteDocument that
+  takes pre-parsed+enriched blocks instead of raw markdown, plus a
+  themeKey, and renders the 3 new block types.
+- app/api/admin/books/from-text/route.js: parse -> enrich -> render ->
+  upload to the 'books' storage bucket -> insert/update books row.
+- supabase/migrations/20260727_book_source_columns.sql: adds nullable
+  source_markdown + template columns to books so generated books can be
+  reopened and regenerated later.
+---
+ app/admin/books/from-text/page.js             | 204 ++++++++++++++++++
+ app/admin/books/page.js                       |  20 +-
+ app/api/admin/books/from-text/route.js        | 103 +++++++++
+ lib/pdf/BookDocument.js                       | 173 +++++++++++++++
+ lib/pdf/BrandLayout.js                        |  35 +--
+ lib/pdf/CoverPage.js                          | 194 ++++++++---------
+ lib/pdf/Footer.js                             |  27 +--
+ lib/pdf/Header.js                             |  30 +--
+ lib/pdf/calloutTypes.js                       |  19 ++
+ lib/pdf/parseMarkdown.js                      |  44 +++-
+ lib/pdf/themes.js                             |  83 +++++++
+ lib/pdf/youtube.js                            |  38 ++++
+ .../20260727_book_source_columns.sql          |  21 ++
+ 13 files changed, 844 insertions(+), 147 deletions(-)
+ create mode 100644 app/admin/books/from-text/page.js
+ create mode 100644 app/api/admin/books/from-text/route.js
+ create mode 100644 lib/pdf/BookDocument.js
+ create mode 100644 lib/pdf/calloutTypes.js
+ create mode 100644 lib/pdf/themes.js
+ create mode 100644 lib/pdf/youtube.js
+ create mode 100644 supabase/migrations/20260727_book_source_columns.sql
+
+diff --git a/app/admin/books/from-text/page.js b/app/admin/books/from-text/page.js
+new file mode 100644
+index 0000000..26c7fa3
+--- /dev/null
++++ b/app/admin/books/from-text/page.js
+@@ -0,0 +1,204 @@
++'use client';
++
++import { useState, useRef } from 'react';
++import Link from 'next/link';
++import { useRouter } from 'next/navigation';
++import { themeList } from '@/lib/pdf/themes';
++import { calloutTypes } from '@/lib/pdf/calloutTypes';
++
++// Quick-insert snippets for the reusable ":::type ... :::" blocks, plus
++// a checklist snippet. Clicking a button inserts the snippet at the
++// current cursor position in the textarea, same pattern already used
++// on /admin/study-note-drafts for inserting images.
++const BLOCK_SNIPPETS = [
++  { key: 'summary', label: `${calloutTypes.summary.icon} Summary`, snippet: ':::summary\nWrite the summary here.\n:::' },
++  { key: 'tip', label: `${calloutTypes.tip.icon} Tip`, snippet: ':::tip\nWrite the tip here.\n:::' },
++  { key: 'warning', label: `${calloutTypes.warning.icon} Warning`, snippet: ':::warning\nWrite the warning here.\n:::' },
++  { key: 'memory', label: `${calloutTypes.memory.icon} Memory Trick`, snippet: ':::memory\nWrite the memory trick here.\n:::' },
++  { key: 'challenge', label: `${calloutTypes.challenge.icon} Challenge`, snippet: ':::challenge\nWrite the challenge here.\n:::' },
++  { key: 'exercise', label: `${calloutTypes.exercise.icon} Exercise`, snippet: ':::exercise\nWrite the exercise here.\n:::' },
++  { key: 'takeaway', label: `${calloutTypes.takeaway.icon} Key Takeaway`, snippet: ':::takeaway\nWrite the key takeaway here.\n:::' },
++  { key: 'further', label: `${calloutTypes.further.icon} Further Reading`, snippet: ':::further\nLink or note here.\n:::' },
++  { key: 'checklist', label: '✅ Checklist', snippet: ':::checklist\n- First step\n- Second step\n- Third step\n:::' },
++  { key: 'youtube', label: '📺 YouTube Video', snippet: 'https://www.youtube.com/watch?v=VIDEO_ID' },
++];
++
++export default function BookFromTextPage() {
++  const router = useRouter();
++  const textareaRef = useRef(null);
++
++  const [title, setTitle] = useState('');
++  const [description, setDescription] = useState('');
++  const [author, setAuthor] = useState('Shiney Brain Academy');
++  const [price, setPrice] = useState('0');
++  const [themeKey, setThemeKey] = useState('brand');
++  const [markdown, setMarkdown] = useState('');
++  const [generating, setGenerating] = useState(false);
++  const [result, setResult] = useState(null);
++  const [error, setError] = useState('');
++
++  const insertSnippet = (snippet) => {
++    const textarea = textareaRef.current;
++    if (textarea) {
++      const start = textarea.selectionStart;
++      const end = textarea.selectionEnd;
++      const before = markdown.substring(0, start);
++      const after = markdown.substring(end);
++      const insert = `\n\n${snippet}\n\n`;
++      setMarkdown(before + insert + after);
++      setTimeout(() => {
++        textarea.focus();
++        const newPos = start + insert.length;
++        textarea.setSelectionRange(newPos, newPos);
++      }, 0);
++    } else {
++      setMarkdown(prev => prev + `\n\n${snippet}\n`);
++    }
++  };
++
++  const generatePdf = async () => {
++    setError('');
++    setResult(null);
++    if (!title.trim()) { setError('Title is required.'); return; }
++    if (!markdown.trim()) { setError('Paste some content first.'); return; }
++
++    setGenerating(true);
++    try {
++      const res = await fetch('/api/admin/books/from-text', {
++        method: 'POST',
++        headers: { 'Content-Type': 'application/json' },
++        body: JSON.stringify({ title, description, author, price, markdown, themeKey }),
++      });
++      const data = await res.json();
++      if (!res.ok) throw new Error(data.error || 'Generation failed');
++      setResult(data);
++    } catch (err) {
++      setError(err.message);
++    } finally {
++      setGenerating(false);
++    }
++  };
++
++  return (
++    <div className="space-y-6">
++      <section className="rounded-2xl bg-white p-6 shadow-sm border border-slate-100">
++        <Link href="/admin/books" className="text-sm text-brand-blue underline">← Back to Books</Link>
++        <h1 className="text-2xl font-extrabold text-brand-blue mt-2">📝 Generate Book from Text</h1>
++        <p className="text-sm text-slate-500 mt-1">
++          Paste content from ChatGPT, DeepSeek, or anywhere else, pick a template, and click Generate — no manual formatting needed.
++        </p>
++      </section>
++
++      <section className="rounded-2xl bg-white p-6 shadow-sm border border-slate-100 space-y-4">
++        <div className="grid gap-4 sm:grid-cols-2">
++          <div>
++            <label className="block text-sm font-semibold mb-1">Title *</label>
++            <input
++              type="text" value={title} onChange={e => setTitle(e.target.value)}
++              className="w-full rounded-lg border border-slate-200 px-3 py-2 text-sm"
++              placeholder="How to Score 300+ in JAMB"
++            />
++          </div>
++          <div>
++            <label className="block text-sm font-semibold mb-1">Author</label>
++            <input
++              type="text" value={author} onChange={e => setAuthor(e.target.value)}
++              className="w-full rounded-lg border border-slate-200 px-3 py-2 text-sm"
++            />
++          </div>
++          <div>
++            <label className="block text-sm font-semibold mb-1">Short description</label>
++            <input
++              type="text" value={description} onChange={e => setDescription(e.target.value)}
++              className="w-full rounded-lg border border-slate-200 px-3 py-2 text-sm"
++              placeholder="Used as the PDF subtitle and library description"
++            />
++          </div>
++          <div>
++            <label className="block text-sm font-semibold mb-1">Price (₦, 0 = free)</label>
++            <input
++              type="number" min="0" value={price} onChange={e => setPrice(e.target.value)}
++              className="w-full rounded-lg border border-slate-200 px-3 py-2 text-sm"
++            />
++          </div>
++        </div>
++
++        <div>
++          <label className="block text-sm font-semibold mb-2">Template</label>
++          <div className="flex flex-wrap gap-2">
++            {themeList.map(t => (
++              <button
++                key={t.key}
++                type="button"
++                onClick={() => setThemeKey(t.key)}
++                className={`rounded-full px-4 py-1.5 text-sm font-semibold border ${
++                  themeKey === t.key
++                    ? 'bg-brand-blue text-white border-brand-blue'
++                    : 'bg-white text-slate-600 border-slate-200 hover:border-brand-blue'
++                }`}
++              >
++                {t.label}
++              </button>
++            ))}
++          </div>
++        </div>
++
++        <div>
++          <div className="flex items-center justify-between mb-2">
++            <label className="block text-sm font-semibold">Content (Markdown)</label>
++          </div>
++          <div className="flex flex-wrap gap-2 mb-2">
++            {BLOCK_SNIPPETS.map(b => (
++              <button
++                key={b.key}
++                type="button"
++                onClick={() => insertSnippet(b.snippet)}
++                className="rounded-full bg-slate-100 hover:bg-slate-200 px-3 py-1 text-xs font-semibold text-slate-700"
++              >
++                + {b.label}
++              </button>
++            ))}
++          </div>
++          <textarea
++            ref={textareaRef}
++            rows={18}
++            value={markdown}
++            onChange={e => setMarkdown(e.target.value)}
++            className="w-full rounded-lg border border-slate-200 px-3 py-2 text-sm font-mono"
++            placeholder={`# Title\n\n## Introduction\n\nPaste your content here...\n\n:::tip\nA short tip goes here.\n:::\n\nhttps://www.youtube.com/watch?v=VIDEO_ID\n\n:::checklist\n- Step one\n- Step two\n:::`}
++          />
++          <p className="text-xs text-slate-400 mt-1">
++            Supports headings (#/##/###), bullet lists, tables, **bold**, images, the block buttons above, and bare YouTube links (auto-converted into video cards).
++          </p>
++        </div>
++
++        {error && <p className="text-sm text-red-600 font-semibold">{error}</p>}
++
++        {result && (
++          <div className="rounded-lg bg-green-50 border border-green-200 p-4 text-sm">
++            <p className="font-semibold text-green-800 mb-1">✅ PDF generated!</p>
++            <a href={result.fileUrl} target="_blank" rel="noreferrer" className="text-brand-blue underline break-all">
++              {result.fileUrl}
++            </a>
++            <div className="mt-2">
++              <Link href={`/admin/books/${result.bookId}`} className="text-brand-blue underline text-sm font-semibold">
++                View / edit book entry →
++              </Link>
++            </div>
++          </div>
++        )}
++
++        <div className="flex justify-end">
++          <button
++            type="button"
++            onClick={generatePdf}
++            disabled={generating}
++            className="rounded-full bg-brand-yellow px-6 py-2.5 text-sm font-bold text-brand-dark hover:opacity-90 disabled:opacity-50"
++          >
++            {generating ? 'Generating…' : '✨ Generate PDF'}
++          </button>
++        </div>
++      </section>
++    </div>
++  );
++}
+diff --git a/app/admin/books/page.js b/app/admin/books/page.js
+index fc8cf3e..1db1c01 100644
+--- a/app/admin/books/page.js
++++ b/app/admin/books/page.js
+@@ -43,12 +43,20 @@ export default function AdminBooksPage() {
+           <h1 className="text-2xl font-extrabold text-brand-blue">📕 Books</h1>
+           <p className="text-sm text-slate-500 mt-1">{books.length} book{books.length === 1 ? '' : 's'}</p>
+         </div>
+-        <Link
+-          href="/admin/books/new"
+-          className="rounded-full bg-brand-yellow px-5 py-2.5 text-sm font-bold text-brand-dark hover:opacity-90"
+-        >
+-          + Add Book
+-        </Link>
++        <div className="flex gap-2">
++          <Link
++            href="/admin/books/from-text"
++            className="rounded-full bg-brand-blue px-5 py-2.5 text-sm font-bold text-white hover:opacity-90"
++          >
++            ✨ Generate from Text
++          </Link>
++          <Link
++            href="/admin/books/new"
++            className="rounded-full bg-brand-yellow px-5 py-2.5 text-sm font-bold text-brand-dark hover:opacity-90"
++          >
++            + Add Book
++          </Link>
++        </div>
+       </section>
+ 
+       {books.length === 0 ? (
+diff --git a/app/api/admin/books/from-text/route.js b/app/api/admin/books/from-text/route.js
+new file mode 100644
+index 0000000..88231e8
+--- /dev/null
++++ b/app/api/admin/books/from-text/route.js
+@@ -0,0 +1,103 @@
++import { NextResponse } from 'next/server';
++import { createAdminClient } from '@/lib/supabase-admin';
++import { renderToBuffer } from '@react-pdf/renderer';
++import React from 'react';
++import BookDocument from '@/lib/pdf/BookDocument';
++import { parseMarkdownToBlocks } from '@/lib/pdf/parseMarkdown';
++import { enrichYoutubeBlocks } from '@/lib/pdf/youtube';
++import { generatePdfFileName } from '@/lib/seo-utils';
++
++export async function POST(request) {
++  try {
++    const {
++      title,
++      description = '',
++      author = 'Shiney Brain Academy',
++      price = 0,
++      markdown,
++      themeKey = 'brand',
++      authorType = 'team',
++      bookId = null, // pass an existing book id to regenerate/update it
++    } = await request.json();
++
++    if (!title || !title.trim()) {
++      return NextResponse.json({ error: 'Title is required' }, { status: 400 });
++    }
++    if (!markdown || !markdown.trim()) {
++      return NextResponse.json({ error: 'Markdown content is required' }, { status: 400 });
++    }
++
++    const supabase = createAdminClient();
++
++    // 1. Parse pasted markdown into blocks, then enrich any bare
++    // YouTube links into video cards (title/channel/thumbnail) before
++    // rendering — @react-pdf/renderer builds its tree synchronously,
++    // so all async work has to happen up front.
++    const rawBlocks = parseMarkdownToBlocks(markdown);
++    const blocks = await enrichYoutubeBlocks(rawBlocks);
++
++    // 2. Render the branded PDF
++    let pdfBuffer;
++    try {
++      pdfBuffer = await renderToBuffer(
++        React.createElement(BookDocument, {
++          title,
++          subtitle: description,
++          blocks,
++          themeKey,
++          authorType,
++        })
++      );
++    } catch (renderError) {
++      console.error('❌ Book PDF render error:', renderError);
++      return NextResponse.json({ error: `PDF render failed: ${renderError.message}` }, { status: 500 });
++    }
++
++    // 3. Upload to the same storage bucket the existing study-notes
++    // pipeline already uses
++    const fileName = generatePdfFileName(title);
++    const filePath = `files/${fileName}`;
++
++    const { error: uploadError } = await supabase.storage
++      .from('books')
++      .upload(filePath, pdfBuffer, { contentType: 'application/pdf', upsert: true });
++
++    if (uploadError) {
++      return NextResponse.json({ error: `Upload failed: ${uploadError.message}` }, { status: 500 });
++    }
++
++    const { data: urlData } = supabase.storage.from('books').getPublicUrl(filePath);
++
++    // 4. Insert or update the book row
++    const bookPayload = {
++      title,
++      author,
++      description,
++      price: parseInt(price, 10) || 0,
++      pdf_url: urlData.publicUrl,
++      is_published: true,
++      source_markdown: markdown,
++      template: themeKey,
++    };
++
++    let resultId = bookId;
++
++    if (bookId) {
++      const { error: updateError } = await supabase.from('books').update(bookPayload).eq('id', bookId);
++      if (updateError) return NextResponse.json({ error: updateError.message }, { status: 500 });
++    } else {
++      const { data: newBook, error: insertError } = await supabase
++        .from('books')
++        .insert(bookPayload)
++        .select()
++        .single();
++      if (insertError) return NextResponse.json({ error: insertError.message }, { status: 500 });
++      resultId = newBook.id;
++    }
++
++    return NextResponse.json({ success: true, bookId: resultId, fileUrl: urlData.publicUrl });
++  } catch (error) {
++    console.error('❌ Book from-text generation error:', error);
++    return NextResponse.json({ error: error.message }, { status: 500 });
++  }
++}
+diff --git a/lib/pdf/BookDocument.js b/lib/pdf/BookDocument.js
+new file mode 100644
+index 0000000..74679df
+--- /dev/null
++++ b/lib/pdf/BookDocument.js
+@@ -0,0 +1,173 @@
++// lib/pdf/BookDocument.js
++// Generalized version of StudyNoteDocument for the "paste text -> branded
++// PDF" flow: takes already-parsed (and YouTube-enriched) blocks instead
++// of raw markdown, plus a theme key for the template selector. Adds
++// three block types StudyNoteDocument doesn't render: callout,
++// checklist, and youtube.
++//
++// StudyNoteDocument itself is untouched — this is a sibling, not a
++// replacement, so the existing AI study-notes pipeline keeps working
++// exactly as it did before.
++
++import React from 'react';
++import { Document, Text, View, StyleSheet, Image, Link } from '@react-pdf/renderer';
++import { getTheme } from './themes';
++import BrandLayout from './BrandLayout';
++import { CoverPage, BackPage } from './CoverPage';
++import { splitBold } from './parseMarkdown';
++import { getCalloutType } from './calloutTypes';
++
++function colorForRole(theme, role) {
++  if (role === 'accent') return theme.accent;
++  if (role === 'muted') return theme.muted;
++  if (role === 'warning') return '#b45309';
++  return theme.primary;
++}
++
++function buildStyles(theme) {
++  return StyleSheet.create({
++    h1: { fontSize: 20, fontFamily: 'Helvetica-Bold', color: theme.primary, marginTop: 14, marginBottom: 8 },
++    h2: { fontSize: 15, fontFamily: 'Helvetica-Bold', color: theme.primary, marginTop: 12, marginBottom: 6, borderBottomWidth: 1, borderBottomColor: theme.accent, paddingBottom: 3 },
++    h3: { fontSize: 12.5, fontFamily: 'Helvetica-Bold', color: theme.textColor || '#1a1a1a', marginTop: 8, marginBottom: 4 },
++    p: { marginBottom: 6, lineHeight: 1.5, color: theme.textColor || '#1a1a1a' },
++    bold: { fontFamily: 'Helvetica-Bold' },
++    listItem: { flexDirection: 'row', marginBottom: 4, paddingLeft: 4 },
++    bullet: { width: 12, color: theme.accent, fontFamily: 'Helvetica-Bold' },
++    listText: { flex: 1, lineHeight: 1.4, color: theme.textColor || '#1a1a1a' },
++    table: { marginBottom: 10, borderWidth: 1, borderColor: '#ccc' },
++    tableRow: { flexDirection: 'row' },
++    tableCellHeader: { flex: 1, backgroundColor: theme.primary, color: '#fff', fontSize: 9.5, fontFamily: 'Helvetica-Bold', padding: 5, borderRightWidth: 1, borderRightColor: '#fff' },
++    tableCell: { flex: 1, fontSize: 9.5, padding: 5, borderRightWidth: 1, borderRightColor: '#ccc', borderTopWidth: 1, borderTopColor: '#ccc' },
++
++    // Callout box: colored left border + icon + label, shared look for
++    // every :::variant type (summary, tip, warning, memory, challenge,
++    // exercise, takeaway, further, or any custom name).
++    callout: { marginBottom: 10, padding: 10, backgroundColor: '#f8f9fb', borderRadius: 4 },
++    calloutLabel: { fontSize: 10.5, fontFamily: 'Helvetica-Bold', marginBottom: 4 },
++    calloutText: { fontSize: 10, lineHeight: 1.5, color: theme.textColor || '#1a1a1a' },
++
++    checklistItem: { flexDirection: 'row', marginBottom: 5, paddingLeft: 4 },
++    checklistBox: { width: 14, fontSize: 11, color: theme.primary },
++    checklistText: { flex: 1, lineHeight: 1.4, color: theme.textColor || '#1a1a1a' },
++
++    // YouTube video card
++    videoCard: { marginBottom: 12, padding: 10, borderWidth: 1, borderColor: '#ddd', borderRadius: 4, backgroundColor: '#fff' },
++    videoThumb: { width: '100%', height: 140, objectFit: 'cover', borderRadius: 3, marginBottom: 6 },
++    videoLabel: { fontSize: 9, fontFamily: 'Helvetica-Bold', color: theme.accent, marginBottom: 2 },
++    videoTitle: { fontSize: 11, fontFamily: 'Helvetica-Bold', color: theme.textColor || '#1a1a1a', marginBottom: 2 },
++    videoChannel: { fontSize: 9, color: theme.muted, marginBottom: 4 },
++    videoLink: { fontSize: 9.5, color: theme.primary, textDecoration: 'none' },
++  });
++}
++
++function RichText({ text, style, styles }) {
++  const parts = splitBold(text);
++  return (
++    <Text style={style}>
++      {parts.map((p, idx) => (
++        <Text key={idx} style={p.bold ? styles.bold : undefined}>{p.text}</Text>
++      ))}
++    </Text>
++  );
++}
++
++function Block({ block, index, theme, styles }) {
++  switch (block.type) {
++    case 'h1': return <Text style={styles.h1} key={index}>{block.text}</Text>;
++    case 'h2': return <Text style={styles.h2} key={index}>{block.text}</Text>;
++    case 'h3': return <Text style={styles.h3} key={index}>{block.text}</Text>;
++    case 'p': return <RichText key={index} text={block.text} style={styles.p} styles={styles} />;
++
++    case 'list':
++      return (
++        <View key={index}>
++          {block.items.map((item, i) => (
++            <View style={styles.listItem} key={i}>
++              <Text style={styles.bullet}>•</Text>
++              <RichText text={item} style={styles.listText} styles={styles} />
++            </View>
++          ))}
++        </View>
++      );
++
++    case 'table':
++      return (
++        <View style={styles.table} key={index}>
++          {block.rows.map((row, r) => (
++            <View style={styles.tableRow} key={r} wrap={false}>
++              {row.map((cell, c) => (
++                <Text key={c} style={r === 0 ? styles.tableCellHeader : styles.tableCell}>{cell}</Text>
++              ))}
++            </View>
++          ))}
++        </View>
++      );
++
++    case 'image':
++      if (!block.url || !block.url.trim()) return null;
++      return (
++        <View key={index} style={{ marginVertical: 8, alignItems: 'center' }}>
++          <Image src={block.url} style={{ maxWidth: 400, maxHeight: 300, objectFit: 'contain' }} />
++        </View>
++      );
++
++    case 'callout': {
++      const { icon, label, colorRole } = getCalloutType(block.variant);
++      const color = colorForRole(theme, colorRole);
++      return (
++        <View key={index} style={[styles.callout, { borderLeft: `4px solid ${color}` }]} wrap={false}>
++          <Text style={[styles.calloutLabel, { color }]}>{icon} {label}</Text>
++          <RichText text={block.text} style={styles.calloutText} styles={styles} />
++        </View>
++      );
++    }
++
++    case 'checklist':
++      return (
++        <View key={index} style={{ marginBottom: 10 }}>
++          {block.items.map((item, i) => (
++            <View style={styles.checklistItem} key={i}>
++              <Text style={styles.checklistBox}>☐</Text>
++              <RichText text={item} style={styles.checklistText} styles={styles} />
++            </View>
++          ))}
++        </View>
++      );
++
++    case 'youtube':
++      return (
++        <View key={index} style={styles.videoCard} wrap={false}>
++          <Text style={styles.videoLabel}>📺 RECOMMENDED VIDEO</Text>
++          {block.thumbnailUrl ? (
++            <Image src={block.thumbnailUrl} style={styles.videoThumb} />
++          ) : null}
++          {block.title ? <Text style={styles.videoTitle}>{block.title}</Text> : null}
++          {block.channel ? <Text style={styles.videoChannel}>{block.channel}</Text> : null}
++          <Link src={block.url} style={styles.videoLink}>Watch → {block.url}</Link>
++        </View>
++      );
++
++    default:
++      return null;
++  }
++}
++
++export default function BookDocument({ title, subtitle, blocks, themeKey = 'brand', authorType = 'team' }) {
++  const theme = getTheme(themeKey);
++  const styles = buildStyles(theme);
++
++  return (
++    <Document
++      title={`${title} | Shiney Brain Academy`}
++      author="Shiney Brain Academy"
++      subject={subtitle || title}
++      keywords={`${title}, study guide, Shiney Brain Academy`}
++    >
++      <CoverPage title={title} subtitle={subtitle || ''} theme={theme} />
++      <BrandLayout title={title} theme={theme}>
++        {blocks.map((b, i) => <Block block={b} index={i} theme={theme} styles={styles} key={i} />)}
++      </BrandLayout>
++      <BackPage title={title} authorType={authorType} theme={theme} />
++    </Document>
++  );
++}
+diff --git a/lib/pdf/BrandLayout.js b/lib/pdf/BrandLayout.js
+index dd76ab2..0672e6e 100644
+--- a/lib/pdf/BrandLayout.js
++++ b/lib/pdf/BrandLayout.js
+@@ -1,27 +1,32 @@
+ // lib/pdf/BrandLayout.js
+ import React from 'react';
+ import { Page, View, StyleSheet } from '@react-pdf/renderer';
++import { brand } from './brand';
+ import Header from './Header';
+ import Footer from './Footer';
+ 
+-const styles = StyleSheet.create({
+-  page: {
+-    paddingTop: 50,
+-    paddingBottom: 50,
+-    paddingHorizontal: 40,
+-    fontFamily: 'Helvetica',
+-  },
+-  content: {
+-    flex: 1,
+-  },
+-});
++// theme is optional so every existing caller (StudyNoteDocument) keeps
++// its original white-page brand look untouched.
++export default function BrandLayout({ title, children, theme = brand }) {
++  const styles = StyleSheet.create({
++    page: {
++      paddingTop: 50,
++      paddingBottom: 50,
++      paddingHorizontal: 40,
++      fontFamily: 'Helvetica',
++      backgroundColor: theme.pageBackground || '#ffffff',
++      color: theme.textColor || '#1a1a1a',
++    },
++    content: {
++      flex: 1,
++    },
++  });
+ 
+-export default function BrandLayout({ title, children }) {
+   return (
+     <Page size="A4" style={styles.page}>
+-      <Header title={title} />
++      <Header title={title} theme={theme} />
+       <View style={styles.content}>{children}</View>
+-      <Footer />
++      <Footer theme={theme} />
+     </Page>
+   );
+-}
+\ No newline at end of file
++}
+diff --git a/lib/pdf/CoverPage.js b/lib/pdf/CoverPage.js
+index 62b348b..32854de 100644
+--- a/lib/pdf/CoverPage.js
++++ b/lib/pdf/CoverPage.js
+@@ -5,101 +5,18 @@ import { brand } from './brand';
+ import Header from './Header';
+ import Footer from './Footer';
+ 
+-// ─── Front cover styles ──────────────────────────────────────────────
+-const frontStyles = StyleSheet.create({
+-  coverTitle: { fontSize: 26, fontFamily: 'Helvetica-Bold', color: brand.primary, textAlign: 'center', marginTop: 200 },
+-  coverSubtitle: { fontSize: 13, color: '#555', textAlign: 'center', marginTop: 10 },
+-  coverBrand: { fontSize: 14, color: brand.accent, textAlign: 'center', marginTop: 260, fontFamily: 'Helvetica-Bold' },
+-});
+-
+-// ─── Back page styles ───────────────────────────────────────────────
+-const backStyles = StyleSheet.create({
+-  page: {
+-    paddingTop: 70,
+-    paddingBottom: 60,
+-    paddingHorizontal: 40,
+-    fontFamily: 'Helvetica',
+-    backgroundColor: '#ffffff',
+-    flex: 1,
+-    flexDirection: 'column',
+-    justifyContent: 'space-between',
+-  },
+-  hero: {
+-    alignItems: 'center',
+-    marginBottom: 20,
+-  },
+-  logo: {
+-    width: 62,
+-    height: 62,
+-    marginBottom: 10,
+-  },
+-  mission: {
+-    fontSize: 11,
+-    color: '#333',
+-    textAlign: 'center',
+-    marginBottom: 8,
+-    lineHeight: 1.5,
+-  },
+-  contactRow: {
+-    flexDirection: 'row',
+-    justifyContent: 'center',
+-    fontSize: 9,
+-    color: brand.muted,
+-    flexWrap: 'wrap',
+-  },
+-  contactItem: {
+-    marginHorizontal: 6,
+-  },
+-  link: {
+-    color: brand.primary,
+-    textDecoration: 'none',
+-  },
+-  cards: {
+-    flexDirection: 'row',
+-    justifyContent: 'space-between',
+-    marginVertical: 15,
+-  },
+-  card: {
+-    width: '30%',
+-    backgroundColor: '#f5f7fa',
+-    padding: 12,
+-    borderRadius: 4,
+-    borderLeft: `4px solid ${brand.primary}`,
+-  },
+-  cardTitle: {
+-    fontSize: 10,
+-    fontWeight: 'bold',
+-    color: brand.primary,
+-    marginBottom: 4,
+-  },
+-  cardText: {
+-    fontSize: 8,
+-    color: '#333',
+-    lineHeight: 1.4,
+-  },
+-  donation: {
+-    backgroundColor: brand.accent,
+-    padding: 14,
+-    borderRadius: 4,
+-    flexDirection: 'row',
+-    justifyContent: 'space-between',
+-    alignItems: 'center',
+-  },
+-  donationLeft: {
+-    fontSize: 9,
+-    fontWeight: 'bold',
+-    color: '#000',
+-  },
+-  donationRight: {
+-    fontSize: 9,
+-    color: '#000',
+-  },
+-});
+-
+ // ─── Front Cover ──────────────────────────────────────────────────────
+-export function CoverPage({ title, subtitle }) {
++// theme is optional so existing callers (StudyNoteDocument) keep the
++// original brand-blue cover look untouched.
++export function CoverPage({ title, subtitle, theme = brand }) {
++  const frontStyles = StyleSheet.create({
++    coverTitle: { fontSize: 26, fontFamily: 'Helvetica-Bold', color: theme.primary, textAlign: 'center', marginTop: 200 },
++    coverSubtitle: { fontSize: 13, color: '#555', textAlign: 'center', marginTop: 10 },
++    coverBrand: { fontSize: 14, color: theme.accent, textAlign: 'center', marginTop: 260, fontFamily: 'Helvetica-Bold' },
++  });
++
+   return (
+-    <Page size="A4" style={{ padding: 0 }}>
++    <Page size="A4" style={{ padding: 0, backgroundColor: theme.pageBackground || '#ffffff' }}>
+       <Text style={frontStyles.coverTitle}>{title}</Text>
+       <Text style={frontStyles.coverSubtitle}>{subtitle}</Text>
+       <Text style={frontStyles.coverBrand}>{brand.name.toUpperCase()}</Text>
+@@ -108,7 +25,90 @@ export function CoverPage({ title, subtitle }) {
+ }
+ 
+ // ─── Back Page (magazine style) ─────────────────────────────────────
+-export function BackPage({ title, authorType = 'team' }) {
++export function BackPage({ title, authorType = 'team', theme = brand }) {
++  const backStyles = StyleSheet.create({
++    page: {
++      paddingTop: 70,
++      paddingBottom: 60,
++      paddingHorizontal: 40,
++      fontFamily: 'Helvetica',
++      backgroundColor: '#ffffff',
++      flex: 1,
++      flexDirection: 'column',
++      justifyContent: 'space-between',
++    },
++    hero: {
++      alignItems: 'center',
++      marginBottom: 20,
++    },
++    logo: {
++      width: 62,
++      height: 62,
++      marginBottom: 10,
++    },
++    mission: {
++      fontSize: 11,
++      color: '#333',
++      textAlign: 'center',
++      marginBottom: 8,
++      lineHeight: 1.5,
++    },
++    contactRow: {
++      flexDirection: 'row',
++      justifyContent: 'center',
++      fontSize: 9,
++      color: theme.muted,
++      flexWrap: 'wrap',
++    },
++    contactItem: {
++      marginHorizontal: 6,
++    },
++    link: {
++      color: theme.primary,
++      textDecoration: 'none',
++    },
++    cards: {
++      flexDirection: 'row',
++      justifyContent: 'space-between',
++      marginVertical: 15,
++    },
++    card: {
++      width: '30%',
++      backgroundColor: '#f5f7fa',
++      padding: 12,
++      borderRadius: 4,
++      borderLeft: `4px solid ${theme.primary}`,
++    },
++    cardTitle: {
++      fontSize: 10,
++      fontWeight: 'bold',
++      color: theme.primary,
++      marginBottom: 4,
++    },
++    cardText: {
++      fontSize: 8,
++      color: '#333',
++      lineHeight: 1.4,
++    },
++    donation: {
++      backgroundColor: theme.accent,
++      padding: 14,
++      borderRadius: 4,
++      flexDirection: 'row',
++      justifyContent: 'space-between',
++      alignItems: 'center',
++    },
++    donationLeft: {
++      fontSize: 9,
++      fontWeight: 'bold',
++      color: '#000',
++    },
++    donationRight: {
++      fontSize: 9,
++      color: '#000',
++    },
++  });
++
+   const isFounder = authorType === 'founder';
+   const authorTitle = isFounder ? 'About the Author: Florry Shine' : 'About the Content Team';
+   const authorBio = isFounder
+@@ -118,8 +118,8 @@ export function BackPage({ title, authorType = 'team' }) {
+ 
+   return (
+     <Page size="A4" style={backStyles.page}>
+-      <Header title={title} />
+-      <Footer />
++      <Header title={title} theme={theme} />
++      <Footer theme={theme} />
+ 
+       {/* Hero section */}
+       <View style={backStyles.hero}>
+@@ -177,4 +177,4 @@ export function BackPage({ title, authorType = 'team' }) {
+       </View>
+     </Page>
+   );
+-}
+\ No newline at end of file
++}
+diff --git a/lib/pdf/Footer.js b/lib/pdf/Footer.js
+index 76bbc77..9743c5f 100644
+--- a/lib/pdf/Footer.js
++++ b/lib/pdf/Footer.js
+@@ -2,19 +2,20 @@ import React from 'react';
+ import { View, Text, StyleSheet, Link } from '@react-pdf/renderer';
+ import { brand } from './brand';
+ 
+-const styles = StyleSheet.create({
+-  footer: {
+-    position: 'absolute', bottom: 20, left: 40, right: 40,
+-    flexDirection: 'row', justifyContent: 'space-between', fontSize: 8,
+-    color: brand.muted, borderTopWidth: 1, borderTopColor: '#ddd', paddingTop: 6,
+-  },
+-  link: {
+-    color: brand.primary,
+-    textDecoration: 'none',
+-  },
+-});
++// theme is optional so every existing caller keeps its original look.
++export default function Footer({ theme = brand }) {
++  const styles = StyleSheet.create({
++    footer: {
++      position: 'absolute', bottom: 20, left: 40, right: 40,
++      flexDirection: 'row', justifyContent: 'space-between', fontSize: 8,
++      color: theme.muted, borderTopWidth: 1, borderTopColor: '#ddd', paddingTop: 6,
++    },
++    link: {
++      color: theme.primary,
++      textDecoration: 'none',
++    },
++  });
+ 
+-export default function Footer() {
+   return (
+     <View style={styles.footer} fixed>
+       <Text>
+@@ -27,4 +28,4 @@ export default function Footer() {
+       <Text render={({ pageNumber, totalPages }) => `Page ${pageNumber} of ${totalPages}`} />
+     </View>
+   );
+-}
+\ No newline at end of file
++}
+diff --git a/lib/pdf/Header.js b/lib/pdf/Header.js
+index 2598b56..1768135 100644
+--- a/lib/pdf/Header.js
++++ b/lib/pdf/Header.js
+@@ -3,21 +3,23 @@ import React from 'react';
+ import { View, Text, StyleSheet } from '@react-pdf/renderer';
+ import { brand } from './brand';   // named import
+ 
+-const styles = StyleSheet.create({
+-  header: {
+-    backgroundColor: brand.primary,   // now brand.primary
+-    padding: 12,
+-    marginBottom: 20,
+-  },
+-  headerText: {
+-    color: '#ffffff',
+-    fontSize: 14,
+-    fontFamily: 'Helvetica-Bold',
+-    textAlign: 'center',
+-  },
+-});
++// theme is optional so every existing caller (StudyNoteDocument, which
++// never passes it) keeps rendering exactly as before.
++export default function Header({ title, theme = brand }) {
++  const styles = StyleSheet.create({
++    header: {
++      backgroundColor: theme.primary,
++      padding: 12,
++      marginBottom: 20,
++    },
++    headerText: {
++      color: theme.headerTextColor || '#ffffff',
++      fontSize: 14,
++      fontFamily: 'Helvetica-Bold',
++      textAlign: 'center',
++    },
++  });
+ 
+-export default function Header({ title }) {
+   return (
+     <View style={styles.header} fixed>
+       <Text style={styles.headerText}>{brand.name} – {title}</Text>
+diff --git a/lib/pdf/calloutTypes.js b/lib/pdf/calloutTypes.js
+new file mode 100644
+index 0000000..b2129d8
+--- /dev/null
++++ b/lib/pdf/calloutTypes.js
+@@ -0,0 +1,19 @@
++// lib/pdf/calloutTypes.js
++// Metadata for reusable ":::type ... :::" blocks. Add a new one here and
++// it's usable immediately in both the markdown parser and the PDF
++// renderer — no other code needs to change.
++
++export const calloutTypes = {
++  summary:   { icon: '📘', label: 'Summary',           colorRole: 'primary' },
++  tip:       { icon: '💡', label: 'Tip',                colorRole: 'accent' },
++  warning:   { icon: '⚠️', label: 'Warning',            colorRole: 'warning' },
++  memory:    { icon: '🧠', label: 'Memory Trick',       colorRole: 'primary' },
++  challenge: { icon: '🎯', label: 'Challenge',          colorRole: 'accent' },
++  exercise:  { icon: '📝', label: 'Exercise',           colorRole: 'primary' },
++  takeaway:  { icon: '⭐', label: 'Key Takeaway',        colorRole: 'accent' },
++  further:   { icon: '📚', label: 'Further Reading',    colorRole: 'muted' },
++};
++
++export function getCalloutType(key) {
++  return calloutTypes[key] || { icon: '📌', label: key, colorRole: 'primary' };
++}
+diff --git a/lib/pdf/parseMarkdown.js b/lib/pdf/parseMarkdown.js
+index 9583b6c..bd21879 100644
+--- a/lib/pdf/parseMarkdown.js
++++ b/lib/pdf/parseMarkdown.js
+@@ -1,6 +1,10 @@
+ // lib/pdf/parseMarkdown.js
+ // Minimal markdown → block parser for study notes.
+-// Handles: ## / ### headings, bullet lists, | table | rows |, **bold**, plain paragraphs, images.
++// Handles: ## / ### headings, bullet lists, | table | rows |, **bold**,
++// plain paragraphs, images, ":::type ... :::" callout/checklist blocks,
++// and bare YouTube links (auto-converted into video cards).
++
++const YOUTUBE_URL_RE = /^(https?:\/\/)?(www\.)?(youtube\.com\/watch\?v=[\w-]+|youtu\.be\/[\w-]+|youtube\.com\/shorts\/[\w-]+)(\S*)$/i;
+ 
+ export function parseMarkdownToBlocks(markdown) {
+   const lines = (markdown || '').replace(/\r\n/g, '\n').split('\n');
+@@ -12,6 +16,40 @@ export function parseMarkdownToBlocks(markdown) {
+ 
+     if (!line.trim()) { i++; continue; }
+ 
++    // ── Fenced blocks: :::type ... ::: ─────────────────────
++    // :::checklist renders as tickable boxes; every other :::name
++    // (summary, tip, warning, memory, challenge, exercise, takeaway,
++    // further, or any custom name) renders as a styled callout box.
++    const fenceMatch = line.trim().match(/^:::([a-zA-Z0-9_-]+)\s*$/);
++    if (fenceMatch) {
++      const variant = fenceMatch[1].toLowerCase();
++      i++;
++      const inner = [];
++      while (i < lines.length && lines[i].trim() !== ':::') {
++        inner.push(lines[i]);
++        i++;
++      }
++      i++; // skip closing :::
++
++      if (variant === 'checklist') {
++        const items = inner
++          .map(l => l.trim())
++          .filter(l => /^[-*]\s+/.test(l))
++          .map(l => l.replace(/^[-*]\s+/, ''));
++        blocks.push({ type: 'checklist', items });
++      } else {
++        blocks.push({ type: 'callout', variant, text: inner.join('\n').trim() });
++      }
++      continue;
++    }
++
++    // ── Bare YouTube link on its own line ─────────────────
++    if (YOUTUBE_URL_RE.test(line.trim())) {
++      blocks.push({ type: 'youtube', url: line.trim() });
++      i++;
++      continue;
++    }
++
+     // ── Headings ────────────────────────────────────────────
+     if (/^###\s+/.test(line)) {
+       blocks.push({ type: 'h3', text: line.replace(/^###\s+/, '').trim() });
+@@ -74,7 +112,9 @@ export function parseMarkdownToBlocks(markdown) {
+            !/^#{1,3}\s+/.test(lines[i]) && 
+            !lines[i].trim().startsWith('|') && 
+            !/^[-*]\s+/.test(lines[i].trim()) &&
+-           !/!\[.*?\]\(.*?\)/.test(lines[i].trim())   // stop if next is an image
++           !/!\[.*?\]\(.*?\)/.test(lines[i].trim()) &&  // stop if next is an image
++           !/^:::[a-zA-Z0-9_-]+\s*$/.test(lines[i].trim()) &&  // stop if next is a fenced block
++           !YOUTUBE_URL_RE.test(lines[i].trim())   // stop if next is a bare YouTube link
+           ) {
+       paraLines.push(lines[i].trim());
+       i++;
+diff --git a/lib/pdf/themes.js b/lib/pdf/themes.js
+new file mode 100644
+index 0000000..613d5c3
+--- /dev/null
++++ b/lib/pdf/themes.js
+@@ -0,0 +1,83 @@
++// lib/pdf/themes.js
++// Template selector for branded PDFs. Each theme keeps all of `brand`'s
++// non-visual info (name, phone, email, website, about, founder, donation)
++// and only overrides the visual bits: colors + page background.
++// Existing callers that don't pass a theme keep getting the original
++// look untouched (getTheme() defaults to 'brand').
++
++import { brand } from './brand';
++
++export const themes = {
++  brand: {
++    ...brand,
++    key: 'brand',
++    label: 'Shiney Brain Brand',
++    primary: brand.primary,
++    accent: brand.accent,
++    muted: brand.muted,
++    pageBackground: '#ffffff',
++    textColor: '#1a1a1a',
++    headerTextColor: '#ffffff',
++  },
++  modern: {
++    ...brand,
++    key: 'modern',
++    label: 'Modern',
++    primary: '#0f172a',
++    accent: '#38bdf8',
++    muted: '#64748b',
++    pageBackground: '#ffffff',
++    textColor: '#0f172a',
++    headerTextColor: '#ffffff',
++  },
++  workbook: {
++    ...brand,
++    key: 'workbook',
++    label: 'Student Workbook',
++    primary: '#166534',
++    accent: '#facc15',
++    muted: '#4b5563',
++    pageBackground: '#fffdf5',
++    textColor: '#1a1a1a',
++    headerTextColor: '#ffffff',
++  },
++  premium: {
++    ...brand,
++    key: 'premium',
++    label: 'Premium Ebook',
++    primary: '#111827',
++    accent: '#c9a227',
++    muted: '#6b7280',
++    pageBackground: '#fbfaf7',
++    textColor: '#111827',
++    headerTextColor: '#f5f0e1',
++  },
++  minimal: {
++    ...brand,
++    key: 'minimal',
++    label: 'Minimal',
++    primary: '#1f2937',
++    accent: '#9ca3af',
++    muted: '#9ca3af',
++    pageBackground: '#ffffff',
++    textColor: '#1f2937',
++    headerTextColor: '#ffffff',
++  },
++  dark: {
++    ...brand,
++    key: 'dark',
++    label: 'Dark Mode',
++    primary: '#0b0f19',
++    accent: '#f59e0b',
++    muted: '#9ca3af',
++    pageBackground: '#111827',
++    textColor: '#f3f4f6',
++    headerTextColor: '#f3f4f6',
++  },
++};
++
++export const themeList = Object.values(themes).map(t => ({ key: t.key, label: t.label }));
++
++export function getTheme(key) {
++  return themes[key] || themes.brand;
++}
+diff --git a/lib/pdf/youtube.js b/lib/pdf/youtube.js
+new file mode 100644
+index 0000000..be2c47b
+--- /dev/null
++++ b/lib/pdf/youtube.js
+@@ -0,0 +1,38 @@
++// lib/pdf/youtube.js
++// Turns a bare YouTube URL block into a rich video card by calling
++// YouTube's public oEmbed endpoint (no API key needed). Only fetches
++// title, author (channel) name, and thumbnail — that's all oEmbed
++// exposes. Duration and channel logo would need the full YouTube Data
++// API (a key + quota), which is intentionally skipped for now.
++//
++// This must run BEFORE rendering, since @react-pdf/renderer builds its
++// tree synchronously — there's no way to fetch mid-render. Call this on
++// the parsed blocks array first, then pass the enriched blocks into
++// BookDocument.
++
++export async function enrichYoutubeBlocks(blocks) {
++  return Promise.all(
++    blocks.map(async (block) => {
++      if (block.type !== 'youtube') return block;
++
++      try {
++        const oembedUrl = `https://www.youtube.com/oembed?url=${encodeURIComponent(block.url)}&format=json`;
++        const res = await fetch(oembedUrl);
++        if (!res.ok) throw new Error(`oEmbed ${res.status}`);
++        const data = await res.json();
++
++        return {
++          ...block,
++          title: data.title || null,
++          channel: data.author_name || null,
++          thumbnailUrl: data.thumbnail_url || null,
++        };
++      } catch (err) {
++        // Video is unlisted/private/deleted, or the request failed —
++        // fall back to a plain link card rather than failing the whole
++        // PDF generation.
++        return { ...block, title: null, channel: null, thumbnailUrl: null };
++      }
++    })
++  );
++}
+diff --git a/supabase/migrations/20260727_book_source_columns.sql b/supabase/migrations/20260727_book_source_columns.sql
+new file mode 100644
+index 0000000..3200c89
+--- /dev/null
++++ b/supabase/migrations/20260727_book_source_columns.sql
+@@ -0,0 +1,21 @@
++-- 20260727_book_source_columns.sql
++-- Supports the "paste text -> branded PDF" book generator
++-- (app/admin/books/from-text). Keeps the original markdown and chosen
++-- template alongside the generated PDF, so a book can be reopened,
++-- edited, and regenerated later instead of the source being thrown away
++-- the moment the PDF is created.
++--
++-- Both columns nullable — books created via the existing manual
++-- /admin/books/new form (with no source markdown) are unaffected.
++
++alter table public.books
++  add column if not exists source_markdown text;
++
++alter table public.books
++  add column if not exists template text;
++
++comment on column public.books.source_markdown is
++  'Original pasted markdown used to generate pdf_url via /admin/books/from-text. Null for manually-added books.';
++
++comment on column public.books.template is
++  'Theme key used at generation time (brand, modern, workbook, premium, minimal, dark). Null for manually-added books.';
+-- 
+2.43.0
+
