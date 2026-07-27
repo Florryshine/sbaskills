@@ -49,6 +49,14 @@ export function UnlockSystemProvider({ children }) {
     }
   }, [supabase]);
 
+  // Update unlock state based on level
+  const updateUnlockState = useCallback((level) => {
+    const unlocked = getUnlockedFeatures(level, customLevels);
+    const locked = getLockedFeatures(level, customLevels);
+    setUnlockedFeatures(unlocked);
+    setLockedFeatures(locked);
+  }, [customLevels]);
+
   // Load user data and update unlock state
   const loadUserData = useCallback(async () => {
     try {
@@ -85,14 +93,6 @@ export function UnlockSystemProvider({ children }) {
       setLoading(false);
     }
   }, [supabase, updateUnlockState]);
-
-  // Update unlock state based on level
-  const updateUnlockState = useCallback((level) => {
-    const unlocked = getUnlockedFeatures(level, customLevels);
-    const locked = getLockedFeatures(level, customLevels);
-    setUnlockedFeatures(unlocked);
-    setLockedFeatures(locked);
-  }, [customLevels]);
 
   // Check for newly unlocked features when leveling up
   const checkForNewUnlocks = useCallback((oldLevel, newLevel) => {
