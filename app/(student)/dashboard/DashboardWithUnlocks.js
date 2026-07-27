@@ -1,0 +1,419 @@
+'use client';
+
+import { useEffect, useState } from 'react';
+import { createBrowserClient } from '@/lib/supabase';
+import { useRouter } from 'next/navigation';
+import Link from 'next/link';
+import Navbar from '@/components/Navbar';
+import Footer from '@/components/Footer';
+import { addPoints, updateStreak, getUserPoints } from '@/lib/gamification';
+import { awardEligibleBadges } from '@/lib/badges';
+import { getMasteryStats } from '@/lib/mastery';
+import LevelProgress from '@/components/LevelProgress';
+import MasteryChecklist from '@/components/MasteryChecklist';
+import FeatureUnlockSection from '@/components/FeatureUnlockSection';
+import { useUnlockSystem } from '@/context/UnlockSystemContext';
+import { getLevelInfo } from '@/lib/levels';
+
+export default function DashboardWithUnlocks() {
+  const [user, setUser] = useState(null);
+  const [profile, setProfile] = useState(null);
+  const [enrolledCourses, setEnrolledCourses] = useState([]);
+  const [availableCourses, setAvailableCourses] = useState([]);
+  const [certificates, setCertificates] = useState([]);
+  const [quizzes, setQuizzes] = useState([]);
+  const [userPoints, setUserPoints] = useState(0);
+  const [userStreak, setUserStreak] = useState(0);
+  const [masteryStats, setMasteryStats] = useState(null);
+  const [lessonsDone, setLessonsDone] = useState(0);
+  const [loading, setLoading] = useState(true);
+  const router = useRouter();
+  const supabase = createBrowserClient();
+  const unlockSystem = useUnlockSystem();
+
+  useEffect(() => {
+    async function loadDashboard() {
+      const { data: { user } } = await supabase.auth.getUser();
+      if (!user) {
+        router.push('/login');
+        return;
+      }
+      setUser(user);
+
+      // Update streak and add daily login bonus
+      await updateStreak(user.id);
+      await addPoints(user.id, 5, 'Daily login bonus', 'login');
+
+      // Check for any badges newly earned since last visit
+      awardEligibleBadges(supabase, user.id).catch((e) => console.error('Badge check failed:', e));
+
+      // Get user points
+      const pointsData = await getUserPoints(user.id);
+      const newPoints = pointsData.total_points || 0;
+      const newStreak = pointsData.streak_days || 0;
+      setUserPoints(newPoints);
+      setUserStreak(newStreak);
+
+      // Update unlock system with new points
+      if (unlockSystem) {
+        const levelInfo = getLevelInfo(newPoints);
+        unlockSystem.handleLevelUp(newPoints);
+      }
+
+      // Get 4-pillar mastery stats for the level-up checklist
+      getMasteryStats(supabase, user.id)
+        .then(setMasteryStats)
+        .catch((e) => console.error('Mastery stats failed:', e));
+
+      // Get profile
+      const { data: profileData } = await supabase
+        .from('profiles')
+        .select('*')
+        .eq('id', user.id)
+        .single();
+      setProfile(profileData);
+
+      // Get enrollments
+      const { data: enrollments } = await supabase
+        .from('enrollments')
+        .select('*, courses(*)')
+        .eq('student_id', user.id);
+
+      const enrolled = enrollments?.map(e => e.courses).filter(Boolean) || [];
+      setEnrolledCourses(enrolled);
+
+      // Get available courses
+      const enrolledIds = enrolled.map(c => c.id);
+      const { data: allCourses } = await supabase
+        .from('courses')
+        .select('*')
+        .eq('is_published', true);
+      const available = (allCourses || []).filter(
+        c => !enrolledIds.includes(c.id)
+      );
+      setAvailableCourses(available);
+
+      // Get certificates
+      const { data: certs } = await supabase
+        .from('certificates')
+        .select('*, courses(title)')
+        .eq('student_id', user.id)
+        .order('issued_at', { ascending: false });
+      setCertificates(certs || []);
+
+      // Count lessons completed
+      const { data: progress } = await supabase
+        .from('lesson_progress')
+        .select('id')
+        .eq('student_id', user.id)
+        .eq('completed', true);
+      setLessonsDone(progress?.length || 0);
+
+      // Fetch published quizzes
+      const { data: manualQuizzes } = await supabase
+        .from('quizzes')
+        .select('id, title, description, points_reward, created_at')
+        .eq('is_published', true)
+        .order('created_at', { ascending: false })
+        .limit(5);
+
+      const { data: draftQuizzes } = await supabase
+        .from('quiz_drafts')
+        .select('id, keyword, questions, created_at')
+        .eq('status', 'published')
+        .order('created_at', { ascending: false })
+        .limit(5);
+
+      const combinedQuizzes = [
+        ...(manualQuizzes || []).map((q) => ({
+          id: q.id,
+          title: q.title,
+          description: q.description,
+          points_reward: q.points_reward,
+          created_at: q.created_at,
+          href: `/quiz/${q.id}`,
+        })),
+        ...(draftQuizzes || []).map((q) => ({
+          id: q.id,
+          title: q.keyword,
+          description: `${q.questions?.length || 0} questions`,
+          points_reward: 10,
+          created_at: q.created_at,
+          href: `/quizzes/${q.id}?draft=true`,
+        })),
+      ]
+        .sort((a, b) => new Date(b.created_at) - new Date(a.created_at))
+        .slice(0, 5);
+
+      setQuizzes(combinedQuizzes);
+
+      setLoading(false);
+    }
+
+    loadDashboard();
+  }, [router, supabase, unlockSystem]);
+
+  // Sync points with unlock system
+  useEffect(() => {
+    if (userPoints > 0 && unlockSystem) {
+      unlockSystem.handleLevelUp(userPoints);
+    }
+  }, [userPoints, unlockSystem]);
+
+  if (loading) {
+    return (
+      <div className="min-h-screen flex items-center justify-center">
+        <div className="text-center">
+          <p className="text-5xl mb-4">📊</p>
+          <p className="text-gray-500 font-medium">Loading your dashboard...</p>
+        </div>
+      </div>
+    );
+  }
+
+  return (
+    <>
+      <Navbar />
+      <div className="min-h-screen bg-gray-50">
+        <div className="max-w-7xl mx-auto px-4 py-8">
+
+          {/* Welcome Banner */}
+          <div className="bg-brand-blue rounded-2xl p-6 mb-8 text-white">
+            <h1 className="text-2xl font-extrabold mb-1">
+              Welcome back, {profile?.full_name || user?.email?.split('@')[0]}! 👋
+            </h1>
+            <p className="text-blue-100 text-sm">
+              Continue your learning journey — champions never stop growing.
+            </p>
+            {userStreak > 0 && (
+              <div className="mt-3 bg-white/10 inline-block px-4 py-1 rounded-full">
+                <span className="text-sm font-bold">🔥 {userStreak} day streak</span>
+              </div>
+            )}
+          </div>
+
+          {/* Level / Rank Progress */}
+          <div className="mb-4">
+            <LevelProgress totalPoints={userPoints} />
+          </div>
+          {masteryStats && (
+            <div className="mb-8">
+              <MasteryChecklist totalPoints={userPoints} stats={masteryStats} />
+            </div>
+          )}
+
+          {/* Feature Unlock Section */}
+          <FeatureUnlockSection />
+
+          {/* Refer & Earn Section */}
+          <div className="bg-gradient-to-r from-brand-blue to-blue-700 rounded-2xl p-6 mb-8 text-white">
+            <div className="flex flex-col md:flex-row items-center justify-between gap-4">
+              <div>
+                <h3 className="text-xl font-extrabold">🎁 Refer & Earn 50 Points!</h3>
+                <p className="text-blue-100 text-sm mt-1">
+                  Share your referral link with friends. When they sign up, you both get points!
+                </p>
+                <div className="mt-3 bg-white/20 rounded-xl px-4 py-2 text-sm font-mono truncate max-w-xs">
+                  {profile?.referral_code ? 
+                    `${process.env.NEXT_PUBLIC_SITE_URL || 'https://shineybrainacademy.vercel.app'}/register?ref=${profile.referral_code}` 
+                    : 'Loading referral code...'}
+                </div>
+              </div>
+              <button
+                onClick={() => {
+                  const link = `${process.env.NEXT_PUBLIC_SITE_URL || 'https://shineybrainacademy.vercel.app'}/register?ref=${profile?.referral_code}`;
+                  navigator.clipboard.writeText(link).then(() => {
+                    alert('✅ Referral link copied! Share it with your friends.');
+                  }).catch(() => {
+                    prompt('Copy this link:', link);
+                  });
+                }}
+                className="bg-brand-yellow text-brand-dark px-6 py-3 rounded-full font-bold hover:opacity-90 transition whitespace-nowrap"
+              >
+                📋 Copy Link
+              </button>
+            </div>
+          </div>
+
+          {/* Stats Row */}
+          <div className="grid grid-cols-2 sm:grid-cols-4 gap-4 mb-8">
+            {[
+              { label: 'Enrolled Courses', value: enrolledCourses.length, emoji: '📚' },
+              { label: 'Available Courses', value: availableCourses.length, emoji: '🌍' },
+              { label: 'Lessons Done', value: lessonsDone, emoji: '✅' },
+              { label: 'Points', value: userPoints, emoji: '✨', href: '/store' },
+              { label: 'Tools', href: '/tools', emoji: '🛠️' },
+            ].map((stat) => (
+              <Link
+                key={stat.label}
+                href={stat.href || '#'}
+                className={`bg-white rounded-2xl p-4 shadow-sm border border-gray-100 text-center ${stat.href ? 'hover:shadow-md transition' : ''}`}
+              >
+                <p className="text-2xl mb-1">{stat.emoji}</p>
+                <p className="text-2xl font-extrabold text-brand-blue">{stat.value}</p>
+                <p className="text-xs text-gray-500 mt-1">{stat.label}</p>
+              </Link>
+            ))}
+          </div>
+
+          {/* My Enrolled Courses */}
+          <div className="mb-10">
+            <h2 className="text-xl font-extrabold text-gray-800 mb-4">
+              📚 My Courses
+            </h2>
+            {enrolledCourses.length === 0 ? (
+              <div className="bg-white rounded-2xl border border-gray-100 shadow-sm p-8 text-center">
+                <p className="text-4xl mb-3">🌱</p>
+                <p className="font-bold text-gray-700 mb-1">No courses yet</p>
+                <p className="text-sm text-gray-500 mb-4">
+                  Browse available courses below and enroll today
+                </p>
+                <Link href="/courses"
+                  className="inline-block bg-brand-yellow text-brand-dark font-bold px-6 py-3 rounded-full text-sm hover:opacity-90 transition">
+                  Browse Courses →
+                </Link>
+              </div>
+            ) : (
+              <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
+                {enrolledCourses.map((course) => (
+                  <div key={course.id}
+                    className="bg-white rounded-2xl border border-gray-100 shadow-sm overflow-hidden hover:shadow-md transition">
+                    <div className="h-24 flex items-center justify-center text-4xl"
+                      style={{ backgroundColor: course.color || '#1a73e8' }}>
+                      📚
+                    </div>
+                    <div className="p-4">
+                      <span className="text-xs font-bold text-green-600 bg-green-50 px-2 py-1 rounded-full">
+                        ✅ Enrolled
+                      </span>
+                      <h3 className="font-bold text-gray-800 mt-2 mb-1">{course.title}</h3>
+                      <p className="text-xs text-gray-500 mb-3 line-clamp-2">{course.description}</p>
+                      <Link href={`/courses/${course.id}`}
+                        className="block text-center bg-brand-blue text-white font-bold py-2 rounded-full text-sm hover:opacity-90 transition">
+                        Continue Learning →
+                      </Link>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+
+          {/* Available Courses */}
+          {availableCourses.length > 0 && (
+            <div className="mb-10">
+              <h2 className="text-xl font-extrabold text-gray-800 mb-4">🌍 Available Courses</h2>
+              <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
+                {availableCourses.map((course) => (
+                  <div key={course.id}
+                    className="bg-white rounded-2xl border border-gray-100 shadow-sm overflow-hidden hover:shadow-md transition">
+                    <div className="h-24 flex items-center justify-center text-4xl"
+                      style={{ backgroundColor: course.color || '#1a73e8' }}>
+                      🌱
+                    </div>
+                    <div className="p-4">
+                      <h3 className="font-bold text-gray-800 mb-1">{course.title}</h3>
+                      <p className="text-xs text-gray-500 mb-3 line-clamp-2">{course.description}</p>
+                      <div className="flex items-center justify-between">
+                        <span className="font-extrabold text-brand-blue text-sm">
+                          {course.price === 0 ? 'FREE' : `₦${course.price?.toLocaleString()}`}
+                        </span>
+                        <Link href={`/courses/${course.id}`}
+                          className="bg-brand-yellow text-brand-dark font-bold px-4 py-2 rounded-full text-xs hover:opacity-90 transition">
+                          Enroll Now
+                        </Link>
+                      </div>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
+
+          {/* Available Quizzes */}
+          <div className="mb-10">
+            <div className="flex items-center justify-between mb-4">
+              <h2 className="text-xl font-extrabold text-gray-800">📝 Available Quizzes</h2>
+              <Link href="/quizzes" className="text-sm font-bold text-brand-blue hover:underline">
+                View All →
+              </Link>
+            </div>
+            {quizzes.length === 0 ? (
+              <div className="bg-white rounded-2xl border border-gray-100 shadow-sm p-6 text-center">
+                <p className="text-gray-500">No quizzes available right now. Check back soon!</p>
+              </div>
+            ) : (
+              <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
+                {quizzes.map((quiz) => (
+                  <div key={quiz.id} className="bg-white rounded-2xl border border-gray-100 shadow-sm p-4 hover:shadow-md transition">
+                    <h3 className="font-bold text-gray-800">{quiz.title}</h3>
+                    <p className="text-xs text-gray-500 mt-1 line-clamp-2">{quiz.description}</p>
+                    <div className="flex items-center justify-between mt-3">
+                      <span className="text-xs font-bold text-brand-blue">+{quiz.points_reward || 10} points</span>
+                      <Link
+                        href={quiz.href}
+                        className="bg-brand-yellow text-brand-dark px-4 py-2 rounded-full text-xs font-bold hover:opacity-90 transition"
+                      >
+                        Take Quiz →
+                      </Link>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+
+          {/* Certificates Section */}
+          {certificates.length > 0 && (
+            <div className="mb-10">
+              <h2 className="text-xl font-extrabold text-gray-800 mb-4">🎓 My Certificates</h2>
+              <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
+                {certificates.map((cert) => (
+                  <div key={cert.id} className="bg-white rounded-2xl border border-gray-100 shadow-sm p-4">
+                    <div className="text-3xl mb-2">🎓</div>
+                    <p className="font-bold text-gray-800">{cert.courses?.title}</p>
+                    <p className="text-xs text-gray-500 mt-1">
+                      Issued: {new Date(cert.issued_at).toLocaleDateString('en-NG', {
+                        day: 'numeric',
+                        month: 'long',
+                        year: 'numeric'
+                      })}
+                    </p>
+                    <a href={`/certificate/${cert.id}`} target="_blank"
+                      className="inline-block mt-3 text-brand-blue font-bold text-sm hover:underline">
+                      View Certificate →
+                    </a>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
+
+          {/* Quick Links */}
+          <div className="bg-white rounded-2xl border border-gray-100 shadow-sm p-6">
+            <h2 className="font-extrabold text-gray-800 mb-4">⚡ Quick Links</h2>
+            <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+              {[
+                { label: 'Browse Courses', href: '/courses', emoji: '📚' },
+                { label: 'Leaderboard', href: '/leaderboard', emoji: '🏆' },
+                { label: 'Blog', href: '/blog', emoji: '📝' },
+                { label: 'Audio', href: '/audio', emoji: '🎵' },
+                { label: 'Library', href: '/library', emoji: '📚' },
+                { label: 'Rewards', href: '/rewards', emoji: '🎁' },
+                { label: 'Testimonial', href: '/testimonials', emoji: '💬' },
+              ].map((link) => (
+                <Link key={link.href} href={link.href}
+                  className="flex flex-col items-center gap-2 p-4 rounded-2xl border border-gray-100 hover:border-brand-blue hover:shadow-sm transition text-center">
+                  <span className="text-2xl">{link.emoji}</span>
+                  <span className="text-xs font-bold text-gray-700">{link.label}</span>
+                </Link>
+              ))}
+            </div>
+          </div>
+
+        </div>
+      </div>
+      <Footer />
+    </>
+  );
+}
