@@ -6,6 +6,7 @@ import { useRouter } from 'next/navigation';
 import Navbar from '@/components/Navbar';
 import Footer from '@/components/Footer';
 import Link from 'next/link';
+import Image from 'next/image';
 
 export default function TestimonialsPage() {
   const [approved, setApproved] = useState([]);
@@ -258,7 +259,7 @@ export default function TestimonialsPage() {
                   <div key={t.id} className="bg-white rounded-2xl shadow-sm border p-4">
                     <div className="flex items-center gap-3">
                       {t.photo ? (
-                        <img src={t.photo} alt={t.name} className="w-10 h-10 rounded-full object-cover" />
+                        <Image src={t.photo} alt={t.name} width={40} height={40} className="rounded-full object-cover" />
                       ) : (
                         <div className="w-10 h-10 rounded-full bg-brand-blue flex items-center justify-center text-white font-bold text-sm">
                           {t.name?.charAt(0) || 'S'}

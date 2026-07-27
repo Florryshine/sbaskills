@@ -5,6 +5,7 @@ import Navbar from '@/components/Navbar';
 import Footer from '@/components/Footer';
 import nextDynamic from 'next/dynamic';
 import Link from 'next/link';
+import Image from 'next/image';
 import { marked } from 'marked';
 import { BASE_URL, generateBlogPostMetadata } from '@/lib/seo';
 
@@ -260,11 +261,16 @@ export default async function BlogPostPage({ params }) {
           <article className="max-w-4xl mx-auto px-4 py-8">
             {/* ─── Hero Image ─── */}
             {post.cover_image ? (
-              <img
-                src={post.cover_image}
-                alt={post.title}
-                className="w-full h-64 md:h-80 object-cover rounded-lg mb-6"
-              />
+              <div className="relative w-full h-64 md:h-80 rounded-lg mb-6 overflow-hidden">
+                <Image
+                  src={post.cover_image}
+                  alt={post.title}
+                  fill
+                  className="object-cover"
+                  sizes="(max-width: 768px) 100vw, 800px"
+                  priority
+                />
+              </div>
             ) : heroPrompt ? (
               <div className="relative w-full h-64 md:h-80 bg-gray-200 rounded-lg mb-6 overflow-hidden">
                 <div className="w-full h-full flex items-center justify-center bg-gradient-to-br from-blue-50 to-gray-100 text-gray-400">

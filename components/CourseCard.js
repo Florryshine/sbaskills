@@ -1,12 +1,13 @@
+import Image from 'next/image';
 import Link from 'next/link';
 import { formatCurrency } from '@/lib/utils';
 
 export default function CourseCard({ course, href = `/courses/${course.id}`, actionLabel = 'View Details' }) {
   return (
     <article className="overflow-hidden rounded-3xl border border-slate-100 bg-white shadow-soft">
-      <div className="aspect-[16/9] w-full bg-slate-100">
+      <div className="relative aspect-[16/9] w-full bg-slate-100">
         {course.thumbnail_url ? (
-          <img src={course.thumbnail_url} alt={course.title} className="h-full w-full object-cover" />
+          <Image src={course.thumbnail_url} alt={course.title} fill className="object-cover" sizes="(max-width: 768px) 100vw, 400px" />
         ) : (
           <div className="flex h-full items-center justify-center bg-brand-blue/10 text-sm font-semibold text-brand-blue">
             Shiney Brain Academy
