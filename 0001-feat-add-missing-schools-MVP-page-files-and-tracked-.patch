@@ -1,0 +1,1348 @@
+From 685dd9c3c2479f93676c17a2e92d9e7c176514ba Mon Sep 17 00:00:00 2001
+From: Claude <assistant@local>
+Date: Mon, 27 Jul 2026 04:02:04 +0000
+Subject: [PATCH] feat: add missing schools MVP page files and tracked
+ migration
+
+The prior 'feat: add school MVP' commit only added a sidebar link;
+none of the actual page code was ever committed, which is why
+/admin/schools and /school/[slug] both 404'd. Adds:
+- app/admin/schools (list, create, manage/assign)
+- app/school/[slug] (public school page)
+- app/school/[slug]/principal (principal dashboard)
+- supabase/migrations/20260727_schools.sql, corrected to match the
+  live database (tutor role preserved in the role check constraint,
+  profiles_school_staff_read policy rewritten to use security-definer
+  helper functions instead of a self-referencing subquery that caused
+  infinite recursion in production).
+---
+ app/admin/schools/[id]/page.js           | 331 +++++++++++++++++++++++
+ app/admin/schools/new/page.js            | 222 +++++++++++++++
+ app/admin/schools/page.js                | 158 +++++++++++
+ app/school/[slug]/page.js                | 140 ++++++++++
+ app/school/[slug]/principal/page.js      | 285 +++++++++++++++++++
+ supabase/migrations/20260727_schools.sql | 141 ++++++++++
+ 6 files changed, 1277 insertions(+)
+ create mode 100644 app/admin/schools/[id]/page.js
+ create mode 100644 app/admin/schools/new/page.js
+ create mode 100644 app/admin/schools/page.js
+ create mode 100644 app/school/[slug]/page.js
+ create mode 100644 app/school/[slug]/principal/page.js
+ create mode 100644 supabase/migrations/20260727_schools.sql
+
+diff --git a/app/admin/schools/[id]/page.js b/app/admin/schools/[id]/page.js
+new file mode 100644
+index 0000000..4f35166
+--- /dev/null
++++ b/app/admin/schools/[id]/page.js
+@@ -0,0 +1,331 @@
++'use client';
++
++import { useEffect, useState, useRef } from 'react';
++import { useParams, useRouter } from 'next/navigation';
++import { createBrowserClient } from '@/lib/supabase';
++import Link from 'next/link';
++
++function ActionMenu({ student, onMakeTeacher, onMakePrincipal, onMakeStudent, onToggleActive, onUnassign, schools }) {
++  const [open, setOpen] = useState(false);
++  const [showMove, setShowMove] = useState(false);
++  const ref = useRef(null);
++
++  useEffect(() => {
++    function handleClickOutside(e) {
++      if (ref.current && !ref.current.contains(e.target)) {
++        setOpen(false);
++        setShowMove(false);
++      }
++    }
++    document.addEventListener('mousedown', handleClickOutside);
++    return () => document.removeEventListener('mousedown', handleClickOutside);
++  }, []);
++
++  return (
++    <div className="relative inline-block text-left" ref={ref}>
++      <button
++        onClick={() => setOpen(v => !v)}
++        className="rounded-full h-8 w-8 flex items-center justify-center text-slate-400 hover:bg-slate-100 hover:text-slate-600"
++        aria-label="Actions"
++      >
++        ⋮
++      </button>
++      {open && (
++        <div className="absolute right-0 z-10 mt-1 w-48 rounded-xl border border-slate-100 bg-white shadow-lg py-1 text-sm">
++          {student.role !== 'teacher' && (
++            <button onClick={() => { onMakeTeacher(student.id); setOpen(false); }}
++              className="w-full text-left px-4 py-2 hover:bg-slate-50 text-slate-700">
++              → Make Teacher
++            </button>
++          )}
++          {student.role !== 'principal' && (
++            <button onClick={() => { onMakePrincipal(student.id); setOpen(false); }}
++              className="w-full text-left px-4 py-2 hover:bg-slate-50 text-slate-700">
++              → Make Principal
++            </button>
++          )}
++          {student.role !== 'student' && (
++            <button onClick={() => { onMakeStudent(student.id); setOpen(false); }}
++              className="w-full text-left px-4 py-2 hover:bg-slate-50 text-slate-700">
++              → Make Student
++            </button>
++          )}
++          <div className="border-t border-slate-100 my-1" />
++          <button onClick={() => { onToggleActive(student.id, student.is_active); setOpen(false); }}
++            className="w-full text-left px-4 py-2 hover:bg-slate-50 text-slate-700">
++            → {student.is_active === false ? 'Reactivate' : 'Deactivate'}
++          </button>
++          <div className="border-t border-slate-100 my-1" />
++          <button onClick={() => { onUnassign(student.id); setOpen(false); }}
++            className="w-full text-left px-4 py-2 hover:bg-slate-50 text-red-500">
++            → Remove from School
++          </button>
++        </div>
++      )}
++    </div>
++  );
++}
++
++export default function ManageSchoolPage() {
++  const { id } = useParams();
++  const router = useRouter();
++  const [school, setSchool] = useState(null);
++  const [assignedStudents, setAssignedStudents] = useState([]);
++  const [unassignedStudents, setUnassignedStudents] = useState([]);
++  const [search, setSearch] = useState('');
++  const [loading, setLoading] = useState(true);
++  const [publicUrl, setPublicUrl] = useState('');
++
++  useEffect(() => {
++    if (typeof window !== 'undefined') {
++      setPublicUrl(`${window.location.origin}/school/`);
++    }
++  }, []);
++
++  async function loadData() {
++    const supabase = createBrowserClient();
++
++    const { data: { user } } = await supabase.auth.getUser();
++    if (!user) { router.push('/admin/login'); return; }
++    const { data: profile } = await supabase
++      .from('profiles').select('role').eq('id', user.id).single();
++    if (profile?.role !== 'admin') { router.push('/login'); return; }
++
++    const { data: schoolData } = await supabase
++      .from('schools')
++      .select('*')
++      .eq('id', id)
++      .single();
++    setSchool(schoolData);
++
++    const { data: assigned } = await supabase
++      .from('profiles')
++      .select('id, full_name, email, role, is_teaching, is_active')
++      .eq('school_id', id)
++      .order('full_name');
++    setAssignedStudents(assigned || []);
++
++    const { data: unassigned } = await supabase
++      .from('profiles')
++      .select('id, full_name, email, role')
++      .is('school_id', null)
++      .eq('role', 'student')
++      .order('full_name')
++      .limit(100);
++    setUnassignedStudents(unassigned || []);
++
++    setLoading(false);
++  }
++
++  useEffect(() => { loadData(); }, [id]);
++
++  async function assignStudent(studentId) {
++    const supabase = createBrowserClient();
++    await supabase.from('profiles').update({ school_id: id }).eq('id', studentId);
++    loadData();
++  }
++
++  async function unassignStudent(studentId) {
++    const supabase = createBrowserClient();
++    await supabase.from('profiles').update({ school_id: null }).eq('id', studentId);
++    loadData();
++  }
++
++  async function makePrincipal(studentId) {
++    if (!confirm('Give this person principal access to this school?')) return;
++    const supabase = createBrowserClient();
++    await supabase.from('profiles').update({ role: 'principal', school_id: id }).eq('id', studentId);
++    loadData();
++  }
++
++  async function makeTeacher(studentId) {
++    if (!confirm('Give this person teacher access to this school?')) return;
++    const supabase = createBrowserClient();
++    await supabase.from('profiles').update({ role: 'teacher', school_id: id }).eq('id', studentId);
++    loadData();
++  }
++
++  async function makeStudent(studentId) {
++    if (!confirm('Change this person back to a regular student?')) return;
++    const supabase = createBrowserClient();
++    await supabase.from('profiles').update({ role: 'student' }).eq('id', studentId);
++    loadData();
++  }
++
++  async function toggleActive(studentId, currentlyActive) {
++    const nowActive = currentlyActive === false; // if currently inactive, reactivate
++    const supabase = createBrowserClient();
++    await supabase.from('profiles').update({ is_active: nowActive }).eq('id', studentId);
++    loadData();
++  }
++
++  if (loading) return (
++    <div className="flex items-center justify-center py-20">
++      <p className="text-gray-500">Loading...</p>
++    </div>
++  );
++
++  if (!school) return (
++    <div className="max-w-md mx-auto mt-20 text-center text-slate-500">School not found.</div>
++  );
++
++  const schoolPageUrl = `${publicUrl}${school.slug}`;
++  const qrUrl = `https://api.qrserver.com/v1/create-qr-code/?size=240x240&data=${encodeURIComponent(schoolPageUrl)}`;
++
++  const filteredUnassigned = unassignedStudents.filter(s =>
++    s.full_name?.toLowerCase().includes(search.toLowerCase()) ||
++    s.email?.toLowerCase().includes(search.toLowerCase())
++  );
++
++  return (
++    <div className="max-w-4xl mx-auto space-y-6">
++      <section className="rounded-2xl bg-white p-6 shadow-sm border border-slate-100">
++        <div className="flex items-center justify-between flex-wrap gap-3">
++          <div>
++            <p className="text-xs font-bold uppercase tracking-widest text-brand-yellow">
++              Manage School
++            </p>
++            <h1 className="mt-1 text-2xl font-extrabold text-brand-blue">{school.name}</h1>
++            <p className="mt-1 text-sm text-slate-500">/school/{school.slug}</p>
++          </div>
++          <Link href="/admin/schools" className="text-sm font-semibold text-brand-blue hover:underline">
++            ← Back to Schools
++          </Link>
++        </div>
++      </section>
++
++      {/* QR Code + links */}
++      <section className="rounded-2xl bg-white p-6 shadow-sm border border-slate-100">
++        <h2 className="font-extrabold text-brand-blue mb-4">School Page & QR Code</h2>
++        <div className="flex flex-col sm:flex-row gap-6 items-start">
++          <div className="shrink-0 rounded-xl border border-slate-100 p-3">
++            {/* eslint-disable-next-line @next/next/no-img-element */}
++            <img src={qrUrl} alt={`QR code for ${school.name}`} width={160} height={160} />
++          </div>
++          <div className="space-y-3 flex-1">
++            <div>
++              <p className="text-xs font-semibold text-slate-400 uppercase">Public School Page</p>
++              <a href={schoolPageUrl} target="_blank" rel="noreferrer"
++                className="text-brand-blue font-semibold hover:underline break-all">
++                {schoolPageUrl}
++              </a>
++            </div>
++            <div>
++              <p className="text-xs font-semibold text-slate-400 uppercase">Principal Dashboard</p>
++              <a href={`${schoolPageUrl}/principal`} target="_blank" rel="noreferrer"
++                className="text-brand-blue font-semibold hover:underline break-all">
++                {schoolPageUrl}/principal
++              </a>
++            </div>
++            <a href={qrUrl} download={`${school.slug}-qr.png`}
++              className="inline-block rounded-full bg-brand-yellow text-brand-dark px-4 py-2 text-sm font-bold hover:opacity-90">
++              Download QR Code
++            </a>
++          </div>
++        </div>
++      </section>
++
++      {/* Assigned students / staff */}
++      <section className="rounded-2xl bg-white shadow-sm border border-slate-100 overflow-hidden">
++        <div className="p-6 border-b border-slate-100">
++          <h2 className="font-extrabold text-brand-blue">
++            Assigned to {school.name} ({assignedStudents.length})
++          </h2>
++        </div>
++        <div className="overflow-x-auto">
++          <table className="min-w-full divide-y divide-slate-100 text-left text-sm">
++            <thead className="bg-slate-50 text-slate-500">
++              <tr>
++                <th className="px-6 py-3 font-semibold">Name</th>
++                <th className="px-6 py-3 font-semibold">Role</th>
++                <th className="px-6 py-3 font-semibold">Actions</th>
++              </tr>
++            </thead>
++            <tbody className="divide-y divide-slate-100">
++              {assignedStudents.length > 0 ? assignedStudents.map(s => (
++                <tr key={s.id} className={`hover:bg-slate-50 ${s.is_active === false ? 'opacity-50' : ''}`}>
++                  <td className="px-6 py-3">
++                    <p className="font-bold text-brand-dark">{s.full_name || 'Unnamed'}</p>
++                    <p className="text-xs text-slate-400">{s.email}</p>
++                  </td>
++                  <td className="px-6 py-3">
++                    <div className="flex items-center gap-2 flex-wrap">
++                      <span className={`rounded-full px-3 py-1 text-xs font-bold ${
++                        s.role === 'principal' ? 'bg-purple-100 text-purple-700'
++                        : s.role === 'teacher' ? 'bg-blue-100 text-blue-700'
++                        : 'bg-slate-100 text-slate-600'
++                      }`}>
++                        {s.role}
++                      </span>
++                      {s.is_active === false && (
++                        <span className="rounded-full px-2 py-0.5 text-xs font-bold bg-red-50 text-red-500">
++                          inactive
++                        </span>
++                      )}
++                    </div>
++                  </td>
++                  <td className="px-6 py-3 text-right">
++                    <ActionMenu
++                      student={s}
++                      onMakeTeacher={makeTeacher}
++                      onMakePrincipal={makePrincipal}
++                      onMakeStudent={makeStudent}
++                      onToggleActive={toggleActive}
++                      onUnassign={unassignStudent}
++                    />
++                  </td>
++                </tr>
++              )) : (
++                <tr>
++                  <td colSpan="3" className="px-6 py-8 text-center text-slate-500">
++                    No one assigned yet.
++                  </td>
++                </tr>
++              )}
++            </tbody>
++          </table>
++        </div>
++      </section>
++
++      {/* Assign students */}
++      <section className="rounded-2xl bg-white shadow-sm border border-slate-100 overflow-hidden">
++        <div className="p-6 border-b border-slate-100 space-y-3">
++          <h2 className="font-extrabold text-brand-blue">Assign Students</h2>
++          <input
++            type="text"
++            value={search}
++            onChange={e => setSearch(e.target.value)}
++            placeholder="Search unassigned students by name or email..."
++            className="w-full max-w-md rounded-xl border border-slate-200 px-4 py-2 text-sm outline-none focus:border-brand-blue"
++          />
++        </div>
++        <div className="overflow-x-auto max-h-96 overflow-y-auto">
++          <table className="min-w-full divide-y divide-slate-100 text-left text-sm">
++            <tbody className="divide-y divide-slate-100">
++              {filteredUnassigned.length > 0 ? filteredUnassigned.map(s => (
++                <tr key={s.id} className="hover:bg-slate-50">
++                  <td className="px-6 py-3">
++                    <p className="font-bold text-brand-dark">{s.full_name || 'Unnamed'}</p>
++                    <p className="text-xs text-slate-400">{s.email}</p>
++                  </td>
++                  <td className="px-6 py-3 text-right">
++                    <button onClick={() => assignStudent(s.id)}
++                      className="rounded-full bg-brand-blue text-white px-4 py-1.5 text-xs font-bold hover:opacity-90">
++                      Assign
++                    </button>
++                  </td>
++                </tr>
++              )) : (
++                <tr>
++                  <td colSpan="2" className="px-6 py-8 text-center text-slate-500">
++                    No unassigned students found.
++                  </td>
++                </tr>
++              )}
++            </tbody>
++          </table>
++        </div>
++      </section>
++    </div>
++  );
++}
+diff --git a/app/admin/schools/new/page.js b/app/admin/schools/new/page.js
+new file mode 100644
+index 0000000..9dc6127
+--- /dev/null
++++ b/app/admin/schools/new/page.js
+@@ -0,0 +1,222 @@
++'use client';
++
++import { useState, useEffect } from 'react';
++import { createBrowserClient } from '@/lib/supabase';
++import { useRouter } from 'next/navigation';
++
++function slugify(text) {
++  return text
++    .toLowerCase()
++    .trim()
++    .replace(/[^a-z0-9\s-]/g, '')
++    .replace(/\s+/g, '-')
++    .replace(/-+/g, '-');
++}
++
++export default function NewSchoolPage() {
++  const router = useRouter();
++  const [checkingAuth, setCheckingAuth] = useState(true);
++  const [saving, setSaving] = useState(false);
++  const [error, setError] = useState(null);
++  const [form, setForm] = useState({
++    name: '',
++    slug: '',
++    slugEdited: false,
++    logo_url: '',
++    address: '',
++    principal_name: '',
++    contact_phone: '',
++    contact_email: '',
++    about: '',
++  });
++
++  useEffect(() => {
++    const supabase = createBrowserClient();
++    async function check() {
++      const { data: { user } } = await supabase.auth.getUser();
++      if (!user) { router.push('/admin/login'); return; }
++      const { data: profile } = await supabase
++        .from('profiles').select('role').eq('id', user.id).single();
++      if (profile?.role !== 'admin') { router.push('/login'); return; }
++      setCheckingAuth(false);
++    }
++    check();
++  }, [router]);
++
++  function handleNameChange(name) {
++    setForm(prev => ({
++      ...prev,
++      name,
++      slug: prev.slugEdited ? prev.slug : slugify(name),
++    }));
++  }
++
++  async function handleSubmit(e) {
++    e.preventDefault();
++    setError(null);
++
++    if (!form.name.trim() || !form.slug.trim()) {
++      setError('School name and slug are required.');
++      return;
++    }
++
++    setSaving(true);
++    const supabase = createBrowserClient();
++
++    const { data, error: insertError } = await supabase
++      .from('schools')
++      .insert({
++        name: form.name.trim(),
++        slug: slugify(form.slug),
++        logo_url: form.logo_url.trim() || null,
++        address: form.address.trim() || null,
++        principal_name: form.principal_name.trim() || null,
++        contact_phone: form.contact_phone.trim() || null,
++        contact_email: form.contact_email.trim() || null,
++        about: form.about.trim() || null,
++      })
++      .select()
++      .single();
++
++    setSaving(false);
++
++    if (insertError) {
++      setError(
++        insertError.code === '23505'
++          ? 'That slug is already taken — try a different one.'
++          : insertError.message
++      );
++      return;
++    }
++
++    router.push(`/admin/schools/${data.id}`);
++  }
++
++  if (checkingAuth) return (
++    <div className="flex items-center justify-center py-20">
++      <p className="text-gray-500">Loading...</p>
++    </div>
++  );
++
++  return (
++    <div className="max-w-2xl mx-auto space-y-6">
++      <section className="rounded-2xl bg-white p-6 shadow-sm border border-slate-100">
++        <p className="text-xs font-bold uppercase tracking-widest text-brand-yellow">
++          New
++        </p>
++        <h1 className="mt-1 text-2xl font-extrabold text-brand-blue">Add School</h1>
++        <p className="mt-1 text-sm text-slate-500">
++          Creates the school's page automatically at /school/&lt;slug&gt;
++        </p>
++      </section>
++
++      <form onSubmit={handleSubmit} className="rounded-2xl bg-white p-6 shadow-sm border border-slate-100 space-y-5">
++        {error && (
++          <div className="rounded-xl bg-red-50 border border-red-100 px-4 py-3 text-sm text-red-600">
++            {error}
++          </div>
++        )}
++
++        <div>
++          <label className="block text-sm font-semibold mb-1">School Name *</label>
++          <input
++            type="text"
++            required
++            value={form.name}
++            onChange={e => handleNameChange(e.target.value)}
++            placeholder="e.g., Royal College"
++            className="w-full rounded-xl border border-slate-200 px-4 py-2 outline-none focus:border-brand-blue"
++          />
++        </div>
++
++        <div>
++          <label className="block text-sm font-semibold mb-1">Page URL (slug) *</label>
++          <div className="flex items-center rounded-xl border border-slate-200 px-4 py-2 focus-within:border-brand-blue">
++            <span className="text-slate-400 text-sm shrink-0">shineybrainacademy.com/school/</span>
++            <input
++              type="text"
++              required
++              value={form.slug}
++              onChange={e => setForm(prev => ({ ...prev, slug: e.target.value, slugEdited: true }))}
++              className="flex-1 outline-none text-sm min-w-0"
++            />
++          </div>
++        </div>
++
++        <div>
++          <label className="block text-sm font-semibold mb-1">Logo URL</label>
++          <input
++            type="text"
++            value={form.logo_url}
++            onChange={e => setForm(prev => ({ ...prev, logo_url: e.target.value }))}
++            placeholder="https://..."
++            className="w-full rounded-xl border border-slate-200 px-4 py-2 outline-none focus:border-brand-blue"
++          />
++          <p className="mt-1 text-xs text-slate-400">
++            Paste an image link for now — upload support can be added later.
++          </p>
++        </div>
++
++        <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
++          <div>
++            <label className="block text-sm font-semibold mb-1">Principal Name</label>
++            <input
++              type="text"
++              value={form.principal_name}
++              onChange={e => setForm(prev => ({ ...prev, principal_name: e.target.value }))}
++              className="w-full rounded-xl border border-slate-200 px-4 py-2 outline-none focus:border-brand-blue"
++            />
++          </div>
++          <div>
++            <label className="block text-sm font-semibold mb-1">Phone</label>
++            <input
++              type="text"
++              value={form.contact_phone}
++              onChange={e => setForm(prev => ({ ...prev, contact_phone: e.target.value }))}
++              className="w-full rounded-xl border border-slate-200 px-4 py-2 outline-none focus:border-brand-blue"
++            />
++          </div>
++        </div>
++
++        <div>
++          <label className="block text-sm font-semibold mb-1">Email</label>
++          <input
++            type="email"
++            value={form.contact_email}
++            onChange={e => setForm(prev => ({ ...prev, contact_email: e.target.value }))}
++            className="w-full rounded-xl border border-slate-200 px-4 py-2 outline-none focus:border-brand-blue"
++          />
++        </div>
++
++        <div>
++          <label className="block text-sm font-semibold mb-1">Address</label>
++          <input
++            type="text"
++            value={form.address}
++            onChange={e => setForm(prev => ({ ...prev, address: e.target.value }))}
++            className="w-full rounded-xl border border-slate-200 px-4 py-2 outline-none focus:border-brand-blue"
++          />
++        </div>
++
++        <div>
++          <label className="block text-sm font-semibold mb-1">About (optional)</label>
++          <textarea
++            rows={3}
++            value={form.about}
++            onChange={e => setForm(prev => ({ ...prev, about: e.target.value }))}
++            placeholder="A short description shown on the school's public page."
++            className="w-full rounded-xl border border-slate-200 px-4 py-2 outline-none focus:border-brand-blue"
++          />
++        </div>
++
++        <button
++          type="submit"
++          disabled={saving}
++          className="w-full bg-brand-yellow text-brand-dark px-6 py-3 rounded-full font-bold hover:opacity-90 disabled:opacity-50"
++        >
++          {saving ? 'Creating...' : 'Create School'}
++        </button>
++      </form>
++    </div>
++  );
++}
+diff --git a/app/admin/schools/page.js b/app/admin/schools/page.js
+new file mode 100644
+index 0000000..99b4135
+--- /dev/null
++++ b/app/admin/schools/page.js
+@@ -0,0 +1,158 @@
++'use client';
++
++import { useEffect, useState } from 'react';
++import { createBrowserClient } from '@/lib/supabase';
++import { useRouter } from 'next/navigation';
++import Link from 'next/link';
++
++export default function AdminSchoolsPage() {
++  const [schools, setSchools] = useState([]);
++  const [loading, setLoading] = useState(true);
++  const router = useRouter();
++
++  useEffect(() => {
++    const supabase = createBrowserClient();
++
++    async function load() {
++      const { data: { user } } = await supabase.auth.getUser();
++      if (!user) { router.push('/admin/login'); return; }
++
++      const { data: profile } = await supabase
++        .from('profiles').select('role').eq('id', user.id).single();
++      if (profile?.role !== 'admin') { router.push('/login'); return; }
++
++      const { data: schoolRows } = await supabase
++        .from('schools')
++        .select('id, slug, name, principal_name, is_published, created_at')
++        .order('created_at', { ascending: false });
++
++      const schoolIds = (schoolRows || []).map(s => s.id);
++      let counts = {};
++      if (schoolIds.length > 0) {
++        const { data: studentRows } = await supabase
++          .from('profiles')
++          .select('school_id')
++          .eq('role', 'student')
++          .in('school_id', schoolIds);
++        (studentRows || []).forEach(r => {
++          counts[r.school_id] = (counts[r.school_id] || 0) + 1;
++        });
++      }
++
++      setSchools((schoolRows || []).map(s => ({ ...s, studentCount: counts[s.id] || 0 })));
++      setLoading(false);
++    }
++    load();
++  }, [router]);
++
++  async function togglePublish(school) {
++    const supabase = createBrowserClient();
++    await supabase
++      .from('schools')
++      .update({ is_published: !school.is_published })
++      .eq('id', school.id);
++    setSchools(prev =>
++      prev.map(s => s.id === school.id ? { ...s, is_published: !s.is_published } : s)
++    );
++  }
++
++  async function deleteSchool(id) {
++    if (!confirm('Delete this school? Students linked to it will be unlinked, not deleted.')) return;
++    const supabase = createBrowserClient();
++    await supabase.from('schools').delete().eq('id', id);
++    setSchools(prev => prev.filter(s => s.id !== id));
++  }
++
++  if (loading) return (
++    <div className="flex items-center justify-center py-20">
++      <p className="text-gray-500">Loading schools...</p>
++    </div>
++  );
++
++  return (
++    <div className="space-y-6">
++      <section className="rounded-2xl bg-white p-6 shadow-sm border border-slate-100">
++        <div className="flex items-center justify-between flex-wrap gap-3">
++          <div>
++            <p className="text-xs font-bold uppercase tracking-widest text-brand-yellow">
++              Management
++            </p>
++            <h1 className="mt-1 text-2xl font-extrabold text-brand-blue">Schools</h1>
++            <p className="mt-1 text-sm text-slate-500">{schools.length} schools on the platform</p>
++          </div>
++          <Link href="/admin/schools/new"
++            className="rounded-full bg-brand-yellow px-5 py-2.5 text-sm
++                       font-bold text-brand-dark hover:opacity-90 transition">
++            + Add School
++          </Link>
++        </div>
++      </section>
++
++      <section className="rounded-2xl bg-white shadow-sm border border-slate-100 overflow-hidden">
++        {schools.length > 0 ? (
++          <div className="overflow-x-auto">
++            <table className="min-w-full divide-y divide-slate-100 text-left text-sm">
++              <thead className="bg-slate-50 text-slate-500">
++                <tr>
++                  <th className="px-6 py-4 font-semibold">School</th>
++                  <th className="px-6 py-4 font-semibold">Principal</th>
++                  <th className="px-6 py-4 font-semibold">Students</th>
++                  <th className="px-6 py-4 font-semibold">Page</th>
++                  <th className="px-6 py-4 font-semibold">Status</th>
++                  <th className="px-6 py-4 font-semibold">Actions</th>
++                </tr>
++              </thead>
++              <tbody className="divide-y divide-slate-100">
++                {schools.map(school => (
++                  <tr key={school.id} className="hover:bg-slate-50">
++                    <td className="px-6 py-4">
++                      <p className="font-bold text-brand-blue">{school.name}</p>
++                      <p className="text-xs text-slate-400">/school/{school.slug}</p>
++                    </td>
++                    <td className="px-6 py-4 text-slate-600">{school.principal_name || '—'}</td>
++                    <td className="px-6 py-4 font-bold text-brand-dark">{school.studentCount}</td>
++                    <td className="px-6 py-4">
++                      <Link href={`/school/${school.slug}`} target="_blank"
++                        className="text-brand-blue font-semibold hover:underline">
++                        View →
++                      </Link>
++                    </td>
++                    <td className="px-6 py-4">
++                      <button onClick={() => togglePublish(school)}
++                        className={`rounded-full px-3 py-1 text-xs font-bold ${
++                          school.is_published
++                            ? 'bg-green-100 text-green-700'
++                            : 'bg-slate-100 text-slate-500'
++                        }`}>
++                        {school.is_published ? 'Published' : 'Hidden'}
++                      </button>
++                    </td>
++                    <td className="px-6 py-4">
++                      <div className="flex gap-3">
++                        <Link href={`/admin/schools/${school.id}`}
++                          className="text-brand-blue font-semibold hover:underline">
++                          Manage
++                        </Link>
++                        <button onClick={() => deleteSchool(school.id)}
++                          className="text-red-500 font-semibold hover:underline">
++                          Delete
++                        </button>
++                      </div>
++                    </td>
++                  </tr>
++                ))}
++              </tbody>
++            </table>
++          </div>
++        ) : (
++          <div className="px-6 py-10 text-center text-slate-500">
++            No schools yet.{' '}
++            <Link href="/admin/schools/new" className="text-brand-blue font-semibold hover:underline">
++              Add your first one →
++            </Link>
++          </div>
++        )}
++      </section>
++    </div>
++  );
++}
+diff --git a/app/school/[slug]/page.js b/app/school/[slug]/page.js
+new file mode 100644
+index 0000000..91b5c5f
+--- /dev/null
++++ b/app/school/[slug]/page.js
+@@ -0,0 +1,140 @@
++import { createServerClient } from '@/lib/supabase-server';
++import { notFound } from 'next/navigation';
++import Link from 'next/link';
++
++export const dynamic = 'force-dynamic';
++
++async function getSchool(slug) {
++  const supabase = createServerClient();
++  const { data } = await supabase
++    .from('schools')
++    .select('id, slug, name, logo_url, about, contact_phone, contact_email, address, is_published')
++    .eq('slug', slug)
++    .eq('is_published', true)
++    .maybeSingle();
++  return data;
++}
++
++async function getStudentCount(schoolId) {
++  const supabase = createServerClient();
++  const { count } = await supabase
++    .from('profiles')
++    .select('id', { count: 'exact', head: true })
++    .eq('school_id', schoolId)
++    .eq('role', 'student');
++  return count || 0;
++}
++
++export async function generateMetadata({ params }) {
++  const school = await getSchool(params.slug);
++  if (!school) return { title: 'School Not Found | Shiney Brain Academy' };
++  return {
++    title: `${school.name} | Powered by Shiney Brain Academy`,
++    description: school.about || `${school.name}'s official page on Shiney Brain Academy.`,
++  };
++}
++
++export default async function SchoolPage({ params }) {
++  const school = await getSchool(params.slug);
++  if (!school) notFound();
++
++  const studentCount = await getStudentCount(school.id);
++
++  return (
++    <div className="min-h-screen bg-slate-50">
++      {/* Header */}
++      <header className="bg-brand-blue text-white">
++        <div className="max-w-5xl mx-auto px-4 py-10 flex items-center gap-5">
++          <div className="h-16 w-16 shrink-0 rounded-2xl bg-white flex items-center justify-center overflow-hidden">
++            {school.logo_url ? (
++              // eslint-disable-next-line @next/next/no-img-element
++              <img src={school.logo_url} alt={`${school.name} logo`} className="h-full w-full object-cover" />
++            ) : (
++              <span className="text-2xl font-extrabold text-brand-blue">
++                {school.name[0]}
++              </span>
++            )}
++          </div>
++          <div>
++            <p className="text-xs font-bold uppercase tracking-widest text-brand-yellow">
++              Official School Page
++            </p>
++            <h1 className="text-3xl font-extrabold">{school.name}</h1>
++          </div>
++        </div>
++      </header>
++
++      <main className="max-w-5xl mx-auto px-4 py-10 space-y-10">
++        {/* About */}
++        <section className="rounded-2xl bg-white p-6 shadow-sm border border-slate-100">
++          <h2 className="text-lg font-extrabold text-brand-blue mb-2">About {school.name}</h2>
++          <p className="text-slate-600 leading-relaxed">
++            {school.about || 'This school is on Shiney Brain Academy — helping students prepare for WAEC, JAMB, and NECO with quizzes, an AI tutor, and performance tracking.'}
++          </p>
++        </section>
++
++        {/* Stats strip */}
++        <section className="grid grid-cols-1 sm:grid-cols-3 gap-4">
++          <div className="rounded-2xl bg-white p-6 shadow-sm border border-slate-100 text-center">
++            <p className="text-3xl font-extrabold text-brand-blue">{studentCount}</p>
++            <p className="text-sm text-slate-500 mt-1">Students on Shiney Brain</p>
++          </div>
++          <div className="rounded-2xl bg-white p-6 shadow-sm border border-slate-100 text-center">
++            <p className="text-3xl font-extrabold text-brand-blue">WAEC / JAMB / NECO</p>
++            <p className="text-sm text-slate-500 mt-1">Exam prep covered</p>
++          </div>
++          <div className="rounded-2xl bg-white p-6 shadow-sm border border-slate-100 text-center">
++            <p className="text-3xl font-extrabold text-brand-blue">24/7</p>
++            <p className="text-sm text-slate-500 mt-1">AI Tutor access</p>
++          </div>
++        </section>
++
++        {/* What students get */}
++        <section className="rounded-2xl bg-white p-6 shadow-sm border border-slate-100">
++          <h2 className="text-lg font-extrabold text-brand-blue mb-4">
++            What {school.name} students get, free
++          </h2>
++          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
++            {[
++              ['📝', 'Quizzes & Boss Battles', 'Practice by subject, gamified for real engagement.'],
++              ['🎓', 'AI Tutor', 'Ask questions anytime, get explained answers instantly.'],
++              ['📇', 'Flashcards', 'Quick revision for key topics before exams.'],
++              ['📊', 'Past Questions', 'Real WAEC/JAMB/NECO past questions with practice mode.'],
++            ].map(([icon, title, desc]) => (
++              <div key={title} className="flex gap-3 rounded-xl border border-slate-100 p-4">
++                <span className="text-2xl">{icon}</span>
++                <div>
++                  <p className="font-bold text-brand-dark">{title}</p>
++                  <p className="text-sm text-slate-500">{desc}</p>
++                </div>
++              </div>
++            ))}
++          </div>
++        </section>
++
++        {/* Contact */}
++        <section className="rounded-2xl bg-white p-6 shadow-sm border border-slate-100">
++          <h2 className="text-lg font-extrabold text-brand-blue mb-3">Contact {school.name}</h2>
++          <div className="text-sm text-slate-600 space-y-1">
++            {school.contact_phone && <p>📞 {school.contact_phone}</p>}
++            {school.contact_email && <p>✉️ {school.contact_email}</p>}
++            {school.address && <p>📍 {school.address}</p>}
++            {!school.contact_phone && !school.contact_email && !school.address && (
++              <p className="text-slate-400">Contact details coming soon.</p>
++            )}
++          </div>
++        </section>
++
++        {/* Footer CTA */}
++        <section className="text-center py-6">
++          <p className="text-sm text-slate-500">
++            Powered by{' '}
++            <Link href="/" className="font-bold text-brand-blue hover:underline">
++              Shiney Brain Academy
++            </Link>
++          </p>
++        </section>
++      </main>
++    </div>
++  );
++}
+diff --git a/app/school/[slug]/principal/page.js b/app/school/[slug]/principal/page.js
+new file mode 100644
+index 0000000..481535d
+--- /dev/null
++++ b/app/school/[slug]/principal/page.js
+@@ -0,0 +1,285 @@
++'use client';
++
++import { useEffect, useState, useMemo } from 'react';
++import { useParams, useRouter } from 'next/navigation';
++import { createBrowserClient } from '@/lib/supabase';
++
++// Deterministic "random" so the same demo student always gets the same
++// fake numbers within a session, instead of reshuffling on every render.
++function fakeSeed(str) {
++  let h = 0;
++  for (let i = 0; i < str.length; i++) h = (h * 31 + str.charCodeAt(i)) >>> 0;
++  return h;
++}
++
++const DEMO_SUBJECTS = [
++  { subject: 'Mathematics', score: 74 },
++  { subject: 'English', score: 81 },
++  { subject: 'Biology', score: 68 },
++  { subject: 'Chemistry', score: 59 },
++  { subject: 'Physics', score: 63 },
++];
++
++const DEMO_NAMES = [
++  'Chidera Okafor', 'Amina Bello', 'Emeka Nwosu', 'Grace Adeyemi',
++  'Ibrahim Suleiman', 'Ngozi Eze', 'Tunde Bakare', 'Fatima Yusuf',
++  'David Okonkwo', 'Blessing Umeh',
++];
++
++function buildDemoStudents(count) {
++  return Array.from({ length: count }).map((_, i) => {
++    const seed = fakeSeed(`demo-${i}`);
++    return {
++      id: `demo-${i}`,
++      full_name: DEMO_NAMES[i % DEMO_NAMES.length] + (i >= DEMO_NAMES.length ? ` ${Math.floor(i / DEMO_NAMES.length) + 1}` : ''),
++      email: `student${i + 1}@demo.sba`,
++      student_level: ['SS1', 'SS2', 'SS3'][seed % 3],
++      target_exams: [['WAEC'], ['WAEC', 'JAMB'], ['NECO']][seed % 3],
++      points: 120 + (seed % 880),
++      activityCount: seed % 40,
++      isDemo: true,
++    };
++  });
++}
++
++export default function PrincipalDashboard() {
++  const { slug } = useParams();
++  const router = useRouter();
++  const [school, setSchool] = useState(null);
++  const [students, setStudents] = useState([]);
++  const [loading, setLoading] = useState(true);
++  const [error, setError] = useState(null);
++  const [demoMode, setDemoMode] = useState(false);
++
++  useEffect(() => {
++    const supabase = createBrowserClient();
++
++    async function load() {
++      const { data: { user } } = await supabase.auth.getUser();
++      if (!user) { router.push('/admin/login'); return; }
++
++      const { data: profile } = await supabase
++        .from('profiles')
++        .select('role, school_id, full_name')
++        .eq('id', user.id)
++        .single();
++
++      if (!profile || !['principal', 'teacher', 'admin'].includes(profile.role)) {
++        setError('This page is only available to school staff.');
++        setLoading(false);
++        return;
++      }
++
++      const { data: schoolData } = await supabase
++        .from('schools')
++        .select('id, slug, name')
++        .eq('slug', slug)
++        .single();
++
++      if (!schoolData) {
++        setError('School not found.');
++        setLoading(false);
++        return;
++      }
++
++      if (profile.role !== 'admin' && profile.school_id !== schoolData.id) {
++        setError('You do not have access to this school\'s dashboard.');
++        setLoading(false);
++        return;
++      }
++
++      setSchool(schoolData);
++
++      const { data: studentRows } = await supabase
++        .from('profiles')
++        .select(`
++          id, full_name, email, student_level, target_exams, created_at,
++          user_points(total_points)
++        `)
++        .eq('school_id', schoolData.id)
++        .eq('role', 'student')
++        .order('created_at', { ascending: false });
++
++      const studentIds = (studentRows || []).map(s => s.id);
++      let activityCounts = {};
++      if (studentIds.length > 0) {
++        const { data: logRows } = await supabase
++          .from('points_log')
++          .select('user_id, action_type')
++          .in('user_id', studentIds);
++
++        (logRows || []).forEach(row => {
++          activityCounts[row.user_id] = (activityCounts[row.user_id] || 0) + 1;
++        });
++      }
++
++      setStudents(
++        (studentRows || []).map(s => ({
++          ...s,
++          points: s.user_points?.total_points || 0,
++          activityCount: activityCounts[s.id] || 0,
++          isDemo: false,
++        }))
++      );
++      setLoading(false);
++    }
++
++    load();
++  }, [slug, router]);
++
++  const demoStudents = useMemo(() => buildDemoStudents(48), []);
++  const displayStudents = demoMode ? demoStudents : students;
++
++  if (loading) {
++    return (
++      <div className="flex items-center justify-center py-20">
++        <p className="text-gray-500">Loading dashboard...</p>
++      </div>
++    );
++  }
++
++  if (error) {
++    return (
++      <div className="max-w-md mx-auto mt-20 rounded-2xl bg-white p-6 shadow-sm border border-slate-100 text-center">
++        <p className="text-red-500 font-semibold">{error}</p>
++      </div>
++    );
++  }
++
++  const totalStudents = displayStudents.length;
++  const activeStudents = displayStudents.filter(s => s.activityCount > 0).length;
++  const avgPoints = totalStudents > 0
++    ? Math.round(displayStudents.reduce((sum, s) => sum + s.points, 0) / totalStudents)
++    : 0;
++
++  return (
++    <div className="min-h-screen bg-slate-50">
++      <div className="max-w-6xl mx-auto px-4 py-10 space-y-6">
++        <section className="rounded-2xl bg-white p-6 shadow-sm border border-slate-100">
++          <div className="flex items-start justify-between flex-wrap gap-3">
++            <div>
++              <p className="text-xs font-bold uppercase tracking-widest text-brand-yellow">
++                Principal Dashboard
++              </p>
++              <h1 className="mt-1 text-2xl font-extrabold text-brand-blue">
++                {school.name}
++              </h1>
++              <p className="mt-1 text-sm text-slate-500">
++                {totalStudents} students on Shiney Brain
++              </p>
++            </div>
++            <button
++              onClick={() => setDemoMode(v => !v)}
++              className={`shrink-0 rounded-full px-4 py-2 text-sm font-bold transition ${
++                demoMode
++                  ? 'bg-purple-600 text-white'
++                  : 'bg-slate-100 text-slate-600 hover:bg-slate-200'
++              }`}
++            >
++              🎭 Demo Mode {demoMode ? 'ON' : 'OFF'}
++            </button>
++          </div>
++          {demoMode && (
++            <div className="mt-4 rounded-xl bg-purple-50 border border-purple-100 px-4 py-3 text-sm text-purple-700">
++              You're viewing sample data to illustrate what this dashboard looks like with an active school.
++              No real students are shown. Turn this off to see {school.name}'s real data.
++            </div>
++          )}
++        </section>
++
++        {/* Summary cards */}
++        <section className="grid grid-cols-1 sm:grid-cols-3 gap-4">
++          <div className="rounded-2xl bg-white p-6 shadow-sm border border-slate-100 text-center">
++            <p className="text-3xl font-extrabold text-brand-blue">{totalStudents}</p>
++            <p className="text-sm text-slate-500 mt-1">Total Students</p>
++          </div>
++          <div className="rounded-2xl bg-white p-6 shadow-sm border border-slate-100 text-center">
++            <p className="text-3xl font-extrabold text-green-600">{activeStudents}</p>
++            <p className="text-sm text-slate-500 mt-1">Active This Term</p>
++          </div>
++          <div className="rounded-2xl bg-white p-6 shadow-sm border border-slate-100 text-center">
++            <p className="text-3xl font-extrabold text-purple-600">{avgPoints}</p>
++            <p className="text-sm text-slate-500 mt-1">Average Points / Student</p>
++          </div>
++        </section>
++
++        {/* Subject performance - only meaningful in demo mode for now,
++            since real per-subject scoring isn't tracked yet */}
++        {demoMode && (
++          <section className="rounded-2xl bg-white p-6 shadow-sm border border-slate-100">
++            <h2 className="font-extrabold text-brand-blue mb-4">Subject Performance (sample)</h2>
++            <div className="space-y-3">
++              {DEMO_SUBJECTS.map(({ subject, score }) => (
++                <div key={subject}>
++                  <div className="flex justify-between text-sm mb-1">
++                    <span className="font-semibold text-slate-600">{subject}</span>
++                    <span className="font-bold text-brand-blue">{score}%</span>
++                  </div>
++                  <div className="h-2 rounded-full bg-slate-100 overflow-hidden">
++                    <div
++                      className={`h-full rounded-full ${score >= 70 ? 'bg-green-500' : score >= 60 ? 'bg-amber-400' : 'bg-red-400'}`}
++                      style={{ width: `${score}%` }}
++                    />
++                  </div>
++                </div>
++              ))}
++            </div>
++            <p className="mt-3 text-xs text-slate-400">
++              Once your students start using quizzes, this fills in with their real subject-by-subject results.
++            </p>
++          </section>
++        )}
++
++        {/* Students table */}
++        <section className="rounded-2xl bg-white shadow-sm border border-slate-100 overflow-hidden">
++          <div className="p-6 border-b border-slate-100">
++            <h2 className="font-extrabold text-brand-blue">Students</h2>
++          </div>
++          <div className="overflow-x-auto max-h-[32rem] overflow-y-auto">
++            <table className="min-w-full divide-y divide-slate-100 text-left text-sm">
++              <thead className="bg-slate-50 text-slate-500 sticky top-0">
++                <tr>
++                  <th className="px-6 py-4 font-semibold">Student</th>
++                  <th className="px-6 py-4 font-semibold">Level</th>
++                  <th className="px-6 py-4 font-semibold">Target Exams</th>
++                  <th className="px-6 py-4 font-semibold">Activity</th>
++                  <th className="px-6 py-4 font-semibold">Points</th>
++                </tr>
++              </thead>
++              <tbody className="divide-y divide-slate-100">
++                {displayStudents.length > 0 ? displayStudents.map(s => (
++                  <tr key={s.id} className="hover:bg-slate-50">
++                    <td className="px-6 py-4">
++                      <p className="font-bold text-brand-dark">{s.full_name || 'Unnamed Student'}</p>
++                      <p className="text-xs text-slate-400">{s.email}</p>
++                    </td>
++                    <td className="px-6 py-4 text-slate-600">{s.student_level || '—'}</td>
++                    <td className="px-6 py-4 text-slate-600">{(s.target_exams || []).join(', ') || '—'}</td>
++                    <td className="px-6 py-4">
++                      {s.activityCount > 0 ? (
++                        <span className="rounded-full bg-green-100 text-green-700 px-3 py-1 text-xs font-bold">
++                          {s.activityCount} actions logged
++                        </span>
++                      ) : (
++                        <span className="rounded-full bg-slate-100 text-slate-500 px-3 py-1 text-xs font-bold">
++                          No activity yet
++                        </span>
++                      )}
++                    </td>
++                    <td className="px-6 py-4 font-bold text-brand-blue">{s.points}</td>
++                  </tr>
++                )) : (
++                  <tr>
++                    <td colSpan="5" className="px-6 py-10 text-center text-slate-500">
++                      No students linked to this school yet.
++                    </td>
++                  </tr>
++                )}
++              </tbody>
++            </table>
++          </div>
++        </section>
++      </div>
++    </div>
++  );
++}
+diff --git a/supabase/migrations/20260727_schools.sql b/supabase/migrations/20260727_schools.sql
+new file mode 100644
+index 0000000..0f563ac
+--- /dev/null
++++ b/supabase/migrations/20260727_schools.sql
+@@ -0,0 +1,141 @@
++-- 20260727_schools.sql
++-- Adds multi-school support so Shiney Brain can be pitched and demoed to
++-- individual schools as "shineybrainacademy.com/school/<slug>".
++--
++-- This does NOT touch existing tables' data, only adds a new table and
++-- new nullable columns. Existing students/admins with school_id = null
++-- keep working exactly as before (they just aren't attached to a school).
++--
++-- NOTE: this file was originally run directly against Supabase without
++-- being committed, and contained a role_check + policy bug that broke
++-- admin access and the tutor account in production. Both are already
++-- fixed live; this committed version matches the corrected live state
++-- so the repo and the database agree.
++
++create table if not exists public.schools (
++  id uuid primary key default gen_random_uuid(),
++  slug text not null unique,
++  name text not null,
++  logo_url text,
++  about text,
++  contact_phone text,
++  contact_email text,
++  address text,
++  principal_name text,
++  is_published boolean not null default true,
++  created_at timestamptz not null default now()
++);
++
++create index if not exists idx_schools_slug on public.schools(slug);
++
++alter table public.profiles
++  add column if not exists school_id uuid references public.schools(id) on delete set null;
++
++-- Lightweight version of "global role vs school responsibility": rather
++-- than a full separate roles/permissions table (overkill for a handful
++-- of pilot schools), a principal or teacher can also be flagged as
++-- actively teaching. Extend this if/when a school actually needs finer
++-- grained permissions (e.g. an ICT-coordinator teacher role).
++alter table public.profiles
++  add column if not exists is_teaching boolean not null default false;
++
++-- Lets an admin "deactivate" a user (e.g. a student who left the school)
++-- without deleting their account/history. Deactivated users are not
++-- blocked from logging in by this column alone -- if login-blocking is
++-- needed later, check this flag in middleware.js too.
++alter table public.profiles
++  add column if not exists is_active boolean not null default true;
++
++create index if not exists idx_profiles_school_id on public.profiles(school_id);
++
++-- Widen the role check constraint to allow 'teacher' and 'principal'
++-- alongside the existing 'student' / 'admin' / 'tutor'. Postgres requires
++-- dropping and recreating a check constraint to change it.
++-- FIX: the original version of this migration dropped 'tutor' from the
++-- allowed set (it predated this migration and wasn't tracked anywhere),
++-- which silently broke every existing tutor account the moment their
++-- profile row was next updated. 'tutor' is included below to match what's
++-- actually live now.
++alter table public.profiles drop constraint if exists profiles_role_check;
++alter table public.profiles
++  add constraint profiles_role_check
++  check (role in ('student', 'admin', 'teacher', 'principal', 'tutor'));
++
++alter table public.schools enable row level security;
++
++-- School profile pages are public marketing pages (like a school's own
++-- website), so anyone can read a published school.
++drop policy if exists "schools_public_read" on public.schools;
++create policy "schools_public_read"
++  on public.schools
++  for select
++  using (is_published = true or public.is_admin());
++
++drop policy if exists "schools_admin_write" on public.schools;
++create policy "schools_admin_write"
++  on public.schools
++  for all
++  using (public.is_admin())
++  with check (public.is_admin());
++
++-- Helper functions so the profiles policy below never queries profiles
++-- from inside a policy defined on profiles itself.
++-- FIX: the original version of this migration used inline subqueries
++-- like `(select p.school_id from public.profiles p where p.id = auth.uid())`
++-- directly in the USING clause. Because that subquery reads the very
++-- table the policy protects, Postgres has to re-evaluate this same
++-- policy to answer it, which caused
++-- "infinite recursion detected in policy for relation profiles" on
++-- every read of profiles -- including the app's own admin-role check,
++-- which is what broke admin access production-wide. is_admin() already
++-- avoided this by being security definer; these two functions follow
++-- the same pattern.
++create or replace function public.current_school_id()
++returns uuid
++language sql
++stable
++security definer
++set search_path = public
++as $$
++  select school_id from public.profiles where id = auth.uid();
++$$;
++
++create or replace function public.is_school_staff()
++returns boolean
++language sql
++stable
++security definer
++set search_path = public
++as $$
++  select role in ('teacher', 'principal')
++  from public.profiles
++  where id = auth.uid();
++$$;
++
++-- Principals/teachers need to see students in their own school (not
++-- other schools' students). This mirrors the "profiles_self_read" policy
++-- already on profiles, just extended with the school-scoped case.
++drop policy if exists "profiles_school_staff_read" on public.profiles;
++create policy "profiles_school_staff_read"
++  on public.profiles
++  for select
++  using (
++    auth.uid() = id
++    or public.is_admin()
++    or (
++      school_id is not null
++      and school_id = public.current_school_id()
++      and public.is_school_staff()
++    )
++  );
++
++-- Seed one demo school so there's something real to click through
++-- immediately, before the first real school signs up.
++insert into public.schools (slug, name, about, is_published)
++values (
++  'demo-school',
++  'Demo Secondary School',
++  'A demo school profile used to show principals what their own Shiney Brain school page will look like.',
++  true
++)
++on conflict (slug) do nothing;
+-- 
+2.43.0
+

@@ -19,12 +19,6 @@ const RatingWidget = nextDynamic(() => import('@/components/RatingWidget'), { ss
 export const dynamic = 'force-dynamic';
 
 // ─── Single, deduped post fetch ─────────────────────────────────────────
-// generateMetadata() and the page component used to each run their own
-// independent Supabase query for the same slug. Two separate queries in
-// the same request could disagree (one finding the post, one not) —
-// which is why some posts rendered a real body but showed a
-// "Post Not Found" <title>. Wrapping the fetch in React's cache() means
-// both call sites share the exact same result within a request.
 const getPost = cache(async (slug) => {
   const supabase = createServerClient();
   const { data: post, error } = await supabase
@@ -42,7 +36,6 @@ const getPost = cache(async (slug) => {
 });
 
 // ─── Tool URL Mapping (fixes internal 404s) ────────────────────────────
-// Keep this in sync with AVAILABLE_TOOLS in app/api/content-engine/generate/route.js
 const toolUrlMap = {
   'JAMB Aggregate Calculator': '/tools/jamb-aggregate',
   'Cut-off Mark Checker': '/tools/cut-off-mark',
@@ -56,16 +49,9 @@ const toolUrlMap = {
 };
 
 // ─── Safe JSON parse ────────────────────────────────────────────────────
-// Handles both cases that can occur across different pipeline versions:
-//  - column is jsonb -> Supabase already returns a parsed array/object
-//  - column is text/legacy -> value is a JSON string that needs parsing
-//  - value is null/empty -> returns the fallback
-// Without this, JSON.parse() on an already-parsed value throws
-// "Unexpected token 'o', "[object Obj"... is not valid JSON" — which is
-// what was crashing some posts and not others.
 function safeJsonParse(value, fallback = []) {
   if (value === null || value === undefined || value === '') return fallback;
-  if (typeof value !== 'string') return value; // already parsed by Supabase
+  if (typeof value !== 'string') return value;
   try {
     return JSON.parse(value);
   } catch (e) {
@@ -75,10 +61,6 @@ function safeJsonParse(value, fallback = []) {
 }
 
 // ─── Per-post SEO metadata ──────────────────────────────────────────────
-// Without this, every post fell back to the generic title/description in
-// app/layout.js and Google showed the exact same title + snippet for every
-// single blog post. This gives each post its own <title>, meta description,
-// canonical URL, and OG/Twitter card image.
 export async function generateMetadata({ params }) {
   const post = await getPost(params.slug);
 
@@ -95,15 +77,13 @@ export default async function BlogPostPage({ params }) {
     const post = await getPost(params.slug);
     if (!post) notFound();
 
-    // ─── Parse JSON fields (safely, regardless of column type) ─────────
+    // ─── Parse JSON fields ───────────────────────────────────────────────
     const images = safeJsonParse(post.image_prompts, []);
     const heroPrompt = images.find((img) => img.type === 'hero')?.description || null;
     const faq = safeJsonParse(post.schemas, []);
     const internalLinks = safeJsonParse(post.internal_links, []);
 
-    // ─── Fetch real published posts to resolve blog-post internal links ──
-    // Only fetched if there are internal links to resolve, to avoid an
-    // unnecessary query on every page load.
+    // ─── Fetch real published posts for internal links ──────────────────
     let postTitleToSlug = {};
     if (internalLinks.length > 0) {
       const { data: allPosts } = await supabase
@@ -117,9 +97,6 @@ export default async function BlogPostPage({ params }) {
       );
     }
 
-    // ─── Resolve a link label to a real, existing URL — or null ─────────
-    // Never guesses a URL. If it doesn't match a known tool or an actual
-    // published post, it's dropped instead of rendered as a broken link.
     function resolveInternalLink(label) {
       if (toolUrlMap[label]) {
         return { href: toolUrlMap[label], isTool: true };
@@ -134,7 +111,7 @@ export default async function BlogPostPage({ params }) {
       .map((label) => ({ label, resolved: resolveInternalLink(label) }))
       .filter((item) => item.resolved !== null);
 
-    // ─── Podcast episode (if one has been generated for this post) ──────
+    // ─── Podcast episode ──────────────────────────────────────────────────
     let podcastSegments = [];
     let podcastEpisode = null;
     const { data: fetchedPodcastEpisode } = await supabase
@@ -165,7 +142,7 @@ export default async function BlogPostPage({ params }) {
       console.warn('Markdown parsing failed, using raw content:', e);
     }
 
-    // ─── Rating aggregate (real data, for both the widget and the schema) ──
+    // ─── Rating aggregate ────────────────────────────────────────────────
     const { data: ratingRows } = await supabase
       .from('blog_post_ratings')
       .select('rating')
@@ -177,18 +154,7 @@ export default async function BlogPostPage({ params }) {
         ? Math.round((ratingRows.reduce((sum, r) => sum + r.rating, 0) / ratingCount) * 10) / 10
         : 0;
 
-    // ─── Structured data (JSON-LD) ───────────────────────────────────────
-    // Article schema: tells Google this is an article with a real
-    // published/modified date, author, and publisher — required for most
-    // article-type rich results.
-    // FAQPage schema: turns the FAQ section you already render into an
-    // actual expandable FAQ rich result in search. We only emit this when
-    // there's real FAQ content — never fabricate.
-    // AggregateRating: now backed by the real blog_post_ratings table via
-    // the reader rating widget below. We only add this to the schema once
-    // there are at least MIN_RATINGS_FOR_SCHEMA genuine votes — a "5.0 from
-    // 1 rating" schema looks manipulated and Google can act on fake or
-    // unrepresentative ratings, so we wait for a small real sample first.
+    // ─── Structured data ──────────────────────────────────────────────────
     const MIN_RATINGS_FOR_SCHEMA = 3;
     const postUrl = `${BASE_URL}/blog/${post.url_slug}`;
     const articleSchema = {
@@ -284,9 +250,11 @@ export default async function BlogPostPage({ params }) {
               {post.title}
             </h1>
 
-            {/* ─── Meta info ─── */}
+            {/* ─── Meta info (AUTHOR & DATE added here) ─── */}
             <div className="flex flex-wrap items-center gap-4 mb-6 text-sm text-gray-500 border-b pb-4">
-              <span className="font-semibold text-gray-700">Shiney Brain Academy</span>
+              <span className="font-semibold text-gray-700">
+                {post.author || 'Igberhi Florry (mentor Florryshine)'}
+              </span>
               <span>•</span>
               <span>
                 {new Date(post.published_at || post.created_at).toLocaleDateString('en-NG', {
@@ -317,7 +285,7 @@ export default async function BlogPostPage({ params }) {
               />
             </div>
 
-            {/* ─── Main Content (rendered from markdown) ─── */}
+            {/* ─── Main Content ─── */}
             <div
               className="prose prose-lg max-w-none text-gray-700 leading-relaxed"
               dangerouslySetInnerHTML={{ __html: htmlContent }}
@@ -341,7 +309,7 @@ export default async function BlogPostPage({ params }) {
               </div>
             )}
 
-            {/* ─── Internal Links (only real, resolvable ones) ─── */}
+            {/* ─── Internal Links ─── */}
             {resolvedLinks.length > 0 && (
               <div className="mt-8 border-t pt-6">
                 <h3 className="text-xl font-bold text-gray-900 mb-4">🔗 Related Tools & Resources</h3>
@@ -361,7 +329,7 @@ export default async function BlogPostPage({ params }) {
               </div>
             )}
 
-            {/* ─── CTA / Before You Leave ─── */}
+            {/* ─── CTA ─── */}
             {post.cta && (
               <div className="mt-8 p-6 bg-brand-yellow/10 rounded-lg border border-brand-yellow">
                 <p className="text-lg font-medium text-gray-900">{post.cta}</p>
@@ -378,7 +346,7 @@ export default async function BlogPostPage({ params }) {
               />
             </div>
 
-            {/* ─── Podcast (if generated) ─── */}
+            {/* ─── Podcast ─── */}
             {podcastSegments.length > 0 && (
               <div className="mt-8">
                 <PodcastPlayer segments={podcastSegments} title={podcastEpisode?.title || post.title} />
