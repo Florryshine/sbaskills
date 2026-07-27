@@ -9,7 +9,10 @@ const nextConfig = withPWA({
   reactStrictMode: true,
   swcMinify: true,
   images: {
-    domains: ['res.cloudinary.com', 'supabase.co'],
+    remotePatterns: [
+      { protocol: 'https', hostname: 'res.cloudinary.com' },
+      { protocol: 'https', hostname: '*.supabase.co' },
+    ],
   },
   experimental: {
     serverComponentsExternalPackages: ['@napi-rs/canvas'],
