@@ -47,6 +47,8 @@ export default function PrincipalDashboard() {
   const router = useRouter();
   const [school, setSchool] = useState(null);
   const [students, setStudents] = useState([]);
+  const [teacherCount, setTeacherCount] = useState(0);
+  const [recentActivity, setRecentActivity] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
   const [demoMode, setDemoMode] = useState(false);
@@ -121,6 +123,24 @@ export default function PrincipalDashboard() {
           isDemo: false,
         }))
       );
+
+      const { count: teacherTotal } = await supabase
+        .from('profiles')
+        .select('id', { count: 'exact', head: true })
+        .eq('school_id', schoolData.id)
+        .in('role', ['teacher', 'principal']);
+      setTeacherCount(teacherTotal || 0);
+
+      if (studentIds.length > 0) {
+        const { data: recentLog } = await supabase
+          .from('points_log')
+          .select('user_id, action_type, created_at, profiles:user_id(full_name)')
+          .in('user_id', studentIds)
+          .order('created_at', { ascending: false })
+          .limit(8);
+        setRecentActivity(recentLog || []);
+      }
+
       setLoading(false);
     }
 
@@ -151,6 +171,12 @@ export default function PrincipalDashboard() {
   const avgPoints = totalStudents > 0
     ? Math.round(displayStudents.reduce((sum, s) => sum + s.points, 0) / totalStudents)
     : 0;
+  const studentsAtRisk = displayStudents
+    .filter(s => s.activityCount === 0)
+    .slice(0, 10);
+  const leaderboard = [...displayStudents]
+    .sort((a, b) => b.points - a.points)
+    .slice(0, 5);
 
   return (
     <div className="min-h-screen bg-slate-50">
@@ -185,13 +211,37 @@ export default function PrincipalDashboard() {
               No real students are shown. Turn this off to see {school.name}'s real data.
             </div>
           )}
+
+          {/* Quick links to the rest of the School Module */}
+          <div className="mt-5 flex flex-wrap gap-2">
+            {[
+              ['👥 Teachers', `/school/${slug}/teachers`],
+              ['🗓️ Attendance', `/school/${slug}/attendance`],
+              ['💳 Fees', `/school/${slug}/fees`],
+              ['📄 Report Cards', `/school/${slug}/report-cards`],
+              ['📢 Announcements', `/school/${slug}/announcements`],
+              ['⚙️ Manage School Profile', `/admin/schools`],
+            ].map(([label, href]) => (
+              <a
+                key={href}
+                href={href}
+                className="rounded-full bg-slate-100 hover:bg-slate-200 text-slate-700 text-sm font-semibold px-4 py-2 transition"
+              >
+                {label}
+              </a>
+            ))}
+          </div>
         </section>
 
         {/* Summary cards */}
-        <section className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+        <section className="grid grid-cols-1 sm:grid-cols-4 gap-4">
           <div className="rounded-2xl bg-white p-6 shadow-sm border border-slate-100 text-center">
             <p className="text-3xl font-extrabold text-brand-blue">{totalStudents}</p>
             <p className="text-sm text-slate-500 mt-1">Total Students</p>
+          </div>
+          <div className="rounded-2xl bg-white p-6 shadow-sm border border-slate-100 text-center">
+            <p className="text-3xl font-extrabold text-brand-blue">{teacherCount}</p>
+            <p className="text-sm text-slate-500 mt-1">Total Teachers</p>
           </div>
           <div className="rounded-2xl bg-white p-6 shadow-sm border border-slate-100 text-center">
             <p className="text-3xl font-extrabold text-green-600">{activeStudents}</p>
@@ -200,6 +250,60 @@ export default function PrincipalDashboard() {
           <div className="rounded-2xl bg-white p-6 shadow-sm border border-slate-100 text-center">
             <p className="text-3xl font-extrabold text-purple-600">{avgPoints}</p>
             <p className="text-sm text-slate-500 mt-1">Average Points / Student</p>
+          </div>
+        </section>
+
+        {/* Leaderboard + Students at risk + Recent activity */}
+        <section className="grid grid-cols-1 lg:grid-cols-3 gap-4">
+          <div className="rounded-2xl bg-white p-6 shadow-sm border border-slate-100">
+            <h2 className="font-extrabold text-brand-blue mb-4">🏆 Leaderboard</h2>
+            {leaderboard.length > 0 ? (
+              <ol className="space-y-2">
+                {leaderboard.map((s, i) => (
+                  <li key={s.id} className="flex justify-between text-sm">
+                    <span className="text-slate-600">{i + 1}. {s.full_name || 'Unnamed Student'}</span>
+                    <span className="font-bold text-brand-blue">{s.points} pts</span>
+                  </li>
+                ))}
+              </ol>
+            ) : (
+              <p className="text-sm text-slate-400">No point activity yet.</p>
+            )}
+          </div>
+
+          <div className="rounded-2xl bg-white p-6 shadow-sm border border-slate-100">
+            <h2 className="font-extrabold text-red-600 mb-4">⚠️ Students at Risk</h2>
+            {studentsAtRisk.length > 0 ? (
+              <ul className="space-y-2">
+                {studentsAtRisk.map(s => (
+                  <li key={s.id} className="text-sm">
+                    <span className="text-slate-700 font-semibold">{s.full_name || 'Unnamed Student'}</span>
+                    <span className="text-slate-400"> — no activity logged</span>
+                  </li>
+                ))}
+              </ul>
+            ) : (
+              <p className="text-sm text-slate-400">No students flagged — everyone has some activity.</p>
+            )}
+          </div>
+
+          <div className="rounded-2xl bg-white p-6 shadow-sm border border-slate-100">
+            <h2 className="font-extrabold text-brand-blue mb-4">🕒 Recent Activity</h2>
+            {recentActivity.length > 0 ? (
+              <ul className="space-y-2">
+                {recentActivity.map((r, i) => (
+                  <li key={i} className="text-sm text-slate-600">
+                    <span className="font-semibold text-slate-700">{r.profiles?.full_name || 'A student'}</span>
+                    {' '}— {r.action_type?.replace(/_/g, ' ') || 'activity'}
+                    <span className="text-slate-400"> · {new Date(r.created_at).toLocaleDateString('en-NG', { day: 'numeric', month: 'short' })}</span>
+                  </li>
+                ))}
+              </ul>
+            ) : (
+              <p className="text-sm text-slate-400">
+                {demoMode ? 'Recent activity feed isn\'t simulated in demo mode yet.' : 'No activity yet.'}
+              </p>
+            )}
           </div>
         </section>
 
