@@ -3,6 +3,7 @@
 import { useState, useRef } from 'react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
+import { createBrowserClient } from '@/lib/supabase';
 import { themeList } from '@/lib/pdf/themes';
 import { calloutTypes } from '@/lib/pdf/calloutTypes';
 
@@ -26,6 +27,7 @@ const BLOCK_SNIPPETS = [
 export default function BookFromTextPage() {
   const router = useRouter();
   const textareaRef = useRef(null);
+  const supabase = createBrowserClient();
 
   const [title, setTitle] = useState('');
   const [description, setDescription] = useState('');
@@ -33,9 +35,33 @@ export default function BookFromTextPage() {
   const [price, setPrice] = useState('0');
   const [themeKey, setThemeKey] = useState('brand');
   const [markdown, setMarkdown] = useState('');
+  const [coverFile, setCoverFile] = useState(null);
+  const [coverPreview, setCoverPreview] = useState(null);
+  const [uploadingCover, setUploadingCover] = useState(false);
   const [generating, setGenerating] = useState(false);
   const [result, setResult] = useState(null);
   const [error, setError] = useState('');
+
+  const handleCoverSelect = (e) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    setCoverFile(file);
+    setCoverPreview(URL.createObjectURL(file));
+  };
+
+  // Same 'books' bucket + 'covers/' folder pattern already used by
+  // /admin/library/add, so covers end up in the same place regardless
+  // of which admin page created the book.
+  const uploadCover = async () => {
+    if (!coverFile) return null;
+    const fileExt = coverFile.name.split('.').pop();
+    const fileName = `${Date.now()}.${fileExt}`;
+    const path = `covers/${fileName}`;
+    const { error: uploadError } = await supabase.storage.from('books').upload(path, coverFile);
+    if (uploadError) throw uploadError;
+    const { data: urlData } = supabase.storage.from('books').getPublicUrl(path);
+    return urlData.publicUrl;
+  };
 
   const insertSnippet = (snippet) => {
     const textarea = textareaRef.current;
@@ -64,10 +90,20 @@ export default function BookFromTextPage() {
 
     setGenerating(true);
     try {
+      let coverUrl = null;
+      if (coverFile) {
+        setUploadingCover(true);
+        try {
+          coverUrl = await uploadCover();
+        } finally {
+          setUploadingCover(false);
+        }
+      }
+
       const res = await fetch('/api/admin/books/from-text', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ title, description, author, price, markdown, themeKey }),
+        body: JSON.stringify({ title, description, author, price, markdown, themeKey, coverUrl }),
       });
       const data = await res.json();
       if (!res.ok) throw new Error(data.error || 'Generation failed');
@@ -121,7 +157,33 @@ export default function BookFromTextPage() {
               className="w-full rounded-lg border border-slate-200 px-3 py-2 text-sm"
             />
           </div>
+          <div>
+            <label className="block text-sm font-semibold mb-1">Cover image</label>
+            <input
+              type="file"
+              accept="image/*"
+              capture="environment"
+              onChange={handleCoverSelect}
+              className="w-full text-sm file:mr-3 file:rounded-full file:border-0 file:bg-brand-blue file:px-4 file:py-1.5 file:text-sm file:font-semibold file:text-white"
+            />
+            <p className="text-xs text-slate-400 mt-1">
+              Choose from your phone's camera or photo library.
+            </p>
+          </div>
         </div>
+
+        {coverPreview && (
+          <div className="flex items-center gap-3">
+            <img src={coverPreview} alt="Cover preview" className="w-20 h-28 object-cover rounded-lg border border-slate-200" />
+            <button
+              type="button"
+              onClick={() => { setCoverFile(null); setCoverPreview(null); }}
+              className="text-xs font-semibold text-red-600 underline"
+            >
+              Remove cover
+            </button>
+          </div>
+        )}
 
         <div>
           <label className="block text-sm font-semibold mb-2">Template</label>
@@ -195,7 +257,7 @@ export default function BookFromTextPage() {
             disabled={generating}
             className="rounded-full bg-brand-yellow px-6 py-2.5 text-sm font-bold text-brand-dark hover:opacity-90 disabled:opacity-50"
           >
-            {generating ? 'Generating…' : '✨ Generate PDF'}
+            {uploadingCover ? 'Uploading cover…' : generating ? 'Generating…' : '✨ Generate PDF'}
           </button>
         </div>
       </section>

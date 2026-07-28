@@ -17,6 +17,7 @@ export async function POST(request) {
       markdown,
       themeKey = 'brand',
       authorType = 'team',
+      coverUrl = null,
       bookId = null, // pass an existing book id to regenerate/update it
     } = await request.json();
 
@@ -79,6 +80,12 @@ export async function POST(request) {
       source_markdown: markdown,
       template: themeKey,
     };
+    // Only set cover_url when a new cover was actually uploaded this
+    // time, so regenerating an existing book without re-picking a cover
+    // doesn't wipe out the one it already has.
+    if (coverUrl) {
+      bookPayload.cover_url = coverUrl;
+    }
 
     let resultId = bookId;
 
