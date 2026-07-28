@@ -214,6 +214,12 @@ export default function KnowledgeAssetsPage() {
                   >
                     Generate Content
                   </Link>
+                  <Link
+                    href={`/games/${asset.id}`}
+                    className="bg-indigo-100 text-indigo-700 px-4 py-2 rounded-xl text-sm font-bold hover:bg-indigo-200"
+                  >
+                    🎮 Play Games
+                  </Link>
                   <button
                     onClick={() => deleteAsset(asset.id)}
                     className="bg-red-100 text-red-600 px-4 py-2 rounded-xl text-sm font-bold hover:bg-red-200"
