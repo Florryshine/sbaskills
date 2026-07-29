@@ -44,6 +44,29 @@ export default function KnowledgeAssetsPage() {
     setLoading(false);
   };
 
+  const [publishingId, setPublishingId] = useState(null);
+
+  const publishToGames = async (id) => {
+    setPublishingId(id);
+    try {
+      const res = await fetch('/api/admin/games/publish', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ knowledgeAssetId: id }),
+      });
+      const data = await res.json();
+      if (!res.ok) {
+        alert(data.error || 'Failed to publish to games');
+        return;
+      }
+      window.open(`/games/${data.gameTopicId}`, '_blank');
+    } catch (err) {
+      alert(err.message);
+    } finally {
+      setPublishingId(null);
+    }
+  };
+
   const deleteAsset = async (id) => {
     if (!confirm('Delete this knowledge asset and all its generated content?')) return;
     const { error } = await supabase.from('knowledge_assets').delete().eq('id', id);
@@ -214,12 +237,13 @@ export default function KnowledgeAssetsPage() {
                   >
                     Generate Content
                   </Link>
-                  <Link
-                    href={`/games/${asset.id}`}
-                    className="bg-indigo-100 text-indigo-700 px-4 py-2 rounded-xl text-sm font-bold hover:bg-indigo-200"
+                  <button
+                    onClick={() => publishToGames(asset.id)}
+                    disabled={publishingId === asset.id}
+                    className="bg-indigo-100 text-indigo-700 px-4 py-2 rounded-xl text-sm font-bold hover:bg-indigo-200 disabled:opacity-50"
                   >
-                    🎮 Play Games
-                  </Link>
+                    {publishingId === asset.id ? 'Publishing…' : '🎮 Publish to Games'}
+                  </button>
                   <button
                     onClick={() => deleteAsset(asset.id)}
                     className="bg-red-100 text-red-600 px-4 py-2 rounded-xl text-sm font-bold hover:bg-red-200"

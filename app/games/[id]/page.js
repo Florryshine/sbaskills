@@ -2,32 +2,39 @@ import { createServerClient } from '@/lib/supabase-server';
 import { notFound } from 'next/navigation';
 import GamesClient from '@/components/games/GamesClient';
 
-// Session-aware fetch, matching the createServerClient() pattern used across
-// the rest of the app (dashboard, admin, leaderboard) — see Fix #8 notes.
-// sequence_steps RLS requires the `authenticated` role, so a signed-out
-// visitor will get zero rows here rather than a real error; the client
-// component handles that by just not showing that game's tab.
+// Reads game_topics / game_sequence_steps — the public, student-safe tables
+// — never knowledge_assets or sequence_steps directly. GamesClient's props
+// stay shaped exactly as before (asset.keyword, steps[]) so no changes were
+// needed there; we just alias game_topics.title -> keyword when building
+// the props object below.
 export const dynamic = 'force-dynamic';
 
 export default async function TopicGamesPage({ params }) {
   const { id } = params;
   const supabase = createServerClient();
 
-  const { data: asset, error: assetError } = await supabase
-    .from('knowledge_assets')
-    .select('id, keyword, subject, summary, definitions, key_concepts')
+  const { data: topic, error: topicError } = await supabase
+    .from('game_topics')
+    .select('id, title, subject, definitions')
     .eq('id', id)
     .maybeSingle();
 
-  if (assetError || !asset) {
+  if (topicError || !topic) {
     notFound();
   }
 
   const { data: steps } = await supabase
-    .from('sequence_steps')
+    .from('game_sequence_steps')
     .select('id, step_order, label, detail')
-    .eq('knowledge_asset_id', id)
+    .eq('game_topic_id', id)
     .order('step_order', { ascending: true });
+
+  const asset = {
+    id: topic.id,
+    keyword: topic.title,
+    subject: topic.subject,
+    definitions: topic.definitions,
+  };
 
   return (
     <GamesClient asset={asset} steps={steps || []} />
