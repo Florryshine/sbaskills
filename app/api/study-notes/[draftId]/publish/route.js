@@ -8,6 +8,17 @@ import { generatePdfFileName } from '@/lib/seo-utils';
 export async function POST(request, { params }) {
   const { draftId } = params;
 
+  // Optional style choice from the request body, e.g. { "themeKey": "modern" }.
+  // See lib/pdf/themes.js for the full list (brand, modern, workbook,
+  // premium, minimal, dark). Defaults to 'brand' if not provided or body is empty.
+  let themeKey = 'brand';
+  try {
+    const body = await request.json();
+    if (body?.themeKey) themeKey = body.themeKey;
+  } catch {
+    // no JSON body sent — fine, just use the default theme
+  }
+
   try {
     const supabase = createAdminClient();
 
@@ -33,7 +44,8 @@ export async function POST(request, { params }) {
           title,
           keyword,
           markdown: draft.content,
-          authorType: 'team'
+          authorType: 'team',
+          themeKey
         })
       );
     } catch (renderError) {

@@ -11,6 +11,15 @@ export default function StudyNoteDraftsPage() {
   const [editText, setEditText] = useState('');
   const [saving, setSaving] = useState(false);
   const [publishingId, setPublishingId] = useState(null);
+  const [themeByDraft, setThemeByDraft] = useState({});
+  const THEME_OPTIONS = [
+    { key: 'brand', label: 'Shiney Brain Brand' },
+    { key: 'modern', label: 'Modern' },
+    { key: 'workbook', label: 'Student Workbook' },
+    { key: 'premium', label: 'Premium Ebook' },
+    { key: 'minimal', label: 'Minimal' },
+    { key: 'dark', label: 'Dark Mode' },
+  ];
   
   // Image picker
   const [showImagePicker, setShowImagePicker] = useState(false);
@@ -62,7 +71,11 @@ export default function StudyNoteDraftsPage() {
   const publishToLibrary = async (id) => {
     setPublishingId(id);
     try {
-      const res = await fetch(`/api/study-notes/${id}/publish`, { method: 'POST' });
+      const res = await fetch(`/api/study-notes/${id}/publish`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ themeKey: themeByDraft[id] || 'brand' })
+      });
       const data = await res.json();
       if (!res.ok) throw new Error(data.error || 'Publish failed');
       alert('Published! It should now appear in the Library.');
@@ -117,10 +130,20 @@ export default function StudyNoteDraftsPage() {
                     {draft.book_id && <span className="ml-2 text-blue-600">• In Library</span>}
                   </p>
                 </div>
-                <div className="flex gap-2 flex-wrap">
+                <div className="flex gap-2 flex-wrap items-center">
                   <button onClick={() => toggleExpand(draft)} className="text-brand-blue px-4 py-2 rounded-xl text-sm font-bold hover:bg-blue-50">
                     {expandedId === draft.id ? 'Close Editor' : 'Edit / Preview'}
                   </button>
+                  <select
+                    value={themeByDraft[draft.id] || 'brand'}
+                    onChange={(e) => setThemeByDraft(prev => ({ ...prev, [draft.id]: e.target.value }))}
+                    className="border rounded-xl text-sm px-2 py-2"
+                    title="PDF style"
+                  >
+                    {THEME_OPTIONS.map(t => (
+                      <option key={t.key} value={t.key}>{t.label}</option>
+                    ))}
+                  </select>
                   <button
                     onClick={() => publishToLibrary(draft.id)}
                     disabled={publishingId === draft.id}
