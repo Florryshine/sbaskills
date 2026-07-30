@@ -39,6 +39,7 @@ export default function BookFromTextPage() {
   const [coverPreview, setCoverPreview] = useState(null);
   const [uploadingCover, setUploadingCover] = useState(false);
   const [generating, setGenerating] = useState(false);
+  const [statusMessage, setStatusMessage] = useState('');
   const [result, setResult] = useState(null);
   const [error, setError] = useState('');
 
@@ -82,6 +83,37 @@ export default function BookFromTextPage() {
     }
   };
 
+  // Generation now runs as a background job (see
+  // app/api/admin/books/from-text/route.js) so the whole 30k-50k word
+  // book renders into ONE PDF without the browser's request having to
+  // stay open the whole time -- that's what was timing out at
+  // 35k-45k words. This just polls the book row every 3s until the
+  // status flips to 'ready' or 'failed'.
+  const pollStatus = (bookId) => new Promise((resolve, reject) => {
+    const started = Date.now();
+    const timeoutMs = 15 * 60 * 1000; // give up after 15 min of polling
+
+    const tick = async () => {
+      try {
+        const res = await fetch(`/api/admin/books/${bookId}/status`);
+        const data = await res.json();
+        if (!res.ok) return reject(new Error(data.error || 'Could not check status'));
+
+        if (data.status === 'ready') return resolve(data);
+        if (data.status === 'failed') return reject(new Error(data.error || 'PDF generation failed'));
+
+        if (Date.now() - started > timeoutMs) {
+          return reject(new Error('Still generating after 15 minutes — check back on the Books list shortly, or try again.'));
+        }
+        setStatusMessage(data.status === 'processing' ? 'Rendering PDF…' : 'Queued…');
+        setTimeout(tick, 3000);
+      } catch (err) {
+        reject(err);
+      }
+    };
+    tick();
+  });
+
   const generatePdf = async () => {
     setError('');
     setResult(null);
@@ -89,6 +121,7 @@ export default function BookFromTextPage() {
     if (!markdown.trim()) { setError('Paste some content first.'); return; }
 
     setGenerating(true);
+    setStatusMessage('Queuing…');
     try {
       let coverUrl = null;
       if (coverFile) {
@@ -112,17 +145,20 @@ export default function BookFromTextPage() {
         try {
           message = JSON.parse(text).error;
         } catch {
-          message = `Server error (${res.status}). The document may be too long to render in time — try splitting it into smaller sections.`;
+          message = `Server error (${res.status}).`;
         }
         throw new Error(message || 'Generation failed');
       }
 
-      const data = await res.json();
-      setResult(data);
+      const queued = await res.json();
+      setStatusMessage('Queued…');
+      const finalResult = await pollStatus(queued.bookId);
+      setResult({ bookId: queued.bookId, fileUrl: finalResult.fileUrl });
     } catch (err) {
       setError(err.message);
     } finally {
       setGenerating(false);
+      setStatusMessage('');
     }
   };
 
@@ -245,6 +281,14 @@ export default function BookFromTextPage() {
           </p>
         </div>
 
+        {generating && (
+          <p className="text-sm text-slate-500">
+            {statusMessage || 'Queuing…'} Long books (30k-50k+ words) render as one PDF in the
+            background now, so this can safely take a few minutes — feel free to leave this
+            tab open, it'll update automatically.
+          </p>
+        )}
+
         {error && <p className="text-sm text-red-600 font-semibold">{error}</p>}
 
         {result && (
@@ -268,7 +312,7 @@ export default function BookFromTextPage() {
             disabled={generating}
             className="rounded-full bg-brand-yellow px-6 py-2.5 text-sm font-bold text-brand-dark hover:opacity-90 disabled:opacity-50"
           >
-            {uploadingCover ? 'Uploading cover…' : generating ? 'Generating…' : '✨ Generate PDF'}
+            {uploadingCover ? 'Uploading cover…' : generating ? (statusMessage || 'Generating…') : '✨ Generate PDF'}
           </button>
         </div>
       </section>
