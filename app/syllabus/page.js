@@ -114,7 +114,7 @@ export default async function SyllabusMapPage() {
                   {locked ? (
                     <div className="cursor-not-allowed">{content}</div>
                   ) : (
-                    <Link href={`/games/${topic.id}`}>{content}</Link>
+                    <Link href={`/mission/${topic.id}`}>{content}</Link>
                   )}
                 </div>
               );
