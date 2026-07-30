@@ -7,6 +7,11 @@ import { parseMarkdownToBlocks } from '@/lib/pdf/parseMarkdown';
 import { enrichYoutubeBlocks } from '@/lib/pdf/youtube';
 import { generatePdfFileName } from '@/lib/seo-utils';
 
+// Vercel's default serverless timeout is too short for rendering long
+// pasted books with @react-pdf/renderer + uploading the buffer to
+// Supabase storage. 60s is the max allowed on the Hobby plan.
+export const maxDuration = 60;
+
 export async function POST(request) {
   try {
     const {

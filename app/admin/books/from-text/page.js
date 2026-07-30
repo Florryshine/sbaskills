@@ -105,8 +105,19 @@ export default function BookFromTextPage() {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ title, description, author, price, markdown, themeKey, coverUrl }),
       });
+
+      if (!res.ok) {
+        const text = await res.text();
+        let message;
+        try {
+          message = JSON.parse(text).error;
+        } catch {
+          message = `Server error (${res.status}). The document may be too long to render in time — try splitting it into smaller sections.`;
+        }
+        throw new Error(message || 'Generation failed');
+      }
+
       const data = await res.json();
-      if (!res.ok) throw new Error(data.error || 'Generation failed');
       setResult(data);
     } catch (err) {
       setError(err.message);
