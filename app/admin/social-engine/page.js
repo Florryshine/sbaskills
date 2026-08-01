@@ -730,7 +730,7 @@ export default function SocialEnginePage() {
                         </div>
                       </div>
                     )}
-                    {carouselSlides.length > 0 && ['instagram', 'facebook'].includes(draft.platform) && (
+                    {carouselSlides.length > 0 && ['instagram', 'facebook', 'x'].includes(draft.platform) && (
                       <div className="bg-white border rounded-xl p-3">
                         <p className="text-xs font-bold text-gray-500 uppercase mb-2">
                           Background (cover + CTA slide)

@@ -8,7 +8,7 @@
 // calls the LLM again. Same "just re-render, don't regenerate" idea as the
 // inline-edit feature, applied to the image side instead of the text side.
 //
-// Only carousels on the "bold" layout (Instagram, Facebook) actually
+// Only carousels on the "bold" layout (Instagram, Facebook, X) actually
 // support a custom background — see render-canvas.js for why LinkedIn and
 // Telegram are intentionally left alone. Calling this on a non-carousel or
 // editorial/plain-platform row returns a 400 rather than silently no-op'ing.
@@ -17,7 +17,11 @@ import { createAdminClient } from '@/lib/supabase-admin';
 import { renderCarouselSlides } from '@/lib/carousel-engine/render-canvas';
 
 const CAROUSEL_BUCKET = 'carousel-slides';
-const BOLD_LAYOUT_PLATFORMS = ['instagram', 'facebook'];
+// X has no PLATFORM_STYLES entry of its own in render-canvas.js, so
+// getStyle() there falls back to Instagram's bold layout for it — meaning
+// X carousels already have a colored hook/CTA slide just like Instagram
+// and Facebook, and should be editable the same way.
+const BOLD_LAYOUT_PLATFORMS = ['instagram', 'facebook', 'x'];
 // Vercel's serverless functions cap the request body at ~4.5MB by default
 // (Hobby/Pro alike). Base64 inflates a file by ~33%, so we cap the raw
 // image well below that — 3MB raw becomes ~4MB as base64, leaving headroom

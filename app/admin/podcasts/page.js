@@ -118,6 +118,14 @@ export default function AdminPodcastsPage() {
               ▶️ Play
             </Link>
           )}
+          {ep.status === 'ready' && (
+            <Link
+              href={`/admin/podcasts/${ep.id}/audiogram`}
+              className="bg-indigo-100 text-indigo-700 px-4 py-2 rounded-xl text-sm font-bold hover:bg-indigo-200"
+            >
+              {ep.audiogram_url ? '🎥 Audiogram ✓' : '🎥 Create Audiogram'}
+            </Link>
+          )}
           <button
             onClick={() => regenerateEpisode(ep)}
             disabled={regeneratingId === ep.id}
