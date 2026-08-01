@@ -16,10 +16,14 @@ import { runInBackground } from '@/lib/backgroundTask';
 // sent so the background render actually gets to finish, and that
 // extension is capped by maxDuration. Set this to your plan's real
 // ceiling (Hobby is stuck at 60 regardless; Pro allows 300; Pro with
-// Fluid Compute allows up to 800). On a persistent server (e.g.
-// Render, `next start`) this value is simply ignored and the
-// background work just keeps running in the normal event loop.
-export const maxDuration = 800;
+// Fluid Compute allows up to 800). This project is on Hobby, so 60 is
+// the real ceiling here -- an earlier 800 exceeded it and was failing
+// every deploy since the commit that introduced it ("Builder returned
+// invalid maxDuration value ... must have a maxDuration between 1 and
+// 300 for plan hobby"). If you upgrade plans, raise this to match, and
+// note a 30k-50k word book may still not fully render within 60s even
+// on the background path -- worth testing after any plan change.
+export const maxDuration = 60;
 
 export async function POST(request) {
   try {
