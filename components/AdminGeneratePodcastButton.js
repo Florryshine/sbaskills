@@ -4,20 +4,35 @@ import { useState } from 'react';
 
 /**
  * Drop this into your admin content list/editor next to a published post:
- *   <AdminGeneratePodcastButton contentDraftId={post.id} />
+ *   <AdminGeneratePodcastButton title={post.title} content={post.content} />
+ *
+ * Sends the post's own title/content straight to generate-from-text —
+ * blog posts (content_drafts) were never knowledge_assets, so there was
+ * never a knowledgeAssetId for this button to send.
  */
-export default function AdminGeneratePodcastButton({ contentDraftId }) {
+export default function AdminGeneratePodcastButton({ title, content }) {
   const [status, setStatus] = useState('idle'); // idle | generating | done | error
   const [message, setMessage] = useState('');
 
   async function handleGenerate() {
+    if (!content) {
+      setStatus('error');
+      setMessage('❌ This post has no content to generate a podcast from');
+      return;
+    }
     setStatus('generating');
     setMessage('');
     try {
-      const res = await fetch('/api/content-engine/podcast/generate', {
+      const res = await fetch('/api/content-engine/podcast/generate-from-text', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ contentDraftId, format: 'teacher_examiner' }),
+        body: JSON.stringify({
+          title,
+          text: content,
+          source: 'blog_post',
+          format: 'teacher_examiner',
+          saveAsAsset: false,
+        }),
       });
       const data = await res.json();
       if (!res.ok) throw new Error(data.error || 'Generation failed');
