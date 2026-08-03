@@ -1,8 +1,20 @@
 import { NextResponse } from 'next/server';
 import { createAdminClient } from '@/lib/supabase-admin';
-import { generatePodcastEpisode } from '@/lib/podcastGenerate';
+import { createPodcastEpisodeRow, runPodcastEpisodePipeline } from '@/lib/podcastGenerate';
 import { DEFAULT_PODCAST_STYLE } from '@/lib/podcastStyles';
+import { runInBackground } from '@/lib/backgroundTask';
 
+// Same fixed Hobby ceiling as everywhere else in this project — see the
+// comment in app/api/admin/books/from-text/route.js. This route now only
+// does the fast synchronous part (optionally save a knowledge asset,
+// create the episode row) and returns immediately with an episodeId; the
+// actual script + TTS pipeline runs via runInBackground and the client
+// polls /api/content-engine/podcast/status. Previously this route awaited
+// the whole pipeline inline, which is what was producing the 504 Gateway
+// Timeout + "Unexpected token 'A', 'An error o'..." JSON-parse error on
+// /admin/podcasts/paste — the browser was trying to JSON.parse Vercel's
+// plain-text timeout page because the connection never got a real
+// response in time.
 export const maxDuration = 60;
 
 export async function POST(request) {
@@ -12,7 +24,7 @@ export async function POST(request) {
       text,
       source = 'manual_paste',
       style,
-      format, // legacy field name, still honored below
+      format, // legacy field name, still honored
       saveAsAsset = true,
     } = await request.json();
     if (!title || !text) {
@@ -21,11 +33,6 @@ export async function POST(request) {
 
     let knowledgeAssetId = null;
 
-    // Blog-post podcasts (source: 'blog_post') don't need a knowledge asset —
-    // the content_draft row is already the source of truth. Playbook/pasted
-    // text does get saved as a knowledge asset, since that's the only place
-    // this platform tracks topic content, and it's what makes it reusable
-    // for quizzes/flashcards/games later.
     if (saveAsAsset) {
       const supabase = createAdminClient();
       const { data: asset, error: assetError } = await supabase
@@ -43,14 +50,33 @@ export async function POST(request) {
       knowledgeAssetId = asset.id;
     }
 
-    const result = await generatePodcastEpisode({
+    const resolvedStyle = style || (format && format !== 'teacher_examiner' ? format : null) || DEFAULT_PODCAST_STYLE;
+
+    // Create the row fast, hand the id back immediately...
+    const episode = await createPodcastEpisodeRow({
       title,
-      content: text,
-      style: style || (format && format !== 'teacher_examiner' ? format : null) || DEFAULT_PODCAST_STYLE,
+      style: resolvedStyle,
       extra: { knowledgeAssetId },
     });
 
-    return NextResponse.json({ success: true, knowledgeAssetId, ...result });
+    // ...then let the slow part (LLM script + TTS for every line) run
+    // after the response is sent.
+    runInBackground(() =>
+      runPodcastEpisodePipeline({
+        episodeId: episode.id,
+        title,
+        content: text,
+        style: resolvedStyle,
+      })
+    );
+
+    return NextResponse.json({
+      success: true,
+      episodeId: episode.id,
+      knowledgeAssetId,
+      status: 'generating',
+      style: resolvedStyle,
+    });
   } catch (err) {
     console.error('generate-from-text error:', err);
     return NextResponse.json({ error: err.message || 'Internal error' }, { status: 500 });

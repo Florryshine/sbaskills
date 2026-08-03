@@ -24,6 +24,12 @@ export default function PastePodcastPage() {
 
     try {
       if (mode === 'single') {
+        // This now returns almost immediately with an episodeId in
+        // 'generating' status — the actual script + TTS work happens in
+        // the background on the server. We poll from here instead of
+        // waiting on one long fetch, same as batch mode already does
+        // below. (Waiting on one long fetch is what used to produce a
+        // 504 Gateway Timeout + broken "not valid JSON" error here.)
         const res = await fetch('/api/content-engine/podcast/generate-from-text', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
@@ -31,8 +37,8 @@ export default function PastePodcastPage() {
         });
         const data = await res.json();
         if (!res.ok) throw new Error(data.error || 'Generation failed');
-        setStatus('done');
-        setResult({ kind: 'single', ...data });
+        setStatus('polling');
+        pollSingle(data.episodeId);
       } else {
         const res = await fetch('/api/content-engine/podcast/generate-batch', {
           method: 'POST',
@@ -48,6 +54,43 @@ export default function PastePodcastPage() {
       setStatus('error');
       setError(err.message);
     }
+  }
+
+  function pollSingle(episodeId) {
+    clearInterval(pollRef.current);
+    const startedAt = Date.now();
+    // Hobby plan functions are hard-capped at 60s per invocation, so an
+    // episode either finishes well inside that or it won't finish at
+    // all — give up politely after 90s instead of polling forever.
+    const giveUpAfterMs = 90 * 1000;
+
+    pollRef.current = setInterval(async () => {
+      try {
+        const res = await fetch(`/api/content-engine/podcast/status?episodeId=${episodeId}`);
+        const data = await res.json();
+        if (!res.ok) throw new Error(data.error || 'Status check failed');
+        setResult({ kind: 'single', ...data });
+
+        if (data.status === 'ready' || data.status === 'failed') {
+          clearInterval(pollRef.current);
+          setStatus(data.status === 'ready' ? 'done' : 'error');
+          if (data.status === 'failed') setError(data.errorMessage || 'Podcast generation failed');
+          return;
+        }
+
+        if (Date.now() - startedAt > giveUpAfterMs) {
+          clearInterval(pollRef.current);
+          setStatus('error');
+          setError(
+            "Still generating after 90s — it may still finish in the background. Check the episode on the All Episodes page shortly."
+          );
+        }
+      } catch (err) {
+        clearInterval(pollRef.current);
+        setStatus('error');
+        setError(err.message);
+      }
+    }, 3000);
   }
 
   function pollBatch(seriesId) {
@@ -157,7 +200,7 @@ export default function PastePodcastPage() {
           disabled={busy}
           className="px-4 py-2 rounded-lg bg-brand-blue text-white font-medium disabled:opacity-50"
         >
-          {busy ? 'Generating…' : mode === 'single' ? 'Generate Podcast' : 'Generate Series'}
+          {status === 'submitting' ? 'Starting…' : status === 'polling' ? 'Generating…' : mode === 'single' ? 'Generate Podcast' : 'Generate Series'}
         </button>
       </form>
 
@@ -167,11 +210,22 @@ export default function PastePodcastPage() {
         </div>
       )}
 
+      {result?.kind === 'single' && status === 'polling' && (
+        <div className="mt-4 p-4 bg-blue-50 border border-blue-200 rounded-lg text-blue-800 text-sm">
+          ⏳ Generating script and voices — usually takes 20-50 seconds…
+        </div>
+      )}
+
       {result?.kind === 'single' && status === 'done' && (
         <div className="mt-4 p-4 bg-green-50 border border-green-200 rounded-lg text-green-800 text-sm">
           ✅ Episode ready — {result.segmentCount} segments, ~
-          {Math.round((result.totalDurationSeconds || 0) / 60)} min ({result.usedProvider})
+          {Math.round((result.totalDurationSeconds || 0) / 60)} min
           {result.failedSegments ? ` — ${result.failedSegments} segment(s) skipped` : ''}
+          <div className="mt-2">
+            <Link href={`/admin/podcasts`} className="text-brand-blue underline font-semibold">
+              View in All Episodes →
+            </Link>
+          </div>
         </div>
       )}
 

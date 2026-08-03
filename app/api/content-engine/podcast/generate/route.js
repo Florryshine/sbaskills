@@ -1,16 +1,18 @@
 import { NextResponse } from 'next/server';
 import { createAdminClient } from '@/lib/supabase-admin';
-import { generatePodcastEpisode } from '@/lib/podcastGenerate';
+import { createPodcastEpisodeRow, runPodcastEpisodePipeline } from '@/lib/podcastGenerate';
 import { DEFAULT_PODCAST_STYLE } from '@/lib/podcastStyles';
+import { runInBackground } from '@/lib/backgroundTask';
 
+// Same background pattern as generate-from-text/route.js — see the
+// comment there for why. This route was just as exposed to the same 60s
+// timeout risk (script + TTS for 15-25 lines, run inline), just less
+// visibly since it's usually called from the multi-engine orchestrator
+// (generate-selected/route.js) rather than directly from a form.
 export const maxDuration = 60;
 
 export async function POST(request) {
   try {
-    // `style` is the new field. `format` is accepted too so any old
-    // callers (buttons, the orchestrator, saved bookmarklets) that still
-    // send { format: 'teacher_examiner' } keep working -- it just falls
-    // back to the default style, same as before.
     const { knowledgeAssetId, style, format } = await request.json();
     if (!knowledgeAssetId) {
       return NextResponse.json({ error: 'knowledgeAssetId is required' }, { status: 400 });
@@ -18,7 +20,6 @@ export async function POST(request) {
 
     const supabase = createAdminClient();
 
-    // 1. Fetch the knowledge asset
     const { data: asset, error: assetError } = await supabase
       .from('knowledge_assets')
       .select('*')
@@ -29,9 +30,6 @@ export async function POST(request) {
       return NextResponse.json({ error: 'Knowledge asset not found' }, { status: 404 });
     }
 
-    // 2. Build plain-text content from the asset's structured fields, or
-    // fall back to raw_content when the asset came from a paste/playbook
-    // rather than the AI research pipeline.
     const content = asset.raw_content
       ? asset.raw_content
       : `
@@ -53,16 +51,33 @@ Common Mistakes:
 ${(asset.common_mistakes || []).map((m) => `- ${m}`).join('\n')}
       `.trim();
 
-    // 3. Generate — knowledge_asset_id is stored on the episode row, and
-    // now so is the style used, so regenerate/traceability actually works.
-    const result = await generatePodcastEpisode({
+    const resolvedStyle =
+      style ||
+      (format && format !== 'teacher_examiner' ? format : null) ||
+      asset.default_podcast_style ||
+      DEFAULT_PODCAST_STYLE;
+
+    const episode = await createPodcastEpisodeRow({
       title: asset.keyword,
-      content,
-      style: style || (format && format !== 'teacher_examiner' ? format : null) || asset.default_podcast_style || DEFAULT_PODCAST_STYLE,
+      style: resolvedStyle,
       extra: { knowledgeAssetId: asset.id },
     });
 
-    return NextResponse.json({ success: true, ...result });
+    runInBackground(() =>
+      runPodcastEpisodePipeline({
+        episodeId: episode.id,
+        title: asset.keyword,
+        content,
+        style: resolvedStyle,
+      })
+    );
+
+    return NextResponse.json({
+      success: true,
+      episodeId: episode.id,
+      status: 'generating',
+      style: resolvedStyle,
+    });
   } catch (err) {
     console.error('Podcast error:', err);
     return NextResponse.json({ error: err.message || 'Internal error' }, { status: 500 });
