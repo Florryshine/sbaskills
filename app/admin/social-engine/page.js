@@ -8,10 +8,10 @@ const PLATFORMS = ['instagram', 'facebook', 'telegram', 'linkedin', 'x', 'pinter
 // Format-agnostic video assets (asset_type set, content_assets.platform left
 // null on purpose — see app/api/admin/quote-loops/generate/route.js) can go
 // out to any of these, since every one of them has a working video publisher
-// adapter (lib/publishers/{facebook,instagram,telegram,youtube,tiktok}.js).
+// adapter (lib/publishers/{facebook,instagram,telegram,linkedin,youtube,tiktok}.js).
 // Used below wherever `draft.platform` is null instead of a single locked-in
 // platform, so the channel picker isn't stuck showing zero options.
-const VIDEO_CAPABLE_PLATFORMS = ['facebook', 'instagram', 'telegram', 'tiktok', 'youtube'];
+const VIDEO_CAPABLE_PLATFORMS = ['facebook', 'instagram', 'telegram', 'linkedin', 'tiktok', 'youtube'];
 
 // Founder posts aren't a real target platform — they're generated onto
 // linkedin/facebook/instagram rows (see lib/content-factory/generators/founder.js)
@@ -696,7 +696,7 @@ export default function SocialEnginePage() {
                         />
                         <div className="flex gap-2 mt-2">
                           <button
-                            onClick={() => downloadUrl(heroImage.url, `${(draft.title || 'quote-loop').replace(/[^a-z0-9]+/gi, '-').toLowerCase()}.webm`)}
+                            onClick={() => downloadUrl(heroImage.url, `${(draft.title || 'quote-loop').replace(/[^a-z0-9]+/gi, '-').toLowerCase()}.${(heroImage.url.split('.').pop() || 'mp4').split('?')[0]}`)}
                             className="text-xs font-semibold text-gray-600 border rounded-full px-3 py-1 hover:bg-gray-50"
                           >
                             ⬇ Download

@@ -42,11 +42,36 @@ function wrapText(ctx, text, maxWidth) {
 }
 
 function pickMimeType() {
-  const candidates = ['video/webm;codecs=vp9,opus', 'video/webm;codecs=vp8,opus', 'video/webm'];
+  const candidates = [
+    // Real MP4 muxing (H.264 + AAC) — Chrome shipped MediaRecorder support
+    // for this recently. This is the format Instagram's Graph API (and
+    // TikTok, and most platforms) actually require for video containers;
+    // uploading WebM was why "Instagram video processing timed out" kept
+    // happening — the container never finishes processing an unsupported
+    // format, it just sits there until our own poll gives up.
+    'video/mp4;codecs=avc1.42E01E,mp4a.40.2',
+    'video/mp4;codecs=avc1,mp4a.40.2',
+    'video/mp4',
+    // WebM fallback for browsers that don't support MP4 muxing yet
+    // (Firefox, older Chrome/Edge). Facebook and Telegram tolerate WebM
+    // fine, but this path will still hit the same Instagram/TikTok
+    // problem — there's no way around that without server-side
+    // transcoding, which is a separate, bigger piece of work.
+    'video/webm;codecs=vp9,opus',
+    'video/webm;codecs=vp8,opus',
+    'video/webm',
+  ];
   for (const type of candidates) {
     if (typeof MediaRecorder !== 'undefined' && MediaRecorder.isTypeSupported(type)) return type;
   }
   return '';
+}
+
+// Derives a real file extension from the mimeType MediaRecorder actually
+// used, instead of assuming .webm — needed now that MP4 is the preferred
+// (and hopefully common) path, not the exception.
+function extensionForMimeType(mimeType) {
+  return (mimeType || '').includes('mp4') ? 'mp4' : 'webm';
 }
 
 /**
@@ -346,7 +371,8 @@ export default function QuoteLoopRecorder({ contentAsset, onSaved }) {
     setErrorMsg(null);
     try {
       const supabase = createBrowserClient();
-      const path = `${contentAsset.id}/${Date.now()}.webm`;
+      const ext = extensionForMimeType(videoBlob.type);
+      const path = `${contentAsset.id}/${Date.now()}.${ext}`;
 
       const { error: uploadError } = await supabase.storage
         .from(BUCKET)
@@ -421,7 +447,7 @@ export default function QuoteLoopRecorder({ contentAsset, onSaved }) {
           <>
             <a
               href={videoBlobUrl}
-              download={`${(contentAsset.title || 'quote-loop').replace(/[^a-z0-9]+/gi, '-').toLowerCase()}.webm`}
+              download={`${(contentAsset.title || 'quote-loop').replace(/[^a-z0-9]+/gi, '-').toLowerCase()}.${extensionForMimeType(videoBlob?.type)}`}
               className="bg-gray-100 text-gray-700 px-5 py-2.5 rounded-xl text-sm font-bold hover:bg-gray-200"
             >
               ⬇ Download
