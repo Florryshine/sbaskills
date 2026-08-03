@@ -217,9 +217,12 @@ export default function PrincipalDashboard() {
             {[
               ['👥 Teachers', `/school/${slug}/teachers`],
               ['🗓️ Attendance', `/school/${slug}/attendance`],
+              ['📝 Daily Observations', `/school/${slug}/observations`],
+              ['⏰ Teacher Check-in', `/school/${slug}/teacher-attendance`],
               ['💳 Fees', `/school/${slug}/fees`],
               ['📄 Report Cards', `/school/${slug}/report-cards`],
               ['📢 Announcements', `/school/${slug}/announcements`],
+              ['➕ Manage People', `/school/${slug}/manage-people`],
               ['⚙️ Manage School Profile', `/admin/schools`],
             ].map(([label, href]) => (
               <a

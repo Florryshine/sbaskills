@@ -2,13 +2,14 @@
 
 import { useEffect, useState } from 'react';
 import { useParams } from 'next/navigation';
+import { computeSubjectRow, DEFAULT_SCALE } from '@/lib/school/grading';
 
 const DEFAULT_SESSION = '2025/2026';
 const DEFAULT_TERM = 'First Term';
 const DEFAULT_SUBJECTS = ['Mathematics', 'English Language', 'Biology'];
 
 function emptyScores() {
-  return DEFAULT_SUBJECTS.map(subject => ({ subject, score: '', grade: '', remark: '' }));
+  return DEFAULT_SUBJECTS.map(subject => ({ subject, ca1: '', ca2: '', exam: '' }));
 }
 
 export default function ReportCardsPage() {
@@ -20,18 +21,20 @@ export default function ReportCardsPage() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
   const [message, setMessage] = useState('');
+  const [isPrincipal, setIsPrincipal] = useState(false);
 
   const [form, setForm] = useState({
     student_id: '', class_level: '', subject_scores: emptyScores(),
-    teacher_comment: '', position_in_class: '', class_size: '',
+    teacher_comment: '', principal_comment: '',
   });
 
   const load = async () => {
     setLoading(true);
     setError(null);
-    const [rcRes, attRes] = await Promise.all([
+    const [rcRes, attRes, meRes] = await Promise.all([
       fetch(`/api/school/report-cards?school=${slug}&term=${encodeURIComponent(term)}&session=${encodeURIComponent(session)}`),
       fetch(`/api/school/attendance?school=${slug}`),
+      fetch(`/api/school/me?school=${slug}`),
     ]);
     const rcJson = await rcRes.json();
     const attJson = await attRes.json();
@@ -41,6 +44,10 @@ export default function ReportCardsPage() {
       setReportCards(rcJson.reportCards || []);
     }
     setStudents(attJson.students || []);
+    if (meRes.ok) {
+      const meJson = await meRes.json();
+      setIsPrincipal(meJson.profile?.role === 'principal' || meJson.profile?.role === 'admin');
+    }
     setLoading(false);
   };
 
@@ -54,7 +61,11 @@ export default function ReportCardsPage() {
   };
 
   const addSubjectRow = () => {
-    setForm(prev => ({ ...prev, subject_scores: [...prev.subject_scores, { subject: '', score: '', grade: '', remark: '' }] }));
+    setForm(prev => ({ ...prev, subject_scores: [...prev.subject_scores, { subject: '', ca1: '', ca2: '', exam: '' }] }));
+  };
+
+  const removeSubjectRow = (index) => {
+    setForm(prev => ({ ...prev, subject_scores: prev.subject_scores.filter((_, i) => i !== index) }));
   };
 
   const submit = async (e) => {
@@ -71,22 +82,29 @@ export default function ReportCardsPage() {
         term, session,
         class_level: form.class_level,
         subject_scores: form.subject_scores
-          .filter(s => s.subject && s.score !== '')
-          .map(s => ({ ...s, score: Number(s.score) })),
+          .filter(s => s.subject && (s.ca1 !== '' || s.ca2 !== '' || s.exam !== ''))
+          .map(s => ({ subject: s.subject, ca1: Number(s.ca1) || 0, ca2: Number(s.ca2) || 0, exam: Number(s.exam) || 0 })),
         teacher_comment: form.teacher_comment,
-        position_in_class: form.position_in_class ? Number(form.position_in_class) : null,
-        class_size: form.class_size ? Number(form.class_size) : null,
+        principal_comment: form.principal_comment,
       }),
     });
     const json = await res.json();
     if (res.ok) {
-      setMessage('Report card saved.');
-      setForm({ student_id: '', class_level: '', subject_scores: emptyScores(), teacher_comment: '', position_in_class: '', class_size: '' });
+      setMessage(`Report card saved. Average: ${json.average}%`);
+      setForm({ student_id: '', class_level: '', subject_scores: emptyScores(), teacher_comment: '', principal_comment: '' });
       load();
     } else {
       setError(json.error || 'Could not save report card.');
     }
   };
+
+  // Live preview of totals/grades as the teacher types, using the default
+  // scale client-side (the API recomputes against the school's real scale
+  // on save, so this is just for instant feedback).
+  const previewRows = form.subject_scores.map(s => computeSubjectRow(s, DEFAULT_SCALE));
+  const previewAverage = previewRows.length
+    ? Math.round((previewRows.reduce((a, r) => a + r.total, 0) / previewRows.length) * 10) / 10
+    : 0;
 
   return (
     <div className="min-h-screen bg-slate-50">
@@ -94,6 +112,7 @@ export default function ReportCardsPage() {
         <div>
           <p className="text-xs font-bold uppercase tracking-widest text-brand-yellow">School Module</p>
           <h1 className="mt-1 text-2xl font-extrabold text-brand-blue">Report Cards</h1>
+          <p className="text-sm text-slate-500 mt-1">Enter CA1, CA2 and Exam scores — total, grade and class position are calculated automatically.</p>
         </div>
 
         <div className="rounded-2xl bg-white p-5 shadow-sm border border-slate-100 flex flex-wrap gap-4 items-end">
@@ -122,20 +141,30 @@ export default function ReportCardsPage() {
               <option value="">Select student...</option>
               {students.map(s => <option key={s.id} value={s.id}>{s.full_name} ({s.student_level || 'no class'})</option>)}
             </select>
-            <input placeholder="Position" type="number" value={form.position_in_class} onChange={e => setForm(prev => ({ ...prev, position_in_class: e.target.value }))} className="rounded-lg border border-slate-200 px-3 py-2 text-sm w-24" />
-            <input placeholder="Class size" type="number" value={form.class_size} onChange={e => setForm(prev => ({ ...prev, class_size: e.target.value }))} className="rounded-lg border border-slate-200 px-3 py-2 text-sm w-28" />
           </div>
 
           <div className="space-y-2">
-            {form.subject_scores.map((s, i) => (
-              <div key={i} className="flex gap-2">
-                <input placeholder="Subject" value={s.subject} onChange={e => updateScore(i, 'subject', e.target.value)} className="rounded-lg border border-slate-200 px-3 py-2 text-sm flex-1" />
-                <input placeholder="Score" type="number" value={s.score} onChange={e => updateScore(i, 'score', e.target.value)} className="rounded-lg border border-slate-200 px-3 py-2 text-sm w-20" />
-                <input placeholder="Grade" value={s.grade} onChange={e => updateScore(i, 'grade', e.target.value)} className="rounded-lg border border-slate-200 px-3 py-2 text-sm w-20" />
-                <input placeholder="Remark" value={s.remark} onChange={e => updateScore(i, 'remark', e.target.value)} className="rounded-lg border border-slate-200 px-3 py-2 text-sm w-28" />
-              </div>
-            ))}
+            <div className="grid grid-cols-[1fr_4.5rem_4.5rem_4.5rem_4.5rem_3.5rem_2rem] gap-2 text-xs font-bold text-slate-400 px-1">
+              <span>Subject</span><span>CA1</span><span>CA2</span><span>Exam</span><span>Total</span><span>Grade</span><span></span>
+            </div>
+            {form.subject_scores.map((s, i) => {
+              const computed = computeSubjectRow(s, DEFAULT_SCALE);
+              return (
+                <div key={i} className="grid grid-cols-[1fr_4.5rem_4.5rem_4.5rem_4.5rem_3.5rem_2rem] gap-2 items-center">
+                  <input placeholder="Subject" value={s.subject} onChange={e => updateScore(i, 'subject', e.target.value)} className="rounded-lg border border-slate-200 px-3 py-2 text-sm" />
+                  <input placeholder="0-30" type="number" value={s.ca1} onChange={e => updateScore(i, 'ca1', e.target.value)} className="rounded-lg border border-slate-200 px-2 py-2 text-sm" />
+                  <input placeholder="0-30" type="number" value={s.ca2} onChange={e => updateScore(i, 'ca2', e.target.value)} className="rounded-lg border border-slate-200 px-2 py-2 text-sm" />
+                  <input placeholder="0-40" type="number" value={s.exam} onChange={e => updateScore(i, 'exam', e.target.value)} className="rounded-lg border border-slate-200 px-2 py-2 text-sm" />
+                  <span className="text-sm font-bold text-brand-dark text-center">{computed.total}</span>
+                  <span className="text-sm font-bold text-brand-blue text-center">{computed.grade}</span>
+                  <button type="button" onClick={() => removeSubjectRow(i)} className="text-red-400 text-lg leading-none">×</button>
+                </div>
+              );
+            })}
             <button type="button" onClick={addSubjectRow} className="text-xs font-bold text-brand-blue">+ Add subject</button>
+            {previewRows.length > 0 && (
+              <p className="text-xs text-slate-500 pt-1">Average so far: <span className="font-bold text-brand-dark">{previewAverage}%</span></p>
+            )}
           </div>
 
           <textarea
@@ -145,6 +174,16 @@ export default function ReportCardsPage() {
             className="w-full rounded-lg border border-slate-200 px-3 py-2 text-sm"
             rows={2}
           />
+
+          {isPrincipal && (
+            <textarea
+              placeholder="Principal's comment"
+              value={form.principal_comment}
+              onChange={e => setForm(prev => ({ ...prev, principal_comment: e.target.value }))}
+              className="w-full rounded-lg border border-slate-200 px-3 py-2 text-sm"
+              rows={2}
+            />
+          )}
 
           <button type="submit" className="rounded-full bg-brand-blue text-white font-bold px-6 py-3">Save Report Card</button>
         </form>
@@ -161,7 +200,10 @@ export default function ReportCardsPage() {
               <div key={rc.id} className="p-4 flex items-center justify-between">
                 <div>
                   <p className="font-bold text-brand-dark">{rc.profiles?.full_name}</p>
-                  <p className="text-xs text-slate-400">{rc.class_level || '—'} · {(rc.subject_scores || []).length} subjects</p>
+                  <p className="text-xs text-slate-400">
+                    {rc.class_level || '—'} · {(rc.subject_scores || []).length} subjects
+                    {rc.position_in_class ? ` · Position ${rc.position_in_class} of ${rc.class_size}` : ''}
+                  </p>
                 </div>
                 <a href={`/api/school/report-cards/${rc.id}/pdf`} className="text-xs font-bold rounded-full px-4 py-2 bg-brand-blue text-white">Download PDF</a>
               </div>

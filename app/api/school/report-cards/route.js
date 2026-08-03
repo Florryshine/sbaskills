@@ -1,5 +1,6 @@
 import { NextResponse } from 'next/server';
 import { requireSchoolStaff } from '@/lib/school/auth';
+import { computeSubjectRow, computePositions, overallAverage, DEFAULT_SCALE } from '@/lib/school/grading';
 
 export const dynamic = 'force-dynamic';
 
@@ -33,15 +34,16 @@ export async function GET(request) {
 
 // POST /api/school/report-cards
 // Body: { school, student_id, term, session, class_level, subject_scores,
-//         teacher_comment, principal_comment, position_in_class, class_size,
-//         attendance_present, attendance_total }
-// Upserts (one report card per student per term+session).
+//         teacher_comment, principal_comment, attendance_present, attendance_total }
+// Upserts (one report card per student per term+session). Teachers only
+// enter raw ca1/ca2/exam per subject -- total, grade, position, and class
+// size are always computed here, never hand-typed.
 export async function POST(request) {
   const body = await request.json();
   const {
     school: schoolSlug, student_id, term, session, class_level,
     subject_scores, teacher_comment, principal_comment,
-    position_in_class, class_size, attendance_present, attendance_total,
+    attendance_present, attendance_total,
   } = body;
 
   if (!schoolSlug || !student_id || !term || !session || !Array.isArray(subject_scores)) {
@@ -51,6 +53,14 @@ export async function POST(request) {
   const { supabase, profile, school, error } = await requireSchoolStaff(schoolSlug);
   if (error) return NextResponse.json({ error: error.message }, { status: error.status });
 
+  const { data: scaleRows } = await supabase
+    .from('grading_scales')
+    .select('min_score, max_score, grade, remark')
+    .eq('school_id', school.id);
+  const scale = scaleRows && scaleRows.length ? scaleRows : DEFAULT_SCALE;
+
+  const computedScores = subject_scores.map(s => computeSubjectRow(s, scale));
+
   const { data, error: upsertError } = await supabase
     .from('report_cards')
     .upsert({
@@ -59,11 +69,9 @@ export async function POST(request) {
       term,
       session,
       class_level: class_level || null,
-      subject_scores,
+      subject_scores: computedScores,
       teacher_comment: teacher_comment || null,
       principal_comment: principal_comment || null,
-      position_in_class: position_in_class || null,
-      class_size: class_size || null,
       attendance_present: attendance_present ?? null,
       attendance_total: attendance_total ?? null,
       created_by: profile.id,
@@ -73,5 +81,37 @@ export async function POST(request) {
     .single();
 
   if (upsertError) return NextResponse.json({ error: upsertError.message }, { status: 500 });
-  return NextResponse.json({ reportCard: data });
+
+  // Recompute class position for everyone in this class/term/session now
+  // that one student's totals may have changed.
+  if (class_level) {
+    const { data: classCards } = await supabase
+      .from('report_cards')
+      .select('id, student_id, subject_scores')
+      .eq('school_id', school.id)
+      .eq('term', term)
+      .eq('session', session)
+      .eq('class_level', class_level);
+
+    if (classCards && classCards.length) {
+      const totals = classCards.map(c => ({
+        student_id: c.student_id,
+        total: (c.subject_scores || []).reduce((acc, r) => acc + (Number(r.total) || 0), 0),
+      }));
+      const positions = computePositions(totals);
+      const classSize = classCards.length;
+
+      await Promise.all(classCards.map(c =>
+        supabase
+          .from('report_cards')
+          .update({ position_in_class: positions[c.student_id], class_size: classSize })
+          .eq('id', c.id)
+      ));
+
+      data.position_in_class = positions[student_id];
+      data.class_size = classSize;
+    }
+  }
+
+  return NextResponse.json({ reportCard: data, average: overallAverage(computedScores) });
 }

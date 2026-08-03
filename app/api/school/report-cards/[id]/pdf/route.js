@@ -38,7 +38,18 @@ export async function GET(request, { params }) {
   const isStaffForSchool = profile && ['teacher', 'principal', 'admin'].includes(profile.role) &&
     (profile.role === 'admin' || profile.school_id === reportCard.school_id);
 
-  if (!isOwner && !isStaffForSchool) {
+  let isParent = false;
+  if (!isOwner && !isStaffForSchool && profile?.role === 'parent') {
+    const { data: link } = await supabase
+      .from('parent_links')
+      .select('id')
+      .eq('parent_id', user.id)
+      .eq('student_id', reportCard.student_id)
+      .maybeSingle();
+    isParent = !!link;
+  }
+
+  if (!isOwner && !isStaffForSchool && !isParent) {
     return NextResponse.json({ error: 'Not authorized to view this report card.' }, { status: 403 });
   }
 
