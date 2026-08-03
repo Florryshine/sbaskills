@@ -27,7 +27,9 @@ async function generateQuoteLines(asset, count) {
   const keyConcepts = (asset.key_concepts || []).slice(0, 5).join(', ') || 'none listed';
   const facts = (asset.facts || []).slice(0, 5).join('; ') || 'none listed';
 
-  const prompt = `You are writing short motivational/study-tip lines for Shiney Brain Academy, a Nigerian exam-prep brand (JAMB/WAEC/NECO/Post-UTME). These lines get overlaid on a ${count > 1 ? 'set of short' : 'short'} looping video (about 3 seconds each, on screen the whole time), so each one must be readable at a glance.
+  const prompt = `You are writing short motivational/study-tip lines for Shiney Brain Academy, a Nigerian exam-prep brand (JAMB/WAEC/NECO/Post-UTME). These get overlaid on a short looping video (about 4 seconds, replaying continuously), so each one has TWO parts that reveal in sequence:
+1. A "headline" — the hook, appears immediately, under 8 words, the kind of line that stops a scroll.
+2. A "followUp" — one supporting sentence that completes the thought or delivers the payoff, appears a beat later. Slightly longer than the headline (roughly 8-14 words) is fine — the point is the viewer needs to watch the loop replay once or twice to catch both parts, which is good: it means they watch longer.
 
 Topic: "${asset.keyword}"
 Subject: ${asset.subject || 'General'}
@@ -35,21 +37,24 @@ Summary: ${asset.summary || 'No summary available.'}
 Key concepts: ${keyConcepts}
 Facts: ${facts}
 
-Write ${count} different short lines grounded in this topic. Rules for every line:
-- Under 10 words. Shorter is better.
-- Punchy and quotable — the kind of line a student would screenshot.
-- No hashtags, no emoji, no quotation marks around it.
+Write ${count} different headline+followUp pairs grounded in this topic. Rules:
+- No hashtags, no emoji, no quotation marks around either part.
+- The followUp must genuinely complete or pay off the headline — not just repeat it in other words.
 - Mix of styles across the set: a motivational push, a sharp study tip, a confidence line, a myth-buster, a "did you know" hook — don't make them all the same shape.
 - Must actually connect to the topic above, not generic filler that could apply to anything.
 
 Return ONLY JSON:
-{ "lines": ["line one", "line two", ...] }`;
+{ "lines": [{ "headline": "...", "followUp": "..." }, ...] }`;
 
   const { result, errors } = await generateWithFallback(
     prompt,
     (text) => parseJsonFromText(text, 'object'),
-    (parsed) => parsed && Array.isArray(parsed.lines) && parsed.lines.length > 0,
-    1024
+    (parsed) =>
+      parsed &&
+      Array.isArray(parsed.lines) &&
+      parsed.lines.length > 0 &&
+      parsed.lines.every((l) => l && l.headline && l.followUp),
+    1536
   );
 
   if (!result) {
@@ -132,10 +137,11 @@ export async function POST(request) {
     platform: null, // format-agnostic, same as podcast_audiogram — publishable to any platform's queue
     format: 'video',
     title: asset.keyword,
-    body: line,
+    body: line.headline,
     status: 'draft',
     generated_by: 'quote-loop-generator',
     metadata: {
+      followUp: line.followUp,
       background: backgrounds[i], // { type: 'video'|'photo', url, source, sourceUrl } or null
       backgroundQuery,
     },

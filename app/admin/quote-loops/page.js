@@ -134,7 +134,10 @@ export default function QuoteLoopsPage() {
             <div key={draft.id} className="bg-white rounded-xl border p-4 flex items-center justify-between gap-3">
               <div>
                 <p className="font-semibold">{draft.body}</p>
-                <p className="text-xs text-gray-500">
+                {draft.metadata?.followUp && (
+                  <p className="text-sm text-gray-600 mt-0.5">{draft.metadata.followUp}</p>
+                )}
+                <p className="text-xs text-gray-500 mt-1">
                   {draft.metadata?.background?.type
                     ? `${draft.metadata.background.type} background (${draft.metadata.background.source})`
                     : 'no background found'}{' '}

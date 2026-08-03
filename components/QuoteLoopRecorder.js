@@ -73,6 +73,7 @@ export default function QuoteLoopRecorder({ contentAsset, onSaved }) {
 
   const background = contentAsset.metadata?.background || null;
   const quote = contentAsset.body || '';
+  const followUp = contentAsset.metadata?.followUp || null;
 
   // ── Discover music tracks + preload background on mount ────────────────
   useEffect(() => {
@@ -148,27 +149,59 @@ export default function QuoteLoopRecorder({ contentAsset, onSaved }) {
         ctx.fillRect(0, 0, W, H);
       }
 
-      // Quote text — scales/fades in over the first 0.6s, then holds.
+      // Headline — scales/fades in over the first 0.6s, then holds.
+      // Anchored above center (not dead-center) to leave room for the
+      // follow-up line below it.
       const introT = Math.min(1, elapsedMs / 600);
       const eased = 1 - Math.pow(1 - introT, 3); // ease-out cubic
       const fontScale = 0.85 + 0.15 * eased;
-      const alpha = eased;
+      const headlineAlpha = eased;
 
       ctx.save();
-      ctx.globalAlpha = alpha;
+      ctx.globalAlpha = headlineAlpha;
       ctx.textAlign = 'center';
       ctx.textBaseline = 'middle';
-      ctx.font = `800 ${Math.round(64 * fontScale)}px Arial`;
+      ctx.font = `800 ${Math.round(58 * fontScale)}px Arial`;
       ctx.fillStyle = '#ffffff';
       ctx.shadowColor = 'rgba(0,0,0,0.5)';
       ctx.shadowBlur = 12;
-      const lines = wrapText(ctx, quote, W - 140).slice(0, 5);
-      const lineHeight = 76;
-      const totalH = lines.length * lineHeight;
-      lines.forEach((line, i) => {
-        ctx.fillText(line, W / 2, H / 2 - totalH / 2 + lineHeight / 2 + i * lineHeight);
+      const headlineLines = wrapText(ctx, quote, W - 140).slice(0, 4);
+      const headlineLineH = 68;
+      const headlineTop = H * 0.36;
+      headlineLines.forEach((line, i) => {
+        ctx.fillText(line, W / 2, headlineTop + i * headlineLineH);
       });
       ctx.restore();
+
+      // Follow-up sentence — reveals on a delay (~1.4s in), so a single
+      // 4s watch mostly catches the headline and a viewer needs the loop
+      // to replay once or twice to read the whole thing. That's the
+      // point: it's what turns a 4-second clip into 8-12 seconds of
+      // actual watch time.
+      if (followUp) {
+        const followDelayMs = 1400;
+        const followDurationMs = 500;
+        const followT = Math.min(1, Math.max(0, (elapsedMs - followDelayMs) / followDurationMs));
+        const followEased = 1 - Math.pow(1 - followT, 3);
+
+        if (followEased > 0) {
+          ctx.save();
+          ctx.globalAlpha = followEased;
+          ctx.textAlign = 'center';
+          ctx.textBaseline = 'middle';
+          ctx.font = '600 36px Arial';
+          ctx.fillStyle = 'rgba(255,255,255,0.92)';
+          ctx.shadowColor = 'rgba(0,0,0,0.5)';
+          ctx.shadowBlur = 8;
+          const followLines = wrapText(ctx, followUp, W - 180).slice(0, 4);
+          const followLineH = 46;
+          const followTop = headlineTop + headlineLines.length * headlineLineH + 50;
+          followLines.forEach((line, i) => {
+            ctx.fillText(line, W / 2, followTop + i * followLineH);
+          });
+          ctx.restore();
+        }
+      }
 
       // Small brand mark, bottom
       ctx.textAlign = 'left';
@@ -177,7 +210,7 @@ export default function QuoteLoopRecorder({ contentAsset, onSaved }) {
       ctx.font = 'bold 26px Arial';
       ctx.fillText('SHINEY BRAIN ACADEMY', 50, H - 50);
     },
-    [background, quote]
+    [background, quote, followUp]
   );
 
   useEffect(() => {
@@ -189,7 +222,7 @@ export default function QuoteLoopRecorder({ contentAsset, onSaved }) {
     if (status === 'recording') {
       rafRef.current = requestAnimationFrame(loop);
     } else {
-      draw(600); // draw one static, fully-faded-in idle frame
+      draw(2000); // static idle frame — past both the headline and follow-up reveal delays
     }
     return () => {
       if (rafRef.current) cancelAnimationFrame(rafRef.current);
