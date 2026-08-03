@@ -4,23 +4,25 @@
 //
 // Renders one quote_loop content_assets row (a short punchy line + a
 // background candidate fetched by /api/admin/quote-loops/generate) into a
-// short, loopable square video: real stock footage or a photo with a slow
-// Ken Burns zoom (or an animated brand gradient if no background was
-// found) + the quote fading/scaling in + a random background music track
-// — entirely in the browser via <canvas> + Web Audio API + MediaRecorder.
-// Same technique as AudiogramRecorder.js, just a fixed ~3-5s clip instead
-// of a full podcast episode, which is why this one doesn't need to run in
-// realtime for minutes at a time.
+// short, loopable 9:16 video (TikTok / IG Reels / YouTube Shorts): real
+// stock footage or a photo with a slow Ken Burns zoom (or an animated
+// brand gradient if no background was found) + the headline and a
+// paragraph-length follow-up fading/sliding in over a dark scrim + a
+// random background music track — entirely in the browser via <canvas> +
+// Web Audio API + MediaRecorder. Same technique as AudiogramRecorder.js,
+// just a fixed ~6s clip instead of a full podcast episode, which is why
+// this one doesn't need to run in realtime for minutes at a time.
 
 import { useRef, useState, useEffect, useCallback } from 'react';
 import { createBrowserClient } from '@/lib/supabase';
 
-const CANVAS_SIZE = 1080;
+const CANVAS_W = 1080;
+const CANVAS_H = 1920; // 9:16 — TikTok / IG Reels / YouTube Shorts
 const BRAND_BLUE = '#1a73e8';
 const BRAND_YELLOW = '#FFCC00';
 const DARK = '#0f172a';
 const BUCKET = 'quote-loops'; // create this bucket in Supabase storage (public read, authenticated upload) before first use — see admin page note
-const RECORD_SECONDS = 4; // "not more than 3 seconds" target with a little headroom; adjust freely
+const RECORD_SECONDS = 6; // enough time for the headline + full paragraph followUp to both display and hold
 
 function wrapText(ctx, text, maxWidth) {
   const words = String(text || '').split(' ');
@@ -112,7 +114,7 @@ export default function QuoteLoopRecorder({ contentAsset, onSaved }) {
       const canvas = canvasRef.current;
       if (!canvas) return;
       const ctx = canvas.getContext('2d');
-      const W = CANVAS_SIZE, H = CANVAS_SIZE;
+      const W = CANVAS_W, H = CANVAS_H;
       const t = Math.min(1, elapsedMs / (RECORD_SECONDS * 1000)); // 0→1 over the clip
 
       // Background layer
@@ -150,57 +152,79 @@ export default function QuoteLoopRecorder({ contentAsset, onSaved }) {
       }
 
       // Headline — scales/fades in over the first 0.6s, then holds.
-      // Anchored above center (not dead-center) to leave room for the
-      // follow-up line below it.
+      // Anchored in the upper-middle third to leave the lower half of the
+      // 9:16 frame for the paragraph-length follow-up below it.
       const introT = Math.min(1, elapsedMs / 600);
       const eased = 1 - Math.pow(1 - introT, 3); // ease-out cubic
       const fontScale = 0.85 + 0.15 * eased;
       const headlineAlpha = eased;
 
+      ctx.font = `800 64px Arial`; // used below to measure line count before the scrim is drawn
+      const headlineLines = wrapText(ctx, quote, W - 140).slice(0, 4);
+      const headlineLineH = 76;
+      const headlineTop = H * 0.32;
+
+      ctx.font = '600 40px Arial';
+      const followLines = followUp ? wrapText(ctx, followUp, W - 160).slice(0, 6) : [];
+      const followLineH = 54;
+      const followTop = headlineTop + headlineLines.length * headlineLineH + 56;
+      const followBottom = followTop + Math.max(0, followLines.length - 1) * followLineH + 40;
+
+      // Full-width dark scrim band behind the whole text block, fading in
+      // at the top and bottom edges, so both the headline and the full
+      // paragraph stay readable over any footage — matches the text-heavy
+      // look of the reference Facebook Reels clips instead of a small
+      // caption floating over the middle of the frame.
+      const scrimTop = headlineTop - 110;
+      const scrimBottom = followLines.length > 0 ? followBottom + 40 : headlineTop + headlineLines.length * headlineLineH + 60;
+      const scrimGrad = ctx.createLinearGradient(0, scrimTop - 90, 0, scrimBottom + 90);
+      scrimGrad.addColorStop(0, 'rgba(15,23,42,0)');
+      scrimGrad.addColorStop(0.18, 'rgba(15,23,42,0.62)');
+      scrimGrad.addColorStop(0.82, 'rgba(15,23,42,0.62)');
+      scrimGrad.addColorStop(1, 'rgba(15,23,42,0)');
+      ctx.fillStyle = scrimGrad;
+      ctx.fillRect(0, scrimTop - 90, W, scrimBottom - scrimTop + 180);
+
       ctx.save();
       ctx.globalAlpha = headlineAlpha;
       ctx.textAlign = 'center';
       ctx.textBaseline = 'middle';
-      ctx.font = `800 ${Math.round(58 * fontScale)}px Arial`;
+      ctx.font = `800 ${Math.round(64 * fontScale)}px Arial`;
       ctx.fillStyle = '#ffffff';
       ctx.shadowColor = 'rgba(0,0,0,0.5)';
       ctx.shadowBlur = 12;
-      const headlineLines = wrapText(ctx, quote, W - 140).slice(0, 4);
-      const headlineLineH = 68;
-      const headlineTop = H * 0.36;
       headlineLines.forEach((line, i) => {
         ctx.fillText(line, W / 2, headlineTop + i * headlineLineH);
       });
       ctx.restore();
 
-      // Follow-up sentence — reveals on a delay (~1.4s in), so a single
-      // 4s watch mostly catches the headline and a viewer needs the loop
-      // to replay once or twice to read the whole thing. That's the
-      // point: it's what turns a 4-second clip into 8-12 seconds of
-      // actual watch time.
-      if (followUp) {
-        const followDelayMs = 1400;
-        const followDurationMs = 500;
-        const followT = Math.min(1, Math.max(0, (elapsedMs - followDelayMs) / followDurationMs));
-        const followEased = 1 - Math.pow(1 - followT, 3);
+      // Follow-up paragraph — reveals one line at a time on a stagger
+      // starting a beat after the headline, so a single 6s watch mostly
+      // catches the whole paragraph and a viewer needs the loop to replay
+      // once to read every line. That's the point: it's what turns a
+      // 6-second clip into real watch time instead of a 2-second glance.
+      if (followLines.length > 0) {
+        const followDelayMs = 900;
+        const perLineStaggerMs = 220;
+        const lineDurationMs = 420;
 
-        if (followEased > 0) {
-          ctx.save();
-          ctx.globalAlpha = followEased;
-          ctx.textAlign = 'center';
-          ctx.textBaseline = 'middle';
-          ctx.font = '600 36px Arial';
-          ctx.fillStyle = 'rgba(255,255,255,0.92)';
-          ctx.shadowColor = 'rgba(0,0,0,0.5)';
-          ctx.shadowBlur = 8;
-          const followLines = wrapText(ctx, followUp, W - 180).slice(0, 4);
-          const followLineH = 46;
-          const followTop = headlineTop + headlineLines.length * headlineLineH + 50;
-          followLines.forEach((line, i) => {
-            ctx.fillText(line, W / 2, followTop + i * followLineH);
-          });
-          ctx.restore();
-        }
+        ctx.save();
+        ctx.textAlign = 'center';
+        ctx.textBaseline = 'middle';
+        ctx.font = '600 40px Arial';
+        ctx.fillStyle = 'rgba(255,255,255,0.95)';
+        ctx.shadowColor = 'rgba(0,0,0,0.5)';
+        ctx.shadowBlur = 8;
+        followLines.forEach((line, i) => {
+          const lineStart = followDelayMs + i * perLineStaggerMs;
+          const lineT = Math.min(1, Math.max(0, (elapsedMs - lineStart) / lineDurationMs));
+          const lineEased = 1 - Math.pow(1 - lineT, 3);
+          if (lineEased <= 0) return;
+          ctx.globalAlpha = lineEased;
+          const slideY = (1 - lineEased) * 16; // subtle upward slide-in per line
+          ctx.fillText(line, W / 2, followTop + i * followLineH + slideY);
+        });
+        ctx.restore();
       }
 
       // Small brand mark, bottom
@@ -267,8 +291,8 @@ export default function QuoteLoopRecorder({ contentAsset, onSaved }) {
         ...dest.stream.getAudioTracks(),
       ]);
 
-      // Bitrate target: comfortably under 1MB for a 4-5s clip.
-      // 700kbps video + 64kbps audio * 4s / 8 ≈ 380KB.
+      // Bitrate target: comfortably under 1MB for a 6s clip.
+      // 700kbps video + 64kbps audio * 6s / 8 ≈ 570KB.
       const recorderOptions = { videoBitsPerSecond: 700_000, audioBitsPerSecond: 64_000 };
       const mimeType = pickMimeType();
       if (mimeType) recorderOptions.mimeType = mimeType;
@@ -355,9 +379,9 @@ export default function QuoteLoopRecorder({ contentAsset, onSaved }) {
     <div className="space-y-4">
       <canvas
         ref={canvasRef}
-        width={CANVAS_SIZE}
-        height={CANVAS_SIZE}
-        className="w-full max-w-md mx-auto rounded-2xl border shadow-sm bg-black"
+        width={CANVAS_W}
+        height={CANVAS_H}
+        className="w-full max-w-[280px] aspect-[9/16] mx-auto rounded-2xl border shadow-sm bg-black"
       />
       {/* Hidden — real sources the recorder draws/plays from, not meant to be seen directly. */}
       <video ref={bgVideoRef} muted playsInline className="hidden" />

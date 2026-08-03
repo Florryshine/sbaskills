@@ -27,9 +27,11 @@ async function generateQuoteLines(asset, count) {
   const keyConcepts = (asset.key_concepts || []).slice(0, 5).join(', ') || 'none listed';
   const facts = (asset.facts || []).slice(0, 5).join('; ') || 'none listed';
 
-  const prompt = `You are writing short motivational/study-tip lines for Shiney Brain Academy, a Nigerian exam-prep brand (JAMB/WAEC/NECO/Post-UTME). These get overlaid on a short looping video (about 4 seconds, replaying continuously), so each one has TWO parts that reveal in sequence:
+  const prompt = `You are writing short motivational/study-tip lines for Shiney Brain Academy, a Nigerian exam-prep brand (JAMB/WAEC/NECO/Post-UTME). These get overlaid on a short looping 9:16 video (about 6 seconds, replaying continuously), so each one has TWO parts that reveal in sequence:
 1. A "headline" — the hook, appears immediately, under 8 words, the kind of line that stops a scroll.
-2. A "followUp" — one supporting sentence that completes the thought or delivers the payoff, appears a beat later. Slightly longer than the headline (roughly 8-14 words) is fine — the point is the viewer needs to watch the loop replay once or twice to catch both parts, which is good: it means they watch longer.
+2. A "followUp" — a real supporting paragraph, NOT a single sentence. Aim for 4-5 lines of body copy (roughly 35-55 words) that fills the lower half of the screen: unpack the headline, add the "why" or "how", give a concrete detail or mini-example, and land on a payoff or call to action. Think of the text-heavy caption style used in Facebook Reels quote videos — it should read as a short, complete paragraph, not a caption fragment.
+
+Also write a "visualHint" — 3-6 words describing a specific, concrete, filmable scene for the background footage (e.g. "student writing notes at desk", "clock ticking exam hall", "sunrise over Lagos rooftops"). Make it visually specific to THIS line, not just a repeat of the topic name, so each line in the batch can get a different background.
 
 Topic: "${asset.keyword}"
 Subject: ${asset.subject || 'General'}
@@ -37,14 +39,15 @@ Summary: ${asset.summary || 'No summary available.'}
 Key concepts: ${keyConcepts}
 Facts: ${facts}
 
-Write ${count} different headline+followUp pairs grounded in this topic. Rules:
-- No hashtags, no emoji, no quotation marks around either part.
-- The followUp must genuinely complete or pay off the headline — not just repeat it in other words.
+Write ${count} different headline+followUp+visualHint sets grounded in this topic. Rules:
+- No hashtags, no emoji, no quotation marks around any part.
+- The followUp must genuinely unpack and pay off the headline with real substance — not padding, not repetition in other words.
 - Mix of styles across the set: a motivational push, a sharp study tip, a confidence line, a myth-buster, a "did you know" hook — don't make them all the same shape.
 - Must actually connect to the topic above, not generic filler that could apply to anything.
+- Each visualHint should describe a genuinely different scene from the others in the set, so a stock search doesn't keep returning the same clip.
 
 Return ONLY JSON:
-{ "lines": [{ "headline": "...", "followUp": "..." }, ...] }`;
+{ "lines": [{ "headline": "...", "followUp": "...", "visualHint": "..." }, ...] }`;
 
   const { result, errors } = await generateWithFallback(
     prompt,
@@ -54,7 +57,7 @@ Return ONLY JSON:
       Array.isArray(parsed.lines) &&
       parsed.lines.length > 0 &&
       parsed.lines.every((l) => l && l.headline && l.followUp),
-    1536
+    2048
   );
 
   if (!result) {
@@ -68,12 +71,22 @@ Return ONLY JSON:
 // Real footage first (Pexels then Pixabay video), photo as a fallback so a
 // draft is never left with zero background candidates just because a topic
 // has thin video stock coverage.
-async function findBackgroundCandidate(query) {
+//
+// `usedUrls` is shared across the whole batch (passed in by the caller) so
+// that when several lines in one generate call land on overlapping queries,
+// a clip already claimed by an earlier line in the batch gets skipped in
+// favor of the next-best candidate instead of repeating.
+async function findBackgroundCandidate(query, usedUrls) {
   for (const search of [searchPexelsVideoMulti, searchPixabayVideoMulti]) {
     try {
-      const hits = await search(query, 3);
-      if (hits.length > 0) {
-        const pick = hits[Math.floor(Math.random() * hits.length)];
+      // Pull a wider pool (8 instead of 3) so there's room to skip anything
+      // already used elsewhere in this batch on a niche query.
+      const hits = await search(query, 8);
+      const fresh = hits.filter((h) => !usedUrls.has(h.url));
+      const pool = fresh.length > 0 ? fresh : hits; // fall back to a repeat rather than nothing
+      if (pool.length > 0) {
+        const pick = pool[Math.floor(Math.random() * pool.length)];
+        usedUrls.add(pick.url);
         return { type: 'video', url: pick.url, source: pick.source, sourceUrl: pick.sourceUrl };
       }
     } catch (err) {
@@ -82,9 +95,12 @@ async function findBackgroundCandidate(query) {
   }
   for (const search of [searchPexelsMulti, searchPixabayMulti]) {
     try {
-      const hits = await search(query, 3);
-      if (hits.length > 0) {
-        const pick = hits[Math.floor(Math.random() * hits.length)];
+      const hits = await search(query, 8);
+      const fresh = hits.filter((h) => !usedUrls.has(h.url));
+      const pool = fresh.length > 0 ? fresh : hits;
+      if (pool.length > 0) {
+        const pick = pool[Math.floor(Math.random() * pool.length)];
+        usedUrls.add(pick.url);
         return { type: 'photo', url: pick.url, source: pick.source, sourceUrl: pick.sourceUrl };
       }
     } catch (err) {
@@ -125,11 +141,21 @@ export async function POST(request) {
     return NextResponse.json({ error: err.message }, { status: 500 });
   }
 
-  const backgroundQuery = [asset.subject, asset.keyword].filter(Boolean).join(' ');
+  const fallbackQuery = [asset.subject, asset.keyword].filter(Boolean).join(' ');
+  // Per-line query: each line's own visualHint (specific, filmable scene)
+  // falls back to the generic subject+keyword only if the model didn't
+  // supply one — this is what stops every line in a batch from searching
+  // the identical query and landing on the same clip.
+  const backgroundQueries = lines.map((line) => line.visualHint || fallbackQuery);
 
-  // Backgrounds are fetched in parallel — they're independent HTTP calls to
-  // Pexels/Pixabay, no reason to wait on them one at a time.
-  const backgrounds = await Promise.all(lines.map(() => findBackgroundCandidate(backgroundQuery)));
+  // Shared across the whole batch so a clip claimed by an earlier line gets
+  // skipped for later lines on an overlapping/niche query. Still fetched
+  // concurrently — the dedup check happens synchronously per-response, so
+  // there's no race despite running in parallel.
+  const usedUrls = new Set();
+  const backgrounds = await Promise.all(
+    backgroundQueries.map((query) => findBackgroundCandidate(query, usedUrls))
+  );
 
   const toInsert = lines.map((line, i) => ({
     knowledge_asset_id: knowledgeAssetId,
@@ -143,7 +169,7 @@ export async function POST(request) {
     metadata: {
       followUp: line.followUp,
       background: backgrounds[i], // { type: 'video'|'photo', url, source, sourceUrl } or null
-      backgroundQuery,
+      backgroundQuery: backgroundQueries[i],
     },
   }));
 
