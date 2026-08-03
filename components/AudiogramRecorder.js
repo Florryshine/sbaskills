@@ -227,8 +227,26 @@ export default function AudiogramRecorder({ episode, segments, onSaved }) {
         ...dest.stream.getAudioTracks(),
       ]);
 
+      // MediaRecorder had no bitrate cap before, so each browser picked its
+      // own default for a 1080x1080 stream -- often several Mbps, which is
+      // why a few minutes of episode turned into 50MB+ output and started
+      // tripping the Supabase bucket's size limit. Capping it explicitly
+      // targets roughly 500kbps combined, which works out to about
+      // 15MB for a 4-minute episode (500,000 bits/s * 240s / 8 = ~15MB) --
+      // comfortably inside the "10-20MB or less" range, and it scales
+      // linearly, so a 10-minute episode lands around ~37MB, still under
+      // the 50MB bucket limit. VIDEO_BITRATE/AUDIO_BITRATE below are the
+      // two numbers to nudge if you want it smaller/larger or notice the
+      // waveform looking too compressed.
+      const VIDEO_BITRATE = 400_000; // ~400kbps
+      const AUDIO_BITRATE = 96_000; // ~96kbps -- opus stays clean at this rate
       const mimeType = pickMimeType();
-      const recorder = new MediaRecorder(combined, mimeType ? { mimeType } : undefined);
+      const recorderOptions = {
+        videoBitsPerSecond: VIDEO_BITRATE,
+        audioBitsPerSecond: AUDIO_BITRATE,
+      };
+      if (mimeType) recorderOptions.mimeType = mimeType;
+      const recorder = new MediaRecorder(combined, recorderOptions);
       chunksRef.current = [];
       recorder.ondataavailable = (e) => {
         if (e.data.size > 0) chunksRef.current.push(e.data);
