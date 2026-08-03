@@ -36,14 +36,15 @@ export default function QuoteLoopsPage() {
   }, []);
 
   const loadExistingDrafts = async (assetId) => {
-    const supabase = createBrowserClient();
-    const { data } = await supabase
-      .from('content_assets')
-      .select('*, media_files(url, media_type, role)')
-      .eq('knowledge_asset_id', assetId)
-      .eq('asset_type', 'quote_loop')
-      .order('created_at', { ascending: false });
-    setDrafts(data || []);
+    try {
+      const res = await fetch(`/api/admin/quote-loops/list?knowledgeAssetId=${assetId}`);
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || 'Failed to load drafts');
+      setDrafts(data.contentAssets || []);
+    } catch (err) {
+      setErrorMsg(err.message);
+      setDrafts([]);
+    }
   };
 
   useEffect(() => {
