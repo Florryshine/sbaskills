@@ -1,0 +1,10 @@
+These two files are dead code (no longer imported anywhere) and were
+deleted as part of this fix. If you're applying files manually instead of
+the patch, delete them yourself:
+
+lib/carousel-engine/generate.js
+lib/carousel-engine/render.js
+
+Actual carousel rendering now happens entirely in render-canvas.js
+(napi-rs/canvas, in-memory PNGs) — these two were the old Marp CLI /
+Puppeteer-based renderer, which can't run on Vercel serverless.

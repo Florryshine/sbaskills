@@ -101,7 +101,7 @@ export default function BlogAdminPage() {
                     {post.published_at ? new Date(post.published_at).toLocaleDateString() : '—'}
                   </td>
                   <td className="p-3">
-                    <AdminGeneratePodcastButton contentDraftId={post.id} />
+                    <AdminGeneratePodcastButton title={post.title} content={post.content} />
                   </td>
                   <td className="p-3 text-right">
                     <div className="flex justify-end gap-2">

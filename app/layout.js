@@ -1,7 +1,10 @@
 import './globals.css';
 import Script from 'next/script';
+import { UnlockSystemProvider } from '@/context/UnlockSystemContext';
+import NotificationContainer from '@/components/NotificationContainer';
 
 export const metadata = {
+  metadataBase: new URL('https://shineybrainacademy.vercel.app'),
   title: 'Shiney Brain Academy',
   description: 'Where Champions Are Made – JAMB, Tech Skills, and Career Development for Nigerian students.',
 };
@@ -19,7 +22,10 @@ export default function RootLayout({ children }) {
         <link rel="apple-touch-icon" href="/logo.png" />
       </head>
       <body>
-        {children}
+        <UnlockSystemProvider>
+          {children}
+          <NotificationContainer />
+        </UnlockSystemProvider>
         {/* Load Paystack before the page becomes interactive */}
         <Script
           src="https://js.paystack.co/v1/inline.js"

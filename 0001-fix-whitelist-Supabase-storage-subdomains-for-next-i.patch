@@ -1,0 +1,35 @@
+From 3081bd63bc33de32294876647172631b666787ad Mon Sep 17 00:00:00 2001
+From: Claude <assistant@local>
+Date: Mon, 27 Jul 2026 03:26:49 +0000
+Subject: [PATCH] fix: whitelist Supabase storage subdomains for next/image
+
+next/image throws and crashes the whole page render when a src
+hostname isn't explicitly whitelisted. images.domains: ['supabase.co']
+only matches the exact host 'supabase.co', never the real
+storage host '<project-ref>.supabase.co', so every cover/thumbnail
+image pulled from Supabase Storage broke blog, library, testimonials,
+and course card pages. Switch to remotePatterns with a wildcard
+subdomain so any Supabase project host is covered.
+---
+ next.config.js | 5 ++++-
+ 1 file changed, 4 insertions(+), 1 deletion(-)
+
+diff --git a/next.config.js b/next.config.js
+index 0a3fe51..af34a04 100644
+--- a/next.config.js
++++ b/next.config.js
+@@ -9,7 +9,10 @@ const nextConfig = withPWA({
+   reactStrictMode: true,
+   swcMinify: true,
+   images: {
+-    domains: ['res.cloudinary.com', 'supabase.co'],
++    remotePatterns: [
++      { protocol: 'https', hostname: 'res.cloudinary.com' },
++      { protocol: 'https', hostname: '*.supabase.co' },
++    ],
+   },
+   experimental: {
+     serverComponentsExternalPackages: ['@napi-rs/canvas'],
+-- 
+2.43.0
+

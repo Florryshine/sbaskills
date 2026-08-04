@@ -20,13 +20,50 @@ export async function GET() {
   return NextResponse.json({ data });
 }
 
+// Mirrored in app/admin/social-engine/page.js for the live counter.
+// content_assets.platform is stored lowercase (see generators/*.js).
+const PLATFORM_LIMITS = {
+  x: 280,
+  threads: 500,
+  linkedin: 3000,
+  facebook: 63206,
+  instagram: 2200,
+  telegram: 4096,
+};
+
 export async function PATCH(request) {
-  const { id, status } = await request.json();
-  if (!id || !status) {
-    return NextResponse.json({ error: 'id and status are required' }, { status: 400 });
+  const { id, status, body } = await request.json();
+  if (!id || (!status && typeof body !== 'string')) {
+    return NextResponse.json({ error: 'id and (status or body) are required' }, { status: 400 });
   }
   const supabase = createAdminClient();
-  const { error } = await supabase.from('content_assets').update({ status }).eq('id', id);
+
+  const update = {};
+  if (status) update.status = status;
+
+  if (typeof body === 'string') {
+    if (body.trim().length === 0) {
+      return NextResponse.json({ error: 'Body cannot be empty' }, { status: 400 });
+    }
+    const { data: existing, error: fetchError } = await supabase
+      .from('content_assets')
+      .select('id, platform')
+      .eq('id', id)
+      .single();
+    if (fetchError || !existing) return NextResponse.json({ error: 'Asset not found' }, { status: 404 });
+
+    const limit = PLATFORM_LIMITS[existing.platform];
+    if (limit && body.length > limit) {
+      return NextResponse.json(
+        { error: `Exceeds ${existing.platform}'s ${limit} character limit by ${body.length - limit}` },
+        { status: 400 }
+      );
+    }
+    update.body = body;
+    update.updated_at = new Date().toISOString();
+  }
+
+  const { error } = await supabase.from('content_assets').update(update).eq('id', id);
   if (error) return NextResponse.json({ error: error.message }, { status: 500 });
   return NextResponse.json({ success: true });
 }

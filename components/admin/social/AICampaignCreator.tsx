@@ -143,6 +143,18 @@ export function AICampaignCreator({ onCampaignGenerated }: AICampaignCreatorProp
     return generatedResult.posts.find((p: any) => p.platform === platform);
   };
 
+  const handlePostSaved = (updatedPost: any) => {
+    setGeneratedResult((prev: any) => {
+      if (!prev) return null;
+      return {
+        ...prev,
+        posts: prev.posts.map((p: any) =>
+          p.id === updatedPost.id ? { ...p, ...updatedPost } : p
+        ),
+      };
+    });
+  };
+
   return (
     <div className="space-y-8">
       {/* 1. Generation Parameters Panel */}
@@ -351,7 +363,7 @@ export function AICampaignCreator({ onCampaignGenerated }: AICampaignCreatorProp
             <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 items-start">
               {/* Left Column: Post Mockup Frame */}
               <div className="lg:col-span-7">
-                <PostPreviewer post={getPostByPlatform(currentPlatformPreview)} />
+                <PostPreviewer post={getPostByPlatform(currentPlatformPreview)} onSaved={handlePostSaved} />
               </div>
 
               {/* Right Column: Copywriting Parameters & Delivery actions */}

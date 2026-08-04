@@ -95,7 +95,7 @@ export function QueueManager({ queueUpdatedTrigger, onQueueChanged }: QueueManag
 
   const filteredQueue = queue.filter((item) => {
     const matchesFilter = filter === "ALL" || item.status.toUpperCase() === filter;
-    const matchesSearch = item.content.toLowerCase().includes(search.toLowerCase()) || 
+    const matchesSearch = item.caption.toLowerCase().includes(search.toLowerCase()) || 
                           item.platform.toLowerCase().includes(search.toLowerCase());
     return matchesFilter && matchesSearch;
   });
@@ -171,7 +171,7 @@ export function QueueManager({ queueUpdatedTrigger, onQueueChanged }: QueueManag
                 </div>
 
                 <p className="text-xs text-slate-200 leading-relaxed font-sans line-clamp-2 max-w-2xl">
-                  {item.content}
+                  {item.caption}
                 </p>
 
                 {item.postizPayload && (item.postizPayload.media && item.postizPayload.media.length > 0) && (

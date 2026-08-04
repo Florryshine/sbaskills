@@ -43,12 +43,20 @@ export default function AdminBooksPage() {
           <h1 className="text-2xl font-extrabold text-brand-blue">📕 Books</h1>
           <p className="text-sm text-slate-500 mt-1">{books.length} book{books.length === 1 ? '' : 's'}</p>
         </div>
-        <Link
-          href="/admin/books/new"
-          className="rounded-full bg-brand-yellow px-5 py-2.5 text-sm font-bold text-brand-dark hover:opacity-90"
-        >
-          + Add Book
-        </Link>
+        <div className="flex gap-2">
+          <Link
+            href="/admin/books/from-text"
+            className="rounded-full bg-brand-blue px-5 py-2.5 text-sm font-bold text-white hover:opacity-90"
+          >
+            ✨ Generate from Text
+          </Link>
+          <Link
+            href="/admin/books/new"
+            className="rounded-full bg-brand-yellow px-5 py-2.5 text-sm font-bold text-brand-dark hover:opacity-90"
+          >
+            + Add Book
+          </Link>
+        </div>
       </section>
 
       {books.length === 0 ? (

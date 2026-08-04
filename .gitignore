@@ -1,3 +1,4 @@
+<<<<<<< HEAD
 ```
 # Dependencies
 node_modules/
@@ -66,3 +67,11 @@ Thumbs.db
 *.lz
 *.lzo
 ```
+=======
+node_modules/ 
+.next/ 
+.env.local 
+public/sw.js
+public/workbox-*.js
+*.zip 
+>>>>>>> origin/master

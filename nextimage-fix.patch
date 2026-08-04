@@ -1,0 +1,150 @@
+diff --git a/app/blog/[slug]/page.js b/app/blog/[slug]/page.js
+index d6e18bd..ec1b913 100644
+--- a/app/blog/[slug]/page.js
++++ b/app/blog/[slug]/page.js
+@@ -5,6 +5,7 @@ import Navbar from '@/components/Navbar';
+ import Footer from '@/components/Footer';
+ import nextDynamic from 'next/dynamic';
+ import Link from 'next/link';
++import Image from 'next/image';
+ import { marked } from 'marked';
+ import { BASE_URL, generateBlogPostMetadata } from '@/lib/seo';
+ 
+@@ -260,11 +261,16 @@ export default async function BlogPostPage({ params }) {
+           <article className="max-w-4xl mx-auto px-4 py-8">
+             {/* ─── Hero Image ─── */}
+             {post.cover_image ? (
+-              <img
+-                src={post.cover_image}
+-                alt={post.title}
+-                className="w-full h-64 md:h-80 object-cover rounded-lg mb-6"
+-              />
++              <div className="relative w-full h-64 md:h-80 rounded-lg mb-6 overflow-hidden">
++                <Image
++                  src={post.cover_image}
++                  alt={post.title}
++                  fill
++                  className="object-cover"
++                  sizes="(max-width: 768px) 100vw, 800px"
++                  priority
++                />
++              </div>
+             ) : heroPrompt ? (
+               <div className="relative w-full h-64 md:h-80 bg-gray-200 rounded-lg mb-6 overflow-hidden">
+                 <div className="w-full h-full flex items-center justify-center bg-gradient-to-br from-blue-50 to-gray-100 text-gray-400">
+diff --git a/app/blog/page.js b/app/blog/page.js
+index 383661c..ee71c5c 100644
+--- a/app/blog/page.js
++++ b/app/blog/page.js
+@@ -2,6 +2,7 @@ import { createServerClient } from '@/lib/supabase-server';
+ import Navbar from '@/components/Navbar';
+ import Footer from '@/components/Footer';
+ import Link from 'next/link';
++import Image from 'next/image';
+ import SortSelect from '@/components/SortSelect';
+ 
+ // ─── Category mapping ──────────────────────────────────────────────
+@@ -257,10 +258,12 @@ export default async function BlogPage({ searchParams }) {
+                       {/* Cover Image */}
+                       <div className="relative h-48 overflow-hidden">
+                         {post.cover_image ? (
+-                          <img
++                          <Image
+                             src={post.cover_image}
+                             alt={post.title}
+-                            className="w-full h-full object-cover group-hover:scale-105 transition duration-300"
++                            fill
++                            className="object-cover group-hover:scale-105 transition duration-300"
++                            sizes="(max-width: 768px) 100vw, 33vw"
+                           />
+                         ) : (
+                           <div className="w-full h-full bg-brand-blue flex items-center justify-center text-5xl">
+diff --git a/app/library/[id]/page.js b/app/library/[id]/page.js
+index e200726..59fd1f8 100644
+--- a/app/library/[id]/page.js
++++ b/app/library/[id]/page.js
+@@ -6,6 +6,7 @@ import { useParams, useRouter } from 'next/navigation';
+ import { initializePayment } from '@/lib/paystack';
+ import Navbar from '@/components/Navbar';
+ import Footer from '@/components/Footer';
++import Image from 'next/image';
+ 
+ export default function BookPage() {
+   const [book, setBook] = useState(null);
+@@ -120,7 +121,11 @@ export default function BookPage() {
+       <main className="min-h-screen bg-gray-50 py-8">
+         <div className="max-w-4xl mx-auto px-4">
+           <div className="bg-white rounded-2xl shadow-sm border border-gray-100 overflow-hidden">
+-            {book.cover_url && <img src={book.cover_url} alt={book.title} className="w-full max-h-96 object-cover" />}
++            {book.cover_url && (
++              <div className="relative w-full h-64 sm:h-96">
++                <Image src={book.cover_url} alt={book.title} fill className="object-cover" sizes="(max-width: 768px) 100vw, 800px" priority />
++              </div>
++            )}
+             <div className="p-8">
+               <h1 className="text-3xl font-extrabold text-gray-900">{book.title}</h1>
+               {book.author && <p className="text-gray-500 mt-1">by {book.author}</p>}
+diff --git a/app/library/page.js b/app/library/page.js
+index 67889f0..bb4ae7f 100644
+--- a/app/library/page.js
++++ b/app/library/page.js
+@@ -2,6 +2,7 @@ import { createServerClient } from '@/lib/supabase-server';
+ import Navbar from '@/components/Navbar';
+ import Footer from '@/components/Footer';
+ import Link from 'next/link';
++import Image from 'next/image';
+ 
+ export const metadata = {
+   title: 'Library | Shiney Brain Academy',
+@@ -38,7 +39,9 @@ export default async function LibraryPage() {
+                 <Link key={book.id} href={`/library/${book.id}`}
+                   className="bg-white rounded-2xl shadow-sm border border-gray-100 overflow-hidden hover:shadow-md transition group">
+                   {book.cover_url ? (
+-                    <img src={book.cover_url} alt={book.title} className="w-full h-48 object-cover" />
++                    <div className="relative w-full h-48">
++                      <Image src={book.cover_url} alt={book.title} fill className="object-cover" sizes="(max-width: 768px) 100vw, 33vw" />
++                    </div>
+                   ) : (
+                     <div className="w-full h-48 bg-brand-blue flex items-center justify-center text-5xl">📘</div>
+                   )}
+diff --git a/app/testimonials/page.js b/app/testimonials/page.js
+index 6b2322f..5879a4c 100644
+--- a/app/testimonials/page.js
++++ b/app/testimonials/page.js
+@@ -6,6 +6,7 @@ import { useRouter } from 'next/navigation';
+ import Navbar from '@/components/Navbar';
+ import Footer from '@/components/Footer';
+ import Link from 'next/link';
++import Image from 'next/image';
+ 
+ export default function TestimonialsPage() {
+   const [approved, setApproved] = useState([]);
+@@ -258,7 +259,7 @@ export default function TestimonialsPage() {
+                   <div key={t.id} className="bg-white rounded-2xl shadow-sm border p-4">
+                     <div className="flex items-center gap-3">
+                       {t.photo ? (
+-                        <img src={t.photo} alt={t.name} className="w-10 h-10 rounded-full object-cover" />
++                        <Image src={t.photo} alt={t.name} width={40} height={40} className="rounded-full object-cover" />
+                       ) : (
+                         <div className="w-10 h-10 rounded-full bg-brand-blue flex items-center justify-center text-white font-bold text-sm">
+                           {t.name?.charAt(0) || 'S'}
+diff --git a/components/CourseCard.js b/components/CourseCard.js
+index a35d980..509309f 100644
+--- a/components/CourseCard.js
++++ b/components/CourseCard.js
+@@ -1,12 +1,13 @@
++import Image from 'next/image';
+ import Link from 'next/link';
+ import { formatCurrency } from '@/lib/utils';
+ 
+ export default function CourseCard({ course, href = `/courses/${course.id}`, actionLabel = 'View Details' }) {
+   return (
+     <article className="overflow-hidden rounded-3xl border border-slate-100 bg-white shadow-soft">
+-      <div className="aspect-[16/9] w-full bg-slate-100">
++      <div className="relative aspect-[16/9] w-full bg-slate-100">
+         {course.thumbnail_url ? (
+-          <img src={course.thumbnail_url} alt={course.title} className="h-full w-full object-cover" />
++          <Image src={course.thumbnail_url} alt={course.title} fill className="object-cover" sizes="(max-width: 768px) 100vw, 400px" />
+         ) : (
+           <div className="flex h-full items-center justify-center bg-brand-blue/10 text-sm font-semibold text-brand-blue">
+             Shiney Brain Academy

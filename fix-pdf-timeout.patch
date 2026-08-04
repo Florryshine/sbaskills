@@ -1,0 +1,41 @@
+diff --git a/app/admin/books/from-text/page.js b/app/admin/books/from-text/page.js
+index 80e0b98..ec0bf38 100644
+--- a/app/admin/books/from-text/page.js
++++ b/app/admin/books/from-text/page.js
+@@ -105,8 +105,19 @@ export default function BookFromTextPage() {
+         headers: { 'Content-Type': 'application/json' },
+         body: JSON.stringify({ title, description, author, price, markdown, themeKey, coverUrl }),
+       });
++
++      if (!res.ok) {
++        const text = await res.text();
++        let message;
++        try {
++          message = JSON.parse(text).error;
++        } catch {
++          message = `Server error (${res.status}). The document may be too long to render in time — try splitting it into smaller sections.`;
++        }
++        throw new Error(message || 'Generation failed');
++      }
++
+       const data = await res.json();
+-      if (!res.ok) throw new Error(data.error || 'Generation failed');
+       setResult(data);
+     } catch (err) {
+       setError(err.message);
+diff --git a/app/api/admin/books/from-text/route.js b/app/api/admin/books/from-text/route.js
+index 03fa4cd..afa0fa5 100644
+--- a/app/api/admin/books/from-text/route.js
++++ b/app/api/admin/books/from-text/route.js
+@@ -7,6 +7,11 @@ import { parseMarkdownToBlocks } from '@/lib/pdf/parseMarkdown';
+ import { enrichYoutubeBlocks } from '@/lib/pdf/youtube';
+ import { generatePdfFileName } from '@/lib/seo-utils';
+ 
++// Vercel's default serverless timeout is too short for rendering long
++// pasted books with @react-pdf/renderer + uploading the buffer to
++// Supabase storage. 60s is the max allowed on the Hobby plan.
++export const maxDuration = 60;
++
+ export async function POST(request) {
+   try {
+     const {

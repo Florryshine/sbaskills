@@ -1,0 +1,1278 @@
+From 515503ee9b9b9d9e6555a1d651d60845ae6f5592 Mon Sep 17 00:00:00 2001
+From: Claude <claude@anthropic.com>
+Date: Sat, 1 Aug 2026 22:08:22 +0000
+Subject: [PATCH] Podcast: paste-text + batch series generation, fix
+ contentDraftId/knowledgeAssetId mismatch
+
+- lib/podcastGenerate.js: shared script->TTS->segments pipeline, extracted
+  from generate/route.js so every entry point reuses it
+- generate/route.js: now stores knowledge_asset_id on the episode (was
+  content_draft_id: null), supports raw_content assets, adds maxDuration=60
+- generate-from-text/route.js (new): pasted/playbook text or a blog post's
+  own content -> one episode. Saves pasted text as a knowledge_asset for
+  traceability; blog posts skip that (saveAsAsset: false) since
+  content_drafts is already their source of truth
+- generate-batch/route.js (new): long text -> LLM-split into an episode
+  series. Runs as an async background job (lib/backgroundTask.js,
+  mirroring the books.generation_status pattern) since a full series can
+  run well past a request's time budget. New status/route.js is polled by
+  the paste-text page
+- AdminGeneratePodcastButton.js: was sending contentDraftId to a route that
+  only accepts knowledgeAssetId, so this button never actually worked on
+  the blog admin page. Now posts the post's own title/content to
+  generate-from-text directly
+- app/admin/blog/page.js: pass title/content instead of contentDraftId
+- app/admin/podcasts/paste/page.js (new): paste-text UI, single episode or
+  batch series, target-minutes input, polls batch status
+- app/admin/podcasts/page.js: link to the new paste page, groups episodes
+  by series_id, fixes regenerateEpisode using the now-stored
+  knowledge_asset_id
+- migration 20260801_podcast_manual_batch.sql: knowledge_assets gets
+  raw_content + source; podcast_episodes gets knowledge_asset_id/series_id/
+  series_title/episode_number; new podcast_batch_jobs table for the async
+  batch status
+---
+ app/admin/blog/page.js                        |   2 +-
+ app/admin/podcasts/page.js                    | 158 +++++++++----
+ app/admin/podcasts/paste/page.js              | 196 ++++++++++++++++
+ .../podcast/generate-batch/route.js           | 144 ++++++++++++
+ .../podcast/generate-batch/status/route.js    |  39 ++++
+ .../podcast/generate-from-text/route.js       |  50 ++++
+ .../content-engine/podcast/generate/route.js  | 215 +++---------------
+ components/AdminGeneratePodcastButton.js      |  23 +-
+ lib/podcastGenerate.js                        | 193 ++++++++++++++++
+ .../20260801_podcast_manual_batch.sql         |  58 +++++
+ 10 files changed, 834 insertions(+), 244 deletions(-)
+ create mode 100644 app/admin/podcasts/paste/page.js
+ create mode 100644 app/api/content-engine/podcast/generate-batch/route.js
+ create mode 100644 app/api/content-engine/podcast/generate-batch/status/route.js
+ create mode 100644 app/api/content-engine/podcast/generate-from-text/route.js
+ create mode 100644 lib/podcastGenerate.js
+ create mode 100644 supabase/migrations/20260801_podcast_manual_batch.sql
+
+diff --git a/app/admin/blog/page.js b/app/admin/blog/page.js
+index 79245e5..82e64fa 100644
+--- a/app/admin/blog/page.js
++++ b/app/admin/blog/page.js
+@@ -101,7 +101,7 @@ export default function BlogAdminPage() {
+                     {post.published_at ? new Date(post.published_at).toLocaleDateString() : '—'}
+                   </td>
+                   <td className="p-3">
+-                    <AdminGeneratePodcastButton contentDraftId={post.id} />
++                    <AdminGeneratePodcastButton title={post.title} content={post.content} />
+                   </td>
+                   <td className="p-3 text-right">
+                     <div className="flex justify-end gap-2">
+diff --git a/app/admin/podcasts/page.js b/app/admin/podcasts/page.js
+index c1bc702..22394b0 100644
+--- a/app/admin/podcasts/page.js
++++ b/app/admin/podcasts/page.js
+@@ -7,6 +7,7 @@ import Link from 'next/link';
+ export default function AdminPodcastsPage() {
+   const [episodes, setEpisodes] = useState([]);
+   const [loading, setLoading] = useState(true);
++  const [regeneratingId, setRegeneratingId] = useState(null);
+   const supabase = createBrowserClient();
+ 
+   useEffect(() => {
+@@ -37,11 +38,29 @@ export default function AdminPodcastsPage() {
+     else loadEpisodes();
+   };
+ 
+-  const regenerateEpisode = async (id) => {
+-    // This would call the podcast generation route again
+-    // You can pass the same knowledgeAssetId – but we don't store that here.
+-    // For now, we'll just reload – you can implement a proper retry later.
+-    alert('Regenerate feature coming soon – you can re-run the generation from the Generate Content page.');
++  const regenerateEpisode = async (ep) => {
++    if (!ep.knowledge_asset_id) {
++      alert(
++        "This episode wasn't generated from a saved knowledge asset (e.g. it came from a blog post), so there's no source text to regenerate from."
++      );
++      return;
++    }
++    if (!confirm(`Regenerate "${ep.title}"? This creates a new episode from the same source text.`)) return;
++    setRegeneratingId(ep.id);
++    try {
++      const res = await fetch('/api/content-engine/podcast/generate', {
++        method: 'POST',
++        headers: { 'Content-Type': 'application/json' },
++        body: JSON.stringify({ knowledgeAssetId: ep.knowledge_asset_id }),
++      });
++      const data = await res.json();
++      if (!res.ok) throw new Error(data.error || 'Regeneration failed');
++      await loadEpisodes();
++    } catch (e) {
++      alert(`❌ ${e.message}`);
++    } finally {
++      setRegeneratingId(null);
++    }
+   };
+ 
+   const getStatusBadge = (status) => {
+@@ -53,61 +72,100 @@ export default function AdminPodcastsPage() {
+     return `px-2 py-1 rounded-full text-xs font-bold ${colors[status] || 'bg-gray-100'}`;
+   };
+ 
++  // Group series episodes together; standalone episodes each get their own group.
++  const seriesMap = new Map();
++  const standalone = [];
++  for (const ep of episodes) {
++    if (ep.series_id) {
++      if (!seriesMap.has(ep.series_id)) seriesMap.set(ep.series_id, []);
++      seriesMap.get(ep.series_id).push(ep);
++    } else {
++      standalone.push(ep);
++    }
++  }
++  for (const eps of seriesMap.values()) {
++    eps.sort((a, b) => (a.episode_number || 0) - (b.episode_number || 0));
++  }
++
++  const renderEpisode = (ep) => (
++    <div key={ep.id} className="bg-white rounded-2xl shadow-sm border p-4">
++      <div className="flex flex-col md:flex-row md:items-center justify-between gap-3">
++        <div>
++          <h3 className="font-bold">
++            {ep.episode_number ? `Ep. ${ep.episode_number} — ` : ''}
++            {ep.title}
++          </h3>
++          <p className="text-sm text-gray-500">
++            Status: <span className={getStatusBadge(ep.status)}>{ep.status}</span>
++            {ep.total_duration_seconds && (
++              <span className="ml-2">• Duration: {Math.round(ep.total_duration_seconds / 60)} min</span>
++            )}
++            {ep.error_message && (
++              <span className="ml-2 text-red-500 text-xs">⚠️ {ep.error_message}</span>
++            )}
++          </p>
++          <p className="text-xs text-gray-400">
++            Created: {new Date(ep.created_at).toLocaleString()}
++          </p>
++        </div>
++        <div className="flex gap-2 flex-wrap">
++          {ep.status === 'ready' && (
++            <Link
++              href={`/podcast/${ep.id}`}
++              target="_blank"
++              className="text-brand-blue px-4 py-2 rounded-xl text-sm font-bold hover:bg-blue-50"
++            >
++              ▶️ Play
++            </Link>
++          )}
++          <button
++            onClick={() => regenerateEpisode(ep)}
++            disabled={regeneratingId === ep.id}
++            className="bg-yellow-100 text-yellow-700 px-4 py-2 rounded-xl text-sm font-bold hover:bg-yellow-200 disabled:opacity-50"
++          >
++            {regeneratingId === ep.id ? '🔄 Regenerating…' : '🔄 Regenerate'}
++          </button>
++          <button
++            onClick={() => deleteEpisode(ep.id)}
++            className="bg-red-100 text-red-600 px-4 py-2 rounded-xl text-sm font-bold hover:bg-red-200"
++          >
++            Delete
++          </button>
++        </div>
++      </div>
++    </div>
++  );
++
+   return (
+     <div className="p-6">
+-      <h1 className="text-2xl font-bold text-brand-blue mb-6">🎙️ Podcast Episodes</h1>
++      <div className="flex items-center justify-between mb-6">
++        <h1 className="text-2xl font-bold text-brand-blue">🎙️ Podcast Episodes</h1>
++        <Link
++          href="/admin/podcasts/paste"
++          className="bg-brand-blue text-white px-4 py-2 rounded-xl text-sm font-bold hover:opacity-90"
++        >
++          + Paste Text → Podcast
++        </Link>
++      </div>
+       {loading ? (
+         <div className="text-center py-8">Loading...</div>
+       ) : episodes.length === 0 ? (
+         <div className="text-center py-8 text-gray-500">No podcast episodes found.</div>
+       ) : (
+-        <div className="grid gap-4">
+-          {episodes.map((ep) => (
+-            <div key={ep.id} className="bg-white rounded-2xl shadow-sm border p-4">
+-              <div className="flex flex-col md:flex-row md:items-center justify-between gap-3">
+-                <div>
+-                  <h3 className="font-bold">{ep.title}</h3>
+-                  <p className="text-sm text-gray-500">
+-                    Status: <span className={getStatusBadge(ep.status)}>{ep.status}</span>
+-                    {ep.total_duration_seconds && (
+-                      <span className="ml-2">• Duration: {Math.round(ep.total_duration_seconds / 60)} min</span>
+-                    )}
+-                    {ep.error_message && (
+-                      <span className="ml-2 text-red-500 text-xs">⚠️ {ep.error_message}</span>
+-                    )}
+-                  </p>
+-                  <p className="text-xs text-gray-400">
+-                    Created: {new Date(ep.created_at).toLocaleString()}
+-                  </p>
+-                </div>
+-                <div className="flex gap-2 flex-wrap">
+-                  {ep.status === 'ready' && (
+-                    <Link
+-                      href={`/podcast/${ep.id}`}
+-                      target="_blank"
+-                      className="text-brand-blue px-4 py-2 rounded-xl text-sm font-bold hover:bg-blue-50"
+-                    >
+-                      ▶️ Play
+-                    </Link>
+-                  )}
+-                  <button
+-                    onClick={() => regenerateEpisode(ep.id)}
+-                    className="bg-yellow-100 text-yellow-700 px-4 py-2 rounded-xl text-sm font-bold hover:bg-yellow-200"
+-                  >
+-                    🔄 Regenerate
+-                  </button>
+-                  <button
+-                    onClick={() => deleteEpisode(ep.id)}
+-                    className="bg-red-100 text-red-600 px-4 py-2 rounded-xl text-sm font-bold hover:bg-red-200"
+-                  >
+-                    Delete
+-                  </button>
+-                </div>
+-              </div>
++        <div className="space-y-8">
++          {standalone.length > 0 && (
++            <div className="grid gap-4">{standalone.map(renderEpisode)}</div>
++          )}
++          {[...seriesMap.entries()].map(([seriesId, eps]) => (
++            <div key={seriesId}>
++              <h2 className="text-lg font-bold text-gray-700 mb-3">
++                📚 {eps[0].series_title || 'Series'} ({eps.length} episode{eps.length === 1 ? '' : 's'})
++              </h2>
++              <div className="grid gap-4">{eps.map(renderEpisode)}</div>
+             </div>
+           ))}
+         </div>
+       )}
+     </div>
+   );
+-}
+\ No newline at end of file
++}
+diff --git a/app/admin/podcasts/paste/page.js b/app/admin/podcasts/paste/page.js
+new file mode 100644
+index 0000000..2a5bc09
+--- /dev/null
++++ b/app/admin/podcasts/paste/page.js
+@@ -0,0 +1,196 @@
++'use client';
++
++import { useState, useEffect, useRef } from 'react';
++import Link from 'next/link';
++
++export default function PastePodcastPage() {
++  const [mode, setMode] = useState('single'); // 'single' | 'batch'
++  const [title, setTitle] = useState('');
++  const [text, setText] = useState('');
++  const [targetMinutes, setTargetMinutes] = useState(5);
++  const [status, setStatus] = useState('idle'); // idle | submitting | polling | done | error
++  const [result, setResult] = useState(null);
++  const [error, setError] = useState('');
++  const pollRef = useRef(null);
++
++  useEffect(() => () => clearInterval(pollRef.current), []);
++
++  async function handleSubmit(e) {
++    e.preventDefault();
++    if (!title.trim() || !text.trim()) return;
++    setStatus('submitting');
++    setError('');
++    setResult(null);
++
++    try {
++      if (mode === 'single') {
++        const res = await fetch('/api/content-engine/podcast/generate-from-text', {
++          method: 'POST',
++          headers: { 'Content-Type': 'application/json' },
++          body: JSON.stringify({ title, text, source: 'manual_paste' }),
++        });
++        const data = await res.json();
++        if (!res.ok) throw new Error(data.error || 'Generation failed');
++        setStatus('done');
++        setResult({ kind: 'single', ...data });
++      } else {
++        const res = await fetch('/api/content-engine/podcast/generate-batch', {
++          method: 'POST',
++          headers: { 'Content-Type': 'application/json' },
++          body: JSON.stringify({ seriesTitle: title, text, targetMinutes: Number(targetMinutes) || 5 }),
++        });
++        const data = await res.json();
++        if (!res.ok) throw new Error(data.error || 'Batch generation failed');
++        setStatus('polling');
++        pollBatch(data.seriesId);
++      }
++    } catch (err) {
++      setStatus('error');
++      setError(err.message);
++    }
++  }
++
++  function pollBatch(seriesId) {
++    clearInterval(pollRef.current);
++    pollRef.current = setInterval(async () => {
++      try {
++        const res = await fetch(`/api/content-engine/podcast/generate-batch/status?seriesId=${seriesId}`);
++        const data = await res.json();
++        if (!res.ok) throw new Error(data.error || 'Status check failed');
++        setResult({ kind: 'batch', ...data });
++        if (data.status === 'ready' || data.status === 'failed') {
++          clearInterval(pollRef.current);
++          setStatus(data.status === 'ready' ? 'done' : 'error');
++          if (data.status === 'failed') setError(data.error || 'Batch generation failed');
++        }
++      } catch (err) {
++        clearInterval(pollRef.current);
++        setStatus('error');
++        setError(err.message);
++      }
++    }, 3000);
++  }
++
++  const busy = status === 'submitting' || status === 'polling';
++
++  return (
++    <div className="p-6 max-w-3xl mx-auto">
++      <div className="flex items-center justify-between mb-6">
++        <h1 className="text-2xl font-bold text-brand-blue">🎙️ Paste Text → Podcast</h1>
++        <Link href="/admin/podcasts" className="text-sm text-blue-600 hover:underline">
++          ← All episodes
++        </Link>
++      </div>
++
++      <p className="text-sm text-gray-500 mb-6">
++        Paste a playbook, study note, or any other text and generate a podcast from it directly —
++        no research pipeline required. Long text can be split into a full episode series.
++      </p>
++
++      <form onSubmit={handleSubmit} className="space-y-4 bg-white border rounded-2xl p-5 shadow-sm">
++        <div className="flex gap-2">
++          <button
++            type="button"
++            onClick={() => setMode('single')}
++            className={`px-3 py-1.5 rounded-lg text-sm font-medium ${
++              mode === 'single' ? 'bg-brand-blue text-white' : 'bg-gray-100 text-gray-600'
++            }`}
++          >
++            Single episode
++          </button>
++          <button
++            type="button"
++            onClick={() => setMode('batch')}
++            className={`px-3 py-1.5 rounded-lg text-sm font-medium ${
++              mode === 'batch' ? 'bg-brand-blue text-white' : 'bg-gray-100 text-gray-600'
++            }`}
++          >
++            Batch series
++          </button>
++        </div>
++
++        <div>
++          <label className="block text-sm font-medium text-gray-700 mb-1">
++            {mode === 'single' ? 'Episode title' : 'Series title'}
++          </label>
++          <input
++            type="text"
++            value={title}
++            onChange={(e) => setTitle(e.target.value)}
++            className="w-full border rounded-lg p-2"
++            placeholder={mode === 'single' ? 'e.g. Photosynthesis Explained' : 'e.g. JAMB Biology Playbook'}
++            required
++          />
++        </div>
++
++        {mode === 'batch' && (
++          <div>
++            <label className="block text-sm font-medium text-gray-700 mb-1">
++              Target minutes per episode
++            </label>
++            <input
++              type="number"
++              min={2}
++              max={20}
++              value={targetMinutes}
++              onChange={(e) => setTargetMinutes(e.target.value)}
++              className="w-32 border rounded-lg p-2"
++            />
++          </div>
++        )}
++
++        <div>
++          <label className="block text-sm font-medium text-gray-700 mb-1">Text</label>
++          <textarea
++            value={text}
++            onChange={(e) => setText(e.target.value)}
++            rows={14}
++            className="w-full border rounded-lg p-2 font-mono text-sm"
++            placeholder="Paste the playbook or study text here…"
++            required
++          />
++          <p className="text-xs text-gray-400 mt-1">{text.length.toLocaleString()} characters</p>
++        </div>
++
++        <button
++          type="submit"
++          disabled={busy}
++          className="px-4 py-2 rounded-lg bg-brand-blue text-white font-medium disabled:opacity-50"
++        >
++          {busy ? 'Generating…' : mode === 'single' ? 'Generate Podcast' : 'Generate Series'}
++        </button>
++      </form>
++
++      {status === 'error' && (
++        <div className="mt-4 p-4 bg-red-50 border border-red-200 rounded-lg text-red-700 text-sm">
++          ❌ {error}
++        </div>
++      )}
++
++      {result?.kind === 'single' && status === 'done' && (
++        <div className="mt-4 p-4 bg-green-50 border border-green-200 rounded-lg text-green-800 text-sm">
++          ✅ Episode ready — {result.segmentCount} segments, ~
++          {Math.round((result.totalDurationSeconds || 0) / 60)} min ({result.usedProvider})
++          {result.failedSegments ? ` — ${result.failedSegments} segment(s) skipped` : ''}
++        </div>
++      )}
++
++      {result?.kind === 'batch' && (
++        <div className="mt-4 p-4 bg-white border rounded-lg text-sm space-y-2">
++          <p className="font-medium">
++            Series status: <span className="capitalize">{result.status}</span>
++            {result.episodeCount ? ` — ${result.completedCount}/${result.episodeCount} episodes` : ''}
++          </p>
++          {(result.episodes || []).map((ep) => (
++            <div key={ep.id} className="flex justify-between border-t pt-2 text-gray-600">
++              <span>
++                {ep.episode_number}. {ep.title}
++              </span>
++              <span className="capitalize">{ep.status}</span>
++            </div>
++          ))}
++        </div>
++      )}
++    </div>
++  );
++}
+diff --git a/app/api/content-engine/podcast/generate-batch/route.js b/app/api/content-engine/podcast/generate-batch/route.js
+new file mode 100644
+index 0000000..ed040b3
+--- /dev/null
++++ b/app/api/content-engine/podcast/generate-batch/route.js
+@@ -0,0 +1,144 @@
++import { NextResponse } from 'next/server';
++import { createAdminClient } from '@/lib/supabase-admin';
++import { generateWithFallback } from '@/lib/llmFallbackChain';
++import { generatePodcastEpisode } from '@/lib/podcastGenerate';
++import { parseJsonFromText } from '@/lib/robustJsonParse';
++import { runInBackground } from '@/lib/backgroundTask';
++
++// A full series (split + N episodes of script+TTS) can run well past a
++// normal request's time budget, so this route only does the fast part
++// synchronously (save the text, create the job row) and returns. The rest
++// happens in runInBackground below; the paste page polls the status route.
++export const maxDuration = 60;
++
++function buildSplitPrompt(seriesTitle, text, targetMinutes) {
++  return `Split the study material below into podcast episodes for a series called "${seriesTitle}".
++
++Each episode should be a self-contained topic, roughly ${targetMinutes} minutes of spoken content (~${targetMinutes * 130} words of source material per episode). Split at natural topic boundaries, not arbitrary word counts.
++
++Return ONLY a JSON array, no other text:
++[{"title": "Episode title", "content": "the portion of source text this episode covers"}, ...]
++
++Source material:
++${text}`;
++}
++
++async function runBatchJob({ jobId, seriesTitle, text, targetMinutes, format, knowledgeAssetId }) {
++  const supabase = createAdminClient();
++
++  try {
++    await supabase.from('podcast_batch_jobs').update({ status: 'splitting' }).eq('id', jobId);
++
++    const splitPrompt = buildSplitPrompt(seriesTitle, text, targetMinutes);
++    const { result: episodePlan, errors } = await generateWithFallback(
++      splitPrompt,
++      (t) => parseJsonFromText(t, 'array'),
++      (r) => Array.isArray(r) && r.length > 0 && r.every((e) => e.title && e.content),
++      8192
++    );
++
++    if (!episodePlan) {
++      await supabase
++        .from('podcast_batch_jobs')
++        .update({ status: 'failed', error: (errors || []).join(' | ').slice(0, 2000) })
++        .eq('id', jobId);
++      return;
++    }
++
++    await supabase
++      .from('podcast_batch_jobs')
++      .update({ status: 'generating', episode_count: episodePlan.length })
++      .eq('id', jobId);
++
++    // Sequential on purpose — TTS + storage upload per episode is heavy;
++    // running a whole series in parallel risks provider rate limits.
++    for (let i = 0; i < episodePlan.length; i++) {
++      const ep = episodePlan[i];
++      try {
++        await generatePodcastEpisode({
++          title: ep.title,
++          content: ep.content,
++          format,
++          extra: {
++            knowledgeAssetId,
++            seriesId: jobId,
++            seriesTitle,
++            episodeNumber: i + 1,
++          },
++        });
++      } catch (e) {
++        console.error(`Batch episode ${i + 1} failed:`, e.message);
++        // Individual episode failure is recorded on its own podcast_episodes
++        // row by generatePodcastEpisode() — the batch keeps going so one
++        // bad episode doesn't sink the whole series.
++      }
++      await supabase
++        .from('podcast_batch_jobs')
++        .update({ completed_count: i + 1 })
++        .eq('id', jobId);
++    }
++
++    await supabase.from('podcast_batch_jobs').update({ status: 'ready' }).eq('id', jobId);
++  } catch (err) {
++    console.error('Batch job failed:', err);
++    await supabase
++      .from('podcast_batch_jobs')
++      .update({ status: 'failed', error: err.message?.slice(0, 2000) })
++      .eq('id', jobId);
++  }
++}
++
++export async function POST(request) {
++  try {
++    const { seriesTitle, text, targetMinutes = 5, format } = await request.json();
++    if (!seriesTitle || !text) {
++      return NextResponse.json({ error: 'seriesTitle and text are required' }, { status: 400 });
++    }
++
++    const supabase = createAdminClient();
++
++    const { data: asset, error: assetError } = await supabase
++      .from('knowledge_assets')
++      .insert({
++        keyword: seriesTitle,
++        raw_content: text,
++        source: 'manual_paste_batch',
++        summary: text.slice(0, 500),
++      })
++      .select()
++      .single();
++    if (assetError) throw new Error(`Could not save knowledge asset: ${assetError.message}`);
++
++    const { data: job, error: jobError } = await supabase
++      .from('podcast_batch_jobs')
++      .insert({
++        knowledge_asset_id: asset.id,
++        series_title: seriesTitle,
++        status: 'queued',
++      })
++      .select()
++      .single();
++    if (jobError) throw new Error(`Could not create batch job: ${jobError.message}`);
++
++    runInBackground(() =>
++      runBatchJob({
++        jobId: job.id,
++        seriesTitle,
++        text,
++        targetMinutes,
++        format,
++        knowledgeAssetId: asset.id,
++      })
++    );
++
++    return NextResponse.json({
++      success: true,
++      seriesId: job.id,
++      knowledgeAssetId: asset.id,
++      status: 'queued',
++    });
++  } catch (err) {
++    console.error('generate-batch error:', err);
++    return NextResponse.json({ error: err.message || 'Internal error' }, { status: 500 });
++  }
++}
+diff --git a/app/api/content-engine/podcast/generate-batch/status/route.js b/app/api/content-engine/podcast/generate-batch/status/route.js
+new file mode 100644
+index 0000000..ba169b5
+--- /dev/null
++++ b/app/api/content-engine/podcast/generate-batch/status/route.js
+@@ -0,0 +1,39 @@
++import { NextResponse } from 'next/server';
++import { createAdminClient } from '@/lib/supabase-admin';
++
++// Polled by app/admin/podcasts/paste/page.js after POSTing to
++// generate-batch, which returns almost immediately with { seriesId,
++// status: 'queued' } instead of waiting for every episode to finish.
++export async function GET(request) {
++  const seriesId = request.nextUrl.searchParams.get('seriesId');
++  if (!seriesId) {
++    return NextResponse.json({ error: 'seriesId is required' }, { status: 400 });
++  }
++
++  const supabase = createAdminClient();
++
++  const { data: job, error: jobError } = await supabase
++    .from('podcast_batch_jobs')
++    .select('*')
++    .eq('id', seriesId)
++    .single();
++  if (jobError) {
++    return NextResponse.json({ error: jobError.message }, { status: 404 });
++  }
++
++  const { data: episodes } = await supabase
++    .from('podcast_episodes')
++    .select('id, title, status, episode_number, total_duration_seconds, error_message')
++    .eq('series_id', seriesId)
++    .order('episode_number', { ascending: true });
++
++  return NextResponse.json({
++    seriesId: job.id,
++    seriesTitle: job.series_title,
++    status: job.status,
++    episodeCount: job.episode_count,
++    completedCount: job.completed_count,
++    error: job.error,
++    episodes: episodes || [],
++  });
++}
+diff --git a/app/api/content-engine/podcast/generate-from-text/route.js b/app/api/content-engine/podcast/generate-from-text/route.js
+new file mode 100644
+index 0000000..a59ccef
+--- /dev/null
++++ b/app/api/content-engine/podcast/generate-from-text/route.js
+@@ -0,0 +1,50 @@
++import { NextResponse } from 'next/server';
++import { createAdminClient } from '@/lib/supabase-admin';
++import { generatePodcastEpisode } from '@/lib/podcastGenerate';
++
++export const maxDuration = 60;
++
++export async function POST(request) {
++  try {
++    const { title, text, source = 'manual_paste', format, saveAsAsset = true } = await request.json();
++    if (!title || !text) {
++      return NextResponse.json({ error: 'title and text are required' }, { status: 400 });
++    }
++
++    let knowledgeAssetId = null;
++
++    // Blog-post podcasts (source: 'blog_post') don't need a knowledge asset —
++    // the content_draft row is already the source of truth. Playbook/pasted
++    // text does get saved as a knowledge asset, since that's the only place
++    // this platform tracks topic content, and it's what makes it reusable
++    // for quizzes/flashcards/games later.
++    if (saveAsAsset) {
++      const supabase = createAdminClient();
++      const { data: asset, error: assetError } = await supabase
++        .from('knowledge_assets')
++        .insert({
++          keyword: title,
++          raw_content: text,
++          source,
++          summary: text.slice(0, 500),
++        })
++        .select()
++        .single();
++
++      if (assetError) throw new Error(`Could not save knowledge asset: ${assetError.message}`);
++      knowledgeAssetId = asset.id;
++    }
++
++    const result = await generatePodcastEpisode({
++      title,
++      content: text,
++      format,
++      extra: { knowledgeAssetId },
++    });
++
++    return NextResponse.json({ success: true, knowledgeAssetId, ...result });
++  } catch (err) {
++    console.error('generate-from-text error:', err);
++    return NextResponse.json({ error: err.message || 'Internal error' }, { status: 500 });
++  }
++}
+diff --git a/app/api/content-engine/podcast/generate/route.js b/app/api/content-engine/podcast/generate/route.js
+index 0398581..1957f14 100644
+--- a/app/api/content-engine/podcast/generate/route.js
++++ b/app/api/content-engine/podcast/generate/route.js
+@@ -1,36 +1,18 @@
+ import { NextResponse } from 'next/server';
+ import { createAdminClient } from '@/lib/supabase-admin';
+-import { generateWithFallback } from '@/lib/llmFallbackChain';
+-import { buildPodcastPrompt, parseScriptJson, isValidScript } from '@/lib/podcastPrompt';
+-import {
+-  synthesizeLine,
+-  estimateDurationSeconds,
+-  VOICES,
+-  getRandomEffect
+-} from '@/lib/podcastTTS';
++import { generatePodcastEpisode } from '@/lib/podcastGenerate';
+ 
+-const BUCKET = 'podcast-audio';
+-
+-async function uploadSegmentAudio(supabase, episodeId, position, buffer) {
+-  const path = `${episodeId}/${String(position).padStart(3, '0')}.mp3`;
+-  const { error } = await supabase.storage
+-    .from(BUCKET)
+-    .upload(path, buffer, { contentType: 'audio/mpeg', upsert: true });
+-  if (error) throw new Error(`Storage upload failed: ${error.message}`);
+-  const { data: urlData } = supabase.storage.from(BUCKET).getPublicUrl(path);
+-  return urlData.publicUrl;
+-}
++export const maxDuration = 60;
+ 
+ export async function POST(request) {
+-  const supabase = createAdminClient();
+-  let episodeId = null;
+-
+   try {
+     const { knowledgeAssetId, format } = await request.json();
+     if (!knowledgeAssetId) {
+       return NextResponse.json({ error: 'knowledgeAssetId is required' }, { status: 400 });
+     }
+ 
++    const supabase = createAdminClient();
++
+     // 1. Fetch the knowledge asset
+     const { data: asset, error: assetError } = await supabase
+       .from('knowledge_assets')
+@@ -42,187 +24,42 @@ export async function POST(request) {
+       return NextResponse.json({ error: 'Knowledge asset not found' }, { status: 404 });
+     }
+ 
+-    // 2. Build a "post" object from the asset (matches prompt expectations)
+-    const post = {
+-      id: asset.id,
+-      title: asset.keyword,
+-      content: `
++    // 2. Build plain-text content from the asset's structured fields, or
++    // fall back to raw_content when the asset came from a paste/playbook
++    // rather than the AI research pipeline.
++    const content = asset.raw_content
++      ? asset.raw_content
++      : `
+ Summary: ${asset.summary || ''}
+ 
+ Key Concepts:
+-${(asset.key_concepts || []).map(k => `- ${k}`).join('\n')}
++${(asset.key_concepts || []).map((k) => `- ${k}`).join('\n')}
+ 
+ Definitions:
+-${(asset.definitions || []).map(d => `- ${d.term}: ${d.definition}`).join('\n')}
++${(asset.definitions || []).map((d) => `- ${d.term}: ${d.definition}`).join('\n')}
+ 
+ Examples:
+-${(asset.examples || []).map(e => `- ${e}`).join('\n')}
++${(asset.examples || []).map((e) => `- ${e}`).join('\n')}
+ 
+ Facts:
+-${(asset.facts || []).map(f => `- ${f}`).join('\n')}
++${(asset.facts || []).map((f) => `- ${f}`).join('\n')}
+ 
+ Common Mistakes:
+-${(asset.common_mistakes || []).map(m => `- ${m}`).join('\n')}
+-      `.trim(),
+-      topic_type: asset.topic_type || 'learning'
+-    };
+-
+-    // 3. Create the episode
+-    const { data: episode, error: episodeError } = await supabase
+-      .from('podcast_episodes')
+-      .insert({
+-        content_draft_id: null,
+-        title: asset.keyword,
+-        status: 'generating',
+-        host_a_voice: VOICES.host_a,
+-        host_b_voice: VOICES.host_b,
+-      })
+-      .select()
+-      .single();
+-
+-    if (episodeError) {
+-      throw new Error(`Could not create episode: ${episodeError.message}`);
+-    }
+-    episodeId = episode.id;
+-
+-    // 4. Generate the script
+-    const prompt = buildPodcastPrompt(post, format || 'teacher_examiner');
+-    const { result: script, usedProvider, errors } = await generateWithFallback(
+-      prompt,
+-      parseScriptJson,
+-      isValidScript,
+-      8192
+-    );
+-
+-    if (!script) {
+-      await supabase
+-        .from('podcast_episodes')
+-        .update({ status: 'failed', error_message: errors.join(' | ').slice(0, 2000) })
+-        .eq('id', episodeId);
+-      return NextResponse.json(
+-        { error: 'Script generation failed', details: errors },
+-        { status: 502 }
+-      );
+-    }
+-
+-    // 5. Synthesize each line and add effects
+-    let totalDuration = 0;
+-    const segmentRows = [];
+-
+-    for (let i = 0; i < script.length; i++) {
+-      const line = script[i];
+-      const emotion = line.emotion || 'neutral';
+-      let audioUrl = null;
+-      let duration = estimateDurationSeconds(line.text);
++${(asset.common_mistakes || []).map((m) => `- ${m}`).join('\n')}
++      `.trim();
+ 
+-      // 5a. Synthesize the TTS audio
+-      try {
+-        const buffer = await synthesizeLine(line.text, line.speaker, emotion);
+-        audioUrl = await uploadSegmentAudio(supabase, episodeId, i, buffer);
+-      } catch (e) {
+-        console.error(`❌ Segment ${i} TTS/upload failed:`, {
+-          message: e.message,
+-          stack: e.stack,
+-          speaker: line.speaker,
+-          text: line.text.substring(0, 50)
+-        });
+-        // Continue – a missing segment just gets skipped by the player
+-      }
+-
+-      // 5b. Handle effect with random selection
+-      let effectUrl = null;
+-      if (line.effect && line.effect !== 'none') {
+-        const effectPath = getRandomEffect(line.effect);
+-        if (effectPath) {
+-          try {
+-            const baseUrl = process.env.NEXT_PUBLIC_APP_URL || 'https://shineybrainacademy.vercel.app';
+-            const effectPublicUrl = `${baseUrl}${effectPath}`;
+-            const res = await fetch(effectPublicUrl);
+-            if (res.ok) {
+-              const effectBuffer = Buffer.from(await res.arrayBuffer());
+-              // Upload effect as a separate segment (position i + 0.5)
+-              effectUrl = await uploadSegmentAudio(supabase, episodeId, i + 0.5, effectBuffer);
+-            }
+-          } catch (e) {
+-            console.error(`❌ Effect ${line.effect} failed:`, e.message);
+-          }
+-        }
+-      }
+-
+-      totalDuration += duration;
+-      segmentRows.push({
+-        episode_id: episodeId,
+-        position: i,
+-        speaker: line.speaker,
+-        text: line.text,
+-        emotion_tag: emotion,
+-        audio_url: audioUrl,
+-        duration_seconds: duration,
+-        topic: typeof line.topic === 'string' ? line.topic : null,
+-        keywords: Array.isArray(line.keywords) ? line.keywords : [],
+-        exam_tip: line.exam_tip === true,
+-        difficulty: ['easy', 'medium', 'hard'].includes(line.difficulty) ? line.difficulty : null,
+-      });
+-
+-      // If effect was uploaded, add a separate segment for it.
+-      // NOTE: `speaker` must be one of the values allowed by the
+-      // podcast_segments_speaker_check constraint (host_a/host_b) — reuse
+-      // the current line's speaker rather than inventing a new 'effect'
+-      // value, which was violating that constraint and failing the whole
+-      // batch insert for every episode that included a sound effect.
+-      if (effectUrl) {
+-        segmentRows.push({
+-          episode_id: episodeId,
+-          position: i + 0.5,
+-          speaker: line.speaker,
+-          text: `[${line.effect}]`,
+-          emotion_tag: 'neutral',
+-          audio_url: effectUrl,
+-          duration_seconds: 1,
+-          topic: 'effect',
+-          keywords: [],
+-          exam_tip: false,
+-          difficulty: null,
+-        });
+-      }
+-    }
+-
+-    // 6. Save segments
+-    const { error: segmentsError } = await supabase
+-      .from('podcast_segments')
+-      .insert(segmentRows);
+-
+-    if (segmentsError) {
+-      throw new Error(`Could not save segments: ${segmentsError.message}`);
+-    }
+-
+-    const failedSegments = segmentRows.filter((s) => !s.audio_url).length;
+-
+-    await supabase
+-      .from('podcast_episodes')
+-      .update({
+-        status: 'ready',
+-        total_duration_seconds: totalDuration,
+-        error_message: failedSegments > 0 ? `${failedSegments} segment(s) failed TTS` : null,
+-      })
+-      .eq('id', episodeId);
+-
+-    return NextResponse.json({
+-      success: true,
+-      episodeId,
+-      usedProvider,
+-      segmentCount: segmentRows.length,
+-      failedSegments,
+-      totalDurationSeconds: totalDuration,
++    // 3. Generate — knowledge_asset_id is now stored on the episode row,
++    // so regenerate/traceability from the admin list actually works.
++    const result = await generatePodcastEpisode({
++      title: asset.keyword,
++      content,
++      format: format || 'teacher_examiner',
++      extra: { knowledgeAssetId: asset.id },
+     });
++
++    return NextResponse.json({ success: true, ...result });
+   } catch (err) {
+     console.error('Podcast error:', err);
+-    if (episodeId) {
+-      await supabase
+-        .from('podcast_episodes')
+-        .update({ status: 'failed', error_message: err.message?.slice(0, 2000) })
+-        .eq('id', episodeId);
+-    }
+     return NextResponse.json({ error: err.message || 'Internal error' }, { status: 500 });
+   }
+-  }
+\ No newline at end of file
++}
+diff --git a/components/AdminGeneratePodcastButton.js b/components/AdminGeneratePodcastButton.js
+index b08e6cb..fd8548d 100644
+--- a/components/AdminGeneratePodcastButton.js
++++ b/components/AdminGeneratePodcastButton.js
+@@ -4,20 +4,35 @@ import { useState } from 'react';
+ 
+ /**
+  * Drop this into your admin content list/editor next to a published post:
+- *   <AdminGeneratePodcastButton contentDraftId={post.id} />
++ *   <AdminGeneratePodcastButton title={post.title} content={post.content} />
++ *
++ * Sends the post's own title/content straight to generate-from-text —
++ * blog posts (content_drafts) were never knowledge_assets, so there was
++ * never a knowledgeAssetId for this button to send.
+  */
+-export default function AdminGeneratePodcastButton({ contentDraftId }) {
++export default function AdminGeneratePodcastButton({ title, content }) {
+   const [status, setStatus] = useState('idle'); // idle | generating | done | error
+   const [message, setMessage] = useState('');
+ 
+   async function handleGenerate() {
++    if (!content) {
++      setStatus('error');
++      setMessage('❌ This post has no content to generate a podcast from');
++      return;
++    }
+     setStatus('generating');
+     setMessage('');
+     try {
+-      const res = await fetch('/api/content-engine/podcast/generate', {
++      const res = await fetch('/api/content-engine/podcast/generate-from-text', {
+         method: 'POST',
+         headers: { 'Content-Type': 'application/json' },
+-        body: JSON.stringify({ contentDraftId, format: 'teacher_examiner' }),
++        body: JSON.stringify({
++          title,
++          text: content,
++          source: 'blog_post',
++          format: 'teacher_examiner',
++          saveAsAsset: false,
++        }),
+       });
+       const data = await res.json();
+       if (!res.ok) throw new Error(data.error || 'Generation failed');
+diff --git a/lib/podcastGenerate.js b/lib/podcastGenerate.js
+new file mode 100644
+index 0000000..0f61d29
+--- /dev/null
++++ b/lib/podcastGenerate.js
+@@ -0,0 +1,193 @@
++import { createAdminClient } from '@/lib/supabase-admin';
++import { generateWithFallback } from '@/lib/llmFallbackChain';
++import { buildPodcastPrompt, parseScriptJson, isValidScript } from '@/lib/podcastPrompt';
++import {
++  synthesizeLine,
++  estimateDurationSeconds,
++  VOICES,
++  getRandomEffect,
++} from '@/lib/podcastTTS';
++
++const BUCKET = 'podcast-audio';
++
++async function uploadSegmentAudio(supabase, episodeId, position, buffer) {
++  const path = `${episodeId}/${String(position).padStart(3, '0')}.mp3`;
++  const { error } = await supabase.storage
++    .from(BUCKET)
++    .upload(path, buffer, { contentType: 'audio/mpeg', upsert: true });
++  if (error) throw new Error(`Storage upload failed: ${error.message}`);
++  const { data: urlData } = supabase.storage.from(BUCKET).getPublicUrl(path);
++  return urlData.publicUrl;
++}
++
++/**
++ * Generates one podcast episode end-to-end: script -> TTS per line -> sound
++ * effects -> storage upload -> podcast_segments rows -> episode status.
++ *
++ * This is the one place that talks to the LLM + TTS + storage for podcasts —
++ * app/api/content-engine/podcast/generate/route.js (knowledge assets),
++ * generate-from-text/route.js (pasted/playbook text + blog posts), and
++ * generate-batch/route.js (long text split into a series) all call this
++ * instead of duplicating the pipeline.
++ *
++ * @param {Object} args
++ * @param {string} args.title
++ * @param {string} args.content - plain text the script gets built from
++ * @param {string} [args.format='teacher_examiner']
++ * @param {Object} [args.extra] - optional traceability/batching fields
++ * @param {string} [args.extra.knowledgeAssetId]
++ * @param {string} [args.extra.seriesId]
++ * @param {string} [args.extra.seriesTitle]
++ * @param {number} [args.extra.episodeNumber]
++ * @returns {Promise<{episodeId: string, usedProvider: string, segmentCount: number, failedSegments: number, totalDurationSeconds: number}>}
++ */
++export async function generatePodcastEpisode({ title, content, format = 'teacher_examiner', extra = {} }) {
++  const supabase = createAdminClient();
++  let episodeId = null;
++
++  try {
++    const post = { title, content, topic_type: 'learning' };
++
++    // 1. Create the episode row up front so failures still leave a
++    // trackable 'failed' row instead of vanishing silently.
++    const { data: episode, error: episodeError } = await supabase
++      .from('podcast_episodes')
++      .insert({
++        title,
++        status: 'generating',
++        host_a_voice: VOICES.host_a,
++        host_b_voice: VOICES.host_b,
++        knowledge_asset_id: extra.knowledgeAssetId || null,
++        series_id: extra.seriesId || null,
++        series_title: extra.seriesTitle || null,
++        episode_number: extra.episodeNumber || null,
++      })
++      .select()
++      .single();
++
++    if (episodeError) throw new Error(`Could not create episode: ${episodeError.message}`);
++    episodeId = episode.id;
++
++    // 2. Generate the script
++    const prompt = buildPodcastPrompt(post, format);
++    const { result: script, usedProvider, errors } = await generateWithFallback(
++      prompt,
++      parseScriptJson,
++      isValidScript,
++      8192
++    );
++
++    if (!script) {
++      await supabase
++        .from('podcast_episodes')
++        .update({ status: 'failed', error_message: errors.join(' | ').slice(0, 2000) })
++        .eq('id', episodeId);
++      throw new Error(`Script generation failed: ${errors.join(' | ')}`);
++    }
++
++    // 3. Synthesize each line + effects
++    let totalDuration = 0;
++    const segmentRows = [];
++
++    for (let i = 0; i < script.length; i++) {
++      const line = script[i];
++      const emotion = line.emotion || 'neutral';
++      let audioUrl = null;
++      const duration = estimateDurationSeconds(line.text);
++
++      try {
++        const buffer = await synthesizeLine(line.text, line.speaker, emotion);
++        audioUrl = await uploadSegmentAudio(supabase, episodeId, i, buffer);
++      } catch (e) {
++        console.error(`❌ Segment ${i} TTS/upload failed:`, {
++          message: e.message,
++          speaker: line.speaker,
++          text: line.text?.substring(0, 50),
++        });
++        // Continue – a missing segment just gets skipped by the player
++      }
++
++      let effectUrl = null;
++      if (line.effect && line.effect !== 'none') {
++        const effectPath = getRandomEffect(line.effect);
++        if (effectPath) {
++          try {
++            const baseUrl = process.env.NEXT_PUBLIC_APP_URL || 'https://shineybrainacademy.vercel.app';
++            const res = await fetch(`${baseUrl}${effectPath}`);
++            if (res.ok) {
++              const effectBuffer = Buffer.from(await res.arrayBuffer());
++              effectUrl = await uploadSegmentAudio(supabase, episodeId, i + 0.5, effectBuffer);
++            }
++          } catch (e) {
++            console.error(`❌ Effect ${line.effect} failed:`, e.message);
++          }
++        }
++      }
++
++      totalDuration += duration;
++      segmentRows.push({
++        episode_id: episodeId,
++        position: i,
++        speaker: line.speaker,
++        text: line.text,
++        emotion_tag: emotion,
++        audio_url: audioUrl,
++        duration_seconds: duration,
++        topic: typeof line.topic === 'string' ? line.topic : null,
++        keywords: Array.isArray(line.keywords) ? line.keywords : [],
++        exam_tip: line.exam_tip === true,
++        difficulty: ['easy', 'medium', 'hard'].includes(line.difficulty) ? line.difficulty : null,
++      });
++
++      // speaker must satisfy podcast_segments_speaker_check (host_a/host_b
++      // only) — reuse the line's own speaker for the effect segment rather
++      // than inventing a new value.
++      if (effectUrl) {
++        segmentRows.push({
++          episode_id: episodeId,
++          position: i + 0.5,
++          speaker: line.speaker,
++          text: `[${line.effect}]`,
++          emotion_tag: 'neutral',
++          audio_url: effectUrl,
++          duration_seconds: 1,
++          topic: 'effect',
++          keywords: [],
++          exam_tip: false,
++          difficulty: null,
++        });
++      }
++    }
++
++    // 4. Save segments
++    const { error: segmentsError } = await supabase.from('podcast_segments').insert(segmentRows);
++    if (segmentsError) throw new Error(`Could not save segments: ${segmentsError.message}`);
++
++    const failedSegments = segmentRows.filter((s) => !s.audio_url).length;
++
++    await supabase
++      .from('podcast_episodes')
++      .update({
++        status: 'ready',
++        total_duration_seconds: totalDuration,
++        error_message: failedSegments > 0 ? `${failedSegments} segment(s) failed TTS` : null,
++      })
++      .eq('id', episodeId);
++
++    return {
++      episodeId,
++      usedProvider,
++      segmentCount: segmentRows.length,
++      failedSegments,
++      totalDurationSeconds: totalDuration,
++    };
++  } catch (err) {
++    if (episodeId) {
++      await supabase
++        .from('podcast_episodes')
++        .update({ status: 'failed', error_message: err.message?.slice(0, 2000) })
++        .eq('id', episodeId);
++    }
++    throw err;
++  }
++}
+diff --git a/supabase/migrations/20260801_podcast_manual_batch.sql b/supabase/migrations/20260801_podcast_manual_batch.sql
+new file mode 100644
+index 0000000..6d710ae
+--- /dev/null
++++ b/supabase/migrations/20260801_podcast_manual_batch.sql
+@@ -0,0 +1,58 @@
++-- ─── Podcast: manual/playbook text + batch series support ────────────────
++-- Run this in the Supabase SQL editor (or `supabase db push`).
++-- Idempotent — safe to re-run.
++
++-- Lets raw pasted/playbook text skip the structured-research pipeline and
++-- go straight to podcast generation, without pretending it's AI research.
++alter table public.knowledge_assets
++  add column if not exists raw_content text;
++
++alter table public.knowledge_assets
++  add column if not exists source text not null default 'ai_research';
++comment on column public.knowledge_assets.source is
++  'ai_research | ai_playbook | manual_paste | manual_paste_batch | blog_post';
++
++-- Traceability (which asset an episode came from) + batching (series of
++-- episodes split from one long paste) on podcast_episodes.
++alter table public.podcast_episodes
++  add column if not exists knowledge_asset_id uuid references public.knowledge_assets(id) on delete set null;
++
++alter table public.podcast_episodes
++  add column if not exists series_id uuid;
++
++alter table public.podcast_episodes
++  add column if not exists series_title text;
++
++alter table public.podcast_episodes
++  add column if not exists episode_number integer;
++
++create index if not exists idx_podcast_episodes_knowledge_asset
++  on public.podcast_episodes (knowledge_asset_id);
++
++create index if not exists idx_podcast_episodes_series
++  on public.podcast_episodes (series_id, episode_number);
++
++-- ─── Batch job tracking ────────────────────────────────────────────────
++-- A long paste can split into 8-18 episodes, each with its own script +
++-- TTS pass — far past any serverless request's time budget. Mirrors the
++-- books.generation_status pattern (see 20260730_book_generation_jobs.sql):
++-- generate-batch/route.js creates this row and returns immediately with
++-- id = seriesId while the actual split + per-episode generation runs in
++-- the background (lib/backgroundTask.js's runInBackground). The admin
++-- paste-text page polls GET .../generate-batch/status?seriesId=... until
++-- status is 'ready' or 'failed'.
++create table if not exists public.podcast_batch_jobs (
++  id uuid primary key default gen_random_uuid(),
++  knowledge_asset_id uuid references public.knowledge_assets(id) on delete set null,
++  series_title text not null,
++  status text not null default 'queued'
++    check (status in ('queued', 'splitting', 'generating', 'ready', 'failed')),
++  episode_count integer,
++  completed_count integer not null default 0,
++  error text,
++  created_at timestamptz default now(),
++  updated_at timestamptz default now()
++);
++
++create index if not exists idx_podcast_batch_jobs_created
++  on public.podcast_batch_jobs (created_at desc);
+-- 
+2.43.0
+

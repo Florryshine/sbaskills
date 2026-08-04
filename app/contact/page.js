@@ -4,6 +4,7 @@ import Footer from '@/components/Footer';
 export const metadata = {
   title: 'Contact Us | Shiney Brain Academy',
   description: 'Get in touch with Shiney Brain Academy',
+  alternates: { canonical: 'https://shineybrainacademy.vercel.app/contact' },
 };
 
 export default function ContactPage() {

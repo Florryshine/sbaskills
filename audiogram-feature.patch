@@ -1,0 +1,659 @@
+diff --git a/app/admin/podcasts/[id]/audiogram/page.js b/app/admin/podcasts/[id]/audiogram/page.js
+new file mode 100644
+index 0000000..f96d938
+--- /dev/null
++++ b/app/admin/podcasts/[id]/audiogram/page.js
+@@ -0,0 +1,93 @@
++'use client';
++
++import { useState, useEffect } from 'react';
++import { useParams } from 'next/navigation';
++import Link from 'next/link';
++import { createBrowserClient } from '@/lib/supabase';
++import AudiogramRecorder from '@/components/AudiogramRecorder';
++
++export default function AudiogramPage() {
++  const { id } = useParams();
++  const supabase = createBrowserClient();
++
++  const [episode, setEpisode] = useState(null);
++  const [segments, setSegments] = useState([]);
++  const [loading, setLoading] = useState(true);
++  const [error, setError] = useState(null);
++  const [savedUrl, setSavedUrl] = useState(null);
++
++  useEffect(() => {
++    async function load() {
++      setLoading(true);
++      const { data: ep, error: epError } = await supabase
++        .from('podcast_episodes')
++        .select('*')
++        .eq('id', id)
++        .single();
++
++      if (epError || !ep) {
++        setError('Episode not found.');
++        setLoading(false);
++        return;
++      }
++      if (ep.status !== 'ready') {
++        setError(`Episode status is "${ep.status}" — it needs to be "ready" before an audiogram can be made.`);
++        setLoading(false);
++        return;
++      }
++
++      const { data: segs, error: segError } = await supabase
++        .from('podcast_segments')
++        .select('*')
++        .eq('episode_id', id)
++        .order('position', { ascending: true });
++
++      if (segError) {
++        setError('Failed to load segments.');
++        setLoading(false);
++        return;
++      }
++
++      const validSegments = (segs || []).filter((s) => s.audio_url);
++      setEpisode(ep);
++      setSegments(validSegments);
++      setSavedUrl(ep.audiogram_url || null);
++      setLoading(false);
++    }
++    load();
++  }, [id]); // eslint-disable-line react-hooks/exhaustive-deps
++
++  return (
++    <div className="p-6 max-w-2xl mx-auto">
++      <div className="mb-6">
++        <Link href="/admin/podcasts" className="text-sm text-brand-blue hover:underline">
++          ← Back to Podcast Episodes
++        </Link>
++      </div>
++
++      <h1 className="text-2xl font-bold text-brand-blue mb-1">🎥 Audiogram</h1>
++      <p className="text-sm text-gray-500 mb-6">
++        Renders in your browser — square video with a live waveform and burned-in captions, built from this
++        episode's existing segment audio. No server rendering involved.
++      </p>
++
++      {loading && <div className="text-center py-8">Loading…</div>}
++      {error && <div className="text-center py-8 text-red-600">{error}</div>}
++
++      {!loading && !error && episode && (
++        <>
++          {savedUrl && (
++            <div className="bg-emerald-50 border border-emerald-200 rounded-xl p-3 mb-4 text-sm">
++              ✓ An audiogram is already saved for this episode.{' '}
++              <a href={savedUrl} target="_blank" rel="noreferrer" className="text-emerald-700 underline font-semibold">
++                View current version
++              </a>
++              . Recording again below will replace it.
++            </div>
++          )}
++          <AudiogramRecorder episode={episode} segments={segments} onSaved={setSavedUrl} />
++        </>
++      )}
++    </div>
++  );
++}
+diff --git a/app/admin/podcasts/page.js b/app/admin/podcasts/page.js
+index 22394b0..57cc371 100644
+--- a/app/admin/podcasts/page.js
++++ b/app/admin/podcasts/page.js
+@@ -118,6 +118,14 @@ export default function AdminPodcastsPage() {
+               ▶️ Play
+             </Link>
+           )}
++          {ep.status === 'ready' && (
++            <Link
++              href={`/admin/podcasts/${ep.id}/audiogram`}
++              className="bg-indigo-100 text-indigo-700 px-4 py-2 rounded-xl text-sm font-bold hover:bg-indigo-200"
++            >
++              {ep.audiogram_url ? '🎥 Audiogram ✓' : '🎥 Create Audiogram'}
++            </Link>
++          )}
+           <button
+             onClick={() => regenerateEpisode(ep)}
+             disabled={regeneratingId === ep.id}
+diff --git a/app/admin/social-engine/page.js b/app/admin/social-engine/page.js
+index a899942..c06c170 100644
+--- a/app/admin/social-engine/page.js
++++ b/app/admin/social-engine/page.js
+@@ -730,7 +730,7 @@ export default function SocialEnginePage() {
+                         </div>
+                       </div>
+                     )}
+-                    {carouselSlides.length > 0 && ['instagram', 'facebook'].includes(draft.platform) && (
++                    {carouselSlides.length > 0 && ['instagram', 'facebook', 'x'].includes(draft.platform) && (
+                       <div className="bg-white border rounded-xl p-3">
+                         <p className="text-xs font-bold text-gray-500 uppercase mb-2">
+                           Background (cover + CTA slide)
+diff --git a/app/api/admin/content-assets/[id]/carousel-background/route.js b/app/api/admin/content-assets/[id]/carousel-background/route.js
+index 3377ab1..a0a7813 100644
+--- a/app/api/admin/content-assets/[id]/carousel-background/route.js
++++ b/app/api/admin/content-assets/[id]/carousel-background/route.js
+@@ -8,7 +8,7 @@
+ // calls the LLM again. Same "just re-render, don't regenerate" idea as the
+ // inline-edit feature, applied to the image side instead of the text side.
+ //
+-// Only carousels on the "bold" layout (Instagram, Facebook) actually
++// Only carousels on the "bold" layout (Instagram, Facebook, X) actually
+ // support a custom background — see render-canvas.js for why LinkedIn and
+ // Telegram are intentionally left alone. Calling this on a non-carousel or
+ // editorial/plain-platform row returns a 400 rather than silently no-op'ing.
+@@ -17,7 +17,11 @@ import { createAdminClient } from '@/lib/supabase-admin';
+ import { renderCarouselSlides } from '@/lib/carousel-engine/render-canvas';
+ 
+ const CAROUSEL_BUCKET = 'carousel-slides';
+-const BOLD_LAYOUT_PLATFORMS = ['instagram', 'facebook'];
++// X has no PLATFORM_STYLES entry of its own in render-canvas.js, so
++// getStyle() there falls back to Instagram's bold layout for it — meaning
++// X carousels already have a colored hook/CTA slide just like Instagram
++// and Facebook, and should be editable the same way.
++const BOLD_LAYOUT_PLATFORMS = ['instagram', 'facebook', 'x'];
+ // Vercel's serverless functions cap the request body at ~4.5MB by default
+ // (Hobby/Pro alike). Base64 inflates a file by ~33%, so we cap the raw
+ // image well below that — 3MB raw becomes ~4MB as base64, leaving headroom
+diff --git a/app/api/admin/podcasts/[id]/audiogram/route.js b/app/api/admin/podcasts/[id]/audiogram/route.js
+new file mode 100644
+index 0000000..163eaca
+--- /dev/null
++++ b/app/api/admin/podcasts/[id]/audiogram/route.js
+@@ -0,0 +1,106 @@
++// app/api/admin/podcasts/[id]/audiogram/route.js
++//
++// The AudiogramRecorder component (client-side canvas + Web Audio +
++// MediaRecorder) uploads the finished video straight to Supabase storage
++// itself — that's allowed under the existing authenticated-upload policy
++// on the lesson-videos bucket. This route only handles the two writes RLS
++// doesn't let the browser client do directly: updating podcast_episodes,
++// and (if the episode has a knowledge_asset_id) mirroring the video into
++// content_assets + media_files so it shows up in the social-engine review
++// dashboard (app/admin/social-engine/page.js) ready to publish, exactly
++// like every other content-factory-generated asset.
++import { NextResponse } from 'next/server';
++import { createAdminClient } from '@/lib/supabase-admin';
++
++export async function POST(request, { params }) {
++  const { id } = params;
++  let body;
++  try {
++    body = await request.json();
++  } catch {
++    return NextResponse.json({ error: 'Invalid JSON body' }, { status: 400 });
++  }
++
++  const { videoUrl } = body || {};
++  if (!videoUrl) {
++    return NextResponse.json({ error: 'videoUrl is required' }, { status: 400 });
++  }
++
++  const supabase = createAdminClient();
++
++  const { data: episode, error: fetchError } = await supabase
++    .from('podcast_episodes')
++    .select('id, title, knowledge_asset_id, total_duration_seconds, audiogram_content_asset_id')
++    .eq('id', id)
++    .single();
++  if (fetchError || !episode) {
++    return NextResponse.json({ error: 'Episode not found' }, { status: 404 });
++  }
++
++  await supabase
++    .from('podcast_episodes')
++    .update({ audiogram_url: videoUrl, audiogram_status: 'ready' })
++    .eq('id', id);
++
++  // No source knowledge asset (e.g. a blog-post-sourced episode) — nothing
++  // to mirror into content_assets, which requires a non-null
++  // knowledge_asset_id. The video is still saved on the episode itself.
++  if (!episode.knowledge_asset_id) {
++    return NextResponse.json({ success: true, videoUrl, contentAssetId: null });
++  }
++
++  let contentAssetId = episode.audiogram_content_asset_id;
++
++  if (contentAssetId) {
++    // Re-recorded — update the existing mirrored media_files row instead of
++    // creating a duplicate content_assets row.
++    const { error: updateMediaError } = await supabase
++      .from('media_files')
++      .update({ url: videoUrl, duration_seconds: episode.total_duration_seconds || null })
++      .eq('content_asset_id', contentAssetId)
++      .eq('media_type', 'video')
++      .eq('role', 'primary');
++    if (updateMediaError) {
++      return NextResponse.json({ error: updateMediaError.message }, { status: 500 });
++    }
++  } else {
++    const { data: insertedAsset, error: insertAssetError } = await supabase
++      .from('content_assets')
++      .insert({
++        knowledge_asset_id: episode.knowledge_asset_id,
++        asset_type: 'podcast_audiogram',
++        platform: null, // format-agnostic — same video can be published to any platform's queue
++        format: 'video',
++        title: episode.title,
++        status: 'draft',
++        generated_by: 'audiogram-recorder-client',
++      })
++      .select()
++      .single();
++    if (insertAssetError) {
++      return NextResponse.json({ error: insertAssetError.message }, { status: 500 });
++    }
++
++    const { error: insertMediaError } = await supabase.from('media_files').insert({
++      content_asset_id: insertedAsset.id,
++      media_type: 'video',
++      role: 'primary',
++      position: 0,
++      url: videoUrl,
++      duration_seconds: episode.total_duration_seconds || null,
++      source: 'render',
++      alt_text: episode.title,
++    });
++    if (insertMediaError) {
++      return NextResponse.json({ error: insertMediaError.message }, { status: 500 });
++    }
++
++    contentAssetId = insertedAsset.id;
++    await supabase
++      .from('podcast_episodes')
++      .update({ audiogram_content_asset_id: contentAssetId })
++      .eq('id', id);
++  }
++
++  return NextResponse.json({ success: true, videoUrl, contentAssetId });
++}
+diff --git a/components/AudiogramRecorder.js b/components/AudiogramRecorder.js
+new file mode 100644
+index 0000000..76fbb0d
+--- /dev/null
++++ b/components/AudiogramRecorder.js
+@@ -0,0 +1,367 @@
++'use client';
++
++// components/AudiogramRecorder.js
++//
++// Renders a podcast episode's already-generated segment MP3s into a single
++// square video: brand-gradient background + a live frequency-bar waveform
++// + burned-in captions (the segment text your podcast pipeline already
++// stores) — entirely in the browser via <canvas> + Web Audio API +
++// MediaRecorder. No Remotion, no headless Chromium, no server rendering,
++// no local worker. Vercel does nothing here except serve this page and the
++// one API call that saves the resulting URL — the actual "rendering" work
++// runs on the admin's machine in real time while the episode plays.
++//
++// Tradeoff worth knowing: because this captures a live canvas+audio stream,
++// recording takes exactly as long as the episode itself (a 5-minute episode
++// takes 5 real minutes to record) — there's no way to render faster than
++// realtime with this approach. That's the price of avoiding Remotion/FFmpeg
++// entirely; for a first version this is a fair trade.
++
++import { useRef, useState, useEffect, useCallback } from 'react';
++import { createBrowserClient } from '@/lib/supabase';
++
++const CANVAS_SIZE = 1080;
++const BRAND_BLUE = '#1a73e8';
++const BRAND_YELLOW = '#FFCC00';
++const DARK = '#0f172a';
++const BUCKET = 'lesson-videos'; // already public + authenticated-upload; reused instead of a new bucket
++
++function wrapText(ctx, text, maxWidth) {
++  const words = String(text || '').split(' ');
++  const lines = [];
++  let current = '';
++  for (const word of words) {
++    const test = current ? `${current} ${word}` : word;
++    if (ctx.measureText(test).width > maxWidth && current) {
++      lines.push(current);
++      current = word;
++    } else {
++      current = test;
++    }
++  }
++  if (current) lines.push(current);
++  return lines;
++}
++
++function pickMimeType() {
++  const candidates = [
++    'video/webm;codecs=vp9,opus',
++    'video/webm;codecs=vp8,opus',
++    'video/webm',
++  ];
++  for (const type of candidates) {
++    if (typeof MediaRecorder !== 'undefined' && MediaRecorder.isTypeSupported(type)) return type;
++  }
++  return '';
++}
++
++/**
++ * @param {Object} props
++ * @param {Object} props.episode - a podcast_episodes row (id, title, episode_number, total_duration_seconds)
++ * @param {Array}  props.segments - podcast_segments rows, ordered by position, each with { text, audio_url, duration_seconds }
++ * @param {(videoUrl: string) => void} [props.onSaved]
++ */
++export default function AudiogramRecorder({ episode, segments, onSaved }) {
++  const canvasRef = useRef(null);
++  const audioRef = useRef(null);
++  const audioCtxRef = useRef(null);
++  const analyserRef = useRef(null);
++  const rafRef = useRef(null);
++  const recorderRef = useRef(null);
++  const chunksRef = useRef([]);
++  const elapsedBeforeCurrentRef = useRef(0);
++
++  const [index, setIndex] = useState(-1); // -1 = idle
++  const [status, setStatus] = useState('idle'); // idle | recording | finished | uploading | saved | error
++  const [videoBlobUrl, setVideoBlobUrl] = useState(null);
++  const [videoBlob, setVideoBlob] = useState(null);
++  const [errorMsg, setErrorMsg] = useState(null);
++
++  const totalDuration =
++    episode.total_duration_seconds || segments.reduce((sum, s) => sum + (s.duration_seconds || 0), 0);
++
++  // ── Drawing ────────────────────────────────────────────────────────────
++  const draw = useCallback(() => {
++    const canvas = canvasRef.current;
++    if (!canvas) return;
++    const ctx = canvas.getContext('2d');
++    const W = CANVAS_SIZE, H = CANVAS_SIZE;
++
++    // Background gradient — same brand palette as the rest of the platform
++    const gradient = ctx.createLinearGradient(0, 0, W * 0.3, H);
++    gradient.addColorStop(0, DARK);
++    gradient.addColorStop(1, BRAND_BLUE);
++    ctx.fillStyle = gradient;
++    ctx.fillRect(0, 0, W, H);
++
++    // Top label + title
++    ctx.textBaseline = 'top';
++    ctx.fillStyle = BRAND_YELLOW;
++    ctx.font = 'bold 28px Arial';
++    ctx.fillText('🎙 SHINEY BRAIN ACADEMY', 60, 70);
++
++    ctx.fillStyle = '#ffffff';
++    ctx.font = 'bold 52px Arial';
++    const titleLines = wrapText(ctx, episode.title || 'Podcast Episode', W - 120).slice(0, 3);
++    titleLines.forEach((line, i) => ctx.fillText(line, 60, 130 + i * 62));
++
++    // Waveform — live frequency bars from the analyser, or a flat idle line
++    const analyser = analyserRef.current;
++    const barCount = 48;
++    const barAreaW = W - 160;
++    const barW = barAreaW / barCount - 6;
++    const centerY = H * 0.58;
++    const maxBarH = 220;
++
++    let freqData = null;
++    if (analyser) {
++      freqData = new Uint8Array(analyser.frequencyBinCount);
++      analyser.getByteFrequencyData(freqData);
++    }
++
++    ctx.fillStyle = 'rgba(255,255,255,0.9)';
++    for (let i = 0; i < barCount; i++) {
++      const sampleIndex = Math.floor((i / barCount) * (freqData ? freqData.length * 0.6 : 0));
++      const value = freqData ? freqData[sampleIndex] / 255 : 0.06;
++      const barH = Math.max(6, value * maxBarH);
++      const x = 80 + i * (barW + 6);
++      ctx.fillRect(x, centerY - barH / 2, barW, barH);
++    }
++
++    // Caption — current segment's line, if any
++    const current = index >= 0 ? segments[index] : null;
++    if (current) {
++      const capY = H * 0.74;
++      const capH = 190;
++      ctx.fillStyle = 'rgba(0,0,0,0.35)';
++      ctx.fillRect(0, capY, W, capH);
++
++      ctx.fillStyle = '#ffffff';
++      ctx.font = '600 34px Arial';
++      const capLines = wrapText(ctx, current.text || '', W - 120).slice(0, 4);
++      capLines.forEach((line, i) => ctx.fillText(line, 60, capY + 24 + i * 42));
++    }
++
++    // Progress bar
++    const elapsed = elapsedBeforeCurrentRef.current + (audioRef.current?.currentTime || 0);
++    const pct = totalDuration > 0 ? Math.min(1, elapsed / totalDuration) : 0;
++    ctx.fillStyle = 'rgba(255,255,255,0.25)';
++    ctx.fillRect(60, H - 40, W - 120, 6);
++    ctx.fillStyle = BRAND_YELLOW;
++    ctx.fillRect(60, H - 40, (W - 120) * pct, 6);
++  }, [index, segments, episode.title, totalDuration]);
++
++  useEffect(() => {
++    function loop() {
++      draw();
++      rafRef.current = requestAnimationFrame(loop);
++    }
++    if (status === 'recording') {
++      rafRef.current = requestAnimationFrame(loop);
++    } else {
++      draw(); // draw one static idle/finished frame
++    }
++    return () => {
++      if (rafRef.current) cancelAnimationFrame(rafRef.current);
++    };
++  }, [status, draw]);
++
++  // ── Segment advancing ────────────────────────────────────────────────
++  useEffect(() => {
++    const audio = audioRef.current;
++    if (!audio || index < 0) return;
++
++    const handleEnded = () => {
++      elapsedBeforeCurrentRef.current += segments[index].duration_seconds || 0;
++      if (index < segments.length - 1) {
++        setIndex(index + 1);
++      } else {
++        finishRecording();
++      }
++    };
++
++    audio.src = segments[index].audio_url;
++    audio.load();
++    audio
++      .play()
++      .catch((err) => {
++        setStatus('error');
++        setErrorMsg(`Playback failed: ${err.message}`);
++      });
++
++    audio.addEventListener('ended', handleEnded);
++    return () => audio.removeEventListener('ended', handleEnded);
++    // eslint-disable-next-line react-hooks/exhaustive-deps
++  }, [index]);
++
++  // ── Start / stop ─────────────────────────────────────────────────────
++  const startRecording = async () => {
++    setErrorMsg(null);
++    setVideoBlobUrl(null);
++    setVideoBlob(null);
++    elapsedBeforeCurrentRef.current = 0;
++
++    if (!segments.length) {
++      setErrorMsg('This episode has no playable segments.');
++      return;
++    }
++
++    try {
++      const AudioContextCls = window.AudioContext || window.webkitAudioContext;
++      const audioCtx = new AudioContextCls();
++      audioCtxRef.current = audioCtx;
++
++      const source = audioCtx.createMediaElementSource(audioRef.current);
++      const analyser = audioCtx.createAnalyser();
++      analyser.fftSize = 256;
++      const dest = audioCtx.createMediaStreamDestination();
++
++      source.connect(analyser);
++      analyser.connect(dest);
++      source.connect(audioCtx.destination); // so you can hear it while it records
++      analyserRef.current = analyser;
++
++      const canvasStream = canvasRef.current.captureStream(30);
++      const combined = new MediaStream([
++        ...canvasStream.getVideoTracks(),
++        ...dest.stream.getAudioTracks(),
++      ]);
++
++      const mimeType = pickMimeType();
++      const recorder = new MediaRecorder(combined, mimeType ? { mimeType } : undefined);
++      chunksRef.current = [];
++      recorder.ondataavailable = (e) => {
++        if (e.data.size > 0) chunksRef.current.push(e.data);
++      };
++      recorder.onstop = () => {
++        const blob = new Blob(chunksRef.current, { type: mimeType || 'video/webm' });
++        setVideoBlob(blob);
++        setVideoBlobUrl(URL.createObjectURL(blob));
++        setStatus('finished');
++      };
++      recorderRef.current = recorder;
++
++      recorder.start();
++      setStatus('recording');
++      setIndex(0);
++    } catch (err) {
++      setStatus('error');
++      setErrorMsg(`Could not start recording: ${err.message}`);
++    }
++  };
++
++  function finishRecording() {
++    if (recorderRef.current && recorderRef.current.state !== 'inactive') {
++      recorderRef.current.stop();
++    }
++    if (audioCtxRef.current) {
++      audioCtxRef.current.close().catch(() => {});
++    }
++    setIndex(-1);
++  }
++
++  const cancelRecording = () => {
++    if (recorderRef.current) recorderRef.current.onstop = null; // discard, don't produce a blob
++    if (recorderRef.current && recorderRef.current.state !== 'inactive') recorderRef.current.stop();
++    if (audioRef.current) audioRef.current.pause();
++    if (audioCtxRef.current) audioCtxRef.current.close().catch(() => {});
++    setIndex(-1);
++    setStatus('idle');
++  };
++
++  // ── Save: upload blob to storage, then tell the server to record it ──
++  const saveToEpisode = async () => {
++    if (!videoBlob) return;
++    setStatus('uploading');
++    setErrorMsg(null);
++    try {
++      const supabase = createBrowserClient();
++      const path = `audiograms/${episode.id}/${Date.now()}.webm`;
++
++      const { error: uploadError } = await supabase.storage
++        .from(BUCKET)
++        .upload(path, videoBlob, { contentType: videoBlob.type || 'video/webm', upsert: true });
++      if (uploadError) throw uploadError;
++
++      const { data: urlData } = supabase.storage.from(BUCKET).getPublicUrl(path);
++
++      const res = await fetch(`/api/admin/podcasts/${episode.id}/audiogram`, {
++        method: 'POST',
++        headers: { 'Content-Type': 'application/json' },
++        body: JSON.stringify({ videoUrl: urlData.publicUrl }),
++      });
++      const data = await res.json();
++      if (!res.ok) throw new Error(data.error || 'Save failed');
++
++      setStatus('saved');
++      onSaved?.(urlData.publicUrl);
++    } catch (err) {
++      setStatus('finished');
++      setErrorMsg(err.message);
++    }
++  };
++
++  return (
++    <div className="space-y-4">
++      <canvas
++        ref={canvasRef}
++        width={CANVAS_SIZE}
++        height={CANVAS_SIZE}
++        className="w-full max-w-md mx-auto rounded-2xl border shadow-sm bg-black"
++      />
++      {/* Hidden — this is the actual audio source the Web Audio graph and
++          recorder pull from; it isn't meant to be seen, just heard/analyzed. */}
++      <audio ref={audioRef} crossOrigin="anonymous" className="hidden" />
++
++      <p className="text-xs text-gray-500 text-center">
++        Recording plays in realtime — a {Math.round(totalDuration / 60)}-minute episode takes about{' '}
++        {Math.round(totalDuration / 60)} minute(s) to record. Keep this tab open and active while it runs.
++      </p>
++
++      {errorMsg && <p className="text-sm text-red-600 text-center">⚠️ {errorMsg}</p>}
++
++      <div className="flex justify-center gap-2">
++        {status === 'idle' && (
++          <button
++            onClick={startRecording}
++            className="bg-brand-blue text-white px-5 py-2.5 rounded-xl text-sm font-bold hover:opacity-90"
++          >
++            🔴 Start Recording
++          </button>
++        )}
++        {status === 'recording' && (
++          <button
++            onClick={cancelRecording}
++            className="bg-red-100 text-red-600 px-5 py-2.5 rounded-xl text-sm font-bold hover:bg-red-200"
++          >
++            ⏹ Cancel
++          </button>
++        )}
++        {(status === 'finished' || status === 'saved') && videoBlobUrl && (
++          <>
++            <a
++              href={videoBlobUrl}
++              download={`${(episode.title || 'audiogram').replace(/[^a-z0-9]+/gi, '-').toLowerCase()}.webm`}
++              className="bg-gray-100 text-gray-700 px-5 py-2.5 rounded-xl text-sm font-bold hover:bg-gray-200"
++            >
++              ⬇ Download
++            </a>
++            {status === 'finished' ? (
++              <button
++                onClick={saveToEpisode}
++                className="bg-emerald-600 text-white px-5 py-2.5 rounded-xl text-sm font-bold hover:opacity-90"
++              >
++                💾 Save to Episode
++              </button>
++            ) : (
++              <span className="text-sm font-bold text-emerald-600 px-3 py-2.5">✓ Saved</span>
++            )}
++          </>
++        )}
++        {status === 'uploading' && (
++          <span className="text-sm font-bold text-gray-500 px-3 py-2.5">Uploading…</span>
++        )}
++      </div>
++    </div>
++  );
++}
+diff --git a/lib/content-factory/generators/x.js b/lib/content-factory/generators/x.js
+index 8facc6d..a33f30e 100644
+--- a/lib/content-factory/generators/x.js
++++ b/lib/content-factory/generators/x.js
+@@ -44,6 +44,12 @@ Return ONLY JSON:
+         type: 'carousel',
+         slides,
+         summary: asset.summary,
++        // Explicit instead of relying on getStyle()'s instagram fallback in
++        // render-canvas.js — X has no PLATFORM_STYLES entry of its own yet,
++        // so this resolves to the exact same bold/square look Instagram
++        // gets. Naming it here (rather than leaving it implicit) is what
++        // lets the background-recolor feature recognize X as eligible.
++        platform: 'x',
+       },
+     },
+   ];

@@ -9,7 +9,10 @@ const nextConfig = withPWA({
   reactStrictMode: true,
   swcMinify: true,
   images: {
-    domains: ['res.cloudinary.com', 'supabase.co'],
+    remotePatterns: [
+      { protocol: 'https', hostname: 'res.cloudinary.com' },
+      { protocol: 'https', hostname: '*.supabase.co' },
+    ],
   },
   experimental: {
     serverComponentsExternalPackages: ['@napi-rs/canvas'],
@@ -22,6 +25,20 @@ const nextConfig = withPWA({
     outputFileTracingIncludes: {
       '/api/**/*': ['./public/fonts/**'],
     },
+  },
+  webpack: (config, { isServer }) => {
+    // Fix for external HTTPS imports (e.g., jszip from CDN)
+    // Some dependencies may try to import from CDN URLs which webpack can't handle by default
+    // Redirect CDN imports to local packages
+    if (!isServer) {
+      config.plugins.push(
+        new (require('webpack').NormalModuleReplacementPlugin)(
+          /^https:\/\/cdn\.jsdelivr\.net\/npm\/jszip@3\.10\.1\/+esm$/,
+          require.resolve('jszip')
+        )
+      )
+    }
+    return config
   },
 })
 module.exports = nextConfig

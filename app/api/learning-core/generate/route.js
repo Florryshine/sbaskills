@@ -45,8 +45,14 @@ Return ONLY a JSON object with the following fields – no markdown, no extra te
   "facts": ["fact1", "fact2", ...],
   "common_mistakes": ["mistake1", "mistake2", ...],
   "difficulty": 1-5 (1=easy, 5=advanced),
-  "tags": ["tag1", "tag2", ...]
-}`;
+  "tags": ["tag1", "tag2", ...],
+  "learning_objectives": ["Define isotopes.", "Differentiate isotopes from isobars.", ...],
+  "exam_type": ["JAMB", "WAEC"],
+  "estimated_duration_minutes": 20,
+  "sequence": [{"label": "Prophase", "detail": "Chromosomes condense and become visible"}, ...]
+}
+
+Only include "sequence" if this topic genuinely has an ordered process, set of stages, or step-by-step procedure (e.g. mitosis phases, steps of digestion, stages of the water cycle). If the topic has no natural sequence (e.g. a definitions-only topic like "types of soil"), return an empty array for "sequence". Do not invent an artificial order where none exists.`;
 }
 
 // ── Helpers ──────────────────────────────────────────────────────────
@@ -62,6 +68,17 @@ function isValidKnowledge(r) {
     Array.isArray(r.key_concepts) &&
     r.key_concepts.length > 0
   );
+}
+
+// Keeps exam_type values consistent (uppercase, deduped, only known codes)
+// regardless of how the model formats them ("jamb", "Post-UTME", etc).
+const KNOWN_EXAM_TYPES = ['JAMB', 'WAEC', 'NECO', 'POST_UTME'];
+function normalizeExamType(value) {
+  if (!Array.isArray(value)) return [];
+  const normalized = value
+    .map((v) => String(v).trim().toUpperCase().replace(/[\s-]+/g, '_'))
+    .map((v) => (v === 'POSTUTME' ? 'POST_UTME' : v));
+  return [...new Set(normalized.filter((v) => KNOWN_EXAM_TYPES.includes(v)))];
 }
 
 async function tryOpenRouter(prompt) {
@@ -251,6 +268,11 @@ export async function POST(request) {
         common_mistakes: result.common_mistakes || [],
         difficulty: result.difficulty || 3,
         tags: result.tags || [],
+        learning_objectives: Array.isArray(result.learning_objectives) ? result.learning_objectives : [],
+        exam_type: normalizeExamType(result.exam_type),
+        estimated_duration_minutes: Number.isFinite(result.estimated_duration_minutes)
+          ? result.estimated_duration_minutes
+          : null,
         source: 'ai_generated',
         status: 'approved',
       })
@@ -261,10 +283,40 @@ export async function POST(request) {
       return NextResponse.json({ error: assetError.message }, { status: 500 });
     }
 
+    // 5. Insert sequence steps, if the model found a genuine ordered process
+    // for this topic. Non-fatal: the knowledge asset itself already saved
+    // successfully above, so a sequence-insert failure shouldn't fail the
+    // whole request — it just means this topic ends up with no steps yet,
+    // same as any topic that never had a sequence to begin with.
+    let sequenceStepsCreated = 0;
+    const rawSequence = Array.isArray(result.sequence) ? result.sequence : [];
+    const sequenceRows = rawSequence
+      .filter((s) => s && typeof s.label === 'string' && s.label.trim().length > 0)
+      .map((s, index) => ({
+        knowledge_asset_id: asset.id,
+        step_order: index + 1,
+        label: s.label.trim(),
+        detail: typeof s.detail === 'string' ? s.detail.trim() : null,
+      }));
+
+    if (sequenceRows.length > 0) {
+      const { data: insertedSteps, error: sequenceError } = await supabase
+        .from('sequence_steps')
+        .insert(sequenceRows)
+        .select();
+
+      if (sequenceError) {
+        console.error('⚠️ Sequence steps insert failed (non-fatal):', sequenceError.message);
+      } else {
+        sequenceStepsCreated = insertedSteps?.length || 0;
+      }
+    }
+
     return NextResponse.json({
       success: true,
       knowledgeAssetId: asset.id,
       usedProvider,
+      sequenceStepsCreated,
     });
   } catch (error) {
     console.error('❌ Knowledge generation error:', error);

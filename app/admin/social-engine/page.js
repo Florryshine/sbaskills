@@ -5,6 +5,62 @@ import { createBrowserClient } from '@/lib/supabase';
 
 const PLATFORMS = ['instagram', 'facebook', 'telegram', 'linkedin', 'x', 'pinterest', 'youtube', 'tiktok'];
 
+// Format-agnostic video assets (asset_type set, content_assets.platform left
+// null on purpose — see app/api/admin/quote-loops/generate/route.js) can go
+// out to any of these, since every one of them has a working video publisher
+// adapter (lib/publishers/{facebook,instagram,telegram,linkedin,youtube,tiktok}.js).
+// Used below wherever `draft.platform` is null instead of a single locked-in
+// platform, so the channel picker isn't stuck showing zero options.
+const VIDEO_CAPABLE_PLATFORMS = ['facebook', 'instagram', 'telegram', 'linkedin', 'tiktok', 'youtube'];
+
+// Founder posts aren't a real target platform — they're generated onto
+// linkedin/facebook/instagram rows (see lib/content-factory/generators/founder.js)
+// so char limits and existing platform filters still work, marked via an
+// asset_type prefix instead. This list is only for the generation picker;
+// PLATFORMS above stays the real filter-tab / content_assets.platform list.
+const GENERATE_PLATFORMS = [...PLATFORMS, 'founder'];
+
+const VOICE_MODES = [
+  { value: 'founder', label: 'Founder' },
+  { value: 'mentor', label: 'Mentor' },
+  { value: 'funny', label: 'Funny Florry' },
+  { value: 'reflective', label: 'Reflective' },
+];
+
+// Mirrors GRADIENT_PRESETS in lib/carousel-engine/render-canvas.js — kept in
+// sync manually since one is canvas gradient stops and the other is CSS.
+const GRADIENT_CSS = {
+  ocean: 'linear-gradient(135deg, #0f4c81, #1a73e8)',
+  sunrise: 'linear-gradient(135deg, #ff6b6b, #FFCC00)',
+  violet: 'linear-gradient(135deg, #4c1d95, #7c3aed)',
+  forest: 'linear-gradient(135deg, #064e3b, #10b981)',
+  midnight: 'linear-gradient(180deg, #0f172a, #1e293b)',
+  candy: 'linear-gradient(135deg, #ec4899, #8b5cf6)',
+};
+
+// Mirrored in app/api/admin/content-assets/route.js for server-side validation.
+const PLATFORM_LIMITS = {
+  x: 280,
+  threads: 500,
+  linkedin: 3000,
+  facebook: 63206,
+  instagram: 2200,
+  telegram: 4096,
+};
+
+function CharCounter({ platform, length }) {
+  const limit = PLATFORM_LIMITS[platform];
+  if (!limit) return null;
+  const pct = length / limit;
+  const color = pct > 1 ? 'text-red-600' : pct > 0.9 ? 'text-amber-600' : 'text-gray-400';
+  return (
+    <span className={`text-xs font-semibold ${color}`}>
+      {length} / {limit}
+      {pct > 1 && <span> — over by {length - limit}</span>}
+    </span>
+  );
+}
+
 const JOB_STATUS_COLORS = {
   queued: 'text-yellow-600',
   scheduled: 'text-yellow-600',
@@ -30,6 +86,105 @@ export default function SocialEnginePage() {
   const [busyId, setBusyId] = useState(null);
   const [error, setError] = useState(null);
   const [lastResults, setLastResults] = useState(null);
+  const [editingId, setEditingId] = useState(null);
+  const [editDraft, setEditDraft] = useState('');
+  const [savingId, setSavingId] = useState(null);
+  const [editError, setEditError] = useState(null);
+  const [voiceMode, setVoiceMode] = useState('founder');
+  const [founderContext, setFounderContext] = useState('');
+  const [bgBusyId, setBgBusyId] = useState(null);
+  const [bgError, setBgError] = useState(null);
+  const [copiedId, setCopiedId] = useState(null);
+  const [zipBusyId, setZipBusyId] = useState(null);
+  const [actionError, setActionError] = useState(null);
+
+  const copyText = async (text, key) => {
+    try {
+      await navigator.clipboard.writeText(text || '');
+      setCopiedId(key);
+      setTimeout(() => setCopiedId((c) => (c === key ? null : c)), 1500);
+    } catch {
+      setActionError('Clipboard blocked by the browser — try selecting the text manually.');
+    }
+  };
+
+  // Cross-origin Supabase storage URLs won't respect a plain <a download>,
+  // so we fetch the bytes ourselves and trigger the download from a blob
+  // URL. Falls back to opening the file in a new tab if the fetch fails
+  // (e.g. a storage CORS policy change) so the user is never stuck.
+  const downloadUrl = async (url, filename) => {
+    try {
+      const res = await fetch(url);
+      const blob = await res.blob();
+      const objectUrl = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = objectUrl;
+      a.download = filename;
+      document.body.appendChild(a);
+      a.click();
+      a.remove();
+      URL.revokeObjectURL(objectUrl);
+    } catch {
+      window.open(url, '_blank');
+    }
+  };
+
+  // JSZip is loaded from a CDN at click time instead of being an npm
+  // dependency — this is a rarely-used admin action, not worth bundling
+  // into every page load.
+  const downloadZip = async (draft, slides) => {
+    setZipBusyId(draft.id);
+    setActionError(null);
+    try {
+      const { default: JSZip } = await import('jszip');
+      const zip = new JSZip();
+      for (const s of slides) {
+        const res = await fetch(s.url);
+        const blob = await res.blob();
+        zip.file(`slide-${s.position + 1}.png`, blob);
+      }
+      const content = await zip.generateAsync({ type: 'blob' });
+      const objectUrl = URL.createObjectURL(content);
+      const a = document.createElement('a');
+      a.href = objectUrl;
+      a.download = `${(draft.title || 'carousel').replace(/[^a-z0-9]+/gi, '-').toLowerCase()}.zip`;
+      document.body.appendChild(a);
+      a.click();
+      a.remove();
+      URL.revokeObjectURL(objectUrl);
+    } catch (e) {
+      setActionError(`ZIP download failed: ${e.message}`);
+    }
+    setZipBusyId(null);
+  };
+
+  const GRADIENTS = ['ocean', 'sunrise', 'violet', 'forest', 'midnight', 'candy'];
+  const PATTERNS = ['dots', 'grid', 'diagonal'];
+
+  const applyBackground = async (draftId, background) => {
+    setBgBusyId(draftId);
+    setBgError(null);
+    try {
+      const res = await fetch(`/api/admin/content-assets/${draftId}/carousel-background`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ background }),
+      });
+      const json = await res.json();
+      if (!res.ok) throw new Error(json.error || 'Background update failed');
+      await loadDrafts();
+    } catch (e) {
+      setBgError(e.message);
+    }
+    setBgBusyId(null);
+  };
+
+  const handleBackgroundImageUpload = (draftId, file) => {
+    if (!file) return;
+    const reader = new FileReader();
+    reader.onload = () => applyBackground(draftId, { type: 'image', imageBase64: reader.result });
+    reader.readAsDataURL(file);
+  };
   // knowledge_assets has an anon-readable policy elsewhere in the app, so
   // this one still goes through the browser client — content_assets /
   // media_files / video_scripts / social_channels_v2 / publish_jobs are the
@@ -90,6 +245,7 @@ export default function SocialEnginePage() {
         body: JSON.stringify({
           knowledgeAssetId: selectedAssetId,
           platforms: selectedPlatforms.length > 0 ? selectedPlatforms : undefined,
+          ...(selectedPlatforms.includes('founder') ? { voiceMode, founderContext } : {}),
         }),
       });
       const data = await res.json();
@@ -116,6 +272,38 @@ export default function SocialEnginePage() {
       return;
     }
     loadDrafts();
+  };
+
+  const startEdit = (draft) => {
+    setEditingId(draft.id);
+    setEditDraft(draft.body || '');
+    setEditError(null);
+  };
+
+  const cancelEdit = () => {
+    setEditingId(null);
+    setEditDraft('');
+    setEditError(null);
+  };
+
+  const saveEdit = async (id) => {
+    setSavingId(id);
+    setEditError(null);
+    try {
+      const res = await fetch('/api/admin/content-assets', {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ id, body: editDraft }),
+      });
+      const json = await res.json();
+      if (!res.ok) throw new Error(json.error || 'Save failed');
+      setEditingId(null);
+      setEditDraft('');
+      await loadDrafts();
+    } catch (e) {
+      setEditError(e.message);
+    }
+    setSavingId(null);
   };
 
   // Opens the inline channel picker for a draft, pre-filtered to channels
@@ -172,7 +360,12 @@ export default function SocialEnginePage() {
     setBusyId(null);
   };
 
-  const filtered = platformFilter === 'all' ? drafts : drafts.filter((d) => d.platform === platformFilter);
+  const filtered =
+    platformFilter === 'all'
+      ? drafts
+      : platformFilter === 'founder'
+      ? drafts.filter((d) => d.asset_type?.startsWith('founder_'))
+      : drafts.filter((d) => d.platform === platformFilter && !d.asset_type?.startsWith('founder_'));
 
   return (
     <div className="p-6">
@@ -208,23 +401,54 @@ export default function SocialEnginePage() {
           </button>
         </div>
         <div className="flex flex-wrap gap-2">
-          {PLATFORMS.map((p) => (
+          {GENERATE_PLATFORMS.map((p) => (
             <button
               key={p}
               onClick={() => togglePlatform(p)}
               className={`px-3 py-1.5 rounded-full text-xs font-semibold border ${
                 selectedPlatforms.includes(p)
-                  ? 'bg-brand-blue text-white border-brand-blue'
+                  ? p === 'founder'
+                    ? 'bg-indigo-600 text-white border-indigo-600'
+                    : 'bg-brand-blue text-white border-brand-blue'
                   : 'text-gray-600 border-gray-300 hover:bg-gray-50'
               }`}
             >
-              {p}
+              {p === 'founder' ? 'Founder Post' : p}
             </button>
           ))}
         </div>
         <p className="text-xs text-gray-400 mt-2">
-          Leave all unchecked to generate every platform.
+          Leave all unchecked to generate every platform (Founder Post is opt-in only, never included by default).
         </p>
+
+        {selectedPlatforms.includes('founder') && (
+          <div className="mt-3 bg-indigo-50 border border-indigo-100 rounded-xl p-3 space-y-2">
+            <div className="flex flex-wrap gap-2 items-center">
+              <span className="text-xs font-bold text-indigo-700">Voice:</span>
+              {VOICE_MODES.map((v) => (
+                <button
+                  key={v.value}
+                  onClick={() => setVoiceMode(v.value)}
+                  className={`px-3 py-1 rounded-full text-xs font-semibold border ${
+                    voiceMode === v.value
+                      ? 'bg-indigo-600 text-white border-indigo-600'
+                      : 'text-indigo-700 border-indigo-200 bg-white hover:bg-indigo-100'
+                  }`}
+                >
+                  {v.label}
+                </button>
+              ))}
+            </div>
+            <textarea
+              value={founderContext}
+              onChange={(e) => setFounderContext(e.target.value)}
+              placeholder="Anything on your mind today? (optional — leave blank most of the time)"
+              rows={2}
+              className="w-full text-sm border border-indigo-200 rounded-lg p-2 font-sans"
+            />
+          </div>
+        )}
+
         {error && <p className="text-sm text-red-600 mt-3">{error}</p>}
 
         {lastResults && (
@@ -267,6 +491,12 @@ export default function SocialEnginePage() {
             {p}
           </button>
         ))}
+        <button
+          onClick={() => setPlatformFilter('founder')}
+          className={`px-3 py-1.5 rounded-full text-xs font-semibold ${platformFilter === 'founder' ? 'bg-indigo-600 text-white' : 'bg-indigo-50 text-indigo-700'}`}
+        >
+          Founder
+        </button>
       </div>
 
       {/* ── Drafts ── */}
@@ -283,7 +513,13 @@ export default function SocialEnginePage() {
             const heroImage = (draft.media_files || []).find((m) => m.role === 'hero_image' || m.role === 'primary');
             const videoScript = (draft.video_scripts || [])[0];
             const jobs = draft.publish_jobs || [];
-            const matchingChannels = channels.filter((c) => c.platform === draft.platform);
+            // draft.platform is null for format-agnostic assets (quote_loop
+            // videos) — those can go to any video-capable channel, not just
+            // one exact platform match, which used to leave matchingChannels
+            // permanently empty and the Approve button permanently disabled.
+            const matchingChannels = draft.platform
+              ? channels.filter((c) => c.platform === draft.platform)
+              : channels.filter((c) => VIDEO_CAPABLE_PLATFORMS.includes(c.platform));
 
             return (
               <div key={draft.id} className="bg-white rounded-2xl shadow-sm border p-4">
@@ -292,12 +528,17 @@ export default function SocialEnginePage() {
                     <span className="inline-block text-xs font-bold uppercase tracking-wide text-brand-blue bg-blue-50 rounded-full px-2 py-0.5 mr-2">
                       {draft.platform || draft.asset_type}
                     </span>
+                    {draft.asset_type?.startsWith('founder_') && (
+                      <span className="inline-block text-xs font-bold uppercase tracking-wide text-indigo-700 bg-indigo-50 rounded-full px-2 py-0.5 mr-2">
+                        Founder{draft.metadata?.voiceMode ? ` · ${draft.metadata.voiceMode}` : ''}
+                      </span>
+                    )}
                     <span className="font-bold">{draft.title || draft.knowledge_assets?.keyword}</span>
                     <p className="text-sm text-gray-500 mt-1">
                       Status: <span className={`font-semibold ${draft.status === 'approved' || draft.status === 'published' ? 'text-green-600' : 'text-yellow-600'}`}>{draft.status}</span>
                       {carouselSlides.length > 0 && <> • {carouselSlides.length} carousel slide(s)</>}
                       {videoScript && <> • video script: {videoScript.render_status}</>}
-                      {heroImage && <> • hero image attached</>}
+                      {heroImage && <> • {heroImage.media_type === 'video' ? 'video' : 'hero image'} attached</>}
                     </p>
                     {jobs.length > 0 && (
                       <div className="mt-2 flex flex-wrap gap-2">
@@ -315,11 +556,32 @@ export default function SocialEnginePage() {
                       {expandedId === draft.id ? 'Hide' : 'Preview'}
                     </button>
 
+                    {draft.body && (
+                      <button
+                        onClick={() => copyText(draft.body, `text-${draft.id}`)}
+                        className="text-gray-600 px-4 py-2 rounded-xl text-sm font-bold hover:bg-gray-100 border border-gray-200"
+                      >
+                        {copiedId === `text-${draft.id}` ? '✓ Copied' : '📋 Copy Text'}
+                      </button>
+                    )}
+
+                    {editingId !== draft.id && (
+                      <button
+                        onClick={() => {
+                          setExpandedId(draft.id);
+                          startEdit(draft);
+                        }}
+                        className="text-indigo-600 px-4 py-2 rounded-xl text-sm font-bold hover:bg-indigo-50"
+                      >
+                        Edit
+                      </button>
+                    )}
+
                     {jobs.length === 0 && (
                       <button
                         onClick={() => openChannelPicker(draft)}
                         disabled={matchingChannels.length === 0}
-                        title={matchingChannels.length === 0 ? `No active ${draft.platform} channel connected` : ''}
+                        title={matchingChannels.length === 0 ? `No active ${draft.platform || 'video-capable'} channel connected` : ''}
                         className="bg-green-100 text-green-700 px-4 py-2 rounded-xl text-sm font-bold hover:bg-green-200 disabled:opacity-40 disabled:cursor-not-allowed"
                       >
                         Approve
@@ -347,7 +609,7 @@ export default function SocialEnginePage() {
                     <p className="text-sm font-semibold mb-2">Publish to which channel(s)?</p>
                     {matchingChannels.length === 0 ? (
                       <p className="text-sm text-gray-500">
-                        No active {draft.platform} channel connected.{' '}
+                        No active {draft.platform || 'video-capable'} channel connected.{' '}
                         <a href="/admin/channels" className="text-brand-blue underline">Connect one</a>.
                       </p>
                     ) : (
@@ -362,7 +624,11 @@ export default function SocialEnginePage() {
                                 : 'text-gray-600 border-gray-300 hover:bg-gray-50'
                             }`}
                           >
-                            {c.label}
+                            {/* Show the platform alongside the label whenever more than one
+                                platform is on offer (the null-platform / quote_loop case) —
+                                otherwise every button in the row just says "Main Page" etc.
+                                with no way to tell which service it'll post to. */}
+                            {draft.platform ? c.label : `${c.label} (${c.platform})`}
                           </button>
                         ))}
                       </div>
@@ -384,17 +650,183 @@ export default function SocialEnginePage() {
 
                 {expandedId === draft.id && (
                   <div className="mt-4 bg-slate-50 p-4 rounded-xl space-y-4">
-                    {draft.body && (
-                      <p className="text-sm whitespace-pre-wrap">{draft.body}</p>
+                    {editingId === draft.id ? (
+                      <div>
+                        <textarea
+                          value={editDraft}
+                          onChange={(e) => setEditDraft(e.target.value)}
+                          rows={6}
+                          className="w-full text-sm border rounded-lg p-3 font-sans"
+                          autoFocus
+                        />
+                        <div className="flex items-center justify-between mt-2">
+                          <CharCounter platform={draft.platform} length={editDraft.length} />
+                          <div className="flex gap-2">
+                            <button
+                              onClick={cancelEdit}
+                              disabled={savingId === draft.id}
+                              className="px-3 py-1.5 rounded-lg text-sm font-bold text-gray-600 hover:bg-gray-100 disabled:opacity-50"
+                            >
+                              Cancel
+                            </button>
+                            <button
+                              onClick={() => saveEdit(draft.id)}
+                              disabled={savingId === draft.id}
+                              className="bg-brand-blue text-white px-4 py-1.5 rounded-lg text-sm font-bold disabled:opacity-50"
+                            >
+                              {savingId === draft.id ? 'Saving…' : 'Save'}
+                            </button>
+                          </div>
+                        </div>
+                        {editError && <p className="text-xs text-red-600 mt-2">{editError}</p>}
+                      </div>
+                    ) : (
+                      draft.body && (
+                        <p className="text-sm whitespace-pre-wrap">{draft.body}</p>
+                      )
                     )}
-                    {heroImage && (
-                      <img src={heroImage.url} alt={draft.title} className="rounded-lg max-h-64 object-cover" />
+                    {heroImage && heroImage.media_type === 'video' ? (
+                      <div>
+                        <video
+                          src={heroImage.url}
+                          controls
+                          loop
+                          playsInline
+                          className="rounded-lg max-h-[70vh] max-w-xs mx-auto bg-black"
+                        />
+                        <div className="flex gap-2 mt-2">
+                          <button
+                            onClick={() => downloadUrl(heroImage.url, `${(draft.title || 'quote-loop').replace(/[^a-z0-9]+/gi, '-').toLowerCase()}.${(heroImage.url.split('.').pop() || 'mp4').split('?')[0]}`)}
+                            className="text-xs font-semibold text-gray-600 border rounded-full px-3 py-1 hover:bg-gray-50"
+                          >
+                            ⬇ Download
+                          </button>
+                          <a
+                            href={heroImage.url}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            className="text-xs font-semibold text-gray-600 border rounded-full px-3 py-1 hover:bg-gray-50"
+                          >
+                            ↗ Open
+                          </a>
+                          <button
+                            onClick={() => copyText(heroImage.url, `hero-url-${draft.id}`)}
+                            className="text-xs font-semibold text-gray-600 border rounded-full px-3 py-1 hover:bg-gray-50"
+                          >
+                            {copiedId === `hero-url-${draft.id}` ? '✓ Copied' : '🔗 Copy URL'}
+                          </button>
+                        </div>
+                      </div>
+                    ) : heroImage && (
+                      <div>
+                        <img src={heroImage.url} alt={draft.title} className="rounded-lg max-h-64 object-cover" />
+                        <div className="flex gap-2 mt-2">
+                          <button
+                            onClick={() => downloadUrl(heroImage.url, `${(draft.title || 'hero').replace(/[^a-z0-9]+/gi, '-').toLowerCase()}.jpg`)}
+                            className="text-xs font-semibold text-gray-600 border rounded-full px-3 py-1 hover:bg-gray-50"
+                          >
+                            ⬇ Download
+                          </button>
+                          <a
+                            href={heroImage.url}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            className="text-xs font-semibold text-gray-600 border rounded-full px-3 py-1 hover:bg-gray-50"
+                          >
+                            ↗ Open
+                          </a>
+                          <button
+                            onClick={() => copyText(heroImage.url, `hero-url-${draft.id}`)}
+                            className="text-xs font-semibold text-gray-600 border rounded-full px-3 py-1 hover:bg-gray-50"
+                          >
+                            {copiedId === `hero-url-${draft.id}` ? '✓ Copied' : '🔗 Copy URL'}
+                          </button>
+                        </div>
+                      </div>
                     )}
                     {carouselSlides.length > 0 && (
-                      <div className="flex gap-2 overflow-x-auto pb-2">
-                        {carouselSlides.map((s) => (
-                          <img key={s.id} src={s.url} alt={`Slide ${s.position + 1}`} className="h-48 rounded-lg border" />
-                        ))}
+                      <div>
+                        <div className="flex justify-end mb-1">
+                          <button
+                            onClick={() => downloadZip(draft, carouselSlides)}
+                            disabled={zipBusyId === draft.id}
+                            className="text-xs font-semibold text-indigo-700 border border-indigo-200 rounded-full px-3 py-1 hover:bg-indigo-50 disabled:opacity-50"
+                          >
+                            {zipBusyId === draft.id ? 'Zipping…' : `📥 Download all (${carouselSlides.length}) as ZIP`}
+                          </button>
+                        </div>
+                        <div className="flex gap-2 overflow-x-auto pb-2">
+                          {carouselSlides.map((s) => (
+                            <div key={s.id} className="relative group">
+                              <img src={s.url} alt={`Slide ${s.position + 1}`} className="h-48 rounded-lg border" />
+                              <div className="absolute bottom-1 left-1 right-1 flex gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
+                                <button
+                                  onClick={() => downloadUrl(s.url, `slide-${s.position + 1}.png`)}
+                                  title="Download"
+                                  className="bg-black/70 text-white text-xs rounded px-2 py-1"
+                                >
+                                  ⬇
+                                </button>
+                                <button
+                                  onClick={() => copyText(s.url, `slide-url-${s.id}`)}
+                                  title="Copy URL"
+                                  className="bg-black/70 text-white text-xs rounded px-2 py-1"
+                                >
+                                  {copiedId === `slide-url-${s.id}` ? '✓' : '🔗'}
+                                </button>
+                              </div>
+                            </div>
+                          ))}
+                        </div>
+                      </div>
+                    )}
+                    {carouselSlides.length > 0 && ['instagram', 'facebook', 'x'].includes(draft.platform) && (
+                      <div className="bg-white border rounded-xl p-3">
+                        <p className="text-xs font-bold text-gray-500 uppercase mb-2">
+                          Background (cover + CTA slide)
+                        </p>
+                        <div className="flex flex-wrap gap-2 mb-2">
+                          {GRADIENTS.map((g) => (
+                            <button
+                              key={g}
+                              title={g}
+                              onClick={() => applyBackground(draft.id, { type: 'gradient', value: g })}
+                              disabled={bgBusyId === draft.id}
+                              style={{ background: GRADIENT_CSS[g] }}
+                              className="h-8 w-8 rounded-full border-2 border-white ring-1 ring-gray-200 disabled:opacity-40"
+                            />
+                          ))}
+                          {PATTERNS.map((p) => (
+                            <button
+                              key={p}
+                              onClick={() => applyBackground(draft.id, { type: 'pattern', value: p })}
+                              disabled={bgBusyId === draft.id}
+                              className="px-3 py-1.5 rounded-full text-xs font-semibold border text-gray-600 hover:bg-gray-50 disabled:opacity-40"
+                            >
+                              {p}
+                            </button>
+                          ))}
+                          <input
+                            type="color"
+                            onChange={(e) => applyBackground(draft.id, { type: 'solid', value: e.target.value })}
+                            disabled={bgBusyId === draft.id}
+                            className="h-8 w-8 rounded-full border cursor-pointer disabled:opacity-40"
+                            title="Custom solid color"
+                          />
+                          <label className="px-3 py-1.5 rounded-full text-xs font-semibold border text-indigo-700 border-indigo-200 hover:bg-indigo-50 cursor-pointer">
+                            Upload image
+                            <input
+                              type="file"
+                              accept="image/png,image/jpeg,image/webp"
+                              className="hidden"
+                              disabled={bgBusyId === draft.id}
+                              onChange={(e) => handleBackgroundImageUpload(draft.id, e.target.files?.[0])}
+                            />
+                          </label>
+                        </div>
+                        {bgBusyId === draft.id && <p className="text-xs text-gray-400">Rendering new background…</p>}
+                        {bgError && bgBusyId !== draft.id && <p className="text-xs text-red-600">{bgError}</p>}
+                        {actionError && <p className="text-xs text-red-600 mt-1">{actionError}</p>}
                       </div>
                     )}
                     {videoScript && (
