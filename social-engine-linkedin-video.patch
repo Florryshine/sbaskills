@@ -1,0 +1,17 @@
+--- a/app/admin/social-engine/page.js	2026-08-03 23:49:23.043497622 +0000
++++ b/app/admin/social-engine/page.js	2026-08-03 23:49:23.007667340 +0000
+@@ -8,10 +8,10 @@
+ // Format-agnostic video assets (asset_type set, content_assets.platform left
+ // null on purpose — see app/api/admin/quote-loops/generate/route.js) can go
+ // out to any of these, since every one of them has a working video publisher
+-// adapter (lib/publishers/{facebook,instagram,telegram,youtube,tiktok}.js).
++// adapter (lib/publishers/{facebook,instagram,telegram,linkedin,youtube,tiktok}.js).
+ // Used below wherever `draft.platform` is null instead of a single locked-in
+ // platform, so the channel picker isn't stuck showing zero options.
+-const VIDEO_CAPABLE_PLATFORMS = ['facebook', 'instagram', 'telegram', 'tiktok', 'youtube'];
++const VIDEO_CAPABLE_PLATFORMS = ['facebook', 'instagram', 'telegram', 'linkedin', 'tiktok', 'youtube'];
+ 
+ // Founder posts aren't a real target platform — they're generated onto
+ // linkedin/facebook/instagram rows (see lib/content-factory/generators/founder.js)
+
+

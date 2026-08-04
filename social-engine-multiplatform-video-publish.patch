@@ -1,0 +1,115 @@
+diff --git a/app/admin/social-engine/page.js b/app/admin/social-engine/page.js
+index c06c170..9c4b628 100644
+--- a/app/admin/social-engine/page.js
++++ b/app/admin/social-engine/page.js
+@@ -5,6 +5,14 @@ import { createBrowserClient } from '@/lib/supabase';
+ 
+ const PLATFORMS = ['instagram', 'facebook', 'telegram', 'linkedin', 'x', 'pinterest', 'youtube', 'tiktok'];
+ 
++// Format-agnostic video assets (asset_type set, content_assets.platform left
++// null on purpose — see app/api/admin/quote-loops/generate/route.js) can go
++// out to any of these, since every one of them has a working video publisher
++// adapter (lib/publishers/{facebook,instagram,telegram,youtube,tiktok}.js).
++// Used below wherever `draft.platform` is null instead of a single locked-in
++// platform, so the channel picker isn't stuck showing zero options.
++const VIDEO_CAPABLE_PLATFORMS = ['facebook', 'instagram', 'telegram', 'tiktok', 'youtube'];
++
+ // Founder posts aren't a real target platform — they're generated onto
+ // linkedin/facebook/instagram rows (see lib/content-factory/generators/founder.js)
+ // so char limits and existing platform filters still work, marked via an
+@@ -505,7 +513,13 @@ export default function SocialEnginePage() {
+             const heroImage = (draft.media_files || []).find((m) => m.role === 'hero_image' || m.role === 'primary');
+             const videoScript = (draft.video_scripts || [])[0];
+             const jobs = draft.publish_jobs || [];
+-            const matchingChannels = channels.filter((c) => c.platform === draft.platform);
++            // draft.platform is null for format-agnostic assets (quote_loop
++            // videos) — those can go to any video-capable channel, not just
++            // one exact platform match, which used to leave matchingChannels
++            // permanently empty and the Approve button permanently disabled.
++            const matchingChannels = draft.platform
++              ? channels.filter((c) => c.platform === draft.platform)
++              : channels.filter((c) => VIDEO_CAPABLE_PLATFORMS.includes(c.platform));
+ 
+             return (
+               <div key={draft.id} className="bg-white rounded-2xl shadow-sm border p-4">
+@@ -524,7 +538,7 @@ export default function SocialEnginePage() {
+                       Status: <span className={`font-semibold ${draft.status === 'approved' || draft.status === 'published' ? 'text-green-600' : 'text-yellow-600'}`}>{draft.status}</span>
+                       {carouselSlides.length > 0 && <> • {carouselSlides.length} carousel slide(s)</>}
+                       {videoScript && <> • video script: {videoScript.render_status}</>}
+-                      {heroImage && <> • hero image attached</>}
++                      {heroImage && <> • {heroImage.media_type === 'video' ? 'video' : 'hero image'} attached</>}
+                     </p>
+                     {jobs.length > 0 && (
+                       <div className="mt-2 flex flex-wrap gap-2">
+@@ -567,7 +581,7 @@ export default function SocialEnginePage() {
+                       <button
+                         onClick={() => openChannelPicker(draft)}
+                         disabled={matchingChannels.length === 0}
+-                        title={matchingChannels.length === 0 ? `No active ${draft.platform} channel connected` : ''}
++                        title={matchingChannels.length === 0 ? `No active ${draft.platform || 'video-capable'} channel connected` : ''}
+                         className="bg-green-100 text-green-700 px-4 py-2 rounded-xl text-sm font-bold hover:bg-green-200 disabled:opacity-40 disabled:cursor-not-allowed"
+                       >
+                         Approve
+@@ -595,7 +609,7 @@ export default function SocialEnginePage() {
+                     <p className="text-sm font-semibold mb-2">Publish to which channel(s)?</p>
+                     {matchingChannels.length === 0 ? (
+                       <p className="text-sm text-gray-500">
+-                        No active {draft.platform} channel connected.{' '}
++                        No active {draft.platform || 'video-capable'} channel connected.{' '}
+                         <a href="/admin/channels" className="text-brand-blue underline">Connect one</a>.
+                       </p>
+                     ) : (
+@@ -610,7 +624,11 @@ export default function SocialEnginePage() {
+                                 : 'text-gray-600 border-gray-300 hover:bg-gray-50'
+                             }`}
+                           >
+-                            {c.label}
++                            {/* Show the platform alongside the label whenever more than one
++                                platform is on offer (the null-platform / quote_loop case) —
++                                otherwise every button in the row just says "Main Page" etc.
++                                with no way to tell which service it'll post to. */}
++                            {draft.platform ? c.label : `${c.label} (${c.platform})`}
+                           </button>
+                         ))}
+                       </div>
+@@ -667,7 +685,39 @@ export default function SocialEnginePage() {
+                         <p className="text-sm whitespace-pre-wrap">{draft.body}</p>
+                       )
+                     )}
+-                    {heroImage && (
++                    {heroImage && heroImage.media_type === 'video' ? (
++                      <div>
++                        <video
++                          src={heroImage.url}
++                          controls
++                          loop
++                          playsInline
++                          className="rounded-lg max-h-[70vh] max-w-xs mx-auto bg-black"
++                        />
++                        <div className="flex gap-2 mt-2">
++                          <button
++                            onClick={() => downloadUrl(heroImage.url, `${(draft.title || 'quote-loop').replace(/[^a-z0-9]+/gi, '-').toLowerCase()}.webm`)}
++                            className="text-xs font-semibold text-gray-600 border rounded-full px-3 py-1 hover:bg-gray-50"
++                          >
++                            ⬇ Download
++                          </button>
++                          <a
++                            href={heroImage.url}
++                            target="_blank"
++                            rel="noopener noreferrer"
++                            className="text-xs font-semibold text-gray-600 border rounded-full px-3 py-1 hover:bg-gray-50"
++                          >
++                            ↗ Open
++                          </a>
++                          <button
++                            onClick={() => copyText(heroImage.url, `hero-url-${draft.id}`)}
++                            className="text-xs font-semibold text-gray-600 border rounded-full px-3 py-1 hover:bg-gray-50"
++                          >
++                            {copiedId === `hero-url-${draft.id}` ? '✓ Copied' : '🔗 Copy URL'}
++                          </button>
++                        </div>
++                      </div>
++                    ) : heroImage && (
+                       <div>
+                         <img src={heroImage.url} alt={draft.title} className="rounded-lg max-h-64 object-cover" />
+                         <div className="flex gap-2 mt-2">
