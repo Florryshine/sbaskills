@@ -1,1 +1,0 @@
-"from content_generator_ai import generate_ai_script; import json; script = generate_ai_script('Pass WAEC, NECO & JAMB Faster Using AI'); open('test_script.json', 'w').write(json.dumps(script, indent=2)); print('? Done')"  
