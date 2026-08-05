@@ -8,9 +8,13 @@
 // by /api/admin/quote-loops/generate), so it shows up with real media in
 // the social-engine review dashboard, exactly like every other
 // content-factory-generated asset.
+//
+// UPDATED: After saving video, auto-generates metadata for all platforms
+// and creates publish_jobs for any connected channels.
 
 import { NextResponse } from 'next/server';
 import { createAdminClient } from '@/lib/supabase-admin';
+import { generateAllMetadata, applyPlatformMetadata } from '@/lib/metadata-engine';
 
 export async function POST(request) {
   let body;
@@ -20,7 +24,7 @@ export async function POST(request) {
     return NextResponse.json({ error: 'Invalid JSON body' }, { status: 400 });
   }
 
-  const { contentAssetId, videoUrl, durationSeconds } = body || {};
+  const { contentAssetId, videoUrl, durationSeconds, autoPublish = true } = body || {};
   if (!contentAssetId || !videoUrl) {
     return NextResponse.json({ error: 'contentAssetId and videoUrl are required' }, { status: 400 });
   }
@@ -29,7 +33,7 @@ export async function POST(request) {
 
   const { data: contentAsset, error: fetchError } = await supabase
     .from('content_assets')
-    .select('id, title, asset_type')
+    .select('id, title, asset_type, knowledge_asset_id, metadata')
     .eq('id', contentAssetId)
     .eq('asset_type', 'quote_loop')
     .single();
@@ -69,6 +73,129 @@ export async function POST(request) {
     });
     if (insertError) {
       return NextResponse.json({ error: insertError.message }, { status: 500 });
+    }
+  }
+
+  // Generate cross-platform metadata if not already present
+  let updatedMetadata = contentAsset.metadata || {};
+  if (!updatedMetadata.youtube && !updatedMetadata.tiktok) {
+    try {
+      // Fetch the full knowledge asset for metadata generation
+      const { data: knowledgeAsset } = await supabase
+        .from('knowledge_assets')
+        .select('*')
+        .eq('id', contentAsset.knowledge_asset_id)
+        .single();
+
+      if (knowledgeAsset) {
+        const allMetadata = await generateAllMetadata(knowledgeAsset);
+        
+        // Apply metadata to each platform's content asset
+        const platforms = ['youtube', 'tiktok', 'instagram', 'facebook', 'linkedin', 'telegram'];
+        for (const platform of platforms) {
+          if (allMetadata[platform]) {
+            const platformAssetType = platform === 'youtube' ? 'youtube_short' : 
+                                      platform === 'tiktok' ? 'tiktok_video' :
+                                      platform === 'instagram' ? 'instagram_carousel' :
+                                      platform === 'facebook' ? 'facebook_post' :
+                                      platform === 'linkedin' ? 'linkedin_post' : 'telegram_post';
+            
+            // Check if content asset for this platform already exists
+            const { data: existingPlatformAsset } = await supabase
+              .from('content_assets')
+              .select('id, metadata')
+              .eq('knowledge_asset_id', contentAsset.knowledge_asset_id)
+              .eq('platform', platform)
+              .eq('format', 'video')
+              .order('created_at', { ascending: false })
+              .limit(1)
+              .maybeSingle();
+
+            const enrichedMetadata = applyPlatformMetadata({}, allMetadata, platform);
+            
+            if (existingPlatformAsset) {
+              // Update existing platform asset with new metadata
+              await supabase
+                .from('content_assets')
+                .update({ metadata: enrichedMetadata })
+                .eq('id', existingPlatformAsset.id);
+            } else {
+              // Create new platform-specific content asset
+              await supabase.from('content_assets').insert({
+                knowledge_asset_id: contentAsset.knowledge_asset_id,
+                asset_type: platformAssetType,
+                platform: platform,
+                format: 'video',
+                title: allMetadata[platform].title || contentAsset.title,
+                body: allMetadata[platform].caption || allMetadata[platform].description || contentAsset.body,
+                metadata: enrichedMetadata,
+                status: 'draft',
+                generated_by: 'metadata-engine-auto',
+              });
+            }
+          }
+        }
+        
+        updatedMetadata = { ...contentAsset.metadata, cross_platform_metadata: allMetadata };
+        await supabase
+          .from('content_assets')
+          .update({ metadata: updatedMetadata })
+          .eq('id', contentAssetId);
+      }
+    } catch (metaErr) {
+      console.warn('Metadata generation failed, continuing without:', metaErr.message);
+    }
+  }
+
+  // Auto-create publish jobs for connected channels if requested
+  if (autoPublish) {
+    try {
+      const { data: channels } = await supabase
+        .from('social_channels_v2')
+        .select('id, platform')
+        .eq('is_active', true)
+        .in('platform', ['youtube', 'tiktok', 'instagram', 'facebook', 'linkedin', 'telegram']);
+
+      if (channels && channels.length > 0) {
+        const jobsToCreate = [];
+        
+        // For quote loops, create jobs for video-capable platforms
+        const videoPlatforms = ['youtube', 'tiktok', 'instagram', 'facebook'];
+        
+        for (const channel of channels) {
+          if (videoPlatforms.includes(channel.platform)) {
+            // Find or create the platform-specific content asset
+            const assetType = channel.platform === 'youtube' ? 'youtube_short' :
+                             channel.platform === 'tiktok' ? 'tiktok_video' :
+                             channel.platform === 'instagram' ? 'instagram_carousel' : 'facebook_post';
+            
+            const { data: platformAsset } = await supabase
+              .from('content_assets')
+              .select('id')
+              .eq('knowledge_asset_id', contentAsset.knowledge_asset_id)
+              .eq('platform', channel.platform)
+              .eq('format', 'video')
+              .order('created_at', { ascending: false })
+              .limit(1)
+              .maybeSingle();
+
+            const targetAssetId = platformAsset?.id || contentAssetId;
+            
+            jobsToCreate.push({
+              content_asset_id: targetAssetId,
+              channel_id: channel.id,
+              status: 'queued',
+              created_by: 'quote-loop-auto-publish',
+            });
+          }
+        }
+        
+        if (jobsToCreate.length > 0) {
+          await supabase.from('publish_jobs').insert(jobsToCreate);
+        }
+      }
+    } catch (jobErr) {
+      console.warn('Auto-publish job creation failed:', jobErr.message);
     }
   }
 
