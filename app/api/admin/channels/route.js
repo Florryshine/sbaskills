@@ -13,7 +13,7 @@ export async function GET() {
   const supabase = createAdminClient();
   const { data, error } = await supabase
     .from('social_channels_v2')
-    .select('id, platform, label, account_id, access_token, refresh_token, token_expires_at, is_active, created_at')
+    .select('id, platform, label, account_id, access_token, refresh_token, token_expires_at, metadata, is_active, created_at')
     .order('platform', { ascending: true });
 
   if (error) return NextResponse.json({ error: error.message }, { status: 500 });
