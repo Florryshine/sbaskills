@@ -9,12 +9,28 @@
 // the social-engine review dashboard, exactly like every other
 // content-factory-generated asset.
 //
-// UPDATED: After saving video, auto-generates metadata for all platforms
-// and creates publish_jobs for any connected channels.
+// UPDATED: cross-platform metadata generation + auto-publish job creation
+// now run via runInBackground() instead of being awaited inline. The
+// earlier inline version chained one AI call (which can loop through up
+// to 9 fallback models) plus ~14 sequential Supabase round-trips before
+// ever sending a response — on Vercel that risked hitting the function's
+// time limit and dying before the final `status: 'approved'` update ran,
+// which is what made saved videos silently never show up as approved.
+// Saving the media file and marking the asset approved now happens first
+// and is returned to the client immediately; metadata + publish jobs are
+// best-effort follow-up work. Same fix pattern already used in
+// app/api/admin/books/from-text/route.js.
 
 import { NextResponse } from 'next/server';
 import { createAdminClient } from '@/lib/supabase-admin';
 import { generateAllMetadata, applyPlatformMetadata } from '@/lib/metadata-engine';
+import { runInBackground } from '@/lib/backgroundTask';
+
+// Matches the reference maxDuration used for the other background-task
+// routes in this repo — the background work itself isn't bounded by this
+// once the response has been sent, but runInBackground's lifetime
+// extension on Vercel is capped by whatever this route declares.
+export const maxDuration = 60;
 
 export async function POST(request) {
   let body;
@@ -76,130 +92,125 @@ export async function POST(request) {
     }
   }
 
-  // Generate cross-platform metadata if not already present
-  let updatedMetadata = contentAsset.metadata || {};
-  if (!updatedMetadata.youtube && !updatedMetadata.tiktok) {
-    try {
-      // Fetch the full knowledge asset for metadata generation
-      const { data: knowledgeAsset } = await supabase
-        .from('knowledge_assets')
-        .select('*')
-        .eq('id', contentAsset.knowledge_asset_id)
-        .single();
+  // The part that actually needs to happen before the client can see the
+  // video as "done" — do this synchronously and respond right away.
+  await supabase.from('content_assets').update({ status: 'approved' }).eq('id', contentAssetId);
 
-      if (knowledgeAsset) {
-        const allMetadata = await generateAllMetadata(knowledgeAsset);
-        
-        // Apply metadata to each platform's content asset
-        const platforms = ['youtube', 'tiktok', 'instagram', 'facebook', 'linkedin', 'telegram'];
-        for (const platform of platforms) {
-          if (allMetadata[platform]) {
-            const platformAssetType = platform === 'youtube' ? 'youtube_short' : 
-                                      platform === 'tiktok' ? 'tiktok_video' :
-                                      platform === 'instagram' ? 'instagram_carousel' :
-                                      platform === 'facebook' ? 'facebook_post' :
-                                      platform === 'linkedin' ? 'linkedin_post' : 'telegram_post';
-            
-            // Check if content asset for this platform already exists
-            const { data: existingPlatformAsset } = await supabase
-              .from('content_assets')
-              .select('id, metadata')
-              .eq('knowledge_asset_id', contentAsset.knowledge_asset_id)
-              .eq('platform', platform)
-              .eq('format', 'video')
-              .order('created_at', { ascending: false })
-              .limit(1)
-              .maybeSingle();
+  const response = NextResponse.json({ success: true, videoUrl });
 
-            const enrichedMetadata = applyPlatformMetadata({}, allMetadata, platform);
-            
-            if (existingPlatformAsset) {
-              // Update existing platform asset with new metadata
-              await supabase
+  // Everything below is best-effort enrichment (cross-platform metadata +
+  // auto-queued publish jobs) — none of it should block the save from
+  // completing or risk the whole request timing out.
+  runInBackground(async () => {
+    let updatedMetadata = contentAsset.metadata || {};
+    if (!updatedMetadata.youtube && !updatedMetadata.tiktok) {
+      try {
+        const { data: knowledgeAsset } = await supabase
+          .from('knowledge_assets')
+          .select('*')
+          .eq('id', contentAsset.knowledge_asset_id)
+          .single();
+
+        if (knowledgeAsset) {
+          const allMetadata = await generateAllMetadata(knowledgeAsset);
+
+          const platforms = ['youtube', 'tiktok', 'instagram', 'facebook', 'linkedin', 'telegram'];
+          for (const platform of platforms) {
+            if (allMetadata[platform]) {
+              const platformAssetType = platform === 'youtube' ? 'youtube_short' :
+                                        platform === 'tiktok' ? 'tiktok_video' :
+                                        platform === 'instagram' ? 'instagram_carousel' :
+                                        platform === 'facebook' ? 'facebook_post' :
+                                        platform === 'linkedin' ? 'linkedin_post' : 'telegram_post';
+
+              const { data: existingPlatformAsset } = await supabase
                 .from('content_assets')
-                .update({ metadata: enrichedMetadata })
-                .eq('id', existingPlatformAsset.id);
-            } else {
-              // Create new platform-specific content asset
-              await supabase.from('content_assets').insert({
-                knowledge_asset_id: contentAsset.knowledge_asset_id,
-                asset_type: platformAssetType,
-                platform: platform,
-                format: 'video',
-                title: allMetadata[platform].title || contentAsset.title,
-                body: allMetadata[platform].caption || allMetadata[platform].description || contentAsset.body,
-                metadata: enrichedMetadata,
-                status: 'draft',
-                generated_by: 'metadata-engine-auto',
+                .select('id, metadata')
+                .eq('knowledge_asset_id', contentAsset.knowledge_asset_id)
+                .eq('platform', platform)
+                .eq('format', 'video')
+                .order('created_at', { ascending: false })
+                .limit(1)
+                .maybeSingle();
+
+              const enrichedMetadata = applyPlatformMetadata({}, allMetadata, platform);
+
+              if (existingPlatformAsset) {
+                await supabase
+                  .from('content_assets')
+                  .update({ metadata: enrichedMetadata })
+                  .eq('id', existingPlatformAsset.id);
+              } else {
+                await supabase.from('content_assets').insert({
+                  knowledge_asset_id: contentAsset.knowledge_asset_id,
+                  asset_type: platformAssetType,
+                  platform: platform,
+                  format: 'video',
+                  title: allMetadata[platform].title || contentAsset.title,
+                  body: allMetadata[platform].caption || allMetadata[platform].description || contentAsset.body,
+                  metadata: enrichedMetadata,
+                  status: 'draft',
+                  generated_by: 'metadata-engine-auto',
+                });
+              }
+            }
+          }
+
+          updatedMetadata = { ...contentAsset.metadata, cross_platform_metadata: allMetadata };
+          await supabase
+            .from('content_assets')
+            .update({ metadata: updatedMetadata })
+            .eq('id', contentAssetId);
+        }
+      } catch (metaErr) {
+        console.warn('Metadata generation failed, continuing without:', metaErr.message);
+      }
+    }
+
+    if (autoPublish) {
+      try {
+        const { data: channels } = await supabase
+          .from('social_channels_v2')
+          .select('id, platform')
+          .eq('is_active', true)
+          .in('platform', ['youtube', 'tiktok', 'instagram', 'facebook', 'linkedin', 'telegram']);
+
+        if (channels && channels.length > 0) {
+          const jobsToCreate = [];
+          const videoPlatforms = ['youtube', 'tiktok', 'instagram', 'facebook'];
+
+          for (const channel of channels) {
+            if (videoPlatforms.includes(channel.platform)) {
+              const { data: platformAsset } = await supabase
+                .from('content_assets')
+                .select('id')
+                .eq('knowledge_asset_id', contentAsset.knowledge_asset_id)
+                .eq('platform', channel.platform)
+                .eq('format', 'video')
+                .order('created_at', { ascending: false })
+                .limit(1)
+                .maybeSingle();
+
+              const targetAssetId = platformAsset?.id || contentAssetId;
+
+              jobsToCreate.push({
+                content_asset_id: targetAssetId,
+                channel_id: channel.id,
+                status: 'queued',
+                created_by: 'quote-loop-auto-publish',
               });
             }
           }
-        }
-        
-        updatedMetadata = { ...contentAsset.metadata, cross_platform_metadata: allMetadata };
-        await supabase
-          .from('content_assets')
-          .update({ metadata: updatedMetadata })
-          .eq('id', contentAssetId);
-      }
-    } catch (metaErr) {
-      console.warn('Metadata generation failed, continuing without:', metaErr.message);
-    }
-  }
 
-  // Auto-create publish jobs for connected channels if requested
-  if (autoPublish) {
-    try {
-      const { data: channels } = await supabase
-        .from('social_channels_v2')
-        .select('id, platform')
-        .eq('is_active', true)
-        .in('platform', ['youtube', 'tiktok', 'instagram', 'facebook', 'linkedin', 'telegram']);
-
-      if (channels && channels.length > 0) {
-        const jobsToCreate = [];
-        
-        // For quote loops, create jobs for video-capable platforms
-        const videoPlatforms = ['youtube', 'tiktok', 'instagram', 'facebook'];
-        
-        for (const channel of channels) {
-          if (videoPlatforms.includes(channel.platform)) {
-            // Find or create the platform-specific content asset
-            const assetType = channel.platform === 'youtube' ? 'youtube_short' :
-                             channel.platform === 'tiktok' ? 'tiktok_video' :
-                             channel.platform === 'instagram' ? 'instagram_carousel' : 'facebook_post';
-            
-            const { data: platformAsset } = await supabase
-              .from('content_assets')
-              .select('id')
-              .eq('knowledge_asset_id', contentAsset.knowledge_asset_id)
-              .eq('platform', channel.platform)
-              .eq('format', 'video')
-              .order('created_at', { ascending: false })
-              .limit(1)
-              .maybeSingle();
-
-            const targetAssetId = platformAsset?.id || contentAssetId;
-            
-            jobsToCreate.push({
-              content_asset_id: targetAssetId,
-              channel_id: channel.id,
-              status: 'queued',
-              created_by: 'quote-loop-auto-publish',
-            });
+          if (jobsToCreate.length > 0) {
+            await supabase.from('publish_jobs').insert(jobsToCreate);
           }
         }
-        
-        if (jobsToCreate.length > 0) {
-          await supabase.from('publish_jobs').insert(jobsToCreate);
-        }
+      } catch (jobErr) {
+        console.warn('Auto-publish job creation failed:', jobErr.message);
       }
-    } catch (jobErr) {
-      console.warn('Auto-publish job creation failed:', jobErr.message);
     }
-  }
+  });
 
-  await supabase.from('content_assets').update({ status: 'approved' }).eq('id', contentAssetId);
-
-  return NextResponse.json({ success: true, videoUrl });
+  return response;
 }
