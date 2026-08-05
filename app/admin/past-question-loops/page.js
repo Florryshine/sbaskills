@@ -1,22 +1,23 @@
 'use client';
 
-// app/admin/quote-loops/page.js
+// app/admin/past-question-loops/page.js
 //
-// Full flow: pick a knowledge asset -> generate N short quote-loop drafts
-// (LLM lines + background candidates) -> pick one -> record it with
-// QuoteLoopRecorder -> saved into content_assets/media_files, ready for
-// the existing social-engine review dashboard.
+// Same flow as /admin/quote-loops, same architecture, same content_assets/
+// media_files/publish_jobs pipeline — just asset_type='past_question_loop'
+// and a different generator/recorder: pick a knowledge asset -> generate N
+// JAMB/WAEC/NECO MCQ drafts -> pick one -> record it with
+// PastQuestionLoopRecorder -> publish straight to connected channels.
 //
-// Needs a `quote-loops` bucket in Supabase storage (public read,
-// authenticated upload — same policy shape as `lesson-videos`) before the
+// Needs a `past-question-loops` bucket in Supabase storage (public read,
+// authenticated upload — same policy shape as `quote-loops`) before the
 // first save; nothing else new to configure.
 
 import { useState, useEffect } from 'react';
 import { createBrowserClient } from '@/lib/supabase';
-import QuoteLoopRecorder from '@/components/QuoteLoopRecorder';
+import PastQuestionLoopRecorder from '@/components/PastQuestionLoopRecorder';
 import PublishToChannels from '@/components/admin/PublishToChannels';
 
-export default function QuoteLoopsPage() {
+export default function PastQuestionLoopsPage() {
   const [assets, setAssets] = useState([]);
   const [selectedAssetId, setSelectedAssetId] = useState('');
   const [count, setCount] = useState(5);
@@ -38,7 +39,7 @@ export default function QuoteLoopsPage() {
 
   const loadExistingDrafts = async (assetId) => {
     try {
-      const res = await fetch(`/api/admin/quote-loops/list?knowledgeAssetId=${assetId}`);
+      const res = await fetch(`/api/admin/past-question-loops/list?knowledgeAssetId=${assetId}`);
       const data = await res.json();
       if (!res.ok) throw new Error(data.error || 'Failed to load drafts');
       setDrafts(data.contentAssets || []);
@@ -59,7 +60,7 @@ export default function QuoteLoopsPage() {
     setErrorMsg(null);
     setWarnings([]);
     try {
-      const res = await fetch('/api/admin/quote-loops/generate', {
+      const res = await fetch('/api/admin/past-question-loops/generate', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ knowledgeAssetId: selectedAssetId, count }),
@@ -80,9 +81,9 @@ export default function QuoteLoopsPage() {
   return (
     <div className="max-w-3xl mx-auto p-6 space-y-6">
       <div>
-        <h1 className="text-2xl font-bold">Quote Loops</h1>
+        <h1 className="text-2xl font-bold">Past Question Loops</h1>
         <p className="text-sm text-gray-500">
-          Short, loopable, motivational text-over-video clips generated from a topic.
+          Short JAMB/WAEC/NECO-style MCQ reveal clips generated from a topic — question, options, correct answer, explanation.
         </p>
       </div>
 
@@ -102,7 +103,7 @@ export default function QuoteLoopsPage() {
         </select>
 
         <div className="flex items-center gap-3">
-          <label className="text-sm font-semibold">How many lines?</label>
+          <label className="text-sm font-semibold">How many questions?</label>
           <input
             type="number"
             min={1}
@@ -136,9 +137,13 @@ export default function QuoteLoopsPage() {
               <div className="flex items-center justify-between gap-3">
                 <div>
                   <p className="font-semibold">{draft.body}</p>
-                  {draft.metadata?.followUp && (
-                    <p className="text-sm text-gray-600 mt-0.5">{draft.metadata.followUp}</p>
-                  )}
+                  <ul className="text-sm text-gray-600 mt-1 space-y-0.5">
+                    {(draft.metadata?.options || []).map((opt) => (
+                      <li key={opt.id} className={opt.id === draft.metadata?.correctOptionId ? 'text-emerald-600 font-semibold' : ''}>
+                        {opt.id}) {opt.text} {opt.id === draft.metadata?.correctOptionId ? '✓' : ''}
+                      </li>
+                    ))}
+                  </ul>
                   <p className="text-xs text-gray-500 mt-1">
                     {draft.metadata?.background?.type
                       ? `${draft.metadata.background.type} background (${draft.metadata.background.source})`
@@ -167,7 +172,7 @@ export default function QuoteLoopsPage() {
               ✕ Close
             </button>
           </div>
-          <QuoteLoopRecorder
+          <PastQuestionLoopRecorder
             contentAsset={activeDraft}
             onSaved={() => loadExistingDrafts(selectedAssetId)}
           />

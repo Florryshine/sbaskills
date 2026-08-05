@@ -1,0 +1,1820 @@
+diff --git a/.env.example b/.env.example
+index a872545..8597393 100644
+--- a/.env.example
++++ b/.env.example
+@@ -7,3 +7,14 @@ NEXT_PUBLIC_CLOUDINARY_CLOUD_NAME=
+ CLOUDINARY_API_KEY=
+ CLOUDINARY_API_SECRET=
+ NEXT_PUBLIC_SITE_URL=http://localhost:3000
++
++# TikTok Content Posting API — developers.tiktok.com, app needs the
++# video.publish scope approved before /admin/channels' Connect TikTok works
++TIKTOK_CLIENT_KEY=
++TIKTOK_CLIENT_SECRET=
++TIKTOK_REDIRECT_URI=http://localhost:3000/api/auth/tiktok/callback
++
++# YouTube Data API v3 — Google Cloud Console OAuth2 Client ID (Web application)
++YOUTUBE_CLIENT_ID=
++YOUTUBE_CLIENT_SECRET=
++YOUTUBE_REDIRECT_URI=http://localhost:3000/api/auth/youtube/callback
+diff --git a/app/admin/channels/page.js b/app/admin/channels/page.js
+index 495bee2..b6d0dca 100644
+--- a/app/admin/channels/page.js
++++ b/app/admin/channels/page.js
+@@ -24,17 +24,37 @@ const PLATFORM_FIELDS = {
+   instagram: { accountLabel: 'IG Business Account ID', accountPlaceholder: '', tokenLabel: 'Access Token', help: '' },
+   x: { accountLabel: 'Account ID', accountPlaceholder: '', tokenLabel: 'Access Token', help: '' },
+   pinterest: { accountLabel: 'Board ID', accountPlaceholder: '', tokenLabel: 'Access Token', help: '' },
+-  youtube: { accountLabel: 'Channel ID', accountPlaceholder: '', tokenLabel: 'Access Token', help: '' },
+-  tiktok: { accountLabel: 'Account ID', accountPlaceholder: '', tokenLabel: 'Access Token', help: '' },
++  youtube: {
++    accountLabel: 'Channel ID',
++    accountPlaceholder: '',
++    tokenLabel: 'Access Token',
++    help: 'YouTube access tokens expire in ~1hr and need a refresh_token to keep working — use "Connect YouTube" above instead of pasting one here.',
++  },
++  tiktok: {
++    accountLabel: 'Account ID',
++    accountPlaceholder: '',
++    tokenLabel: 'Access Token',
++    help: 'TikTok access tokens expire in 24hr and need a refresh_token to keep working — use "Connect TikTok" above instead of pasting one here.',
++  },
+ };
+ 
+ const PLATFORMS = Object.keys(PLATFORM_FIELDS);
+ 
++// These two need a real OAuth round trip (PKCE for TikTok, offline+consent
++// for YouTube's refresh_token) — a pasted-in token alone can't produce
++// that, so they get a "Connect" button instead of relying on the manual
++// form below. See app/api/auth/{tiktok,youtube}/start.
++const OAUTH_PLATFORMS = {
++  tiktok: { label: 'TikTok', startUrl: '/api/auth/tiktok/start', color: 'bg-black' },
++  youtube: { label: 'YouTube', startUrl: '/api/auth/youtube/start', color: 'bg-red-600' },
++};
++
+ export default function ChannelsPage() {
+   const [channels, setChannels] = useState([]);
+   const [loading, setLoading] = useState(true);
+   const [error, setError] = useState(null);
+   const [saving, setSaving] = useState(false);
++  const [oauthNotice, setOauthNotice] = useState(null);
+ 
+   const [platform, setPlatform] = useState('facebook');
+   const [label, setLabel] = useState('Main');
+@@ -43,7 +63,20 @@ export default function ChannelsPage() {
+ 
+   const fields = PLATFORM_FIELDS[platform];
+ 
+-  useEffect(() => { load(); }, []);
++  useEffect(() => {
++    load();
++    // Reads ?success=tiktok / ?error=... left by the OAuth callback routes.
++    // Parsed from window.location directly (not useSearchParams) so this
++    // stays a plain client component with no Suspense boundary required.
++    const params = new URLSearchParams(window.location.search);
++    const success = params.get('success');
++    const oauthError = params.get('error');
++    if (success) setOauthNotice({ type: 'success', text: `${success} connected.` });
++    if (oauthError) setOauthNotice({ type: 'error', text: oauthError });
++    if (success || oauthError) {
++      window.history.replaceState({}, '', window.location.pathname);
++    }
++  }, []);
+ 
+   const load = async () => {
+     setLoading(true);
+@@ -108,6 +141,40 @@ export default function ChannelsPage() {
+         Tokens are stored server-side only — the list below never shows the full value again.
+       </p>
+ 
++      {oauthNotice && (
++        <div
++          className={`rounded-xl border p-3 mb-6 text-sm ${
++            oauthNotice.type === 'success'
++              ? 'bg-emerald-50 border-emerald-200 text-emerald-700'
++              : 'bg-red-50 border-red-200 text-red-700'
++          }`}
++        >
++          {oauthNotice.type === 'success' ? '✅ ' : '⚠️ '}
++          {oauthNotice.text}
++        </div>
++      )}
++
++      {/* ── OAuth connect — TikTok and YouTube need a real consent round trip
++          (PKCE / offline+consent) to get a working refresh_token; a pasted
++          token alone can't produce that. ── */}
++      <div className="bg-white rounded-2xl shadow-sm border p-4 mb-8">
++        <h2 className="font-bold mb-3">Connect via OAuth</h2>
++        <div className="flex flex-wrap gap-3">
++          {Object.entries(OAUTH_PLATFORMS).map(([key, cfg]) => (
++            <a
++              key={key}
++              href={cfg.startUrl}
++              className={`${cfg.color} text-white px-5 py-2.5 rounded-xl text-sm font-bold hover:opacity-90 inline-block`}
++            >
++              Connect {cfg.label}
++            </a>
++          ))}
++        </div>
++        <p className="text-xs text-gray-400 mt-2">
++          Requires the platform's client ID/secret to be set in your environment first (see .env.example).
++        </p>
++      </div>
++
+       {/* ── Add / update a channel ── */}
+       <form onSubmit={save} className="bg-white rounded-2xl shadow-sm border p-4 mb-8 space-y-3">
+         <h2 className="font-bold">Connect a channel</h2>
+diff --git a/app/admin/past-question-loops/page.js b/app/admin/past-question-loops/page.js
+new file mode 100644
+index 0000000..9d6de9d
+--- /dev/null
++++ b/app/admin/past-question-loops/page.js
+@@ -0,0 +1,183 @@
++'use client';
++
++// app/admin/past-question-loops/page.js
++//
++// Same flow as /admin/quote-loops, same architecture, same content_assets/
++// media_files/publish_jobs pipeline — just asset_type='past_question_loop'
++// and a different generator/recorder: pick a knowledge asset -> generate N
++// JAMB/WAEC/NECO MCQ drafts -> pick one -> record it with
++// PastQuestionLoopRecorder -> publish straight to connected channels.
++//
++// Needs a `past-question-loops` bucket in Supabase storage (public read,
++// authenticated upload — same policy shape as `quote-loops`) before the
++// first save; nothing else new to configure.
++
++import { useState, useEffect } from 'react';
++import { createBrowserClient } from '@/lib/supabase';
++import PastQuestionLoopRecorder from '@/components/PastQuestionLoopRecorder';
++import PublishToChannels from '@/components/admin/PublishToChannels';
++
++export default function PastQuestionLoopsPage() {
++  const [assets, setAssets] = useState([]);
++  const [selectedAssetId, setSelectedAssetId] = useState('');
++  const [count, setCount] = useState(5);
++  const [drafts, setDrafts] = useState([]);
++  const [activeDraft, setActiveDraft] = useState(null);
++  const [generating, setGenerating] = useState(false);
++  const [errorMsg, setErrorMsg] = useState(null);
++  const [warnings, setWarnings] = useState([]);
++
++  useEffect(() => {
++    const supabase = createBrowserClient();
++    supabase
++      .from('knowledge_assets')
++      .select('id, keyword, subject')
++      .order('created_at', { ascending: false })
++      .limit(200)
++      .then(({ data }) => setAssets(data || []));
++  }, []);
++
++  const loadExistingDrafts = async (assetId) => {
++    try {
++      const res = await fetch(`/api/admin/past-question-loops/list?knowledgeAssetId=${assetId}`);
++      const data = await res.json();
++      if (!res.ok) throw new Error(data.error || 'Failed to load drafts');
++      setDrafts(data.contentAssets || []);
++    } catch (err) {
++      setErrorMsg(err.message);
++      setDrafts([]);
++    }
++  };
++
++  useEffect(() => {
++    if (selectedAssetId) loadExistingDrafts(selectedAssetId);
++    else setDrafts([]);
++  }, [selectedAssetId]);
++
++  const handleGenerate = async () => {
++    if (!selectedAssetId) return;
++    setGenerating(true);
++    setErrorMsg(null);
++    setWarnings([]);
++    try {
++      const res = await fetch('/api/admin/past-question-loops/generate', {
++        method: 'POST',
++        headers: { 'Content-Type': 'application/json' },
++        body: JSON.stringify({ knowledgeAssetId: selectedAssetId, count }),
++      });
++      const data = await res.json();
++      if (!res.ok) throw new Error(data.error || 'Generation failed');
++      setWarnings(data.warnings || []);
++      await loadExistingDrafts(selectedAssetId);
++    } catch (err) {
++      setErrorMsg(err.message);
++    } finally {
++      setGenerating(false);
++    }
++  };
++
++  const hasVideo = (draft) => (draft.media_files || []).some((m) => m.media_type === 'video' && m.role === 'primary');
++
++  return (
++    <div className="max-w-3xl mx-auto p-6 space-y-6">
++      <div>
++        <h1 className="text-2xl font-bold">Past Question Loops</h1>
++        <p className="text-sm text-gray-500">
++          Short JAMB/WAEC/NECO-style MCQ reveal clips generated from a topic — question, options, correct answer, explanation.
++        </p>
++      </div>
++
++      <div className="bg-white rounded-xl border p-4 space-y-3">
++        <label className="block text-sm font-semibold">Knowledge asset / topic</label>
++        <select
++          value={selectedAssetId}
++          onChange={(e) => setSelectedAssetId(e.target.value)}
++          className="w-full border rounded-lg px-3 py-2 text-sm"
++        >
++          <option value="">Select a topic…</option>
++          {assets.map((a) => (
++            <option key={a.id} value={a.id}>
++              {a.keyword} {a.subject ? `— ${a.subject}` : ''}
++            </option>
++          ))}
++        </select>
++
++        <div className="flex items-center gap-3">
++          <label className="text-sm font-semibold">How many questions?</label>
++          <input
++            type="number"
++            min={1}
++            max={20}
++            value={count}
++            onChange={(e) => setCount(Number(e.target.value))}
++            className="w-20 border rounded-lg px-2 py-1 text-sm"
++          />
++          <button
++            onClick={handleGenerate}
++            disabled={!selectedAssetId || generating}
++            className="bg-brand-blue text-white px-4 py-2 rounded-lg text-sm font-bold hover:opacity-90 disabled:opacity-50"
++          >
++            {generating ? 'Generating…' : '✨ Generate'}
++          </button>
++        </div>
++
++        {errorMsg && <p className="text-sm text-red-600">⚠️ {errorMsg}</p>}
++        {warnings.map((w, i) => (
++          <p key={i} className="text-sm text-amber-600">
++            ⚠️ {w}
++          </p>
++        ))}
++      </div>
++
++      {drafts.length > 0 && (
++        <div className="space-y-2">
++          <h2 className="font-bold text-sm text-gray-500 uppercase">Drafts</h2>
++          {drafts.map((draft) => (
++            <div key={draft.id} className="bg-white rounded-xl border p-4">
++              <div className="flex items-center justify-between gap-3">
++                <div>
++                  <p className="font-semibold">{draft.body}</p>
++                  <ul className="text-sm text-gray-600 mt-1 space-y-0.5">
++                    {(draft.metadata?.options || []).map((opt) => (
++                      <li key={opt.id} className={opt.id === draft.metadata?.correctOptionId ? 'text-emerald-600 font-semibold' : ''}>
++                        {opt.id}) {opt.text} {opt.id === draft.metadata?.correctOptionId ? '✓' : ''}
++                      </li>
++                    ))}
++                  </ul>
++                  <p className="text-xs text-gray-500 mt-1">
++                    {draft.metadata?.background?.type
++                      ? `${draft.metadata.background.type} background (${draft.metadata.background.source})`
++                      : 'no background found'}{' '}
++                    · {hasVideo(draft) ? '✅ recorded' : '⏳ not recorded'}
++                  </p>
++                </div>
++                <button
++                  onClick={() => setActiveDraft(draft)}
++                  className="bg-gray-100 text-gray-700 px-4 py-2 rounded-lg text-sm font-bold hover:bg-gray-200 whitespace-nowrap"
++                >
++                  {hasVideo(draft) ? 'Re-record' : 'Record'}
++                </button>
++              </div>
++              {hasVideo(draft) && <PublishToChannels contentAssetId={draft.id} />}
++            </div>
++          ))}
++        </div>
++      )}
++
++      {activeDraft && (
++        <div className="bg-white rounded-xl border p-4 space-y-3">
++          <div className="flex items-center justify-between">
++            <h2 className="font-bold">Recording: “{activeDraft.body}”</h2>
++            <button onClick={() => setActiveDraft(null)} className="text-sm text-gray-400 hover:text-gray-600">
++              ✕ Close
++            </button>
++          </div>
++          <PastQuestionLoopRecorder
++            contentAsset={activeDraft}
++            onSaved={() => loadExistingDrafts(selectedAssetId)}
++          />
++        </div>
++      )}
++    </div>
++  );
++}
+diff --git a/app/admin/quote-loops/page.js b/app/admin/quote-loops/page.js
+index 6fe7d28..3d1ecba 100644
+--- a/app/admin/quote-loops/page.js
++++ b/app/admin/quote-loops/page.js
+@@ -14,6 +14,7 @@
+ import { useState, useEffect } from 'react';
+ import { createBrowserClient } from '@/lib/supabase';
+ import QuoteLoopRecorder from '@/components/QuoteLoopRecorder';
++import PublishToChannels from '@/components/admin/PublishToChannels';
+ 
+ export default function QuoteLoopsPage() {
+   const [assets, setAssets] = useState([]);
+@@ -131,25 +132,28 @@ export default function QuoteLoopsPage() {
+         <div className="space-y-2">
+           <h2 className="font-bold text-sm text-gray-500 uppercase">Drafts</h2>
+           {drafts.map((draft) => (
+-            <div key={draft.id} className="bg-white rounded-xl border p-4 flex items-center justify-between gap-3">
+-              <div>
+-                <p className="font-semibold">{draft.body}</p>
+-                {draft.metadata?.followUp && (
+-                  <p className="text-sm text-gray-600 mt-0.5">{draft.metadata.followUp}</p>
+-                )}
+-                <p className="text-xs text-gray-500 mt-1">
+-                  {draft.metadata?.background?.type
+-                    ? `${draft.metadata.background.type} background (${draft.metadata.background.source})`
+-                    : 'no background found'}{' '}
+-                  · {hasVideo(draft) ? '✅ recorded' : '⏳ not recorded'}
+-                </p>
++            <div key={draft.id} className="bg-white rounded-xl border p-4">
++              <div className="flex items-center justify-between gap-3">
++                <div>
++                  <p className="font-semibold">{draft.body}</p>
++                  {draft.metadata?.followUp && (
++                    <p className="text-sm text-gray-600 mt-0.5">{draft.metadata.followUp}</p>
++                  )}
++                  <p className="text-xs text-gray-500 mt-1">
++                    {draft.metadata?.background?.type
++                      ? `${draft.metadata.background.type} background (${draft.metadata.background.source})`
++                      : 'no background found'}{' '}
++                    · {hasVideo(draft) ? '✅ recorded' : '⏳ not recorded'}
++                  </p>
++                </div>
++                <button
++                  onClick={() => setActiveDraft(draft)}
++                  className="bg-gray-100 text-gray-700 px-4 py-2 rounded-lg text-sm font-bold hover:bg-gray-200 whitespace-nowrap"
++                >
++                  {hasVideo(draft) ? 'Re-record' : 'Record'}
++                </button>
+               </div>
+-              <button
+-                onClick={() => setActiveDraft(draft)}
+-                className="bg-gray-100 text-gray-700 px-4 py-2 rounded-lg text-sm font-bold hover:bg-gray-200 whitespace-nowrap"
+-              >
+-                {hasVideo(draft) ? 'Re-record' : 'Record'}
+-              </button>
++              {hasVideo(draft) && <PublishToChannels contentAssetId={draft.id} />}
+             </div>
+           ))}
+         </div>
+diff --git a/app/api/admin/past-question-loops/generate/route.js b/app/api/admin/past-question-loops/generate/route.js
+new file mode 100644
+index 0000000..15aa74f
+--- /dev/null
++++ b/app/api/admin/past-question-loops/generate/route.js
+@@ -0,0 +1,189 @@
++// app/api/admin/past-question-loops/generate/route.js
++//
++// Past Question Loop, step 1 — same shape as quote-loops/generate: turn one
++// knowledge_assets row into several JAMB/WAEC/NECO-style MCQ drafts (via
++// the shared LLM fallback chain), pick a background candidate for each,
++// and save each as a draft content_assets row with asset_type =
++// 'past_question_loop'. Deliberately reuses content_assets/media_files —
++// no new tables — so this rides the exact same Social Engine review,
++// approval, and publish_jobs pipeline quote_loop already goes through.
++//
++// Nothing is recorded yet — an admin opens /admin/past-question-loops,
++// picks a draft, and records it with PastQuestionLoopRecorder (mirrors the
++// quote-loop flow: generate the "script" first, record after).
++
++import { NextResponse } from 'next/server';
++import { createAdminClient } from '@/lib/supabase-admin';
++import { generateWithFallback } from '@/lib/llmFallbackChain';
++import { parseJsonFromText } from '@/lib/robustJsonParse';
++import {
++  searchPexelsVideoMulti,
++  searchPixabayVideoMulti,
++  searchPexelsMulti,
++  searchPixabayMulti,
++} from '@/lib/image-search';
++
++async function generateQuestions(asset, count) {
++  const keyConcepts = (asset.key_concepts || []).slice(0, 5).join(', ') || 'none listed';
++  const facts = (asset.facts || []).slice(0, 5).join('; ') || 'none listed';
++
++  const prompt = `You are writing JAMB/WAEC/NECO/Post-UTME style past-question multiple-choice questions for Shiney Brain Academy, a Nigerian exam-prep brand. Each one gets rendered as a short quiz-reveal video: the question and 4 options show first, then the correct option highlights and a short explanation appears underneath.
++
++Topic: "${asset.keyword}"
++Subject: ${asset.subject || 'General'}
++Summary: ${asset.summary || 'No summary available.'}
++Key concepts: ${keyConcepts}
++Facts: ${facts}
++
++Write ${count} different past-question-style MCQs grounded in this topic. Rules:
++- Each question has exactly 4 options labelled A-D, plausible distractors (no giveaway options like "all of the above" or an obviously silly choice).
++- Exactly one correct option per question.
++- Keep the question itself under 30 words so it fits on a 9:16 frame.
++- The explanation should be 2-3 sentences (roughly 25-45 words): state why the correct option is right, briefly say why the strongest distractor is wrong if useful, and stay grounded in the topic above.
++- No hashtags, no emoji, no quotation marks.
++- Vary difficulty and angle across the set — don't make every question test the exact same fact.
++- Also write a "visualHint" — 3-6 words describing a specific, concrete, filmable scene for the background footage (e.g. "student writing notes at desk", "chalkboard equation close-up"), different for each question.
++
++Return ONLY JSON:
++{ "questions": [{ "question": "...", "options": [{"id":"A","text":"..."},{"id":"B","text":"..."},{"id":"C","text":"..."},{"id":"D","text":"..."}], "correctOptionId": "A", "explanation": "...", "visualHint": "..." }, ...] }`;
++
++  const { result, errors } = await generateWithFallback(
++    prompt,
++    (text) => parseJsonFromText(text, 'object'),
++    (parsed) =>
++      parsed &&
++      Array.isArray(parsed.questions) &&
++      parsed.questions.length > 0 &&
++      parsed.questions.every(
++        (q) =>
++          q &&
++          q.question &&
++          Array.isArray(q.options) &&
++          q.options.length === 4 &&
++          q.options.every((o) => o && o.id && o.text) &&
++          ['A', 'B', 'C', 'D'].includes(q.correctOptionId) &&
++          q.explanation
++      ),
++    2560
++  );
++
++  if (!result) {
++    throw new Error(
++      `Past-question generation failed across all providers.${errors?.length ? ' Errors: ' + errors.join('; ') : ''}`
++    );
++  }
++  return result.questions.slice(0, count);
++}
++
++// Identical to quote-loops/generate's findBackgroundCandidate — kept as its
++// own copy rather than a shared import, matching how quote-loops/generate
++// itself is a self-contained route file in this codebase.
++async function findBackgroundCandidate(query, usedUrls) {
++  for (const search of [searchPexelsVideoMulti, searchPixabayVideoMulti]) {
++    try {
++      const hits = await search(query, 8);
++      const fresh = hits.filter((h) => !usedUrls.has(h.url));
++      const pool = fresh.length > 0 ? fresh : hits;
++      if (pool.length > 0) {
++        const pick = pool[Math.floor(Math.random() * pool.length)];
++        usedUrls.add(pick.url);
++        return { type: 'video', url: pick.url, source: pick.source, sourceUrl: pick.sourceUrl };
++      }
++    } catch (err) {
++      console.warn(`Background video search failed (${search.name}):`, err.message);
++    }
++  }
++  for (const search of [searchPexelsMulti, searchPixabayMulti]) {
++    try {
++      const hits = await search(query, 8);
++      const fresh = hits.filter((h) => !usedUrls.has(h.url));
++      const pool = fresh.length > 0 ? fresh : hits;
++      if (pool.length > 0) {
++        const pick = pool[Math.floor(Math.random() * pool.length)];
++        usedUrls.add(pick.url);
++        return { type: 'photo', url: pick.url, source: pick.source, sourceUrl: pick.sourceUrl };
++      }
++    } catch (err) {
++      console.warn(`Background photo search failed (${search.name}):`, err.message);
++    }
++  }
++  return null;
++}
++
++export async function POST(request) {
++  let body;
++  try {
++    body = await request.json();
++  } catch {
++    return NextResponse.json({ error: 'Invalid JSON body' }, { status: 400 });
++  }
++
++  const { knowledgeAssetId, count = 5 } = body || {};
++  if (!knowledgeAssetId) {
++    return NextResponse.json({ error: 'knowledgeAssetId is required' }, { status: 400 });
++  }
++
++  const supabase = createAdminClient();
++
++  const { data: asset, error: assetError } = await supabase
++    .from('knowledge_assets')
++    .select('*')
++    .eq('id', knowledgeAssetId)
++    .single();
++  if (assetError || !asset) {
++    return NextResponse.json({ error: 'Knowledge asset not found' }, { status: 404 });
++  }
++
++  let questions;
++  try {
++    questions = await generateQuestions(asset, Math.min(Math.max(count, 1), 20));
++  } catch (err) {
++    return NextResponse.json({ error: err.message }, { status: 500 });
++  }
++
++  const fallbackQuery = [asset.subject, asset.keyword].filter(Boolean).join(' ');
++  const backgroundQueries = questions.map((q) => q.visualHint || fallbackQuery);
++
++  const usedUrls = new Set();
++  const backgrounds = await Promise.all(
++    backgroundQueries.map((query) => findBackgroundCandidate(query, usedUrls))
++  );
++
++  const toInsert = questions.map((q, i) => ({
++    knowledge_asset_id: knowledgeAssetId,
++    asset_type: 'past_question_loop',
++    platform: null, // format-agnostic, same as quote_loop — publishable to any platform's queue
++    format: 'video',
++    title: asset.keyword,
++    body: q.question,
++    status: 'draft',
++    generated_by: 'past-question-loop-generator',
++    metadata: {
++      options: q.options,
++      correctOptionId: q.correctOptionId,
++      explanation: q.explanation,
++      subject: asset.subject || null,
++      background: backgrounds[i],
++      backgroundQuery: backgroundQueries[i],
++    },
++  }));
++
++  const { data: inserted, error: insertError } = await supabase
++    .from('content_assets')
++    .insert(toInsert)
++    .select();
++
++  if (insertError) {
++    return NextResponse.json({ error: insertError.message }, { status: 500 });
++  }
++
++  const missingBackground = inserted.filter((row) => !row.metadata?.background).length;
++
++  return NextResponse.json({
++    success: true,
++    contentAssets: inserted,
++    warnings: missingBackground > 0
++      ? [`${missingBackground} of ${inserted.length} questions got no background candidate — you can still record them with a canvas-only gradient background.`]
++      : [],
++  });
++}
+diff --git a/app/api/admin/past-question-loops/list/route.js b/app/api/admin/past-question-loops/list/route.js
+new file mode 100644
+index 0000000..b97b310
+--- /dev/null
++++ b/app/api/admin/past-question-loops/list/route.js
+@@ -0,0 +1,32 @@
++// app/api/admin/past-question-loops/list/route.js
++//
++// Same reasoning as quote-loops/list/route.js: content_assets/media_files
++// are service-role only, so this is the server route that lets
++// /admin/past-question-loops populate its drafts list, scoped to
++// past_question_loop rows for one knowledge asset.
++
++import { NextResponse } from 'next/server';
++import { createAdminClient } from '@/lib/supabase-admin';
++
++export async function GET(request) {
++  const { searchParams } = new URL(request.url);
++  const knowledgeAssetId = searchParams.get('knowledgeAssetId');
++  if (!knowledgeAssetId) {
++    return NextResponse.json({ error: 'knowledgeAssetId is required' }, { status: 400 });
++  }
++
++  const supabase = createAdminClient();
++
++  const { data, error } = await supabase
++    .from('content_assets')
++    .select('*, media_files(url, media_type, role)')
++    .eq('knowledge_asset_id', knowledgeAssetId)
++    .eq('asset_type', 'past_question_loop')
++    .order('created_at', { ascending: false });
++
++  if (error) {
++    return NextResponse.json({ error: error.message }, { status: 500 });
++  }
++
++  return NextResponse.json({ contentAssets: data || [] });
++}
+diff --git a/app/api/admin/past-question-loops/save/route.js b/app/api/admin/past-question-loops/save/route.js
+new file mode 100644
+index 0000000..edd571a
+--- /dev/null
++++ b/app/api/admin/past-question-loops/save/route.js
+@@ -0,0 +1,79 @@
++// app/api/admin/past-question-loops/save/route.js
++//
++// Same shape as quote-loops/save/route.js on purpose: PastQuestionLoopRecorder
++// uploads the finished clip straight to Supabase storage itself; this route
++// only does the write RLS doesn't let the browser client do directly —
++// insert/update the media_files row against the already-existing
++// content_assets draft — then marks it approved so it shows up in the
++// Social Engine review dashboard exactly like quote_loop.
++//
++// This whole route is a single fast round trip: no LLM call, no multi-step
++// enrichment chain in the request path. That matters — a save route that
++// awaits a slow AI call before writing status:'approved' is the classic way
++// a save looks like it silently did nothing on a platform with a hard
++// function time limit (Vercel Hobby). Keep it that way if this ever grows.
++
++import { NextResponse } from 'next/server';
++import { createAdminClient } from '@/lib/supabase-admin';
++
++export async function POST(request) {
++  let body;
++  try {
++    body = await request.json();
++  } catch {
++    return NextResponse.json({ error: 'Invalid JSON body' }, { status: 400 });
++  }
++
++  const { contentAssetId, videoUrl, durationSeconds } = body || {};
++  if (!contentAssetId || !videoUrl) {
++    return NextResponse.json({ error: 'contentAssetId and videoUrl are required' }, { status: 400 });
++  }
++
++  const supabase = createAdminClient();
++
++  const { data: contentAsset, error: fetchError } = await supabase
++    .from('content_assets')
++    .select('id, title, asset_type')
++    .eq('id', contentAssetId)
++    .eq('asset_type', 'past_question_loop')
++    .single();
++  if (fetchError || !contentAsset) {
++    return NextResponse.json({ error: 'Past-question-loop content asset not found' }, { status: 404 });
++  }
++
++  const { data: existingMedia } = await supabase
++    .from('media_files')
++    .select('id')
++    .eq('content_asset_id', contentAssetId)
++    .eq('media_type', 'video')
++    .eq('role', 'primary')
++    .maybeSingle();
++
++  if (existingMedia) {
++    const { error: updateError } = await supabase
++      .from('media_files')
++      .update({ url: videoUrl, duration_seconds: durationSeconds || null })
++      .eq('id', existingMedia.id);
++    if (updateError) {
++      return NextResponse.json({ error: updateError.message }, { status: 500 });
++    }
++  } else {
++    const { error: insertError } = await supabase.from('media_files').insert({
++      content_asset_id: contentAssetId,
++      media_type: 'video',
++      role: 'primary',
++      position: 0,
++      url: videoUrl,
++      duration_seconds: durationSeconds || null,
++      source: 'render',
++      alt_text: contentAsset.title,
++    });
++    if (insertError) {
++      return NextResponse.json({ error: insertError.message }, { status: 500 });
++    }
++  }
++
++  await supabase.from('content_assets').update({ status: 'approved' }).eq('id', contentAssetId);
++
++  return NextResponse.json({ success: true, videoUrl });
++}
+diff --git a/app/api/auth/tiktok/callback/route.js b/app/api/auth/tiktok/callback/route.js
+new file mode 100644
+index 0000000..43d6fd1
+--- /dev/null
++++ b/app/api/auth/tiktok/callback/route.js
+@@ -0,0 +1,75 @@
++// app/api/auth/tiktok/callback/route.js
++import { NextResponse } from 'next/server';
++import { createAdminClient } from '@/lib/supabase-admin';
++
++export async function GET(req) {
++  const siteUrl = process.env.NEXT_PUBLIC_SITE_URL || 'https://shineybrainacademy.vercel.app';
++  const code = req.nextUrl.searchParams.get('code');
++  const state = req.nextUrl.searchParams.get('state');
++  const oauthError = req.nextUrl.searchParams.get('error');
++
++  if (oauthError) {
++    return NextResponse.redirect(`${siteUrl}/admin/channels?error=${encodeURIComponent(oauthError)}`);
++  }
++  if (!code) {
++    return NextResponse.json({ error: 'Missing authorization code' }, { status: 400 });
++  }
++
++  const savedState = req.cookies.get('tiktok_oauth_state')?.value;
++  const codeVerifier = req.cookies.get('tiktok_code_verifier')?.value;
++  if (!state || state !== savedState) {
++    return NextResponse.json({ error: 'State mismatch — restart the connect flow from /admin/channels' }, { status: 400 });
++  }
++  if (!codeVerifier) {
++    return NextResponse.json({ error: 'Missing PKCE verifier (cookie expired) — restart the connect flow' }, { status: 400 });
++  }
++
++  const tokenRes = await fetch('https://open.tiktokapis.com/v2/oauth/token/', {
++    method: 'POST',
++    headers: { 'Content-Type': 'application/x-www-form-urlencoded', 'Cache-Control': 'no-cache' },
++    body: new URLSearchParams({
++      client_key: process.env.TIKTOK_CLIENT_KEY,
++      client_secret: process.env.TIKTOK_CLIENT_SECRET,
++      code,
++      grant_type: 'authorization_code',
++      redirect_uri: process.env.TIKTOK_REDIRECT_URI,
++      code_verifier: codeVerifier,
++    }),
++  });
++  const token = await tokenRes.json();
++  if (!token.access_token) {
++    return NextResponse.json(token, { status: 500 });
++  }
++
++  // TikTok's user.info.basic scope — just enough to label the channel row
++  // with a real name instead of a bare open_id.
++  const infoRes = await fetch('https://open.tiktokapis.com/v2/user/info/?fields=open_id,display_name', {
++    headers: { Authorization: `Bearer ${token.access_token}` },
++  });
++  const info = await infoRes.json().catch(() => ({}));
++  const profile = info?.data?.user || {};
++
++  const supabase = createAdminClient();
++  const { error: dbError } = await supabase.from('social_channels_v2').upsert(
++    {
++      platform: 'tiktok',
++      label: 'Main',
++      account_id: token.open_id || profile.open_id || null,
++      access_token: token.access_token,
++      refresh_token: token.refresh_token || null,
++      token_expires_at: new Date(Date.now() + token.expires_in * 1000).toISOString(),
++      metadata: { display_name: profile.display_name || null, scope: token.scope },
++      is_active: true,
++    },
++    { onConflict: 'platform,label' } // matches the unique constraint already in your schema
++  );
++
++  if (dbError) {
++    return NextResponse.json({ error: dbError.message }, { status: 500 });
++  }
++
++  const res = NextResponse.redirect(`${siteUrl}/admin/channels?success=tiktok`);
++  res.cookies.delete('tiktok_oauth_state');
++  res.cookies.delete('tiktok_code_verifier');
++  return res;
++}
+diff --git a/app/api/auth/tiktok/start/route.js b/app/api/auth/tiktok/start/route.js
+new file mode 100644
+index 0000000..050724c
+--- /dev/null
++++ b/app/api/auth/tiktok/start/route.js
+@@ -0,0 +1,48 @@
++// app/api/auth/tiktok/start/route.js
++//
++// PREREQUISITE (one-time, only you can do this):
++// Register an app at developers.tiktok.com, add "Login Kit" +
++// "Content Posting API", and request the video.publish scope — TikTok
++// reviews that scope manually before it works outside sandbox mode.
++// Then set TIKTOK_CLIENT_KEY / TIKTOK_CLIENT_SECRET / TIKTOK_REDIRECT_URI
++// in your environment. Nothing below substitutes for that approval step.
++
++import { NextResponse } from 'next/server';
++import crypto from 'crypto';
++
++function base64url(buf) {
++  return buf.toString('base64').replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
++}
++
++export async function GET() {
++  if (!process.env.TIKTOK_CLIENT_KEY || !process.env.TIKTOK_REDIRECT_URI) {
++    return NextResponse.json(
++      { error: 'TIKTOK_CLIENT_KEY / TIKTOK_REDIRECT_URI not configured' },
++      { status: 500 }
++    );
++  }
++
++  const state = crypto.randomUUID();
++  // PKCE: TikTok requires this for the Content Posting API — a plain
++  // client_id/secret exchange alone is rejected.
++  const codeVerifier = base64url(crypto.randomBytes(32));
++  const codeChallenge = base64url(crypto.createHash('sha256').update(codeVerifier).digest());
++
++  const url =
++    'https://www.tiktok.com/v2/auth/authorize/?' +
++    new URLSearchParams({
++      client_key: process.env.TIKTOK_CLIENT_KEY,
++      scope: 'user.info.basic,video.publish',
++      response_type: 'code',
++      redirect_uri: process.env.TIKTOK_REDIRECT_URI,
++      state,
++      code_challenge: codeChallenge,
++      code_challenge_method: 'S256',
++    });
++
++  const res = NextResponse.redirect(url);
++  // short-lived, httpOnly — only this flow ever needs to read them back
++  res.cookies.set('tiktok_oauth_state', state, { httpOnly: true, secure: true, sameSite: 'lax', maxAge: 600, path: '/' });
++  res.cookies.set('tiktok_code_verifier', codeVerifier, { httpOnly: true, secure: true, sameSite: 'lax', maxAge: 600, path: '/' });
++  return res;
++}
+diff --git a/app/api/auth/youtube/callback/route.js b/app/api/auth/youtube/callback/route.js
+new file mode 100644
+index 0000000..bb1f140
+--- /dev/null
++++ b/app/api/auth/youtube/callback/route.js
+@@ -0,0 +1,84 @@
++// app/api/auth/youtube/callback/route.js
++import { NextResponse } from 'next/server';
++import { google } from 'googleapis';
++import { createAdminClient } from '@/lib/supabase-admin';
++
++export async function GET(req) {
++  const siteUrl = process.env.NEXT_PUBLIC_SITE_URL || 'https://shineybrainacademy.vercel.app';
++  const code = req.nextUrl.searchParams.get('code');
++  const state = req.nextUrl.searchParams.get('state');
++  const oauthError = req.nextUrl.searchParams.get('error');
++
++  if (oauthError) {
++    return NextResponse.redirect(`${siteUrl}/admin/channels?error=${encodeURIComponent(oauthError)}`);
++  }
++  if (!code) {
++    return NextResponse.json({ error: 'Missing authorization code' }, { status: 400 });
++  }
++
++  const savedState = req.cookies.get('youtube_oauth_state')?.value;
++  if (!state || state !== savedState) {
++    return NextResponse.json({ error: 'State mismatch — restart the connect flow from /admin/channels' }, { status: 400 });
++  }
++
++  const client = new google.auth.OAuth2(
++    process.env.YOUTUBE_CLIENT_ID,
++    process.env.YOUTUBE_CLIENT_SECRET,
++    process.env.YOUTUBE_REDIRECT_URI
++  );
++
++  let tokens;
++  try {
++    ({ tokens } = await client.getToken(code));
++  } catch (err) {
++    return NextResponse.json({ error: `Token exchange failed: ${err.message}` }, { status: 500 });
++  }
++
++  if (!tokens.refresh_token) {
++    // Happens if the Google account already granted this app access before
++    // and Google silently skipped issuing a new refresh_token — revoke
++    // access at myaccount.google.com/permissions and retry so it's forced.
++    return NextResponse.redirect(
++      `${siteUrl}/admin/channels?error=${encodeURIComponent(
++        'No refresh_token returned — revoke Shiney Brain Academy access at myaccount.google.com/permissions, then reconnect.'
++      )}`
++    );
++  }
++
++  client.setCredentials(tokens);
++  const youtube = google.youtube({ version: 'v3', auth: client });
++
++  let channelId = null;
++  let channelTitle = null;
++  try {
++    const { data } = await youtube.channels.list({ part: ['snippet'], mine: true });
++    const ch = data.items?.[0];
++    channelId = ch?.id || null;
++    channelTitle = ch?.snippet?.title || null;
++  } catch {
++    // Non-fatal — tokens are already good; we just won't have a friendly label.
++  }
++
++  const supabase = createAdminClient();
++  const { error: dbError } = await supabase.from('social_channels_v2').upsert(
++    {
++      platform: 'youtube',
++      label: 'Main',
++      account_id: channelId,
++      access_token: tokens.access_token,
++      refresh_token: tokens.refresh_token,
++      token_expires_at: new Date(tokens.expiry_date).toISOString(),
++      metadata: { channel_title: channelTitle },
++      is_active: true,
++    },
++    { onConflict: 'platform,label' }
++  );
++
++  if (dbError) {
++    return NextResponse.json({ error: dbError.message }, { status: 500 });
++  }
++
++  const res = NextResponse.redirect(`${siteUrl}/admin/channels?success=youtube`);
++  res.cookies.delete('youtube_oauth_state');
++  return res;
++}
+diff --git a/app/api/auth/youtube/start/route.js b/app/api/auth/youtube/start/route.js
+new file mode 100644
+index 0000000..3d78122
+--- /dev/null
++++ b/app/api/auth/youtube/start/route.js
+@@ -0,0 +1,47 @@
++// app/api/auth/youtube/start/route.js
++//
++// PREREQUISITE (one-time, only you can do this):
++// In Google Cloud Console: enable "YouTube Data API v3", create an OAuth2
++// Client ID (type: Web application), add YOUTUBE_REDIRECT_URI as an
++// authorized redirect URI, and — since this app isn't Google-verified —
++// add your own Google account as a Test User under the OAuth consent
++// screen, or every login will be blocked with "app not verified".
++// Set YOUTUBE_CLIENT_ID / YOUTUBE_CLIENT_SECRET / YOUTUBE_REDIRECT_URI.
++
++import { NextResponse } from 'next/server';
++import { google } from 'googleapis';
++import crypto from 'crypto';
++
++export async function GET() {
++  if (!process.env.YOUTUBE_CLIENT_ID || !process.env.YOUTUBE_REDIRECT_URI) {
++    return NextResponse.json(
++      { error: 'YOUTUBE_CLIENT_ID / YOUTUBE_REDIRECT_URI not configured' },
++      { status: 500 }
++    );
++  }
++
++  const client = new google.auth.OAuth2(
++    process.env.YOUTUBE_CLIENT_ID,
++    process.env.YOUTUBE_CLIENT_SECRET,
++    process.env.YOUTUBE_REDIRECT_URI
++  );
++
++  const state = crypto.randomUUID();
++
++  const url = client.generateAuthUrl({
++    // 'offline' + prompt:'consent' together are what makes Google actually
++    // issue a refresh_token — with only one of the two, a browser that has
++    // already granted access before gets access_token-only on repeat auth.
++    access_type: 'offline',
++    prompt: 'consent',
++    scope: [
++      'https://www.googleapis.com/auth/youtube.upload',
++      'https://www.googleapis.com/auth/youtube.readonly',
++    ],
++    state,
++  });
++
++  const res = NextResponse.redirect(url);
++  res.cookies.set('youtube_oauth_state', state, { httpOnly: true, secure: true, sameSite: 'lax', maxAge: 600, path: '/' });
++  return res;
++}
+diff --git a/app/api/publish/cron-worker/route.js b/app/api/publish/cron-worker/route.js
+index 87757d5..b65c66c 100644
+--- a/app/api/publish/cron-worker/route.js
++++ b/app/api/publish/cron-worker/route.js
+@@ -10,7 +10,17 @@ import { NextResponse } from 'next/server';
+ import { createAdminClient } from '@/lib/supabase-admin';
+ import { executePublishJob } from '@/lib/publish-engine';
+ 
+-export async function GET() {
++export async function GET(req) {
++  // Vercel sets CRON_SECRET automatically and sends it as this header on
++  // its own invocations. Checking it stops this route being a public,
++  // unauthenticated way for anyone to force every due/queued job to fire.
++  if (process.env.CRON_SECRET) {
++    const auth = req.headers.get('authorization');
++    if (auth !== `Bearer ${process.env.CRON_SECRET}`) {
++      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
++    }
++  }
++
+   const supabase = createAdminClient();
+   const now = new Date().toISOString();
+ 
+diff --git a/components/AdminSidebar.js b/components/AdminSidebar.js
+index 11d5ef0..a5d2a69 100644
+--- a/components/AdminSidebar.js
++++ b/components/AdminSidebar.js
+@@ -40,6 +40,7 @@ const navItems = [
+   { href: '/admin/asset-images', label: 'Image Engine', icon: '\ud83d\uddbc\ufe0f' },
+   { href: '/admin/social-engine', label: 'Social Engine', icon: '\ud83d\ude80' },
+   { href: '/admin/quote-loops', label: 'Quote Loops', icon: '\ud83c\udfac' },
++  { href: '/admin/past-question-loops', label: 'Past Question Loops', icon: '\ud83d\udcdd' },
+   { href: '/admin/channels', label: 'Channels', icon: '\ud83d\udd0c' },
+   { href: '/admin/carousel-drafts', label: 'Carousel Drafts', icon: '\ud83c\udfa0' },
+   { href: '/admin/video-scripts', label: 'Video Scripts', icon: '\ud83c\udfac' },
+diff --git a/components/PastQuestionLoopRecorder.js b/components/PastQuestionLoopRecorder.js
+new file mode 100644
+index 0000000..38fad1b
+--- /dev/null
++++ b/components/PastQuestionLoopRecorder.js
+@@ -0,0 +1,502 @@
++'use client';
++
++// components/PastQuestionLoopRecorder.js
++//
++// Renders one past_question_loop content_assets row (a JAMB/WAEC/NECO-style
++// MCQ generated by /api/admin/past-question-loops/generate) into a short
++// quiz-reveal 9:16 video: question + 4 options appear first, then the
++// correct option highlights green and a short explanation fades in
++// underneath — real stock footage or a photo with a slow Ken Burns zoom (or
++// an animated brand gradient if no background was found) behind it all,
++// with background music. Entirely in the browser via <canvas> + Web Audio
++// API + MediaRecorder — the exact same technique as QuoteLoopRecorder.js
++// and AudiogramRecorder.js, just a different draw() timeline. Deliberately
++// NOT screen-capture (getDisplayMedia): that needs an OS permission prompt
++// every single recording and produces a non-deterministic capture of
++// whatever's on screen — canvas.captureStream() renders exactly this
++// component's pixels, headless-safe and reproducible.
++
++import { useRef, useState, useEffect, useCallback } from 'react';
++import { createBrowserClient } from '@/lib/supabase';
++
++const CANVAS_W = 1080;
++const CANVAS_H = 1920; // 9:16 — TikTok / IG Reels / YouTube Shorts
++const BRAND_BLUE = '#1a73e8';
++const BRAND_YELLOW = '#FFCC00';
++const GREEN = '#22c55e';
++const DARK = '#0f172a';
++const BUCKET = 'past-question-loops'; // create this bucket in Supabase storage (public read, authenticated upload) — same policy shape as quote-loops — before first use
++const RECORD_SECONDS = 9; // question + 4 options + reveal + explanation all need to read comfortably
++
++function wrapText(ctx, text, maxWidth) {
++  const words = String(text || '').split(' ');
++  const lines = [];
++  let current = '';
++  for (const word of words) {
++    const test = current ? `${current} ${word}` : word;
++    if (ctx.measureText(test).width > maxWidth && current) {
++      lines.push(current);
++      current = word;
++    } else {
++      current = test;
++    }
++  }
++  if (current) lines.push(current);
++  return lines;
++}
++
++function pickMimeType() {
++  const candidates = [
++    // Real MP4 muxing (H.264 + AAC) is what Instagram/TikTok's video
++    // processing actually wants — WebM sits there "processing" forever on
++    // some platforms. Same list/order as QuoteLoopRecorder.js.
++    'video/mp4;codecs=avc1.42E01E,mp4a.40.2',
++    'video/mp4;codecs=avc1,mp4a.40.2',
++    'video/mp4',
++    'video/webm;codecs=vp9,opus',
++    'video/webm;codecs=vp8,opus',
++    'video/webm',
++  ];
++  for (const type of candidates) {
++    if (typeof MediaRecorder !== 'undefined' && MediaRecorder.isTypeSupported(type)) return type;
++  }
++  return '';
++}
++
++function extensionForMimeType(mimeType) {
++  return (mimeType || '').includes('mp4') ? 'mp4' : 'webm';
++}
++
++// Reveal timeline, in ms from recording start.
++const QUESTION_IN_MS = 500; // question text fades/scales in
++const OPTIONS_START_MS = 900; // options begin staggering in
++const OPTION_STAGGER_MS = 260; // gap between each option's entrance
++const REVEAL_AT_MS = 4200; // correct option highlights + explanation begins
++const REVEAL_DURATION_MS = 500;
++
++/**
++ * @param {Object} props
++ * @param {Object} props.contentAsset - a content_assets row (id, title, body = question, metadata.{options,correctOptionId,explanation,background})
++ * @param {(videoUrl: string) => void} [props.onSaved]
++ */
++export default function PastQuestionLoopRecorder({ contentAsset, onSaved }) {
++  const canvasRef = useRef(null);
++  const bgVideoRef = useRef(null);
++  const bgImageRef = useRef(null);
++  const audioRef = useRef(null);
++  const audioCtxRef = useRef(null);
++  const rafRef = useRef(null);
++  const recorderRef = useRef(null);
++  const chunksRef = useRef([]);
++  const startTimeRef = useRef(0);
++  const stopTimerRef = useRef(null);
++
++  const [status, setStatus] = useState('idle'); // idle | recording | finished | uploading | saved | error
++  const [videoBlobUrl, setVideoBlobUrl] = useState(null);
++  const [videoBlob, setVideoBlob] = useState(null);
++  const [errorMsg, setErrorMsg] = useState(null);
++  const [tracks, setTracks] = useState([]);
++  const [bgReady, setBgReady] = useState(false);
++
++  const background = contentAsset.metadata?.background || null;
++  const question = contentAsset.body || '';
++  const options = contentAsset.metadata?.options || [];
++  const correctOptionId = contentAsset.metadata?.correctOptionId || null;
++  const explanation = contentAsset.metadata?.explanation || null;
++
++  // ── Discover music tracks + preload background on mount ────────────────
++  // Reuses the quote-loops music library rather than duplicating a second
++  // copy of the same royalty-cleared tracks under a second folder.
++  useEffect(() => {
++    fetch('/api/admin/quote-loops/audio-list')
++      .then((r) => r.json())
++      .then((d) => setTracks(d.tracks || []))
++      .catch(() => setTracks([]));
++
++    if (background?.type === 'photo') {
++      const img = new Image();
++      img.crossOrigin = 'anonymous';
++      img.onload = () => setBgReady(true);
++      img.onerror = () => setBgReady(true);
++      img.src = background.url;
++      bgImageRef.current = img;
++    } else if (background?.type === 'video') {
++      const vid = bgVideoRef.current;
++      if (vid) {
++        vid.src = background.url;
++        vid.crossOrigin = 'anonymous';
++        vid.muted = true;
++        vid.loop = true;
++        vid.oncanplaythrough = () => setBgReady(true);
++        vid.onerror = () => setBgReady(true);
++        vid.load();
++      }
++    } else {
++      setBgReady(true);
++    }
++    // eslint-disable-next-line react-hooks/exhaustive-deps
++  }, []);
++
++  // ── Drawing ─────────────────────────────────────────────────────────────
++  const draw = useCallback(
++    (elapsedMs) => {
++      const canvas = canvasRef.current;
++      if (!canvas) return;
++      const ctx = canvas.getContext('2d');
++      const W = CANVAS_W, H = CANVAS_H;
++      const t = Math.min(1, elapsedMs / (RECORD_SECONDS * 1000));
++      const revealed = elapsedMs >= REVEAL_AT_MS;
++      const revealT = Math.min(1, Math.max(0, (elapsedMs - REVEAL_AT_MS) / REVEAL_DURATION_MS));
++      const revealEased = 1 - Math.pow(1 - revealT, 3);
++
++      // ── Background layer (identical technique to QuoteLoopRecorder) ──
++      if (background?.type === 'video' && bgVideoRef.current?.readyState >= 2) {
++        const vid = bgVideoRef.current;
++        const scale = Math.max(W / vid.videoWidth, H / vid.videoHeight);
++        const dw = vid.videoWidth * scale, dh = vid.videoHeight * scale;
++        ctx.drawImage(vid, (W - dw) / 2, (H - dh) / 2, dw, dh);
++        ctx.fillStyle = 'rgba(15,23,42,0.55)'; // darker than quote-loop — this frame carries a lot more text
++        ctx.fillRect(0, 0, W, H);
++      } else if (background?.type === 'photo' && bgImageRef.current?.complete && bgImageRef.current.naturalWidth) {
++        const img = bgImageRef.current;
++        const zoom = 1 + 0.08 * t;
++        const scale = Math.max(W / img.naturalWidth, H / img.naturalHeight) * zoom;
++        const dw = img.naturalWidth * scale, dh = img.naturalHeight * scale;
++        ctx.drawImage(img, (W - dw) / 2, (H - dh) / 2, dw, dh);
++        ctx.fillStyle = 'rgba(15,23,42,0.55)';
++        ctx.fillRect(0, 0, W, H);
++      } else {
++        const angle = t * Math.PI * 0.4;
++        const gradient = ctx.createLinearGradient(
++          W / 2 + Math.cos(angle) * W, H / 2 + Math.sin(angle) * H,
++          W / 2 - Math.cos(angle) * W, H / 2 - Math.sin(angle) * H
++        );
++        gradient.addColorStop(0, DARK);
++        gradient.addColorStop(1, BRAND_BLUE);
++        ctx.fillStyle = gradient;
++        ctx.fillRect(0, 0, W, H);
++      }
++
++      // ── Subject/kicker tag ──
++      ctx.textAlign = 'center';
++      ctx.textBaseline = 'alphabetic';
++      ctx.font = 'bold 30px Arial';
++      ctx.fillStyle = BRAND_YELLOW;
++      ctx.fillText((contentAsset.metadata?.subject || contentAsset.title || 'EXAM PREP').toUpperCase(), W / 2, 150);
++
++      // ── Question (fades/scales in) ──
++      const qIntroT = Math.min(1, elapsedMs / QUESTION_IN_MS);
++      const qEased = 1 - Math.pow(1 - qIntroT, 3);
++      ctx.font = '700 46px Arial';
++      const qLines = wrapText(ctx, question, W - 140).slice(0, 5);
++      const qLineH = 58;
++      const qTop = 260;
++
++      ctx.save();
++      ctx.globalAlpha = qEased;
++      ctx.fillStyle = '#ffffff';
++      ctx.shadowColor = 'rgba(0,0,0,0.6)';
++      ctx.shadowBlur = 10;
++      qLines.forEach((line, i) => ctx.fillText(line, W / 2, qTop + i * qLineH + (1 - qEased) * 16));
++      ctx.restore();
++
++      // ── Options — each staggers in, then the correct one highlights ──
++      const optionsTop = qTop + qLines.length * qLineH + 70;
++      const optionH = 110;
++      const optionGap = 24;
++      ctx.font = '600 36px Arial';
++
++      options.forEach((opt, i) => {
++        const optStart = OPTIONS_START_MS + i * OPTION_STAGGER_MS;
++        const optT = Math.min(1, Math.max(0, (elapsedMs - optStart) / 350));
++        const optEased = 1 - Math.pow(1 - optT, 3);
++        if (optEased <= 0) return;
++
++        const y = optionsTop + i * (optionH + optionGap);
++        const isCorrect = opt.id === correctOptionId;
++
++        ctx.save();
++        ctx.globalAlpha = optEased;
++        const slideX = (1 - optEased) * 40;
++
++        // Box
++        ctx.fillStyle = revealed && isCorrect
++          ? `rgba(34,197,94,${0.25 + 0.35 * revealEased})`
++          : 'rgba(255,255,255,0.08)';
++        ctx.strokeStyle = revealed && isCorrect ? GREEN : 'rgba(255,255,255,0.35)';
++        ctx.lineWidth = revealed && isCorrect ? 4 : 2;
++        const bx = 70 + slideX, bw = W - 140;
++        ctx.beginPath();
++        if (ctx.roundRect) ctx.roundRect(bx, y, bw, optionH, 18); else ctx.rect(bx, y, bw, optionH);
++        ctx.fill();
++        ctx.stroke();
++
++        // Label circle
++        ctx.textAlign = 'center';
++        ctx.textBaseline = 'middle';
++        ctx.fillStyle = revealed && isCorrect ? GREEN : 'rgba(255,255,255,0.9)';
++        ctx.font = '800 34px Arial';
++        ctx.fillText(opt.id, bx + 60, y + optionH / 2);
++
++        // Option text (wrapped, left-aligned after the label)
++        ctx.textAlign = 'left';
++        ctx.font = '600 32px Arial';
++        ctx.fillStyle = '#ffffff';
++        const optLines = wrapText(ctx, opt.text, bw - 140).slice(0, 2);
++        const optLineH = 36;
++        const optTextTop = y + optionH / 2 - ((optLines.length - 1) * optLineH) / 2;
++        optLines.forEach((line, li) => ctx.fillText(line, bx + 110, optTextTop + li * optLineH));
++
++        if (revealed && isCorrect) {
++          ctx.textAlign = 'right';
++          ctx.font = '800 32px Arial';
++          ctx.fillStyle = GREEN;
++          ctx.globalAlpha = optEased * revealEased;
++          ctx.fillText('✓', bx + bw - 34, y + optionH / 2 + 2);
++        }
++        ctx.restore();
++      });
++
++      // ── Explanation panel — fades in under the options once revealed ──
++      if (explanation && revealEased > 0) {
++        const explTop = optionsTop + options.length * (optionH + optionGap) + 40;
++        ctx.font = '600 32px Arial';
++        const explLines = wrapText(ctx, explanation, W - 200).slice(0, 6);
++        const explLineH = 42;
++        const panelH = explLines.length * explLineH + 80;
++
++        ctx.save();
++        ctx.globalAlpha = revealEased;
++        ctx.fillStyle = 'rgba(15,23,42,0.75)';
++        ctx.beginPath();
++        if (ctx.roundRect) ctx.roundRect(70, explTop, W - 140, panelH, 20); else ctx.rect(70, explTop, W - 140, panelH);
++        ctx.fill();
++        ctx.strokeStyle = GREEN;
++        ctx.lineWidth = 2;
++        ctx.stroke();
++
++        ctx.textAlign = 'left';
++        ctx.font = 'bold 26px Arial';
++        ctx.fillStyle = GREEN;
++        ctx.fillText('WHY', 100, explTop + 44);
++
++        ctx.font = '500 30px Arial';
++        ctx.fillStyle = 'rgba(255,255,255,0.95)';
++        explLines.forEach((line, i) => ctx.fillText(line, 100, explTop + 88 + i * explLineH));
++        ctx.restore();
++      }
++
++      // Brand mark
++      ctx.textAlign = 'left';
++      ctx.font = 'bold 26px Arial';
++      ctx.fillStyle = BRAND_YELLOW;
++      ctx.fillText('SHINEY BRAIN ACADEMY', 50, H - 50);
++    },
++    [background, question, options, correctOptionId, explanation, contentAsset.metadata?.subject, contentAsset.title]
++  );
++
++  useEffect(() => {
++    function loop() {
++      const elapsed = status === 'recording' ? performance.now() - startTimeRef.current : 0;
++      draw(elapsed);
++      rafRef.current = requestAnimationFrame(loop);
++    }
++    if (status === 'recording') {
++      rafRef.current = requestAnimationFrame(loop);
++    } else {
++      draw(REVEAL_AT_MS + REVEAL_DURATION_MS + 1500); // static idle frame — past the reveal, correct answer + explanation visible
++    }
++    return () => {
++      if (rafRef.current) cancelAnimationFrame(rafRef.current);
++    };
++  }, [status, draw]);
++
++  // ── Start / stop ─────────────────────────────────────────────────────
++  const startRecording = async () => {
++    setErrorMsg(null);
++    setVideoBlobUrl(null);
++    setVideoBlob(null);
++
++    try {
++      const AudioContextCls = window.AudioContext || window.webkitAudioContext;
++      const audioCtx = new AudioContextCls();
++      audioCtxRef.current = audioCtx;
++
++      const dest = audioCtx.createMediaStreamDestination();
++
++      if (tracks.length > 0 && audioRef.current) {
++        const track = tracks[Math.floor(Math.random() * tracks.length)];
++        audioRef.current.src = track;
++        audioRef.current.loop = true;
++        audioRef.current.currentTime = 0;
++        await audioRef.current.play().catch(() => {});
++        const source = audioCtx.createMediaElementSource(audioRef.current);
++        source.connect(dest);
++        source.connect(audioCtx.destination);
++      }
++
++      if (background?.type === 'video' && bgVideoRef.current) {
++        bgVideoRef.current.currentTime = 0;
++        bgVideoRef.current.play().catch(() => {});
++      }
++
++      const canvasStream = canvasRef.current.captureStream(30);
++      const combined = new MediaStream([
++        ...canvasStream.getVideoTracks(),
++        ...dest.stream.getAudioTracks(),
++      ]);
++
++      // 9s clip vs quote-loop's 6s — bumped the bitrate down slightly so it
++      // still comfortably clears most platforms' short-video size caps.
++      const recorderOptions = { videoBitsPerSecond: 550_000, audioBitsPerSecond: 64_000 };
++      const mimeType = pickMimeType();
++      if (mimeType) recorderOptions.mimeType = mimeType;
++
++      const recorder = new MediaRecorder(combined, recorderOptions);
++      chunksRef.current = [];
++      recorder.ondataavailable = (e) => {
++        if (e.data.size > 0) chunksRef.current.push(e.data);
++      };
++      recorder.onstop = () => {
++        const blob = new Blob(chunksRef.current, { type: mimeType || 'video/webm' });
++        setVideoBlob(blob);
++        setVideoBlobUrl(URL.createObjectURL(blob));
++        setStatus('finished');
++      };
++      recorderRef.current = recorder;
++
++      startTimeRef.current = performance.now();
++      recorder.start();
++      setStatus('recording');
++
++      stopTimerRef.current = setTimeout(finishRecording, RECORD_SECONDS * 1000);
++    } catch (err) {
++      setStatus('error');
++      setErrorMsg(`Could not start recording: ${err.message}`);
++    }
++  };
++
++  function finishRecording() {
++    if (stopTimerRef.current) clearTimeout(stopTimerRef.current);
++    if (recorderRef.current && recorderRef.current.state !== 'inactive') recorderRef.current.stop();
++    if (audioRef.current) audioRef.current.pause();
++    if (bgVideoRef.current) bgVideoRef.current.pause();
++    if (audioCtxRef.current) audioCtxRef.current.close().catch(() => {});
++  }
++
++  const cancelRecording = () => {
++    if (stopTimerRef.current) clearTimeout(stopTimerRef.current);
++    if (recorderRef.current) recorderRef.current.onstop = null;
++    if (recorderRef.current && recorderRef.current.state !== 'inactive') recorderRef.current.stop();
++    if (audioRef.current) audioRef.current.pause();
++    if (bgVideoRef.current) bgVideoRef.current.pause();
++    if (audioCtxRef.current) audioCtxRef.current.close().catch(() => {});
++    setStatus('idle');
++  };
++
++  // ── Save: upload blob to storage, then tell the server to record it ──
++  const saveToContentAsset = async () => {
++    if (!videoBlob) return;
++    setStatus('uploading');
++    setErrorMsg(null);
++    try {
++      const supabase = createBrowserClient();
++      const ext = extensionForMimeType(videoBlob.type);
++      const path = `${contentAsset.id}/${Date.now()}.${ext}`;
++
++      const { error: uploadError } = await supabase.storage
++        .from(BUCKET)
++        .upload(path, videoBlob, { contentType: videoBlob.type || 'video/webm', upsert: true });
++      if (uploadError) throw uploadError;
++
++      const { data: urlData } = supabase.storage.from(BUCKET).getPublicUrl(path);
++
++      const res = await fetch('/api/admin/past-question-loops/save', {
++        method: 'POST',
++        headers: { 'Content-Type': 'application/json' },
++        body: JSON.stringify({
++          contentAssetId: contentAsset.id,
++          videoUrl: urlData.publicUrl,
++          durationSeconds: RECORD_SECONDS,
++        }),
++      });
++      const data = await res.json();
++      if (!res.ok) throw new Error(data.error || 'Save failed');
++
++      setStatus('saved');
++      onSaved?.(urlData.publicUrl);
++    } catch (err) {
++      setStatus('finished');
++      setErrorMsg(err.message);
++    }
++  };
++
++  return (
++    <div className="space-y-4">
++      <canvas
++        ref={canvasRef}
++        width={CANVAS_W}
++        height={CANVAS_H}
++        className="w-full max-w-[280px] aspect-[9/16] mx-auto rounded-2xl border shadow-sm bg-black"
++      />
++      <video ref={bgVideoRef} muted playsInline className="hidden" />
++      <audio ref={audioRef} crossOrigin="anonymous" className="hidden" />
++
++      <p className="text-xs text-gray-500 text-center">
++        {background?.type === 'video' && `Real footage background (${background.source}).`}
++        {background?.type === 'photo' && `Photo background with zoom (${background.source}).`}
++        {!background && 'No background candidate found — recording on an animated brand gradient.'}
++        {' '}Records a {RECORD_SECONDS}s question reveal{tracks.length === 0 ? ' — no music tracks found, clip will be silent' : ''}.
++      </p>
++
++      {errorMsg && <p className="text-sm text-red-600 text-center">⚠️ {errorMsg}</p>}
++      {!bgReady && status === 'idle' && (
++        <p className="text-xs text-gray-400 text-center">Loading background…</p>
++      )}
++
++      <div className="flex justify-center gap-2">
++        {status === 'idle' && (
++          <button
++            onClick={startRecording}
++            disabled={!bgReady}
++            className="bg-brand-blue text-white px-5 py-2.5 rounded-xl text-sm font-bold hover:opacity-90 disabled:opacity-50"
++          >
++            🔴 Start Recording
++          </button>
++        )}
++        {status === 'recording' && (
++          <button
++            onClick={cancelRecording}
++            className="bg-red-100 text-red-600 px-5 py-2.5 rounded-xl text-sm font-bold hover:bg-red-200"
++          >
++            ⏹ Cancel
++          </button>
++        )}
++        {(status === 'finished' || status === 'saved') && videoBlobUrl && (
++          <>
++            <a
++              href={videoBlobUrl}
++              download={`${(contentAsset.title || 'past-question-loop').replace(/[^a-z0-9]+/gi, '-').toLowerCase()}.${extensionForMimeType(videoBlob?.type)}`}
++              className="bg-gray-100 text-gray-700 px-5 py-2.5 rounded-xl text-sm font-bold hover:bg-gray-200"
++            >
++              ⬇ Download
++            </a>
++            {status === 'finished' ? (
++              <button
++                onClick={saveToContentAsset}
++                className="bg-emerald-600 text-white px-5 py-2.5 rounded-xl text-sm font-bold hover:opacity-90"
++              >
++                💾 Save
++              </button>
++            ) : (
++              <span className="text-sm font-bold text-emerald-600 px-3 py-2.5">✓ Saved</span>
++            )}
++          </>
++        )}
++        {status === 'uploading' && (
++          <span className="text-sm font-bold text-gray-500 px-3 py-2.5">Uploading…</span>
++        )}
++      </div>
++    </div>
++  );
++}
+diff --git a/components/admin/PublishToChannels.js b/components/admin/PublishToChannels.js
+new file mode 100644
+index 0000000..ba2791f
+--- /dev/null
++++ b/components/admin/PublishToChannels.js
+@@ -0,0 +1,152 @@
++'use client';
++
++// components/admin/PublishToChannels.js
++//
++// Drops into any "record a draft" admin page (quote-loops, past-question-
++// loops, ...) once a content_assets row has media on it. Wires straight
++// into the publish pipeline that already exists:
++//   1. POST /api/publish/approve  { contentAssetId, channelIds }
++//      -> marks the asset approved, creates one publish_jobs row per
++//         selected channel (status 'queued')
++//   2. POST /api/publish/bulk     { jobIds, mode: 'now' }
++//      -> executePublishJob() for each: loads the channel + adapter from
++//         lib/publishers/registry.js, refreshes the token if needed, and
++//         actually calls the platform API.
++// Nothing platform-specific lives here — this is the same path every other
++// Social Engine asset already goes out through.
++
++import { useEffect, useState } from 'react';
++
++const PLATFORM_LABELS = {
++  tiktok: 'TikTok',
++  youtube: 'YouTube',
++  instagram: 'Instagram',
++  facebook: 'Facebook',
++  x: 'X',
++  linkedin: 'LinkedIn',
++  pinterest: 'Pinterest',
++  telegram: 'Telegram',
++};
++
++/**
++ * @param {Object} props
++ * @param {string} props.contentAssetId
++ * @param {boolean} [props.disabled] - true until the draft has a recorded video
++ */
++export default function PublishToChannels({ contentAssetId, disabled }) {
++  const [channels, setChannels] = useState([]);
++  const [selected, setSelected] = useState(new Set());
++  const [loading, setLoading] = useState(true);
++  const [publishing, setPublishing] = useState(false);
++  const [results, setResults] = useState(null);
++  const [error, setError] = useState(null);
++
++  useEffect(() => {
++    fetch('/api/admin/channels')
++      .then((r) => r.json())
++      .then((d) => {
++        const active = (d.data || []).filter((c) => c.is_active);
++        setChannels(active);
++      })
++      .catch(() => setChannels([]))
++      .finally(() => setLoading(false));
++  }, []);
++
++  const toggle = (id) => {
++    setSelected((prev) => {
++      const next = new Set(prev);
++      next.has(id) ? next.delete(id) : next.add(id);
++      return next;
++    });
++  };
++
++  const publish = async () => {
++    if (selected.size === 0) return;
++    setPublishing(true);
++    setError(null);
++    setResults(null);
++    try {
++      const approveRes = await fetch('/api/publish/approve', {
++        method: 'POST',
++        headers: { 'Content-Type': 'application/json' },
++        body: JSON.stringify({ contentAssetId, channelIds: Array.from(selected) }),
++      });
++      const approveData = await approveRes.json();
++      if (!approveRes.ok) throw new Error(approveData.error || 'Approve failed');
++
++      const jobIds = (approveData.jobs || []).map((j) => j.id);
++      const bulkRes = await fetch('/api/publish/bulk', {
++        method: 'POST',
++        headers: { 'Content-Type': 'application/json' },
++        body: JSON.stringify({ jobIds, mode: 'now' }),
++      });
++      const bulkData = await bulkRes.json();
++      if (!bulkRes.ok) throw new Error(bulkData.error || 'Publish failed');
++
++      setResults(bulkData.results || []);
++    } catch (err) {
++      setError(err.message);
++    } finally {
++      setPublishing(false);
++    }
++  };
++
++  if (loading) return null;
++
++  if (channels.length === 0) {
++    return (
++      <p className="text-xs text-gray-400">
++        No channels connected yet.{' '}
++        <a href="/admin/channels" className="underline text-brand-blue">
++          Connect TikTok, YouTube, or another platform
++        </a>{' '}
++        to publish this.
++      </p>
++    );
++  }
++
++  return (
++    <div className="border-t pt-3 mt-3 space-y-2">
++      <p className="text-xs font-semibold text-gray-500 uppercase">Publish to</p>
++      <div className="flex flex-wrap gap-2">
++        {channels.map((c) => (
++          <label
++            key={c.id}
++            className={`flex items-center gap-1.5 border rounded-lg px-2.5 py-1.5 text-xs cursor-pointer ${
++              selected.has(c.id) ? 'border-brand-blue bg-blue-50' : 'border-gray-200'
++            } ${disabled ? 'opacity-50 pointer-events-none' : ''}`}
++          >
++            <input
++              type="checkbox"
++              checked={selected.has(c.id)}
++              onChange={() => toggle(c.id)}
++              className="accent-brand-blue"
++            />
++            {PLATFORM_LABELS[c.platform] || c.platform}
++            {c.label && c.label !== 'Main' ? ` · ${c.label}` : ''}
++          </label>
++        ))}
++      </div>
++
++      <button
++        onClick={publish}
++        disabled={disabled || publishing || selected.size === 0}
++        className="bg-emerald-600 text-white px-4 py-1.5 rounded-lg text-xs font-bold hover:opacity-90 disabled:opacity-50"
++      >
++        {publishing ? 'Publishing…' : `🚀 Publish now (${selected.size || 0})`}
++      </button>
++
++      {error && <p className="text-xs text-red-600">⚠️ {error}</p>}
++
++      {results && (
++        <ul className="text-xs space-y-0.5">
++          {results.map((r) => (
++            <li key={r.jobId} className={r.success ? 'text-emerald-600' : 'text-red-600'}>
++              {r.success ? '✓' : '✗'} {r.success ? `Published (${r.externalId || 'ok'})` : r.error}
++            </li>
++          ))}
++        </ul>
++      )}
++    </div>
++  );
++}
+diff --git a/lib/publish-engine.js b/lib/publish-engine.js
+index 504ff32..4f9b277 100644
+--- a/lib/publish-engine.js
++++ b/lib/publish-engine.js
+@@ -3,6 +3,38 @@ import { createAdminClient } from '@/lib/supabase-admin';
+ import { getPublisher } from '@/lib/publishers/registry';
+ import { PublishError } from '@/lib/publishers/base';
+ 
++// Refresh 5 min before actual expiry so a slow upload (TikTok's PULL_FROM_URL
++// polling, YouTube's resumable upload) never straddles the token going stale
++// mid-request.
++const REFRESH_SKEW_MS = 5 * 60 * 1000;
++
++// YouTube and TikTok both issue short-lived access_tokens + a refresh_token.
++// registry.js exposes `refreshToken` per-adapter but nothing was ever
++// calling it — every channel would work once at connect time and then die
++// the moment the access_token expired. This is the one place that now
++// checks expiry, calls the adapter's refresh, and persists the rotated
++// tokens back to social_channels_v2 before the publish attempt.
++async function ensureFreshToken(supabase, channel, adapter) {
++  if (!adapter.refreshToken) return channel;
++
++  const expiresAt = channel.token_expires_at ? new Date(channel.token_expires_at).getTime() : null;
++  const needsRefresh = !channel.access_token || (expiresAt !== null && expiresAt - Date.now() < REFRESH_SKEW_MS);
++  if (!needsRefresh) return channel;
++
++  const refreshed = await adapter.refreshToken(channel);
++
++  await supabase
++    .from('social_channels_v2')
++    .update({
++      access_token: refreshed.access_token,
++      refresh_token: refreshed.refresh_token || channel.refresh_token,
++      token_expires_at: refreshed.token_expires_at || channel.token_expires_at,
++    })
++    .eq('id', channel.id);
++
++  return { ...channel, ...refreshed };
++}
++
+ /**
+  * Executes a single publish_jobs row: loads the content asset + media +
+  * channel, calls the right platform adapter, and records the outcome.
+@@ -22,7 +54,7 @@ export async function executePublishJob(jobId) {
+   if (jobError || !job) throw new Error(`Publish job not found: ${jobId}`);
+ 
+   const contentAsset = job.content_assets;
+-  const channel = job.social_channels_v2;
++  let channel = job.social_channels_v2;
+ 
+   if (!channel || !channel.is_active) {
+     return failJob(supabase, job, 'No active channel configured', { retryable: false });
+@@ -37,8 +69,9 @@ export async function executePublishJob(jobId) {
+   await supabase.from('publish_jobs').update({ status: 'publishing' }).eq('id', job.id);
+ 
+   try {
+-    const { publish } = getPublisher(channel.platform);
+-    const result = await publish(channel, contentAsset, media || []);
++    const adapter = getPublisher(channel.platform);
++    channel = await ensureFreshToken(supabase, channel, adapter);
++    const result = await adapter.publish(channel, contentAsset, media || []);
+ 
+     const now = new Date().toISOString();
+     await supabase
+diff --git a/lib/publishers/registry.js b/lib/publishers/registry.js
+index a019c01..cb206e8 100644
+--- a/lib/publishers/registry.js
++++ b/lib/publishers/registry.js
+@@ -6,7 +6,7 @@ import { publishLinkedIn } from './linkedin';
+ import { publishX } from './x';
+ import { publishPinterest } from './pinterest';
+ import { publishYouTube, refreshYouTubeToken } from './youtube';
+-import { publishTikTok } from './tiktok';
++import { publishTikTok, refreshTikTokToken } from './tiktok';
+ 
+ export const PUBLISHERS = {
+   instagram: { publish: publishInstagram },
+@@ -16,7 +16,7 @@ export const PUBLISHERS = {
+   x: { publish: publishX },
+   pinterest: { publish: publishPinterest },
+   youtube: { publish: publishYouTube, refreshToken: refreshYouTubeToken },
+-  tiktok: { publish: publishTikTok },
++  tiktok: { publish: publishTikTok, refreshToken: refreshTikTokToken },
+ };
+ 
+ export function getPublisher(platform) {
+diff --git a/lib/publishers/tiktok.js b/lib/publishers/tiktok.js
+index c03616e..93c678d 100644
+--- a/lib/publishers/tiktok.js
++++ b/lib/publishers/tiktok.js
+@@ -67,3 +67,42 @@ export async function publishTikTok(channel, contentAsset, media = []) {
+ 
+   throw new PublishError('TikTok publish timed out waiting for processing', { retryable: true });
+ }
++
++// TikTok access tokens expire in 24h; refresh_tokens are valid ~365 days
++// but ROTATE on every use — the caller (publish-engine's ensureFreshToken)
++// must persist the new refresh_token we return here, not just the new
++// access_token, or the next refresh will fail with an already-used token.
++export async function refreshTikTokToken(channel) {
++  if (!channel.refresh_token) {
++    throw new PublishError(
++      'TikTok channel has no refresh_token on file — reconnect it from /admin/channels',
++      { retryable: false }
++    );
++  }
++
++  const res = await fetch(`${API}/oauth/token/`, {
++    method: 'POST',
++    headers: { 'Content-Type': 'application/x-www-form-urlencoded', 'Cache-Control': 'no-cache' },
++    body: new URLSearchParams({
++      client_key: process.env.TIKTOK_CLIENT_KEY,
++      client_secret: process.env.TIKTOK_CLIENT_SECRET,
++      grant_type: 'refresh_token',
++      refresh_token: channel.refresh_token,
++    }),
++  });
++  const data = await res.json();
++  if (!data.access_token) {
++    // A dead refresh_token (revoked, expired, or already-rotated) needs a
++    // human to reconnect — retrying automatically will never succeed.
++    throw new PublishError(
++      `TikTok token refresh failed: ${data.error_description || data.error || res.statusText}`,
++      { retryable: false }
++    );
++  }
++
++  return {
++    access_token: data.access_token,
++    refresh_token: data.refresh_token || channel.refresh_token,
++    token_expires_at: new Date(Date.now() + data.expires_in * 1000).toISOString(),
++  };
++}
+diff --git a/vercel.json b/vercel.json
+index 0483315..4e336c6 100644
+--- a/vercel.json
++++ b/vercel.json
+@@ -3,6 +3,10 @@
+     {
+       "path": "/api/daily-mentor",
+       "schedule": "0 6 * * *"
++    },
++    {
++      "path": "/api/publish/cron-worker",
++      "schedule": "0 3 * * *"
+     }
+   ]
+ }
+\ No newline at end of file

@@ -4,7 +4,6 @@
 sba-channels-oauth-fix/ 
 node_modules/
 *.zip
-/quote-loop-and-past-question-loop/
 /fix2/
 /quote-loop-save-fix/
 /tiktok-debug-route/
