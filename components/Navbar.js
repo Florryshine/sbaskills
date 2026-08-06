@@ -74,6 +74,7 @@ export default function Navbar() {
           <Link href="/leaderboard" className="text-sm font-medium text-slate-600 transition hover:text-brand-blue">🏅 Board</Link>
           <Link href="/store" className="text-sm font-medium text-slate-600 transition hover:text-brand-blue">🏪 Store</Link>
           <Link href="/library" className="text-sm font-medium text-slate-600 transition hover:text-brand-blue">📚 Library</Link>
+          <Link href="/games" className="text-sm font-medium text-slate-600 transition hover:text-brand-blue">🎮 Games</Link>
           <Link href="/tools" className="text-sm font-medium text-slate-600 transition hover:text-brand-blue">🛠️ Tools</Link>
           <Link href="/challenge" className="text-sm font-medium text-slate-600 transition hover:text-brand-blue">⚡ Challenge</Link>
           <Link href="/about" className="text-sm font-medium text-slate-600 transition hover:text-brand-blue">About</Link>
@@ -139,6 +140,8 @@ export default function Navbar() {
             <Link href="/leaderboard" onClick={() => setMenuOpen(false)} className="text-sm font-semibold text-slate-700 hover:text-brand-blue">🏅 Leaderboard</Link>
             <Link href="/store" onClick={() => setMenuOpen(false)} className="text-sm font-semibold text-slate-700 hover:text-brand-blue">🏪 Store</Link>
             <Link href="/library" onClick={() => setMenuOpen(false)} className="text-sm font-semibold text-slate-700 hover:text-brand-blue">📚 Library</Link>
+            <Link href="/games" onClick={() => setMenuOpen(false)} className="text-sm font-semibold text-slate-700 hover:text-brand-blue">🎮 Games</Link>
+            <Link href="/quizzes" onClick={() => setMenuOpen(false)} className="text-sm font-semibold text-slate-700 hover:text-brand-blue">📝 Quizzes</Link>
             <Link href="/tools" onClick={() => setMenuOpen(false)} className="text-sm font-semibold text-slate-700 hover:text-brand-blue">🛠️ Tools</Link>
             <Link href="/challenge" onClick={() => setMenuOpen(false)} className="text-sm font-semibold text-slate-700 hover:text-brand-blue">⚡ Daily Challenge</Link>
             <Link href="/about" onClick={() => setMenuOpen(false)} className="text-sm font-semibold text-slate-700 hover:text-brand-blue">About</Link>
