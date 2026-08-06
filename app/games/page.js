@@ -10,6 +10,35 @@ export const dynamic = 'force-dynamic';
 export default async function GamesIndexPage() {
   const supabase = createServerClient();
 
+  // game_topics / game_sequence_steps are RLS-locked to `authenticated`
+  // only. If the session cookie doesn't resolve (logged-out visitor,
+  // expired session), the queries below return zero rows with no error —
+  // identical to the table genuinely being empty. Checking auth explicitly
+  // lets us show the real reason instead of a misleading "no games yet".
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+
+  if (!user) {
+    return (
+      <div className="max-w-3xl mx-auto py-10 px-4">
+        <h1 className="text-2xl font-bold mb-2">🎮 Revision Games</h1>
+        <p className="text-gray-500 mb-6">
+          Pick a topic to play a quick revision game.
+        </p>
+        <div className="rounded-xl border border-gray-200 p-6 text-center">
+          <p className="text-gray-600 font-semibold mb-3">Log in to see available games.</p>
+          <Link
+            href="/login"
+            className="inline-block bg-brand-blue text-white px-5 py-2 rounded-xl text-sm font-bold hover:opacity-90"
+          >
+            Log In
+          </Link>
+        </div>
+      </div>
+    );
+  }
+
   const { data: topics } = await supabase
     .from('game_topics')
     .select('id, title, subject, definitions')

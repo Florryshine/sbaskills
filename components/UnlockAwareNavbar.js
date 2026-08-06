@@ -1,5 +1,6 @@
 'use client';
 
+import React from 'react';
 import Link from 'next/link';
 import { useState, useEffect } from 'react';
 import { createBrowserClient } from '@/lib/supabase';
@@ -68,7 +69,8 @@ export default function UnlockAwareNavbar() {
     { href: '/challenge', label: 'Challenge', featureId: 'dailyChallenge', emoji: '🎯' },
     { href: '/about', label: 'About', featureId: null, emoji: null },
     { href: '/quizzes', label: 'Quizzes', featureId: 'quiz', emoji: '📝' },
-    { href: '/boss-battles', label: 'Boss Battles', featureId: 'bossBattle', emoji: '🎮' },
+    { href: '/games', label: 'Games', featureId: null, emoji: '🎮' },
+    { href: '/boss-battles', label: 'Boss Battles', featureId: 'bossBattle', emoji: '⚔️' },
     { href: '/contact', label: 'Contact', featureId: null, emoji: '📧' },
   ];
 

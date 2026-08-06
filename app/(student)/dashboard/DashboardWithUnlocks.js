@@ -395,6 +395,7 @@ export default function DashboardWithUnlocks() {
             <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
               {[
                 { label: 'Browse Courses', href: '/courses', emoji: '📚' },
+                { label: 'Games', href: '/games', emoji: '🎮' },
                 { label: 'Leaderboard', href: '/leaderboard', emoji: '🏆' },
                 { label: 'Blog', href: '/blog', emoji: '📝' },
                 { label: 'Audio', href: '/audio', emoji: '🎵' },

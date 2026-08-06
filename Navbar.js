@@ -52,6 +52,7 @@ export default function Navbar() {
           <Link href="/audio" className="text-sm font-medium text-slate-600 transition hover:text-brand-blue">Audio</Link>
           <Link href="/leaderboard" className="text-sm font-medium text-slate-600 transition hover:text-brand-blue">🏆 Board</Link>
           <Link href="/library" className="text-sm font-medium text-slate-600 transition hover:text-brand-blue">📚 Library</Link>
+          <Link href="/quizzes" className="text-sm font-medium text-slate-600 transition hover:text-brand-blue">📝 Quizzes</Link>
           <Link href="/games" className="text-sm font-medium text-slate-600 transition hover:text-brand-blue">🎮 Games</Link>
           <Link href="/about" className="text-sm font-medium text-slate-600 transition hover:text-brand-blue">About</Link>
           <Link href="/contact" className="text-sm font-medium text-slate-600 transition hover:text-brand-blue">Contact</Link>
@@ -102,6 +103,7 @@ export default function Navbar() {
             <Link href="/audio" onClick={() => setMenuOpen(false)} className="text-sm font-semibold text-slate-700 hover:text-brand-blue">🎵 Audio</Link>
             <Link href="/leaderboard" onClick={() => setMenuOpen(false)} className="text-sm font-semibold text-slate-700 hover:text-brand-blue">🏆 Leaderboard</Link>
             <Link href="/library" onClick={() => setMenuOpen(false)} className="text-sm font-semibold text-slate-700 hover:text-brand-blue">📚 Library</Link>
+            <Link href="/quizzes" onClick={() => setMenuOpen(false)} className="text-sm font-semibold text-slate-700 hover:text-brand-blue">📝 Quizzes</Link>
             <Link href="/games" onClick={() => setMenuOpen(false)} className="text-sm font-semibold text-slate-700 hover:text-brand-blue">🎮 Games</Link>
             <Link href="/about" onClick={() => setMenuOpen(false)} className="text-sm font-semibold text-slate-700 hover:text-brand-blue">ℹ️ About</Link>
             <Link href="/contact" onClick={() => setMenuOpen(false)} className="text-sm font-semibold text-slate-700 hover:text-brand-blue">📞 Contact</Link>
