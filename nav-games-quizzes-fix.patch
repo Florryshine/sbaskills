@@ -1,0 +1,128 @@
+From c1410549ccacf14641742a315e38f2bed54869c0 Mon Sep 17 00:00:00 2001
+From: Claude <assistant@anthropic.com>
+Date: Thu, 6 Aug 2026 20:38:01 +0000
+Subject: [PATCH] Fix Games and Quizzes missing from student navigation
+MIME-Version: 1.0
+Content-Type: text/plain; charset=UTF-8
+Content-Transfer-Encoding: 8bit
+
+- Navbar.js: add missing 'Quizzes' link (desktop + mobile) — it was
+  never in the nav despite the /quizzes route working fine, so students
+  browsing from any page other than the dashboard had no way to reach
+  it. 'Games' was already present here.
+- Dashboard Quick Links grid: add 'Games' card. Quizzes already has its
+  own dashboard section with a 'View All' link; Games had no entry
+  point on the dashboard at all.
+- app/games/page.js: game_topics/game_sequence_steps are RLS-locked to
+  authenticated reads only. A logged-out visitor or broken session
+  silently gets zero rows (no error), rendering the exact same 'no
+  games yet' message as a genuinely empty table. Added an explicit
+  auth check so logged-out visitors see a login prompt instead of a
+  misleading empty state.
+- components/UnlockAwareNavbar.js: currently unused/unimported
+  anywhere, but fixed two latent bugs so it's not a landmine if wired
+  in later — missing 'React' import (used via React.Fragment, would
+  throw ReferenceError on render) and missing 'Games' nav entry.
+---
+ Navbar.js                                     |  2 ++
+ .../dashboard/DashboardWithUnlocks.js         |  1 +
+ app/games/page.js                             | 29 +++++++++++++++++++
+ components/UnlockAwareNavbar.js               |  4 ++-
+ 4 files changed, 35 insertions(+), 1 deletion(-)
+
+diff --git a/Navbar.js b/Navbar.js
+index 0edaaab..980c1a9 100644
+--- a/Navbar.js
++++ b/Navbar.js
+@@ -52,6 +52,7 @@ export default function Navbar() {
+           <Link href="/audio" className="text-sm font-medium text-slate-600 transition hover:text-brand-blue">Audio</Link>
+           <Link href="/leaderboard" className="text-sm font-medium text-slate-600 transition hover:text-brand-blue">🏆 Board</Link>
+           <Link href="/library" className="text-sm font-medium text-slate-600 transition hover:text-brand-blue">📚 Library</Link>
++          <Link href="/quizzes" className="text-sm font-medium text-slate-600 transition hover:text-brand-blue">📝 Quizzes</Link>
+           <Link href="/games" className="text-sm font-medium text-slate-600 transition hover:text-brand-blue">🎮 Games</Link>
+           <Link href="/about" className="text-sm font-medium text-slate-600 transition hover:text-brand-blue">About</Link>
+           <Link href="/contact" className="text-sm font-medium text-slate-600 transition hover:text-brand-blue">Contact</Link>
+@@ -102,6 +103,7 @@ export default function Navbar() {
+             <Link href="/audio" onClick={() => setMenuOpen(false)} className="text-sm font-semibold text-slate-700 hover:text-brand-blue">🎵 Audio</Link>
+             <Link href="/leaderboard" onClick={() => setMenuOpen(false)} className="text-sm font-semibold text-slate-700 hover:text-brand-blue">🏆 Leaderboard</Link>
+             <Link href="/library" onClick={() => setMenuOpen(false)} className="text-sm font-semibold text-slate-700 hover:text-brand-blue">📚 Library</Link>
++            <Link href="/quizzes" onClick={() => setMenuOpen(false)} className="text-sm font-semibold text-slate-700 hover:text-brand-blue">📝 Quizzes</Link>
+             <Link href="/games" onClick={() => setMenuOpen(false)} className="text-sm font-semibold text-slate-700 hover:text-brand-blue">🎮 Games</Link>
+             <Link href="/about" onClick={() => setMenuOpen(false)} className="text-sm font-semibold text-slate-700 hover:text-brand-blue">ℹ️ About</Link>
+             <Link href="/contact" onClick={() => setMenuOpen(false)} className="text-sm font-semibold text-slate-700 hover:text-brand-blue">📞 Contact</Link>
+diff --git a/app/(student)/dashboard/DashboardWithUnlocks.js b/app/(student)/dashboard/DashboardWithUnlocks.js
+index 4b158f7..9530bf8 100644
+--- a/app/(student)/dashboard/DashboardWithUnlocks.js
++++ b/app/(student)/dashboard/DashboardWithUnlocks.js
+@@ -395,6 +395,7 @@ export default function DashboardWithUnlocks() {
+             <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+               {[
+                 { label: 'Browse Courses', href: '/courses', emoji: '📚' },
++                { label: 'Games', href: '/games', emoji: '🎮' },
+                 { label: 'Leaderboard', href: '/leaderboard', emoji: '🏆' },
+                 { label: 'Blog', href: '/blog', emoji: '📝' },
+                 { label: 'Audio', href: '/audio', emoji: '🎵' },
+diff --git a/app/games/page.js b/app/games/page.js
+index 78498a0..33d36bf 100644
+--- a/app/games/page.js
++++ b/app/games/page.js
+@@ -10,6 +10,35 @@ export const dynamic = 'force-dynamic';
+ export default async function GamesIndexPage() {
+   const supabase = createServerClient();
+ 
++  // game_topics / game_sequence_steps are RLS-locked to `authenticated`
++  // only. If the session cookie doesn't resolve (logged-out visitor,
++  // expired session), the queries below return zero rows with no error —
++  // identical to the table genuinely being empty. Checking auth explicitly
++  // lets us show the real reason instead of a misleading "no games yet".
++  const {
++    data: { user },
++  } = await supabase.auth.getUser();
++
++  if (!user) {
++    return (
++      <div className="max-w-3xl mx-auto py-10 px-4">
++        <h1 className="text-2xl font-bold mb-2">🎮 Revision Games</h1>
++        <p className="text-gray-500 mb-6">
++          Pick a topic to play a quick revision game.
++        </p>
++        <div className="rounded-xl border border-gray-200 p-6 text-center">
++          <p className="text-gray-600 font-semibold mb-3">Log in to see available games.</p>
++          <Link
++            href="/login"
++            className="inline-block bg-brand-blue text-white px-5 py-2 rounded-xl text-sm font-bold hover:opacity-90"
++          >
++            Log In
++          </Link>
++        </div>
++      </div>
++    );
++  }
++
+   const { data: topics } = await supabase
+     .from('game_topics')
+     .select('id, title, subject, definitions')
+diff --git a/components/UnlockAwareNavbar.js b/components/UnlockAwareNavbar.js
+index 4b4ccf5..220cff4 100644
+--- a/components/UnlockAwareNavbar.js
++++ b/components/UnlockAwareNavbar.js
+@@ -1,5 +1,6 @@
+ 'use client';
+ 
++import React from 'react';
+ import Link from 'next/link';
+ import { useState, useEffect } from 'react';
+ import { createBrowserClient } from '@/lib/supabase';
+@@ -68,7 +69,8 @@ export default function UnlockAwareNavbar() {
+     { href: '/challenge', label: 'Challenge', featureId: 'dailyChallenge', emoji: '🎯' },
+     { href: '/about', label: 'About', featureId: null, emoji: null },
+     { href: '/quizzes', label: 'Quizzes', featureId: 'quiz', emoji: '📝' },
+-    { href: '/boss-battles', label: 'Boss Battles', featureId: 'bossBattle', emoji: '🎮' },
++    { href: '/games', label: 'Games', featureId: null, emoji: '🎮' },
++    { href: '/boss-battles', label: 'Boss Battles', featureId: 'bossBattle', emoji: '⚔️' },
+     { href: '/contact', label: 'Contact', featureId: null, emoji: '📧' },
+   ];
+ 
+-- 
+2.43.0
+
