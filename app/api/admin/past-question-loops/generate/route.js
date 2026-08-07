@@ -27,7 +27,16 @@ async function generateQuestions(asset, count) {
   const keyConcepts = (asset.key_concepts || []).slice(0, 5).join(', ') || 'none listed';
   const facts = (asset.facts || []).slice(0, 5).join('; ') || 'none listed';
 
-  const prompt = `You are writing JAMB/WAEC/NECO/Post-UTME style past-question multiple-choice questions for Shiney Brain Academy, a Nigerian exam-prep brand. Each one gets rendered as a short quiz-reveal video: the question and 4 options show first, then the correct option highlights and a short explanation appears underneath.
+  const prompt = `You are writing JAMB/WAEC/NECO/Post-UTME style past-question multiple-choice questions for Shiney Brain Academy, a Nigerian exam-prep brand. Each one gets rendered as a short quiz-reveal video: the question and 4 options show first (this is a 4-6 second suspense window while the viewer picks an answer — that's the attention hook, don't undercut it), then the correct option highlights and a short explanation appears underneath.
+
+The question itself must stay a real, accurate, exam-style question — do not clickbait or distort it. The attention-grabbing lever here is the DISTRACTORS (make them genuinely tempting, not throwaway, so the viewer commits to an answer before the reveal) and the EXPLANATION.
+
+EXPLANATION RULES — the explanation is the payoff, and it must open with stakes or a trap before it opens with the plain answer. Vary the opening angle across the set (don't reuse the same one twice):
+- Trap-first: name the wrong option most people pick and why it's tempting, THEN give the real answer
+- Stakes-first: state what this mistake costs ("this is a classic mark-loser because...") before explaining
+- Speed/reflex-first: call out the instinctive-but-wrong reaction before correcting it
+- Myth-bust-first: if a common misconception is in play, name it explicitly before correcting it
+Whichever opening angle, the explanation must still land on the actual correct reasoning within 2-3 sentences total (roughly 25-45 words) — the hook can't replace the substance, it just has to earn attention before delivering it.
 
 Topic: "${asset.keyword}"
 Subject: ${asset.subject || 'General'}
@@ -36,12 +45,11 @@ Key concepts: ${keyConcepts}
 Facts: ${facts}
 
 Write ${count} different past-question-style MCQs grounded in this topic. Rules:
-- Each question has exactly 4 options labelled A-D, plausible distractors (no giveaway options like "all of the above" or an obviously silly choice).
+- Each question has exactly 4 options labelled A-D, plausible distractors (no giveaway options like "all of the above" or an obviously silly choice) — the strongest distractor should be genuinely tempting, since a distractor nobody would pick kills the suspense.
 - Exactly one correct option per question.
 - Keep the question itself under 30 words so it fits on a 9:16 frame.
-- The explanation should be 2-3 sentences (roughly 25-45 words): state why the correct option is right, briefly say why the strongest distractor is wrong if useful, and stay grounded in the topic above.
 - No hashtags, no emoji, no quotation marks.
-- Vary difficulty and angle across the set — don't make every question test the exact same fact.
+- Vary difficulty, angle, and explanation opening style across the set — don't make every question test the exact same fact or use the same hook.
 - Also write a "visualHint" — 3-6 words describing a specific, concrete, filmable scene for the background footage (e.g. "student writing notes at desk", "chalkboard equation close-up"), different for each question.
 
 Return ONLY JSON:

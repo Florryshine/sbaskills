@@ -41,6 +41,7 @@ const navItems = [
   { href: '/admin/social-engine', label: 'Social Engine', icon: '\ud83d\ude80' },
   { href: '/admin/quote-loops', label: 'Quote Loops', icon: '\ud83c\udfac' },
   { href: '/admin/past-question-loops', label: 'Past Question Loops', icon: '\ud83d\udcdd' },
+  { href: '/admin/countdown-loops', label: 'Countdown Loops', icon: '\ud83d\udd22' },
   { href: '/admin/channels', label: 'Channels', icon: '\ud83d\udd0c' },
   { href: '/admin/carousel-drafts', label: 'Carousel Drafts', icon: '\ud83c\udfa0' },
   { href: '/admin/video-scripts', label: 'Video Scripts', icon: '\ud83c\udfac' },

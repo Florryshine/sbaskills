@@ -31,6 +31,17 @@ async function generateQuoteLines(asset, count) {
 1. A "headline" — the hook, appears immediately, under 8 words, the kind of line that stops a scroll.
 2. A "followUp" — a real supporting paragraph, NOT a single sentence. Aim for 4-5 lines of body copy (roughly 35-55 words) that fills the lower half of the screen: unpack the headline, add the "why" or "how", give a concrete detail or mini-example, and land on a payoff or call to action. Think of the text-heavy caption style used in Facebook Reels quote videos — it should read as a short, complete paragraph, not a caption fragment.
 
+HOOK RULES for the headline — this is what makes people stop scrolling instead of swiping past. Every headline must do a pattern-interrupt: open with a number, a direct callout, or a warning — never a generic statement of fact. Pull from these formulas (vary which one across the batch, don't reuse the same formula twice):
+- Stakes/number callout: "90% of JAMB students lose marks here" / "This costs you 10 marks"
+- Score-based direct address: "If you're scoring below 200, stop"
+- Mistake warning: "Stop. You're about to get this wrong"
+- Curiosity gap: "Nobody tells you this about [topic]" — must be resolved in the followUp, not left hanging
+- Myth-bust: "This 'fact' about [topic] is wrong"
+- Confrontation/challenge: "Think you know [topic]? Prove it"
+The headline creates the gap; it must NOT give away the payoff — that's the followUp's job. Keep every hook grounded in something real about the topic (an actual common mistake, an actual mark-losing habit) — earn the attention without sacrificing credibility. No fake stats, no manufactured urgency that isn't true.
+
+The followUp must reward the click fast: its first sentence should deliver the actual payoff (the answer, the mistake, the "why") within the first few words — don't make the reader wait through throat-clearing to get the substance.
+
 Also write a "visualHint" — 3-6 words describing a specific, concrete, filmable scene for the background footage (e.g. "student writing notes at desk", "clock ticking exam hall", "sunrise over Lagos rooftops"). Make it visually specific to THIS line, not just a repeat of the topic name, so each line in the batch can get a different background.
 
 Topic: "${asset.keyword}"
@@ -42,7 +53,7 @@ Facts: ${facts}
 Write ${count} different headline+followUp+visualHint sets grounded in this topic. Rules:
 - No hashtags, no emoji, no quotation marks around any part.
 - The followUp must genuinely unpack and pay off the headline with real substance — not padding, not repetition in other words.
-- Mix of styles across the set: a motivational push, a sharp study tip, a confidence line, a myth-buster, a "did you know" hook — don't make them all the same shape.
+- Each headline must use a DIFFERENT hook formula from the list above — unpredictability across the set matters as much as any single hook, since a batch that's all the same shape gets ignored.
 - Must actually connect to the topic above, not generic filler that could apply to anything.
 - Each visualHint should describe a genuinely different scene from the others in the set, so a stock search doesn't keep returning the same clip.
 
