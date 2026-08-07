@@ -40,6 +40,7 @@ const navItems = [
   { href: '/admin/asset-images', label: 'Image Engine', icon: '\ud83d\uddbc\ufe0f' },
   { href: '/admin/social-engine', label: 'Social Engine', icon: '\ud83d\ude80' },
   { href: '/admin/quote-loops', label: 'Quote Loops', icon: '\ud83c\udfac' },
+  { href: '/admin/meme-loops', label: 'Meme/Joke Loops', icon: '\ud83d\ude02' },
   { href: '/admin/past-question-loops', label: 'Past Question Loops', icon: '\ud83d\udcdd' },
   { href: '/admin/countdown-loops', label: 'Countdown Loops', icon: '\ud83d\udd22' },
   { href: '/admin/channels', label: 'Channels', icon: '\ud83d\udd0c' },
