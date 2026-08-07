@@ -1,0 +1,44 @@
+From d0c5f097002226251af4c034ca6f278efd41bb04 Mon Sep 17 00:00:00 2001
+From: Claude <assistant@anthropic.com>
+Date: Thu, 6 Aug 2026 23:25:39 +0000
+Subject: [PATCH] Fix Games/Quizzes actually missing from live navbar
+MIME-Version: 1.0
+Content-Type: text/plain; charset=UTF-8
+Content-Transfer-Encoding: 8bit
+
+components/Navbar.js is the component actually imported across the app
+(45 usages) — the root-level Navbar.js I patched previously has zero
+imports and is dead code, so that earlier fix never took effect on the
+live site.
+
+In the real component: desktop menu had Quizzes but no Games; mobile
+menu (the one in the screenshot) had neither Quizzes nor Games at all.
+Added Games to both, and Quizzes to mobile.
+---
+ components/Navbar.js | 3 +++
+ 1 file changed, 3 insertions(+)
+
+diff --git a/components/Navbar.js b/components/Navbar.js
+index 362b5ad..526c33f 100644
+--- a/components/Navbar.js
++++ b/components/Navbar.js
+@@ -74,6 +74,7 @@ export default function Navbar() {
+           <Link href="/leaderboard" className="text-sm font-medium text-slate-600 transition hover:text-brand-blue">🏅 Board</Link>
+           <Link href="/store" className="text-sm font-medium text-slate-600 transition hover:text-brand-blue">🏪 Store</Link>
+           <Link href="/library" className="text-sm font-medium text-slate-600 transition hover:text-brand-blue">📚 Library</Link>
++          <Link href="/games" className="text-sm font-medium text-slate-600 transition hover:text-brand-blue">🎮 Games</Link>
+           <Link href="/tools" className="text-sm font-medium text-slate-600 transition hover:text-brand-blue">🛠️ Tools</Link>
+           <Link href="/challenge" className="text-sm font-medium text-slate-600 transition hover:text-brand-blue">⚡ Challenge</Link>
+           <Link href="/about" className="text-sm font-medium text-slate-600 transition hover:text-brand-blue">About</Link>
+@@ -139,6 +140,8 @@ export default function Navbar() {
+             <Link href="/leaderboard" onClick={() => setMenuOpen(false)} className="text-sm font-semibold text-slate-700 hover:text-brand-blue">🏅 Leaderboard</Link>
+             <Link href="/store" onClick={() => setMenuOpen(false)} className="text-sm font-semibold text-slate-700 hover:text-brand-blue">🏪 Store</Link>
+             <Link href="/library" onClick={() => setMenuOpen(false)} className="text-sm font-semibold text-slate-700 hover:text-brand-blue">📚 Library</Link>
++            <Link href="/games" onClick={() => setMenuOpen(false)} className="text-sm font-semibold text-slate-700 hover:text-brand-blue">🎮 Games</Link>
++            <Link href="/quizzes" onClick={() => setMenuOpen(false)} className="text-sm font-semibold text-slate-700 hover:text-brand-blue">📝 Quizzes</Link>
+             <Link href="/tools" onClick={() => setMenuOpen(false)} className="text-sm font-semibold text-slate-700 hover:text-brand-blue">🛠️ Tools</Link>
+             <Link href="/challenge" onClick={() => setMenuOpen(false)} className="text-sm font-semibold text-slate-700 hover:text-brand-blue">⚡ Daily Challenge</Link>
+             <Link href="/about" onClick={() => setMenuOpen(false)} className="text-sm font-semibold text-slate-700 hover:text-brand-blue">About</Link>
+-- 
+2.43.0
+
