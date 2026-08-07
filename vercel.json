@@ -5,8 +5,8 @@
       "schedule": "0 6 * * *"
     },
     {
-      "path": "/api/publish/cron-worker",
-      "schedule": "0 3 * * *"
+      "path": "/api/content-factory/auto-loop",
+      "schedule": "0 5 * * *"
     }
   ]
 }

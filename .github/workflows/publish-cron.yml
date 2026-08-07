@@ -1,0 +1,32 @@
+name: Publish scheduled social posts
+
+# On Vercel Hobby, this is the PRIMARY way publish/cron-worker runs - Hobby
+# rejects any cron expression more frequent than once/day at deploy time,
+# so vercel.json only carries the once-daily auto-loop entry. This workflow
+# is what actually fires every 15 minutes and honors your scheduled_at
+# posting times.
+#
+# If you upgrade to Vercel Pro later, you can add a */15 * * * * entry for
+# /api/publish/cron-worker back into vercel.json and delete this file -
+# don't run both at once, or publish_jobs could be picked up twice in the
+# same window.
+#
+# Setup: Repo -> Settings -> Secrets and variables -> Actions -> New repository
+# secret. Add PUBLISH_CRON_URL (e.g. https://shineybrainacademy.vercel.app/api/publish/cron-worker)
+# and CRON_SECRET (same value as the CRON_SECRET env var on Vercel).
+
+on:
+  schedule:
+    - cron: "*/15 * * * *"
+  workflow_dispatch: {} # lets you trigger it manually from the Actions tab too
+
+jobs:
+  trigger-publish:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Call publish cron-worker
+        run: |
+          curl -sS -X GET "${{ secrets.PUBLISH_CRON_URL }}" \
+            -H "Authorization: Bearer ${{ secrets.CRON_SECRET }}" \
+            -w "\nHTTP %{http_code}\n" \
+            --fail-with-body
