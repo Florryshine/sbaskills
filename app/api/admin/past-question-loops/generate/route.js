@@ -22,6 +22,7 @@ import {
   searchPexelsMulti,
   searchPixabayMulti,
 } from '@/lib/image-search';
+import { PLATFORM_LIMITS } from '@/lib/content-factory/generators/_shared';
 
 async function generateQuestions(asset, count) {
   const keyConcepts = (asset.key_concepts || []).slice(0, 5).join(', ') || 'none listed';
@@ -51,9 +52,10 @@ Write ${count} different past-question-style MCQs grounded in this topic. Rules:
 - No hashtags, no emoji, no quotation marks.
 - Vary difficulty, angle, and explanation opening style across the set — don't make every question test the exact same fact or use the same hook.
 - Also write a "visualHint" — 3-6 words describing a specific, concrete, filmable scene for the background footage (e.g. "student writing notes at desk", "chalkboard equation close-up"), different for each question.
+- Also write YouTube metadata unique to THIS question (not the batch topic restated): a "seoTitle" under ${PLATFORM_LIMITS.youtube.title} characters built from the actual question content, a "seoDescription" (2-3 sentences, ~40-70 words) summarizing what the question tests and why the explanation matters, 6-10 lowercase "tags", and 4-6 "hashtags" (with #). No hashtags/emoji inside question/options/explanation/visualHint/seoTitle/seoDescription — hashtags only go in the "hashtags" field.
 
 Return ONLY JSON:
-{ "questions": [{ "question": "...", "options": [{"id":"A","text":"..."},{"id":"B","text":"..."},{"id":"C","text":"..."},{"id":"D","text":"..."}], "correctOptionId": "A", "explanation": "...", "visualHint": "..." }, ...] }`;
+{ "questions": [{ "question": "...", "options": [{"id":"A","text":"..."},{"id":"B","text":"..."},{"id":"C","text":"..."},{"id":"D","text":"..."}], "correctOptionId": "A", "explanation": "...", "visualHint": "...", "seoTitle": "...", "seoDescription": "...", "tags": ["..."], "hashtags": ["#..."] }, ...] }`;
 
   const { result, errors } = await generateWithFallback(
     prompt,
@@ -70,7 +72,8 @@ Return ONLY JSON:
           q.options.length === 4 &&
           q.options.every((o) => o && o.id && o.text) &&
           ['A', 'B', 'C', 'D'].includes(q.correctOptionId) &&
-          q.explanation
+          q.explanation &&
+          q.seoTitle
       ),
     2560
   );
@@ -162,7 +165,7 @@ export async function POST(request) {
     asset_type: 'past_question_loop',
     platform: null, // format-agnostic, same as quote_loop — publishable to any platform's queue
     format: 'video',
-    title: asset.keyword,
+    title: q.seoTitle || asset.keyword, // unique per question — falls back to the topic name only if the model omitted it
     body: q.question,
     status: 'draft',
     generated_by: 'past-question-loop-generator',
@@ -173,6 +176,10 @@ export async function POST(request) {
       subject: asset.subject || null,
       background: backgrounds[i],
       backgroundQuery: backgroundQueries[i],
+      title: q.seoTitle || asset.keyword, // duplicated into metadata — this is what publishYouTube reads
+      description: q.seoDescription || '',
+      tags: Array.isArray(q.tags) ? q.tags : [],
+      hashtags: Array.isArray(q.hashtags) ? q.hashtags : [],
     },
   }));
 

@@ -22,6 +22,7 @@ import {
   searchPexelsMulti,
   searchPixabayMulti,
 } from '@/lib/image-search';
+import { PLATFORM_LIMITS } from '@/lib/content-factory/generators/_shared';
 
 async function generateQuoteLines(asset, count) {
   const keyConcepts = (asset.key_concepts || []).slice(0, 5).join(', ') || 'none listed';
@@ -44,21 +45,29 @@ The followUp must reward the click fast: its first sentence should deliver the a
 
 Also write a "visualHint" — 3-6 words describing a specific, concrete, filmable scene for the background footage (e.g. "student writing notes at desk", "clock ticking exam hall", "sunrise over Lagos rooftops"). Make it visually specific to THIS line, not just a repeat of the topic name, so each line in the batch can get a different background.
 
+Also write YouTube metadata for THIS specific line — it must be unique to this line, not the batch topic restated ${count} times:
+- "seoTitle" — a unique, specific video title under ${PLATFORM_LIMITS.youtube.title} characters, built from THIS line's headline/angle (not a generic topic title). Include the exam context (JAMB/WAEC/NECO/Post-UTME) or subject naturally where it fits.
+- "seoDescription" — 2-3 sentences (roughly 40-70 words) expanding on THIS line's headline+followUp for search, written for humans first, naturally including the topic and subject keywords.
+- "tags" — 6-10 short lowercase SEO keyword phrases relevant to THIS line and the general topic (e.g. "jamb physics", "exam tips nigeria").
+- "hashtags" — 4-6 hashtags (with #, no spaces) mixing topic-specific and brand/exam-general tags.
+
 Topic: "${asset.keyword}"
 Subject: ${asset.subject || 'General'}
 Summary: ${asset.summary || 'No summary available.'}
 Key concepts: ${keyConcepts}
 Facts: ${facts}
 
-Write ${count} different headline+followUp+visualHint sets grounded in this topic. Rules:
-- No hashtags, no emoji, no quotation marks around any part.
+Write ${count} different headline+followUp+visualHint+metadata sets grounded in this topic. Rules:
+- No hashtags or emoji inside headline/followUp/visualHint/seoTitle/seoDescription — hashtags only belong in the "hashtags" field.
+- No quotation marks around any part.
 - The followUp must genuinely unpack and pay off the headline with real substance — not padding, not repetition in other words.
 - Each headline must use a DIFFERENT hook formula from the list above — unpredictability across the set matters as much as any single hook, since a batch that's all the same shape gets ignored.
 - Must actually connect to the topic above, not generic filler that could apply to anything.
 - Each visualHint should describe a genuinely different scene from the others in the set, so a stock search doesn't keep returning the same clip.
+- Each seoTitle must be genuinely different wording from every other line's seoTitle in this batch — never the bare topic name repeated.
 
 Return ONLY JSON:
-{ "lines": [{ "headline": "...", "followUp": "...", "visualHint": "..." }, ...] }`;
+{ "lines": [{ "headline": "...", "followUp": "...", "visualHint": "...", "seoTitle": "...", "seoDescription": "...", "tags": ["..."], "hashtags": ["#..."] }, ...] }`;
 
   const { result, errors } = await generateWithFallback(
     prompt,
@@ -67,7 +76,7 @@ Return ONLY JSON:
       parsed &&
       Array.isArray(parsed.lines) &&
       parsed.lines.length > 0 &&
-      parsed.lines.every((l) => l && l.headline && l.followUp),
+      parsed.lines.every((l) => l && l.headline && l.followUp && l.seoTitle),
     2048
   );
 
@@ -173,7 +182,7 @@ export async function POST(request) {
     asset_type: 'quote_loop',
     platform: null, // format-agnostic, same as podcast_audiogram — publishable to any platform's queue
     format: 'video',
-    title: asset.keyword,
+    title: line.seoTitle || asset.keyword, // unique per line — falls back to the topic name only if the model omitted it
     body: line.headline,
     status: 'draft',
     generated_by: 'quote-loop-generator',
@@ -181,6 +190,10 @@ export async function POST(request) {
       followUp: line.followUp,
       background: backgrounds[i], // { type: 'video'|'photo', url, source, sourceUrl } or null
       backgroundQuery: backgroundQueries[i],
+      title: line.seoTitle || asset.keyword, // duplicated into metadata — this is what publishYouTube reads
+      description: line.seoDescription || '',
+      tags: Array.isArray(line.tags) ? line.tags : [],
+      hashtags: Array.isArray(line.hashtags) ? line.hashtags : [],
     },
   }));
 

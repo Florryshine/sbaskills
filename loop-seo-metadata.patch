@@ -1,0 +1,366 @@
+diff --git a/app/api/admin/countdown-loops/generate/route.js b/app/api/admin/countdown-loops/generate/route.js
+index b1fd405..5c9bf71 100644
+--- a/app/api/admin/countdown-loops/generate/route.js
++++ b/app/api/admin/countdown-loops/generate/route.js
+@@ -25,6 +25,7 @@ import {
+   searchPexelsMulti,
+   searchPixabayMulti,
+ } from '@/lib/image-search';
++import { PLATFORM_LIMITS } from '@/lib/content-factory/generators/_shared';
+ 
+ async function generateCountdowns(asset, count) {
+   const keyConcepts = (asset.key_concepts || []).slice(0, 5).join(', ') || 'none listed';
+@@ -38,6 +39,7 @@ Each countdown needs:
+ - Each item has a "point" (a short punchy name for the habit/mistake, under 8 words) and a "detail" (1-2 sentences, roughly 20-35 words) that opens with the COST (marks lost, time wasted, how often it trips students up) before explaining the fix — trap/stakes-first, same as an explanation should never just flatly state the answer first.
+ - A "cta" — one short closing line (under 12 words) that lands on the #1 item specifically, e.g. "Fix #1 first — it's the one that really hurts".
+ - A "visualHint" on the #1 item only — 3-6 words describing a specific, concrete, filmable scene for the whole video's background (e.g. "student staring at exam clock", "red pen marking wrong answer").
++- YouTube metadata unique to THIS countdown's specific 3 items (not the batch topic restated): a "seoTitle" under ${PLATFORM_LIMITS.youtube.title} characters built from the actual items (not just "3 things costing you marks in X" repeated for every countdown), a "seoDescription" (2-3 sentences, ~40-70 words) previewing the 3 items without giving away the full detail, 6-10 lowercase "tags", and 4-6 "hashtags" (with #). No hashtags/emoji inside title/items/cta/visualHint/seoTitle/seoDescription — hashtags only go in the "hashtags" field.
+ 
+ Topic: "${asset.keyword}"
+ Subject: ${asset.subject || 'General'}
+@@ -46,13 +48,14 @@ Key concepts: ${keyConcepts}
+ Facts: ${facts}
+ 
+ Write ${count} different countdown sets grounded in this topic. Rules:
+-- No hashtags, no emoji, no quotation marks around any part.
++- No hashtags, no emoji, no quotation marks around any part (except inside the dedicated "hashtags" field).
+ - Every item must be a real, specific habit or mistake tied to this topic — no generic "study harder" filler that could apply to any subject.
+ - Each countdown in the batch should take a different angle (e.g. one about calculation mistakes, one about misreading the question, one about timing/pacing) so a batch of ${count} doesn't repeat the same 3 points reworded.
+ - Rank 1's detail should feel like the "real" reveal — the thing the viewer watched the whole video to find out.
++- Each seoTitle must be genuinely different wording from every other countdown's seoTitle in this batch — never the bare topic name repeated.
+ 
+ Return ONLY JSON:
+-{ "countdowns": [{ "title": "...", "items": [{"rank":3,"point":"...","detail":"..."},{"rank":2,"point":"...","detail":"..."},{"rank":1,"point":"...","detail":"...","visualHint":"..."}], "cta": "..." }, ...] }`;
++{ "countdowns": [{ "title": "...", "items": [{"rank":3,"point":"...","detail":"..."},{"rank":2,"point":"...","detail":"..."},{"rank":1,"point":"...","detail":"...","visualHint":"..."}], "cta": "...", "seoTitle": "...", "seoDescription": "...", "tags": ["..."], "hashtags": ["#..."] }, ...] }`;
+ 
+   const { result, errors } = await generateWithFallback(
+     prompt,
+@@ -68,7 +71,8 @@ Return ONLY JSON:
+           Array.isArray(c.items) &&
+           c.items.length === 3 &&
+           c.items.every((it) => it && it.rank && it.point && it.detail) &&
+-          c.cta
++          c.cta &&
++          c.seoTitle
+       ),
+     2560
+   );
+@@ -166,7 +170,7 @@ export async function POST(request) {
+     asset_type: 'countdown_loop',
+     platform: null, // format-agnostic, same as quote_loop/past_question_loop — publishable to any platform's queue
+     format: 'video',
+-    title: asset.keyword,
++    title: c.seoTitle || asset.keyword, // unique per countdown — falls back to the topic name only if the model omitted it
+     body: c.title,
+     status: 'draft',
+     generated_by: 'countdown-loop-generator',
+@@ -175,6 +179,10 @@ export async function POST(request) {
+       cta: c.cta,
+       background: backgrounds[i],
+       backgroundQuery: backgroundQueries[i],
++      title: c.seoTitle || asset.keyword, // duplicated into metadata — this is what publishYouTube reads
++      description: c.seoDescription || '',
++      tags: Array.isArray(c.tags) ? c.tags : [],
++      hashtags: Array.isArray(c.hashtags) ? c.hashtags : [],
+     },
+   }));
+ 
+diff --git a/app/api/admin/past-question-loops/generate/route.js b/app/api/admin/past-question-loops/generate/route.js
+index c980c64..92dca8a 100644
+--- a/app/api/admin/past-question-loops/generate/route.js
++++ b/app/api/admin/past-question-loops/generate/route.js
+@@ -22,6 +22,7 @@ import {
+   searchPexelsMulti,
+   searchPixabayMulti,
+ } from '@/lib/image-search';
++import { PLATFORM_LIMITS } from '@/lib/content-factory/generators/_shared';
+ 
+ async function generateQuestions(asset, count) {
+   const keyConcepts = (asset.key_concepts || []).slice(0, 5).join(', ') || 'none listed';
+@@ -51,9 +52,10 @@ Write ${count} different past-question-style MCQs grounded in this topic. Rules:
+ - No hashtags, no emoji, no quotation marks.
+ - Vary difficulty, angle, and explanation opening style across the set — don't make every question test the exact same fact or use the same hook.
+ - Also write a "visualHint" — 3-6 words describing a specific, concrete, filmable scene for the background footage (e.g. "student writing notes at desk", "chalkboard equation close-up"), different for each question.
++- Also write YouTube metadata unique to THIS question (not the batch topic restated): a "seoTitle" under ${PLATFORM_LIMITS.youtube.title} characters built from the actual question content, a "seoDescription" (2-3 sentences, ~40-70 words) summarizing what the question tests and why the explanation matters, 6-10 lowercase "tags", and 4-6 "hashtags" (with #). No hashtags/emoji inside question/options/explanation/visualHint/seoTitle/seoDescription — hashtags only go in the "hashtags" field.
+ 
+ Return ONLY JSON:
+-{ "questions": [{ "question": "...", "options": [{"id":"A","text":"..."},{"id":"B","text":"..."},{"id":"C","text":"..."},{"id":"D","text":"..."}], "correctOptionId": "A", "explanation": "...", "visualHint": "..." }, ...] }`;
++{ "questions": [{ "question": "...", "options": [{"id":"A","text":"..."},{"id":"B","text":"..."},{"id":"C","text":"..."},{"id":"D","text":"..."}], "correctOptionId": "A", "explanation": "...", "visualHint": "...", "seoTitle": "...", "seoDescription": "...", "tags": ["..."], "hashtags": ["#..."] }, ...] }`;
+ 
+   const { result, errors } = await generateWithFallback(
+     prompt,
+@@ -70,7 +72,8 @@ Return ONLY JSON:
+           q.options.length === 4 &&
+           q.options.every((o) => o && o.id && o.text) &&
+           ['A', 'B', 'C', 'D'].includes(q.correctOptionId) &&
+-          q.explanation
++          q.explanation &&
++          q.seoTitle
+       ),
+     2560
+   );
+@@ -162,7 +165,7 @@ export async function POST(request) {
+     asset_type: 'past_question_loop',
+     platform: null, // format-agnostic, same as quote_loop — publishable to any platform's queue
+     format: 'video',
+-    title: asset.keyword,
++    title: q.seoTitle || asset.keyword, // unique per question — falls back to the topic name only if the model omitted it
+     body: q.question,
+     status: 'draft',
+     generated_by: 'past-question-loop-generator',
+@@ -173,6 +176,10 @@ export async function POST(request) {
+       subject: asset.subject || null,
+       background: backgrounds[i],
+       backgroundQuery: backgroundQueries[i],
++      title: q.seoTitle || asset.keyword, // duplicated into metadata — this is what publishYouTube reads
++      description: q.seoDescription || '',
++      tags: Array.isArray(q.tags) ? q.tags : [],
++      hashtags: Array.isArray(q.hashtags) ? q.hashtags : [],
+     },
+   }));
+ 
+diff --git a/app/api/admin/quote-loops/generate/route.js b/app/api/admin/quote-loops/generate/route.js
+index f8ebadc..9d4b9db 100644
+--- a/app/api/admin/quote-loops/generate/route.js
++++ b/app/api/admin/quote-loops/generate/route.js
+@@ -22,6 +22,7 @@ import {
+   searchPexelsMulti,
+   searchPixabayMulti,
+ } from '@/lib/image-search';
++import { PLATFORM_LIMITS } from '@/lib/content-factory/generators/_shared';
+ 
+ async function generateQuoteLines(asset, count) {
+   const keyConcepts = (asset.key_concepts || []).slice(0, 5).join(', ') || 'none listed';
+@@ -44,21 +45,29 @@ The followUp must reward the click fast: its first sentence should deliver the a
+ 
+ Also write a "visualHint" — 3-6 words describing a specific, concrete, filmable scene for the background footage (e.g. "student writing notes at desk", "clock ticking exam hall", "sunrise over Lagos rooftops"). Make it visually specific to THIS line, not just a repeat of the topic name, so each line in the batch can get a different background.
+ 
++Also write YouTube metadata for THIS specific line — it must be unique to this line, not the batch topic restated ${count} times:
++- "seoTitle" — a unique, specific video title under ${PLATFORM_LIMITS.youtube.title} characters, built from THIS line's headline/angle (not a generic topic title). Include the exam context (JAMB/WAEC/NECO/Post-UTME) or subject naturally where it fits.
++- "seoDescription" — 2-3 sentences (roughly 40-70 words) expanding on THIS line's headline+followUp for search, written for humans first, naturally including the topic and subject keywords.
++- "tags" — 6-10 short lowercase SEO keyword phrases relevant to THIS line and the general topic (e.g. "jamb physics", "exam tips nigeria").
++- "hashtags" — 4-6 hashtags (with #, no spaces) mixing topic-specific and brand/exam-general tags.
++
+ Topic: "${asset.keyword}"
+ Subject: ${asset.subject || 'General'}
+ Summary: ${asset.summary || 'No summary available.'}
+ Key concepts: ${keyConcepts}
+ Facts: ${facts}
+ 
+-Write ${count} different headline+followUp+visualHint sets grounded in this topic. Rules:
+-- No hashtags, no emoji, no quotation marks around any part.
++Write ${count} different headline+followUp+visualHint+metadata sets grounded in this topic. Rules:
++- No hashtags or emoji inside headline/followUp/visualHint/seoTitle/seoDescription — hashtags only belong in the "hashtags" field.
++- No quotation marks around any part.
+ - The followUp must genuinely unpack and pay off the headline with real substance — not padding, not repetition in other words.
+ - Each headline must use a DIFFERENT hook formula from the list above — unpredictability across the set matters as much as any single hook, since a batch that's all the same shape gets ignored.
+ - Must actually connect to the topic above, not generic filler that could apply to anything.
+ - Each visualHint should describe a genuinely different scene from the others in the set, so a stock search doesn't keep returning the same clip.
++- Each seoTitle must be genuinely different wording from every other line's seoTitle in this batch — never the bare topic name repeated.
+ 
+ Return ONLY JSON:
+-{ "lines": [{ "headline": "...", "followUp": "...", "visualHint": "..." }, ...] }`;
++{ "lines": [{ "headline": "...", "followUp": "...", "visualHint": "...", "seoTitle": "...", "seoDescription": "...", "tags": ["..."], "hashtags": ["#..."] }, ...] }`;
+ 
+   const { result, errors } = await generateWithFallback(
+     prompt,
+@@ -67,7 +76,7 @@ Return ONLY JSON:
+       parsed &&
+       Array.isArray(parsed.lines) &&
+       parsed.lines.length > 0 &&
+-      parsed.lines.every((l) => l && l.headline && l.followUp),
++      parsed.lines.every((l) => l && l.headline && l.followUp && l.seoTitle),
+     2048
+   );
+ 
+@@ -173,7 +182,7 @@ export async function POST(request) {
+     asset_type: 'quote_loop',
+     platform: null, // format-agnostic, same as podcast_audiogram — publishable to any platform's queue
+     format: 'video',
+-    title: asset.keyword,
++    title: line.seoTitle || asset.keyword, // unique per line — falls back to the topic name only if the model omitted it
+     body: line.headline,
+     status: 'draft',
+     generated_by: 'quote-loop-generator',
+@@ -181,6 +190,10 @@ export async function POST(request) {
+       followUp: line.followUp,
+       background: backgrounds[i], // { type: 'video'|'photo', url, source, sourceUrl } or null
+       backgroundQuery: backgroundQueries[i],
++      title: line.seoTitle || asset.keyword, // duplicated into metadata — this is what publishYouTube reads
++      description: line.seoDescription || '',
++      tags: Array.isArray(line.tags) ? line.tags : [],
++      hashtags: Array.isArray(line.hashtags) ? line.hashtags : [],
+     },
+   }));
+ 
+diff --git a/app/api/admin/quote-loops/save/route.js b/app/api/admin/quote-loops/save/route.js
+index 260565e..a918719 100644
+--- a/app/api/admin/quote-loops/save/route.js
++++ b/app/api/admin/quote-loops/save/route.js
+@@ -20,10 +20,24 @@
+ // and is returned to the client immediately; metadata + publish jobs are
+ // best-effort follow-up work. Same fix pattern already used in
+ // app/api/admin/books/from-text/route.js.
++//
++// REMOVED (this update): the generateAllMetadata() cross-platform
++// regeneration step and its "find-or-create a shared youtube_short/
++// tiktok_video/... content_asset per knowledge_asset_id" logic. Two real
++// bugs came from that: (1) it silently overwrote the unique per-line
++// title/description/tags/hashtags that quote-loops/generate now writes
++// with a generic topic-level title regenerated from the knowledge asset —
++// same title for every line again. (2) worse, it looked up an existing
++// platform asset by knowledge_asset_id alone, so every video generated
++// from the same knowledge asset after the first one got routed to the
++// SAME shared content_asset row — which never had its own media_files,
++// since the actual recording is attached to the original per-line asset.
++// Publish jobs now target contentAssetId directly: that row already has
++// the correct unique metadata (from generate/route.js) and its own
++// media_files, so no extra step is needed before queuing it.
+ 
+ import { NextResponse } from 'next/server';
+ import { createAdminClient } from '@/lib/supabase-admin';
+-import { generateAllMetadata, applyPlatformMetadata } from '@/lib/metadata-engine';
+ import { runInBackground } from '@/lib/backgroundTask';
+ 
+ // Matches the reference maxDuration used for the other background-task
+@@ -98,76 +112,13 @@ export async function POST(request) {
+ 
+   const response = NextResponse.json({ success: true, videoUrl });
+ 
+-  // Everything below is best-effort enrichment (cross-platform metadata +
+-  // auto-queued publish jobs) — none of it should block the save from
+-  // completing or risk the whole request timing out.
+-  runInBackground(async () => {
+-    let updatedMetadata = contentAsset.metadata || {};
+-    if (!updatedMetadata.youtube && !updatedMetadata.tiktok) {
+-      try {
+-        const { data: knowledgeAsset } = await supabase
+-          .from('knowledge_assets')
+-          .select('*')
+-          .eq('id', contentAsset.knowledge_asset_id)
+-          .single();
+-
+-        if (knowledgeAsset) {
+-          const allMetadata = await generateAllMetadata(knowledgeAsset);
+-
+-          const platforms = ['youtube', 'tiktok', 'instagram', 'facebook', 'linkedin', 'telegram'];
+-          for (const platform of platforms) {
+-            if (allMetadata[platform]) {
+-              const platformAssetType = platform === 'youtube' ? 'youtube_short' :
+-                                        platform === 'tiktok' ? 'tiktok_video' :
+-                                        platform === 'instagram' ? 'instagram_carousel' :
+-                                        platform === 'facebook' ? 'facebook_post' :
+-                                        platform === 'linkedin' ? 'linkedin_post' : 'telegram_post';
+-
+-              const { data: existingPlatformAsset } = await supabase
+-                .from('content_assets')
+-                .select('id, metadata')
+-                .eq('knowledge_asset_id', contentAsset.knowledge_asset_id)
+-                .eq('platform', platform)
+-                .eq('format', 'video')
+-                .order('created_at', { ascending: false })
+-                .limit(1)
+-                .maybeSingle();
+-
+-              const enrichedMetadata = applyPlatformMetadata({}, allMetadata, platform);
+-
+-              if (existingPlatformAsset) {
+-                await supabase
+-                  .from('content_assets')
+-                  .update({ metadata: enrichedMetadata })
+-                  .eq('id', existingPlatformAsset.id);
+-              } else {
+-                await supabase.from('content_assets').insert({
+-                  knowledge_asset_id: contentAsset.knowledge_asset_id,
+-                  asset_type: platformAssetType,
+-                  platform: platform,
+-                  format: 'video',
+-                  title: allMetadata[platform].title || contentAsset.title,
+-                  body: allMetadata[platform].caption || allMetadata[platform].description || contentAsset.body,
+-                  metadata: enrichedMetadata,
+-                  status: 'draft',
+-                  generated_by: 'metadata-engine-auto',
+-                });
+-              }
+-            }
+-          }
+-
+-          updatedMetadata = { ...contentAsset.metadata, cross_platform_metadata: allMetadata };
+-          await supabase
+-            .from('content_assets')
+-            .update({ metadata: updatedMetadata })
+-            .eq('id', contentAssetId);
+-        }
+-      } catch (metaErr) {
+-        console.warn('Metadata generation failed, continuing without:', metaErr.message);
+-      }
+-    }
+-
+-    if (autoPublish) {
++  // Best-effort: auto-queue publish jobs against THIS video's own
++  // content_asset (contentAssetId) — it already carries the unique
++  // title/description/tags/hashtags written by quote-loops/generate and
++  // its own media_files row from above, so no extra metadata step or
++  // shared-asset lookup is needed before queuing it.
++  if (autoPublish) {
++    runInBackground(async () => {
+       try {
+         const { data: channels } = await supabase
+           .from('social_channels_v2')
+@@ -175,42 +126,24 @@ export async function POST(request) {
+           .eq('is_active', true)
+           .in('platform', ['youtube', 'tiktok', 'instagram', 'facebook', 'linkedin', 'telegram']);
+ 
+-        if (channels && channels.length > 0) {
+-          const jobsToCreate = [];
+-          const videoPlatforms = ['youtube', 'tiktok', 'instagram', 'facebook'];
+-
+-          for (const channel of channels) {
+-            if (videoPlatforms.includes(channel.platform)) {
+-              const { data: platformAsset } = await supabase
+-                .from('content_assets')
+-                .select('id')
+-                .eq('knowledge_asset_id', contentAsset.knowledge_asset_id)
+-                .eq('platform', channel.platform)
+-                .eq('format', 'video')
+-                .order('created_at', { ascending: false })
+-                .limit(1)
+-                .maybeSingle();
+-
+-              const targetAssetId = platformAsset?.id || contentAssetId;
+-
+-              jobsToCreate.push({
+-                content_asset_id: targetAssetId,
+-                channel_id: channel.id,
+-                status: 'queued',
+-                created_by: 'quote-loop-auto-publish',
+-              });
+-            }
+-          }
+-
+-          if (jobsToCreate.length > 0) {
+-            await supabase.from('publish_jobs').insert(jobsToCreate);
+-          }
++        const videoPlatforms = ['youtube', 'tiktok', 'instagram', 'facebook'];
++        const jobsToCreate = (channels || [])
++          .filter((channel) => videoPlatforms.includes(channel.platform))
++          .map((channel) => ({
++            content_asset_id: contentAssetId,
++            channel_id: channel.id,
++            status: 'queued',
++            created_by: 'quote-loop-auto-publish',
++          }));
++
++        if (jobsToCreate.length > 0) {
++          await supabase.from('publish_jobs').insert(jobsToCreate);
+         }
+       } catch (jobErr) {
+         console.warn('Auto-publish job creation failed:', jobErr.message);
+       }
+-    }
+-  });
++    });
++  }
+ 
+   return response;
+ }

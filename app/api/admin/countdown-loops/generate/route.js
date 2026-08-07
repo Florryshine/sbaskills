@@ -25,6 +25,7 @@ import {
   searchPexelsMulti,
   searchPixabayMulti,
 } from '@/lib/image-search';
+import { PLATFORM_LIMITS } from '@/lib/content-factory/generators/_shared';
 
 async function generateCountdowns(asset, count) {
   const keyConcepts = (asset.key_concepts || []).slice(0, 5).join(', ') || 'none listed';
@@ -38,6 +39,7 @@ Each countdown needs:
 - Each item has a "point" (a short punchy name for the habit/mistake, under 8 words) and a "detail" (1-2 sentences, roughly 20-35 words) that opens with the COST (marks lost, time wasted, how often it trips students up) before explaining the fix — trap/stakes-first, same as an explanation should never just flatly state the answer first.
 - A "cta" — one short closing line (under 12 words) that lands on the #1 item specifically, e.g. "Fix #1 first — it's the one that really hurts".
 - A "visualHint" on the #1 item only — 3-6 words describing a specific, concrete, filmable scene for the whole video's background (e.g. "student staring at exam clock", "red pen marking wrong answer").
+- YouTube metadata unique to THIS countdown's specific 3 items (not the batch topic restated): a "seoTitle" under ${PLATFORM_LIMITS.youtube.title} characters built from the actual items (not just "3 things costing you marks in X" repeated for every countdown), a "seoDescription" (2-3 sentences, ~40-70 words) previewing the 3 items without giving away the full detail, 6-10 lowercase "tags", and 4-6 "hashtags" (with #). No hashtags/emoji inside title/items/cta/visualHint/seoTitle/seoDescription — hashtags only go in the "hashtags" field.
 
 Topic: "${asset.keyword}"
 Subject: ${asset.subject || 'General'}
@@ -46,13 +48,14 @@ Key concepts: ${keyConcepts}
 Facts: ${facts}
 
 Write ${count} different countdown sets grounded in this topic. Rules:
-- No hashtags, no emoji, no quotation marks around any part.
+- No hashtags, no emoji, no quotation marks around any part (except inside the dedicated "hashtags" field).
 - Every item must be a real, specific habit or mistake tied to this topic — no generic "study harder" filler that could apply to any subject.
 - Each countdown in the batch should take a different angle (e.g. one about calculation mistakes, one about misreading the question, one about timing/pacing) so a batch of ${count} doesn't repeat the same 3 points reworded.
 - Rank 1's detail should feel like the "real" reveal — the thing the viewer watched the whole video to find out.
+- Each seoTitle must be genuinely different wording from every other countdown's seoTitle in this batch — never the bare topic name repeated.
 
 Return ONLY JSON:
-{ "countdowns": [{ "title": "...", "items": [{"rank":3,"point":"...","detail":"..."},{"rank":2,"point":"...","detail":"..."},{"rank":1,"point":"...","detail":"...","visualHint":"..."}], "cta": "..." }, ...] }`;
+{ "countdowns": [{ "title": "...", "items": [{"rank":3,"point":"...","detail":"..."},{"rank":2,"point":"...","detail":"..."},{"rank":1,"point":"...","detail":"...","visualHint":"..."}], "cta": "...", "seoTitle": "...", "seoDescription": "...", "tags": ["..."], "hashtags": ["#..."] }, ...] }`;
 
   const { result, errors } = await generateWithFallback(
     prompt,
@@ -68,7 +71,8 @@ Return ONLY JSON:
           Array.isArray(c.items) &&
           c.items.length === 3 &&
           c.items.every((it) => it && it.rank && it.point && it.detail) &&
-          c.cta
+          c.cta &&
+          c.seoTitle
       ),
     2560
   );
@@ -166,7 +170,7 @@ export async function POST(request) {
     asset_type: 'countdown_loop',
     platform: null, // format-agnostic, same as quote_loop/past_question_loop — publishable to any platform's queue
     format: 'video',
-    title: asset.keyword,
+    title: c.seoTitle || asset.keyword, // unique per countdown — falls back to the topic name only if the model omitted it
     body: c.title,
     status: 'draft',
     generated_by: 'countdown-loop-generator',
@@ -175,6 +179,10 @@ export async function POST(request) {
       cta: c.cta,
       background: backgrounds[i],
       backgroundQuery: backgroundQueries[i],
+      title: c.seoTitle || asset.keyword, // duplicated into metadata — this is what publishYouTube reads
+      description: c.seoDescription || '',
+      tags: Array.isArray(c.tags) ? c.tags : [],
+      hashtags: Array.isArray(c.hashtags) ? c.hashtags : [],
     },
   }));
 
