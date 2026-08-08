@@ -1,4 +1,4 @@
-'use client';
+﻿'use client';
 
 import { useState, useEffect } from 'react';
 import Link from 'next/link';
@@ -10,7 +10,7 @@ const navItems = [
   { href: '/admin/students', label: 'Students', icon: '\ud83d\udc68\u200d\ud83c\udf93' },
   { href: '/admin/tutor-activity', label: 'Tutor Activity', icon: '\ud83e\uddd1\u200d\ud83c\udfeb' },
   { href: '/admin/roles', label: 'Roles', icon: '\ud83d\udd11' },
-  { href: '/admin/schools', label: 'Schools', icon: '🏫' },
+  { href: '/admin/schools', label: 'Schools', icon: 'ðŸ«' },
   { href: '/admin/feature-unlocks', label: 'Feature Unlocks', icon: '\ud83d\udd12' },
 
   { href: '/admin/knowledge-assets', label: 'Knowledge Assets', icon: '\ud83e\udde0' },
@@ -42,6 +42,7 @@ const navItems = [
   { href: '/admin/quote-loops', label: 'Quote Loops', icon: '\ud83c\udfac' },
   { href: '/admin/teaching-loops', label: 'Teaching Loops', icon: '\ud83e\uddd1\u200d\ud83c\udfeb' },
   { href: '/admin/meme-loops', label: 'Meme/Joke Loops', icon: '\ud83d\ude02' },
+  { href: '/admin/lesson-loops', label: '2-Min Lesson Loops', icon: '\ud83d\udcd8' },
   { href: '/admin/past-question-loops', label: 'Past Question Loops', icon: '\ud83d\udcdd' },
   { href: '/admin/countdown-loops', label: 'Countdown Loops', icon: '\ud83d\udd22' },
   { href: '/admin/channels', label: 'Channels', icon: '\ud83d\udd0c' },
@@ -66,7 +67,7 @@ export default function AdminSidebar() {
 
   return (
     <>
-      {/* Mobile-only hamburger button — was completely missing before, so
+      {/* Mobile-only hamburger button â€” was completely missing before, so
           there was no way to open/close the sidebar on small screens. */}
       <button
         onClick={() => setOpen(true)}
@@ -136,3 +137,4 @@ export default function AdminSidebar() {
     </>
   );
 }
+
