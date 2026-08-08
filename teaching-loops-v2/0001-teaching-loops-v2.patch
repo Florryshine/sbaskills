@@ -1,0 +1,1163 @@
+From fff919890f9e7d130666010b3956647cf134becd Mon Sep 17 00:00:00 2001
+From: Claude <assistant@anthropic.com>
+Date: Fri, 7 Aug 2026 10:24:42 +0000
+Subject: [PATCH] Add Teaching Loops: punchy ~2 minute topic-teaching video,
+ recorded in-browser
+MIME-Version: 1.0
+Content-Type: text/plain; charset=UTF-8
+Content-Transfer-Encoding: 8bit
+
+Same technique as QuoteLoopRecorder/PastQuestionLoopRecorder — canvas +
+Web Audio API + MediaRecorder, entirely client-side. No Remotion, no
+video_scripts, no laptop render worker: nothing renders until an admin
+opens /admin/teaching-loops and clicks Record, same as every other Loop.
+
+- lib/content-factory/generators/teaching-loop.js: LLM prompt for a
+  10-14 card script (hook -> why it matters -> teach it -> common mistake
+  -> recap -> CTA), each card short enough to read on-screen since this
+  is a silent video (background music only, no voiceover) + a
+  word-count-based hold-time estimator scaled to ~2 minutes total.
+- app/api/admin/teaching-loops/generate: generates the script and picks
+  ONE background candidate (stock video, falls back to photo) for the
+  whole clip, same fallback helper quote-loops/generate already uses.
+- app/api/admin/teaching-loops/list: scoped list w/ media_files, same
+  pattern as quote-loops/list.
+- app/api/admin/teaching-loops/save: uploads the recorded blob's URL
+  into media_files, marks the draft approved, auto-queues publish jobs
+  in the background — same pattern as quote-loops/save.
+- components/TeachingLoopRecorder.js: draws an Instagram-Stories-style
+  progress bar + one text card at a time over a continuous
+  Ken-Burns-zoomed background, fading through the whole script, records
+  with MediaRecorder.
+- app/admin/teaching-loops/page.js: pick topic -> generate -> Record ->
+  Publish to Channels, same layout as /admin/quote-loops.
+- components/AdminSidebar.js: nav entry.
+
+Needs a 'teaching-loops' bucket in Supabase storage (public read,
+authenticated upload — same policy shape as quote-loops) before first
+save.
+---
+ app/admin/teaching-loops/page.js              | 170 ++++++
+ .../admin/teaching-loops/generate/route.js    | 122 +++++
+ app/api/admin/teaching-loops/list/route.js    |  34 ++
+ app/api/admin/teaching-loops/save/route.js    | 112 ++++
+ components/AdminSidebar.js                    |   1 +
+ components/TeachingLoopRecorder.js            | 511 ++++++++++++++++++
+ .../generators/teaching-loop.js               | 109 ++++
+ 7 files changed, 1059 insertions(+)
+ create mode 100644 app/admin/teaching-loops/page.js
+ create mode 100644 app/api/admin/teaching-loops/generate/route.js
+ create mode 100644 app/api/admin/teaching-loops/list/route.js
+ create mode 100644 app/api/admin/teaching-loops/save/route.js
+ create mode 100644 components/TeachingLoopRecorder.js
+ create mode 100644 lib/content-factory/generators/teaching-loop.js
+
+diff --git a/app/admin/teaching-loops/page.js b/app/admin/teaching-loops/page.js
+new file mode 100644
+index 0000000..9ff245c
+--- /dev/null
++++ b/app/admin/teaching-loops/page.js
+@@ -0,0 +1,170 @@
++'use client';
++
++// app/admin/teaching-loops/page.js
++//
++// Full flow: pick a knowledge asset -> generate ONE punchy ~2 minute
++// teaching script (LLM text cards + one background candidate, see
++// lib/content-factory/generators/teaching-loop.js) -> record it with
++// TeachingLoopRecorder (canvas + Web Audio + MediaRecorder, entirely in
++// the browser) -> saved into content_assets/media_files, ready for the
++// existing social-engine review dashboard. Same flow as
++// /admin/quote-loops and /admin/past-question-loops, just one longer
++// multi-segment recording instead of a fixed few-second clip — no
++// Remotion, no laptop render worker involved anywhere in this page.
++//
++// Needs a `teaching-loops` bucket in Supabase storage (public read,
++// authenticated upload — same policy shape as `quote-loops`) before the
++// first save; nothing else new to configure.
++
++import { useState, useEffect } from 'react';
++import { createBrowserClient } from '@/lib/supabase';
++import TeachingLoopRecorder from '@/components/TeachingLoopRecorder';
++import PublishToChannels from '@/components/admin/PublishToChannels';
++
++export default function TeachingLoopsPage() {
++  const [assets, setAssets] = useState([]);
++  const [selectedAssetId, setSelectedAssetId] = useState('');
++  const [drafts, setDrafts] = useState([]);
++  const [activeDraft, setActiveDraft] = useState(null);
++  const [generating, setGenerating] = useState(false);
++  const [errorMsg, setErrorMsg] = useState(null);
++  const [warnings, setWarnings] = useState([]);
++
++  useEffect(() => {
++    const supabase = createBrowserClient();
++    supabase
++      .from('knowledge_assets')
++      .select('id, keyword, subject')
++      .order('created_at', { ascending: false })
++      .limit(200)
++      .then(({ data }) => setAssets(data || []));
++  }, []);
++
++  const loadExistingDrafts = async (assetId) => {
++    try {
++      const res = await fetch(`/api/admin/teaching-loops/list?knowledgeAssetId=${assetId}`);
++      const data = await res.json();
++      if (!res.ok) throw new Error(data.error || 'Failed to load drafts');
++      setDrafts(data.contentAssets || []);
++    } catch (err) {
++      setErrorMsg(err.message);
++      setDrafts([]);
++    }
++  };
++
++  useEffect(() => {
++    if (selectedAssetId) loadExistingDrafts(selectedAssetId);
++    else setDrafts([]);
++  }, [selectedAssetId]);
++
++  const handleGenerate = async () => {
++    if (!selectedAssetId) return;
++    setGenerating(true);
++    setErrorMsg(null);
++    setWarnings([]);
++    try {
++      const res = await fetch('/api/admin/teaching-loops/generate', {
++        method: 'POST',
++        headers: { 'Content-Type': 'application/json' },
++        body: JSON.stringify({ knowledgeAssetId: selectedAssetId }),
++      });
++      const data = await res.json();
++      if (!res.ok) throw new Error(data.error || 'Generation failed');
++      setWarnings(data.warnings || []);
++      await loadExistingDrafts(selectedAssetId);
++    } catch (err) {
++      setErrorMsg(err.message);
++    } finally {
++      setGenerating(false);
++    }
++  };
++
++  const hasVideo = (draft) => (draft.media_files || []).some((m) => m.media_type === 'video' && m.role === 'primary');
++
++  return (
++    <div className="max-w-3xl mx-auto p-6 space-y-6">
++      <div>
++        <h1 className="text-2xl font-bold">🧑‍🏫 Teaching Loops</h1>
++        <p className="text-sm text-gray-500">
++          Punchy, attention-grabbing ~2 minute vertical videos that actually teach a topic — a script of
++          short text cards (hook, why it matters, the teaching itself, common mistake, recap, CTA), recorded
++          entirely in your browser, just like Quote Loops but longer.
++        </p>
++      </div>
++
++      <div className="bg-white rounded-xl border p-4 space-y-3">
++        <label className="block text-sm font-semibold">Knowledge asset / topic</label>
++        <select
++          value={selectedAssetId}
++          onChange={(e) => setSelectedAssetId(e.target.value)}
++          className="w-full border rounded-lg px-3 py-2 text-sm"
++        >
++          <option value="">Select a topic…</option>
++          {assets.map((a) => (
++            <option key={a.id} value={a.id}>
++              {a.keyword} {a.subject ? `— ${a.subject}` : ''}
++            </option>
++          ))}
++        </select>
++
++        <button
++          onClick={handleGenerate}
++          disabled={!selectedAssetId || generating}
++          className="bg-brand-blue text-white px-4 py-2 rounded-lg text-sm font-bold hover:opacity-90 disabled:opacity-50"
++        >
++          {generating ? 'Writing script…' : '✨ Generate Teaching Loop'}
++        </button>
++
++        {errorMsg && <p className="text-sm text-red-600">⚠️ {errorMsg}</p>}
++        {warnings.map((w, i) => (
++          <p key={i} className="text-sm text-amber-600">⚠️ {w}</p>
++        ))}
++      </div>
++
++      {drafts.length > 0 && (
++        <div className="space-y-2">
++          <h2 className="font-bold text-sm text-gray-500 uppercase">Drafts</h2>
++          {drafts.map((draft) => (
++            <div key={draft.id} className="bg-white rounded-xl border p-4">
++              <div className="flex items-center justify-between gap-3">
++                <div>
++                  <p className="font-semibold">{draft.title}</p>
++                  <p className="text-xs text-gray-500 mt-1">
++                    {(draft.metadata?.segments || []).length} cards ·{' '}
++                    {draft.metadata?.estimated_seconds ? `~${draft.metadata.estimated_seconds}s` : ''} ·{' '}
++                    {draft.metadata?.background?.type
++                      ? `${draft.metadata.background.type} background (${draft.metadata.background.source})`
++                      : 'no background found'}{' '}
++                    · {hasVideo(draft) ? '✅ recorded' : '⏳ not recorded'}
++                  </p>
++                </div>
++                <button
++                  onClick={() => setActiveDraft(draft)}
++                  className="bg-gray-100 text-gray-700 px-4 py-2 rounded-lg text-sm font-bold hover:bg-gray-200 whitespace-nowrap"
++                >
++                  {hasVideo(draft) ? 'Re-record' : 'Record'}
++                </button>
++              </div>
++              {hasVideo(draft) && <PublishToChannels contentAssetId={draft.id} />}
++            </div>
++          ))}
++        </div>
++      )}
++
++      {activeDraft && (
++        <div className="bg-white rounded-xl border p-4 space-y-3">
++          <div className="flex items-center justify-between">
++            <h2 className="font-bold">Recording: "{activeDraft.title}"</h2>
++            <button onClick={() => setActiveDraft(null)} className="text-sm text-gray-400 hover:text-gray-600">
++              ✕ Close
++            </button>
++          </div>
++          <TeachingLoopRecorder
++            contentAsset={activeDraft}
++            onSaved={() => loadExistingDrafts(selectedAssetId)}
++          />
++        </div>
++      )}
++    </div>
++  );
++}
+diff --git a/app/api/admin/teaching-loops/generate/route.js b/app/api/admin/teaching-loops/generate/route.js
+new file mode 100644
+index 0000000..7687c44
+--- /dev/null
++++ b/app/api/admin/teaching-loops/generate/route.js
+@@ -0,0 +1,122 @@
++// app/api/admin/teaching-loops/generate/route.js
++//
++// Turns one knowledge_assets row into ONE "teaching_loop" content_assets
++// draft: a punchy ~2 minute script of short text cards (see
++// lib/content-factory/generators/teaching-loop.js) + one background
++// candidate (real stock video preferred, falls back to a photo — same
++// searchPexelsVideoMulti/searchPixabayVideoMulti/...Multi helpers
++// quote-loops/generate/route.js already uses). That's it — nothing is
++// rendered here. An admin opens /admin/teaching-loops, picks this draft,
++// and records it with TeachingLoopRecorder (canvas + Web Audio +
++// MediaRecorder, entirely in the browser, same technique as
++// QuoteLoopRecorder/PastQuestionLoopRecorder — no Remotion, no laptop
++// worker, no video_scripts row).
++
++import { NextResponse } from 'next/server';
++import { createAdminClient } from '@/lib/supabase-admin';
++import { generateTeachingScript, estimateSegmentTimings } from '@/lib/content-factory/generators/teaching-loop';
++import {
++  searchPexelsVideoMulti,
++  searchPixabayVideoMulti,
++  searchPexelsMulti,
++  searchPixabayMulti,
++} from '@/lib/image-search';
++
++// Single background for the whole clip (unlike quote-loops, which picks one
++// per short line) — same fallback order: real footage first, photo second.
++async function findBackgroundCandidate(query) {
++  for (const search of [searchPexelsVideoMulti, searchPixabayVideoMulti]) {
++    try {
++      const hits = await search(query, 5);
++      if (hits.length > 0) {
++        const pick = hits[Math.floor(Math.random() * hits.length)];
++        return { type: 'video', url: pick.url, source: pick.source, sourceUrl: pick.sourceUrl };
++      }
++    } catch (err) {
++      console.warn(`Background video search failed (${search.name}):`, err.message);
++    }
++  }
++  for (const search of [searchPexelsMulti, searchPixabayMulti]) {
++    try {
++      const hits = await search(query, 5);
++      if (hits.length > 0) {
++        const pick = hits[Math.floor(Math.random() * hits.length)];
++        return { type: 'photo', url: pick.url, source: pick.source, sourceUrl: pick.sourceUrl };
++      }
++    } catch (err) {
++      console.warn(`Background photo search failed (${search.name}):`, err.message);
++    }
++  }
++  return null;
++}
++
++export async function POST(request) {
++  let body;
++  try {
++    body = await request.json();
++  } catch {
++    return NextResponse.json({ error: 'Invalid JSON body' }, { status: 400 });
++  }
++
++  const { knowledgeAssetId } = body || {};
++  if (!knowledgeAssetId) {
++    return NextResponse.json({ error: 'knowledgeAssetId is required' }, { status: 400 });
++  }
++
++  const supabase = createAdminClient();
++
++  const { data: asset, error: assetError } = await supabase
++    .from('knowledge_assets')
++    .select('*')
++    .eq('id', knowledgeAssetId)
++    .single();
++  if (assetError || !asset) {
++    return NextResponse.json({ error: 'Knowledge asset not found' }, { status: 404 });
++  }
++
++  let script;
++  try {
++    script = await generateTeachingScript(asset);
++  } catch (err) {
++    return NextResponse.json({ error: err.message }, { status: 500 });
++  }
++
++  const background = await findBackgroundCandidate(script.visualQuery);
++  const timings = estimateSegmentTimings(script.segments);
++  const segmentsWithTiming = script.segments.map((seg, i) => ({ ...seg, holdSeconds: timings[i] }));
++  const estimatedSeconds = Math.round(timings.reduce((a, b) => a + b, 0));
++
++  const { data: inserted, error: insertError } = await supabase
++    .from('content_assets')
++    .insert({
++      knowledge_asset_id: knowledgeAssetId,
++      asset_type: 'teaching_loop',
++      platform: null, // format-agnostic, same as quote_loop — publishable to any platform's queue once recorded
++      format: 'video',
++      title: script.title,
++      body: script.segments.map((s) => s.text).join(' '),
++      status: 'draft',
++      generated_by: 'teaching-loop-generator',
++      metadata: {
++        description: script.description,
++        tags: script.tags,
++        hashtags: script.hashtags,
++        segments: segmentsWithTiming,
++        background,
++        backgroundQuery: script.visualQuery,
++        estimated_seconds: estimatedSeconds,
++      },
++    })
++    .select()
++    .single();
++
++  if (insertError) {
++    return NextResponse.json({ error: insertError.message }, { status: 500 });
++  }
++
++  return NextResponse.json({
++    success: true,
++    contentAsset: inserted,
++    warnings: background ? [] : ['No background candidate found — you can still record it on a canvas-only gradient background.'],
++  });
++}
+diff --git a/app/api/admin/teaching-loops/list/route.js b/app/api/admin/teaching-loops/list/route.js
+new file mode 100644
+index 0000000..f9ccfbd
+--- /dev/null
++++ b/app/api/admin/teaching-loops/list/route.js
+@@ -0,0 +1,34 @@
++// app/api/admin/teaching-loops/list/route.js
++//
++// content_assets is locked to service-role-only by RLS (see
++// 20260718_social_engine_v2.sql) — the browser's anon key can't read it
++// directly, same reason every other *-loops list route goes through a
++// server route. Scoped to teaching_loop rows for one knowledge asset,
++// joined with media_files (the recorded video, once
++// TeachingLoopRecorder.js saves it).
++
++import { NextResponse } from 'next/server';
++import { createAdminClient } from '@/lib/supabase-admin';
++
++export async function GET(request) {
++  const { searchParams } = new URL(request.url);
++  const knowledgeAssetId = searchParams.get('knowledgeAssetId');
++  if (!knowledgeAssetId) {
++    return NextResponse.json({ error: 'knowledgeAssetId is required' }, { status: 400 });
++  }
++
++  const supabase = createAdminClient();
++
++  const { data, error } = await supabase
++    .from('content_assets')
++    .select('*, media_files(url, media_type, role)')
++    .eq('knowledge_asset_id', knowledgeAssetId)
++    .eq('asset_type', 'teaching_loop')
++    .order('created_at', { ascending: false });
++
++  if (error) {
++    return NextResponse.json({ error: error.message }, { status: 500 });
++  }
++
++  return NextResponse.json({ contentAssets: data || [] });
++}
+diff --git a/app/api/admin/teaching-loops/save/route.js b/app/api/admin/teaching-loops/save/route.js
+new file mode 100644
+index 0000000..9ef477c
+--- /dev/null
++++ b/app/api/admin/teaching-loops/save/route.js
+@@ -0,0 +1,112 @@
++// app/api/admin/teaching-loops/save/route.js
++//
++// TeachingLoopRecorder (client-side canvas + Web Audio + MediaRecorder,
++// same technique as QuoteLoopRecorder) uploads the finished ~2 minute clip
++// straight to Supabase storage itself. This route only handles the write
++// RLS doesn't let the browser client do directly: inserting the
++// media_files row against the already-existing content_assets draft
++// (created earlier by /api/admin/teaching-loops/generate), then marking it
++// approved and auto-queuing publish jobs — same pattern as
++// quote-loops/save/route.js, including running the publish-job step in the
++// background so this response comes back fast.
++
++import { NextResponse } from 'next/server';
++import { createAdminClient } from '@/lib/supabase-admin';
++import { runInBackground } from '@/lib/backgroundTask';
++
++export const maxDuration = 60;
++
++export async function POST(request) {
++  let body;
++  try {
++    body = await request.json();
++  } catch {
++    return NextResponse.json({ error: 'Invalid JSON body' }, { status: 400 });
++  }
++
++  const { contentAssetId, videoUrl, durationSeconds, autoPublish = true } = body || {};
++  if (!contentAssetId || !videoUrl) {
++    return NextResponse.json({ error: 'contentAssetId and videoUrl are required' }, { status: 400 });
++  }
++
++  const supabase = createAdminClient();
++
++  const { data: contentAsset, error: fetchError } = await supabase
++    .from('content_assets')
++    .select('id, title, asset_type, knowledge_asset_id, metadata')
++    .eq('id', contentAssetId)
++    .eq('asset_type', 'teaching_loop')
++    .single();
++  if (fetchError || !contentAsset) {
++    return NextResponse.json({ error: 'Teaching-loop content asset not found' }, { status: 404 });
++  }
++
++  // Re-recorded — update the existing media_files row instead of creating
++  // a duplicate, same "primary" role/position=0 convention as the rest of
++  // the content-factory pipeline.
++  const { data: existingMedia } = await supabase
++    .from('media_files')
++    .select('id')
++    .eq('content_asset_id', contentAssetId)
++    .eq('media_type', 'video')
++    .eq('role', 'primary')
++    .maybeSingle();
++
++  if (existingMedia) {
++    const { error: updateError } = await supabase
++      .from('media_files')
++      .update({ url: videoUrl, duration_seconds: durationSeconds || null })
++      .eq('id', existingMedia.id);
++    if (updateError) {
++      return NextResponse.json({ error: updateError.message }, { status: 500 });
++    }
++  } else {
++    const { error: insertError } = await supabase.from('media_files').insert({
++      content_asset_id: contentAssetId,
++      media_type: 'video',
++      role: 'primary',
++      position: 0,
++      url: videoUrl,
++      duration_seconds: durationSeconds || null,
++      source: 'render',
++      alt_text: contentAsset.title,
++    });
++    if (insertError) {
++      return NextResponse.json({ error: insertError.message }, { status: 500 });
++    }
++  }
++
++  await supabase.from('content_assets').update({ status: 'approved' }).eq('id', contentAssetId);
++
++  const response = NextResponse.json({ success: true, videoUrl });
++
++  if (autoPublish) {
++    runInBackground(async () => {
++      try {
++        const { data: channels } = await supabase
++          .from('social_channels_v2')
++          .select('id, platform')
++          .eq('is_active', true)
++          .in('platform', ['youtube', 'tiktok', 'instagram', 'facebook', 'linkedin', 'telegram']);
++
++        const videoPlatforms = ['youtube', 'tiktok', 'instagram', 'facebook'];
++        const jobsToCreate = (channels || [])
++          .filter((channel) => videoPlatforms.includes(channel.platform))
++          .map((channel) => ({
++            content_asset_id: contentAssetId,
++            channel_id: channel.id,
++            status: 'queued',
++            created_by: 'teaching-loop-auto-publish',
++          }));
++
++        if (jobsToCreate.length > 0) {
++          await supabase.from('publish_jobs').insert(jobsToCreate);
++        }
++      } catch (jobErr) {
++        console.warn('Auto-publish job creation failed:', jobErr.message);
++      }
++    });
++  }
++
++  return response;
++}
+diff --git a/components/AdminSidebar.js b/components/AdminSidebar.js
+index f62c8d8..d7807f3 100644
+--- a/components/AdminSidebar.js
++++ b/components/AdminSidebar.js
+@@ -40,6 +40,7 @@ const navItems = [
+   { href: '/admin/asset-images', label: 'Image Engine', icon: '\ud83d\uddbc\ufe0f' },
+   { href: '/admin/social-engine', label: 'Social Engine', icon: '\ud83d\ude80' },
+   { href: '/admin/quote-loops', label: 'Quote Loops', icon: '\ud83c\udfac' },
++  { href: '/admin/teaching-loops', label: 'Teaching Loops', icon: '\ud83e\uddd1\u200d\ud83c\udfeb' },
+   { href: '/admin/meme-loops', label: 'Meme/Joke Loops', icon: '\ud83d\ude02' },
+   { href: '/admin/past-question-loops', label: 'Past Question Loops', icon: '\ud83d\udcdd' },
+   { href: '/admin/countdown-loops', label: 'Countdown Loops', icon: '\ud83d\udd22' },
+diff --git a/components/TeachingLoopRecorder.js b/components/TeachingLoopRecorder.js
+new file mode 100644
+index 0000000..bfb8c47
+--- /dev/null
++++ b/components/TeachingLoopRecorder.js
+@@ -0,0 +1,511 @@
++'use client';
++
++// components/TeachingLoopRecorder.js
++//
++// Renders one teaching_loop content_assets row (a ~2 minute script of short
++// text cards + one background candidate, generated by
++// /api/admin/teaching-loops/generate) into a real vertical video: real
++// stock footage or a photo with a slow continuous Ken Burns zoom (or an
++// animated brand gradient if no background was found) behind an
++// Instagram-Stories-style progress bar and one text card at a time,
++// fading/sliding through the whole script, + background music — entirely
++// in the browser via <canvas> + Web Audio API + MediaRecorder. Exact same
++// technique as QuoteLoopRecorder.js/PastQuestionLoopRecorder.js, just a
++// longer, multi-segment timeline instead of one fixed clip — no Remotion,
++// no laptop render worker, no server-side rendering at all.
++
++import { useRef, useState, useEffect, useCallback, useMemo } from 'react';
++import { createBrowserClient } from '@/lib/supabase';
++
++const CANVAS_W = 1080;
++const CANVAS_H = 1920; // 9:16 — TikTok / IG Reels / YouTube Shorts
++const BRAND_BLUE = '#1a73e8';
++const BRAND_YELLOW = '#FFCC00';
++const DARK = '#0f172a';
++const BUCKET = 'teaching-loops'; // create this bucket in Supabase storage (public read, authenticated upload) — same policy shape as quote-loops — before first use
++const MIN_TOTAL_SECONDS = 80;
++const MAX_TOTAL_SECONDS = 160;
++const CARD_TRANSITION_MS = 350; // fade/slide in and out at each card's edges
++
++function wrapText(ctx, text, maxWidth) {
++  const words = String(text || '').split(' ');
++  const lines = [];
++  let current = '';
++  for (const word of words) {
++    const test = current ? `${current} ${word}` : word;
++    if (ctx.measureText(test).width > maxWidth && current) {
++      lines.push(current);
++      current = word;
++    } else {
++      current = test;
++    }
++  }
++  if (current) lines.push(current);
++  return lines;
++}
++
++function pickMimeType() {
++  const candidates = [
++    // Real MP4 muxing (H.264 + AAC) is what Instagram/TikTok's video
++    // processing actually wants — same list/order as QuoteLoopRecorder.js.
++    'video/mp4;codecs=avc1.42E01E,mp4a.40.2',
++    'video/mp4;codecs=avc1,mp4a.40.2',
++    'video/mp4',
++    'video/webm;codecs=vp9,opus',
++    'video/webm;codecs=vp8,opus',
++    'video/webm',
++  ];
++  for (const type of candidates) {
++    if (typeof MediaRecorder !== 'undefined' && MediaRecorder.isTypeSupported(type)) return type;
++  }
++  return '';
++}
++
++function extensionForMimeType(mimeType) {
++  return (mimeType || '').includes('mp4') ? 'mp4' : 'webm';
++}
++
++/**
++ * @param {Object} props
++ * @param {Object} props.contentAsset - a content_assets row (id, title, metadata.{segments, background})
++ * @param {(videoUrl: string) => void} [props.onSaved]
++ */
++export default function TeachingLoopRecorder({ contentAsset, onSaved }) {
++  const canvasRef = useRef(null);
++  const bgVideoRef = useRef(null);
++  const bgImageRef = useRef(null);
++  const audioRef = useRef(null);
++  const audioCtxRef = useRef(null);
++  const rafRef = useRef(null);
++  const recorderRef = useRef(null);
++  const chunksRef = useRef([]);
++  const startTimeRef = useRef(0);
++  const stopTimerRef = useRef(null);
++
++  const [status, setStatus] = useState('idle'); // idle | recording | finished | uploading | saved | error
++  const [videoBlobUrl, setVideoBlobUrl] = useState(null);
++  const [videoBlob, setVideoBlob] = useState(null);
++  const [errorMsg, setErrorMsg] = useState(null);
++  const [tracks, setTracks] = useState([]);
++  const [bgReady, setBgReady] = useState(false);
++  const [elapsedDisplay, setElapsedDisplay] = useState(0);
++
++  const background = contentAsset.metadata?.background || null;
++  const rawSegments = useMemo(() => contentAsset.metadata?.segments || [], [contentAsset.metadata]);
++
++  // Segments carry a holdSeconds estimate from generate/route.js — clamp
++  // the total so a pathological script (all very short/long cards) can't
++  // produce an absurdly short or multi-minute-plus recording.
++  const { segments, cumulativeStarts, totalSeconds } = useMemo(() => {
++    if (rawSegments.length === 0) return { segments: [], cumulativeStarts: [], totalSeconds: MIN_TOTAL_SECONDS };
++    const rawTotal = rawSegments.reduce((sum, s) => sum + (s.holdSeconds || 8), 0);
++    const clampedTotal = Math.min(MAX_TOTAL_SECONDS, Math.max(MIN_TOTAL_SECONDS, rawTotal));
++    const scale = rawTotal > 0 ? clampedTotal / rawTotal : 1;
++    const scaled = rawSegments.map((s) => Math.max(4, (s.holdSeconds || 8) * scale));
++    const starts = [];
++    let acc = 0;
++    for (const dur of scaled) {
++      starts.push(acc);
++      acc += dur;
++    }
++    return { segments: rawSegments.map((s, i) => ({ ...s, holdSeconds: scaled[i] })), cumulativeStarts: starts, totalSeconds: acc };
++  }, [rawSegments]);
++
++  // ── Discover music tracks + preload background on mount ────────────────
++  // Reuses the quote-loops music library rather than duplicating a second
++  // copy of the same royalty-cleared tracks under a second folder.
++  useEffect(() => {
++    fetch('/api/admin/quote-loops/audio-list')
++      .then((r) => r.json())
++      .then((d) => setTracks(d.tracks || []))
++      .catch(() => setTracks([]));
++
++    if (background?.type === 'photo') {
++      const img = new Image();
++      img.crossOrigin = 'anonymous';
++      img.onload = () => setBgReady(true);
++      img.onerror = () => setBgReady(true);
++      img.src = background.url;
++      bgImageRef.current = img;
++    } else if (background?.type === 'video') {
++      const vid = bgVideoRef.current;
++      if (vid) {
++        vid.src = background.url;
++        vid.crossOrigin = 'anonymous';
++        vid.muted = true;
++        vid.loop = true;
++        vid.oncanplaythrough = () => setBgReady(true);
++        vid.onerror = () => setBgReady(true);
++        vid.load();
++      }
++    } else {
++      setBgReady(true);
++    }
++    // eslint-disable-next-line react-hooks/exhaustive-deps
++  }, []);
++
++  // Which segment index is "current" for a given elapsed time.
++  const segmentIndexAt = useCallback(
++    (elapsedMs) => {
++      const elapsedS = elapsedMs / 1000;
++      for (let i = cumulativeStarts.length - 1; i >= 0; i--) {
++        if (elapsedS >= cumulativeStarts[i]) return i;
++      }
++      return 0;
++    },
++    [cumulativeStarts]
++  );
++
++  // ── Drawing ─────────────────────────────────────────────────────────────
++  const draw = useCallback(
++    (elapsedMs) => {
++      const canvas = canvasRef.current;
++      if (!canvas || segments.length === 0) return;
++      const ctx = canvas.getContext('2d');
++      const W = CANVAS_W, H = CANVAS_H;
++      const t = Math.min(1, elapsedMs / (totalSeconds * 1000)); // 0→1 over the WHOLE clip, for a continuous background zoom
++
++      // ── Background layer (continuous zoom across the whole 2 minutes,
++      //    not per-segment, so it doesn't look like it's resetting/jumping) ──
++      if (background?.type === 'video' && bgVideoRef.current?.readyState >= 2) {
++        const vid = bgVideoRef.current;
++        const scale = Math.max(W / vid.videoWidth, H / vid.videoHeight);
++        const dw = vid.videoWidth * scale, dh = vid.videoHeight * scale;
++        ctx.drawImage(vid, (W - dw) / 2, (H - dh) / 2, dw, dh);
++        ctx.fillStyle = 'rgba(15,23,42,0.5)';
++        ctx.fillRect(0, 0, W, H);
++      } else if (background?.type === 'photo' && bgImageRef.current?.complete && bgImageRef.current.naturalWidth) {
++        const img = bgImageRef.current;
++        const zoom = 1 + 0.15 * t;
++        const scale = Math.max(W / img.naturalWidth, H / img.naturalHeight) * zoom;
++        const dw = img.naturalWidth * scale, dh = img.naturalHeight * scale;
++        ctx.drawImage(img, (W - dw) / 2, (H - dh) / 2, dw, dh);
++        ctx.fillStyle = 'rgba(15,23,42,0.5)';
++        ctx.fillRect(0, 0, W, H);
++      } else {
++        const angle = t * Math.PI * 2; // slow full rotation over the whole clip
++        const gradient = ctx.createLinearGradient(
++          W / 2 + Math.cos(angle) * W, H / 2 + Math.sin(angle) * H,
++          W / 2 - Math.cos(angle) * W, H / 2 - Math.sin(angle) * H
++        );
++        gradient.addColorStop(0, DARK);
++        gradient.addColorStop(1, BRAND_BLUE);
++        ctx.fillStyle = gradient;
++        ctx.fillRect(0, 0, W, H);
++      }
++
++      // ── Instagram-Stories-style progress bar: one segment per tick ──
++      const barY = 70, barGap = 8, barH = 6;
++      const barW = (W - 80 - barGap * (segments.length - 1)) / segments.length;
++      const activeIndex = segmentIndexAt(elapsedMs);
++      segments.forEach((_, i) => {
++        const x = 40 + i * (barW + barGap);
++        ctx.fillStyle = 'rgba(255,255,255,0.3)';
++        ctx.fillRect(x, barY, barW, barH);
++        if (i < activeIndex) {
++          ctx.fillStyle = '#ffffff';
++          ctx.fillRect(x, barY, barW, barH);
++        } else if (i === activeIndex) {
++          const segStart = cumulativeStarts[i] * 1000;
++          const segDur = (segments[i].holdSeconds || 8) * 1000;
++          const frac = Math.min(1, Math.max(0, (elapsedMs - segStart) / segDur));
++          ctx.fillStyle = '#ffffff';
++          ctx.fillRect(x, barY, barW * frac, barH);
++        }
++      });
++
++      // ── Kicker: topic name, small, top-left ──
++      ctx.textAlign = 'left';
++      ctx.textBaseline = 'alphabetic';
++      ctx.font = 'bold 26px Arial';
++      ctx.fillStyle = 'rgba(255,255,255,0.75)';
++      ctx.fillText('SHINEY BRAIN ACADEMY', 40, 130);
++
++      // ── Current text card ──
++      const seg = segments[activeIndex];
++      if (!seg) return;
++      const segStartMs = cumulativeStarts[activeIndex] * 1000;
++      const segDurMs = (seg.holdSeconds || 8) * 1000;
++      const localMs = elapsedMs - segStartMs;
++
++      const inT = Math.min(1, localMs / CARD_TRANSITION_MS);
++      const inEased = 1 - Math.pow(1 - inT, 3);
++      const outStart = segDurMs - CARD_TRANSITION_MS;
++      const outT = localMs > outStart ? Math.min(1, (localMs - outStart) / CARD_TRANSITION_MS) : 0;
++      const outEased = 1 - Math.pow(1 - outT, 3);
++      const alpha = Math.max(0, inEased - outEased);
++      const slideY = (1 - inEased) * 40 - outEased * -20;
++
++      // Label pill
++      const label = (seg.label || '').toUpperCase();
++      ctx.font = 'bold 30px Arial';
++
++      // Card text
++      ctx.font = '800 58px Arial';
++      const lines = wrapText(ctx, seg.text, W - 160).slice(0, 6);
++      const lineH = 70;
++      const blockH = lines.length * lineH + (label ? 80 : 0);
++      const centerY = H * 0.55;
++      const topY = centerY - blockH / 2 + slideY;
++
++      // Scrim behind the card so text reads over any footage
++      const scrimTop = topY - 90;
++      const scrimH = blockH + 180;
++      const scrimGrad = ctx.createLinearGradient(0, scrimTop, 0, scrimTop + scrimH);
++      scrimGrad.addColorStop(0, 'rgba(15,23,42,0)');
++      scrimGrad.addColorStop(0.15, `rgba(15,23,42,${0.6 * alpha})`);
++      scrimGrad.addColorStop(0.85, `rgba(15,23,42,${0.6 * alpha})`);
++      scrimGrad.addColorStop(1, 'rgba(15,23,42,0)');
++      ctx.fillStyle = scrimGrad;
++      ctx.fillRect(0, scrimTop, W, scrimH);
++
++      ctx.save();
++      ctx.globalAlpha = alpha;
++
++      let cursorY = topY;
++      if (label) {
++        ctx.textAlign = 'center';
++        ctx.font = 'bold 30px Arial';
++        ctx.fillStyle = BRAND_YELLOW;
++        ctx.fillText(label, W / 2, cursorY);
++        cursorY += 80;
++      }
++
++      ctx.textAlign = 'center';
++      ctx.textBaseline = 'alphabetic';
++      ctx.font = '800 58px Arial';
++      ctx.fillStyle = '#ffffff';
++      ctx.shadowColor = 'rgba(0,0,0,0.6)';
++      ctx.shadowBlur = 12;
++      lines.forEach((line, i) => {
++        ctx.fillText(line, W / 2, cursorY + i * lineH);
++      });
++      ctx.restore();
++
++      // Segment counter, bottom
++      ctx.textAlign = 'right';
++      ctx.font = 'bold 26px Arial';
++      ctx.fillStyle = 'rgba(255,255,255,0.6)';
++      ctx.fillText(`${activeIndex + 1}/${segments.length}`, W - 40, H - 50);
++    },
++    [background, segments, cumulativeStarts, totalSeconds, segmentIndexAt]
++  );
++
++  useEffect(() => {
++    function loop() {
++      const elapsed = status === 'recording' ? performance.now() - startTimeRef.current : 0;
++      draw(elapsed);
++      if (status === 'recording') setElapsedDisplay(elapsed / 1000);
++      rafRef.current = requestAnimationFrame(loop);
++    }
++    if (status === 'recording') {
++      rafRef.current = requestAnimationFrame(loop);
++    } else {
++      draw(CARD_TRANSITION_MS + 100); // static idle frame — first card visible, past its fade-in
++    }
++    return () => {
++      if (rafRef.current) cancelAnimationFrame(rafRef.current);
++    };
++  }, [status, draw]);
++
++  // ── Start / stop ─────────────────────────────────────────────────────
++  const startRecording = async () => {
++    setErrorMsg(null);
++    setVideoBlobUrl(null);
++    setVideoBlob(null);
++
++    try {
++      const AudioContextCls = window.AudioContext || window.webkitAudioContext;
++      const audioCtx = new AudioContextCls();
++      audioCtxRef.current = audioCtx;
++
++      const dest = audioCtx.createMediaStreamDestination();
++
++      if (tracks.length > 0 && audioRef.current) {
++        const track = tracks[Math.floor(Math.random() * tracks.length)];
++        audioRef.current.src = track;
++        audioRef.current.loop = true;
++        audioRef.current.currentTime = 0;
++        await audioRef.current.play().catch(() => {});
++        const source = audioCtx.createMediaElementSource(audioRef.current);
++        source.connect(dest);
++        source.connect(audioCtx.destination);
++      }
++
++      if (background?.type === 'video' && bgVideoRef.current) {
++        bgVideoRef.current.currentTime = 0;
++        bgVideoRef.current.play().catch(() => {});
++      }
++
++      const canvasStream = canvasRef.current.captureStream(30);
++      const combined = new MediaStream([
++        ...canvasStream.getVideoTracks(),
++        ...dest.stream.getAudioTracks(),
++      ]);
++
++      // Lower bitrate than quote-loop's 6s clip — at ~2 minutes, 700kbps
++      // would produce a much bigger file for not much visible gain since
++      // most of the frame is a static text card, not fast motion.
++      const recorderOptions = { videoBitsPerSecond: 450_000, audioBitsPerSecond: 96_000 };
++      const mimeType = pickMimeType();
++      if (mimeType) recorderOptions.mimeType = mimeType;
++
++      const recorder = new MediaRecorder(combined, recorderOptions);
++      chunksRef.current = [];
++      recorder.ondataavailable = (e) => {
++        if (e.data.size > 0) chunksRef.current.push(e.data);
++      };
++      recorder.onstop = () => {
++        const blob = new Blob(chunksRef.current, { type: mimeType || 'video/webm' });
++        setVideoBlob(blob);
++        setVideoBlobUrl(URL.createObjectURL(blob));
++        setStatus('finished');
++      };
++      recorderRef.current = recorder;
++
++      startTimeRef.current = performance.now();
++      recorder.start();
++      setStatus('recording');
++
++      stopTimerRef.current = setTimeout(finishRecording, totalSeconds * 1000);
++    } catch (err) {
++      setStatus('error');
++      setErrorMsg(`Could not start recording: ${err.message}`);
++    }
++  };
++
++  function finishRecording() {
++    if (stopTimerRef.current) clearTimeout(stopTimerRef.current);
++    if (recorderRef.current && recorderRef.current.state !== 'inactive') recorderRef.current.stop();
++    if (audioRef.current) audioRef.current.pause();
++    if (bgVideoRef.current) bgVideoRef.current.pause();
++    if (audioCtxRef.current) audioCtxRef.current.close().catch(() => {});
++  }
++
++  const cancelRecording = () => {
++    if (stopTimerRef.current) clearTimeout(stopTimerRef.current);
++    if (recorderRef.current) recorderRef.current.onstop = null;
++    if (recorderRef.current && recorderRef.current.state !== 'inactive') recorderRef.current.stop();
++    if (audioRef.current) audioRef.current.pause();
++    if (bgVideoRef.current) bgVideoRef.current.pause();
++    if (audioCtxRef.current) audioCtxRef.current.close().catch(() => {});
++    setStatus('idle');
++  };
++
++  // ── Save: upload blob to storage, then tell the server to record it ──
++  const saveToContentAsset = async () => {
++    if (!videoBlob) return;
++    setStatus('uploading');
++    setErrorMsg(null);
++    try {
++      const supabase = createBrowserClient();
++      const ext = extensionForMimeType(videoBlob.type);
++      const path = `${contentAsset.id}/${Date.now()}.${ext}`;
++
++      const { error: uploadError } = await supabase.storage
++        .from(BUCKET)
++        .upload(path, videoBlob, { contentType: videoBlob.type || 'video/webm', upsert: true });
++      if (uploadError) throw uploadError;
++
++      const { data: urlData } = supabase.storage.from(BUCKET).getPublicUrl(path);
++
++      const res = await fetch('/api/admin/teaching-loops/save', {
++        method: 'POST',
++        headers: { 'Content-Type': 'application/json' },
++        body: JSON.stringify({
++          contentAssetId: contentAsset.id,
++          videoUrl: urlData.publicUrl,
++          durationSeconds: Math.round(totalSeconds),
++        }),
++      });
++      const data = await res.json();
++      if (!res.ok) throw new Error(data.error || 'Save failed');
++
++      setStatus('saved');
++      onSaved?.(urlData.publicUrl);
++    } catch (err) {
++      setStatus('finished');
++      setErrorMsg(err.message);
++    }
++  };
++
++  if (segments.length === 0) {
++    return <p className="text-sm text-red-600 text-center">This draft has no script segments to record.</p>;
++  }
++
++  return (
++    <div className="space-y-4">
++      <canvas
++        ref={canvasRef}
++        width={CANVAS_W}
++        height={CANVAS_H}
++        className="w-full max-w-[280px] aspect-[9/16] mx-auto rounded-2xl border shadow-sm bg-black"
++      />
++      <video ref={bgVideoRef} muted playsInline className="hidden" />
++      <audio ref={audioRef} crossOrigin="anonymous" className="hidden" />
++
++      <p className="text-xs text-gray-500 text-center">
++        {background?.type === 'video' && `Real footage background (${background.source}).`}
++        {background?.type === 'photo' && `Photo background with zoom (${background.source}).`}
++        {!background && 'No background candidate found — recording on an animated brand gradient.'}
++        {' '}Records a ~{Math.round(totalSeconds)}s, {segments.length}-card teaching loop
++        {tracks.length === 0 ? ' — no music tracks found in public/audio/quote-loops yet, clip will be silent' : ''}.
++      </p>
++
++      {status === 'recording' && (
++        <p className="text-xs text-center text-gray-400">
++          Recording… {Math.round(elapsedDisplay)}s / {Math.round(totalSeconds)}s
++        </p>
++      )}
++
++      {errorMsg && <p className="text-sm text-red-600 text-center">⚠️ {errorMsg}</p>}
++      {!bgReady && status === 'idle' && (
++        <p className="text-xs text-gray-400 text-center">Loading background…</p>
++      )}
++
++      <div className="flex justify-center gap-2">
++        {status === 'idle' && (
++          <button
++            onClick={startRecording}
++            disabled={!bgReady}
++            className="bg-brand-blue text-white px-5 py-2.5 rounded-xl text-sm font-bold hover:opacity-90 disabled:opacity-50"
++          >
++            🔴 Start Recording
++          </button>
++        )}
++        {status === 'recording' && (
++          <button
++            onClick={cancelRecording}
++            className="bg-red-100 text-red-600 px-5 py-2.5 rounded-xl text-sm font-bold hover:bg-red-200"
++          >
++            ⏹ Cancel
++          </button>
++        )}
++        {(status === 'finished' || status === 'saved') && videoBlobUrl && (
++          <>
++            <a
++              href={videoBlobUrl}
++              download={`${(contentAsset.title || 'teaching-loop').replace(/[^a-z0-9]+/gi, '-').toLowerCase()}.${extensionForMimeType(videoBlob?.type)}`}
++              className="bg-gray-100 text-gray-700 px-5 py-2.5 rounded-xl text-sm font-bold hover:bg-gray-200"
++            >
++              ⬇ Download
++            </a>
++            {status === 'finished' ? (
++              <button
++                onClick={saveToContentAsset}
++                className="bg-emerald-600 text-white px-5 py-2.5 rounded-xl text-sm font-bold hover:opacity-90"
++              >
++                💾 Save
++              </button>
++            ) : (
++              <span className="text-sm font-bold text-emerald-600 px-3 py-2.5">✓ Saved</span>
++            )}
++          </>
++        )}
++        {status === 'uploading' && (
++          <span className="text-sm font-bold text-gray-500 px-3 py-2.5">Uploading…</span>
++        )}
++      </div>
++    </div>
++  );
++}
+diff --git a/lib/content-factory/generators/teaching-loop.js b/lib/content-factory/generators/teaching-loop.js
+new file mode 100644
+index 0000000..cdc94ef
+--- /dev/null
++++ b/lib/content-factory/generators/teaching-loop.js
+@@ -0,0 +1,109 @@
++// lib/content-factory/generators/teaching-loop.js
++//
++// "Teaching Loop": a punchy, attention-grabbing ~2 minute vertical video
++// that actually TEACHES or fully summarizes one topic — longer than a
++// youtube_short (which is under 60s and just hooks/samples a topic), but
++// still built to hold attention the whole way through, not a lecture.
++//
++// NOT rendered through Remotion/lib/video-engine — same technique as
++// QuoteLoopRecorder/PastQuestionLoopRecorder: this only writes the script
++// (segments of text), and TeachingLoopRecorder.js turns it into a real
++// video entirely in the browser via <canvas> + Web Audio + MediaRecorder,
++// no laptop worker, no server render step. See
++// app/api/admin/teaching-loops/generate/route.js for how the script +
++// one background candidate get saved as a draft, and
++// components/TeachingLoopRecorder.js for how it's recorded.
++//
++// Kept OUT of the platforms GENERATORS registry in content-factory/index.js
++// on purpose (same reasoning as quote_loop/meme_loop/countdown_loop: this
++// isn't a per-platform caption, it's a standalone content type with its
++// own admin page and generate/list routes).
++
++import { buildAssetContext, generateJson } from './_shared';
++
++// This is a SILENT video (background music only, no voiceover) — the
++// viewer reads each segment's text card the way they'd read a quote-loop
++// or past-question-loop, just cycling through many of them instead of one.
++// Reading silently is slower than listening, so segment hold-times below
++// are budgeted generously (~150 words/minute reading pace, same estimate
++// narration.js already used, but applied to on-screen dwell time instead
++// of speech) — see estimateHoldSeconds() below.
++const TARGET_TOTAL_SECONDS = 120;
++
++export async function generateTeachingScript(asset) {
++  const context = buildAssetContext(asset);
++
++  const prompt = `You are writing the text cards for a "Teaching Loop" — a punchy, fast-paced, ~2 minute SILENT vertical video (9:16, like a long-form TikTok/Reel with background music but no voiceover) for Shiney Brain Academy, a Nigerian exam-prep brand (JAMB/WAEC/NECO/Post-UTME). The viewer reads each card as it appears — this one actually TEACHES the topic well enough that a student watching alone could learn it, but every card must stay short and punchy since it has to be readable in a few seconds, never a wall of text.
++
++${context}
++
++STRUCTURE — break the script into 10-14 segments (each segment = one text card, short enough to read in 6-11 seconds). Follow this arc:
++1. HOOK (segment 1 only): a surprising fact, bold claim, or direct callout about this topic — never a generic "today we're learning about X" intro. Must make someone stop scrolling.
++2. WHY IT MATTERS (1-2 segments): a fast, concrete reason this topic actually costs students marks or shows up on the exam — grounds the video in stakes before teaching begins.
++3. THE TEACHING CORE (bulk of the segments): break the concept into its real sub-parts and teach each one clearly and in order, using the actual key concepts/definitions/examples/facts given above — not invented content. Keep every card punchy: short sentences, one idea per card, concrete language over abstract language. Use rhetorical questions and direct address ("you") every few cards to keep momentum instead of reading like a textbook.
++4. COMMON MISTAKE (1 segment): the single most common way students get this topic wrong on JAMB/WAEC/NECO/Post-UTME.
++5. RECAP (1 segment): compress the whole lesson into one tight, memorable line — not a repeat of everything said, a distillation.
++6. CTA (1 segment): a short call to action pointing at Shiney Brain Academy for more practice on this topic.
++
++For each segment give:
++- "text": the exact words on the card. Max 2 short sentences (roughly 12-22 words) — it has to be readable at a glance, not a paragraph.
++- "label": a 2-4 word tag shown above the text identifying the beat (e.g. "WATCH OUT", "HERE'S WHY", "THE FIX") — vary these across the script, don't reuse the same label twice.
++
++Also produce:
++- "title": a punchy, specific video title under 100 characters (not a generic topic restatement — built from the hook/angle)
++- "description": 2-3 sentences (40-70 words) expanding on the video for search/context, written for humans, naturally including the topic and subject keywords
++- "tags": 8-12 short lowercase SEO keyword phrases (e.g. "jamb physics", "exam tips nigeria")
++- "hashtags": 5-8 hashtags (with #, no spaces) mixing topic-specific and brand/exam-general tags
++- "visualQuery": 3-6 words describing a single background scene (video or photo) that fits the WHOLE topic — this plays behind every card in the video, so keep it general to the subject rather than tied to one specific segment (e.g. "student writing exam nigeria")
++
++Rules:
++- No hashtags or emoji inside text/label/title/description — hashtags only belong in the "hashtags" field.
++- No quotation marks around any part.
++- Every segment's "text" must connect to real facts/concepts from the topic above — never generic filler that could apply to any topic.
++- Don't pad segments just to hit the count — if the concept genuinely only needs fewer teaching cards, keep WHY IT MATTERS/COMMON MISTAKE substantial instead of stretching thin content.
++
++Return ONLY JSON:
++{
++  "segments": [{ "text": "...", "label": "..." }],
++  "title": "...",
++  "description": "...",
++  "tags": ["..."],
++  "hashtags": ["#..."],
++  "visualQuery": "..."
++}`;
++
++  const data = await generateJson(prompt, { expect: 'object', maxTokens: 3072 });
++  const segments = Array.isArray(data.segments) ? data.segments : [];
++
++  if (segments.length === 0) {
++    throw new Error('Teaching loop generation returned no segments');
++  }
++
++  return {
++    segments,
++    title: data.title || asset.keyword,
++    description: data.description || '',
++    tags: Array.isArray(data.tags) ? data.tags : [],
++    hashtags: Array.isArray(data.hashtags) ? data.hashtags : [],
++    visualQuery: data.visualQuery || [asset.subject, asset.keyword].filter(Boolean).join(' '),
++  };
++}
++
++/**
++ * Budgets each segment a hold-time (seconds on screen) proportional to its
++ * word count, floored so short cards ("THE FIX") still get a fair read,
++ * then scaled so the whole script totals TARGET_TOTAL_SECONDS — used by
++ * TeachingLoopRecorder.js to drive its draw() timeline.
++ */
++export function estimateSegmentTimings(segments) {
++  const MIN_HOLD = 5;
++  const raw = segments.map((s) => {
++    const words = String(s.text || '').trim().split(/\s+/).filter(Boolean).length;
++    return Math.max(MIN_HOLD, (words / 150) * 60 + 2); // +2s settle/read buffer per card
++  });
++  const rawTotal = raw.reduce((a, b) => a + b, 0);
++  const scale = rawTotal > 0 ? TARGET_TOTAL_SECONDS / rawTotal : 1;
++  return raw.map((s) => Math.max(MIN_HOLD * 0.7, s * scale));
++}
++
++export { TARGET_TOTAL_SECONDS };
+-- 
+2.43.0
+
