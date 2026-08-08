@@ -18,6 +18,7 @@ import { useState, useEffect, useRef } from 'react';
 import { createBrowserClient } from '@/lib/supabase';
 import LessonLoopRecorder from '@/components/LessonLoopRecorder';
 import PublishToChannels from '@/components/admin/PublishToChannels';
+import { updateContentAsset } from '@/lib/admin/updateContentAsset';
 
 const POLL_INTERVAL_MS = 3000;
 
@@ -30,6 +31,61 @@ export default function LessonLoopsPage() {
   const [errorMsg, setErrorMsg] = useState(null);
   const [warnings, setWarnings] = useState([]);
   const pollTimerRef = useRef(null);
+
+  // Inline edit. Unlike the other loops, each segment's spoken "text" here
+  // already has real narration audio baked in (synthesizeLine, see
+  // lesson-loops/generate's header) — editing it does NOT regenerate that
+  // audio, so we flag it clearly rather than pretend it's free. Editing
+  // onScreenText is safe either way — it's just the on-screen caption.
+  const [editingId, setEditingId] = useState(null);
+  const [editTitle, setEditTitle] = useState('');
+  const [editSegments, setEditSegments] = useState([]);
+  const [saving, setSaving] = useState(false);
+  const [editError, setEditError] = useState(null);
+
+  const startEdit = (draft) => {
+    setEditingId(draft.id);
+    setEditTitle(draft.title || '');
+    setEditSegments((draft.metadata?.segments || []).map((s) => ({ ...s })));
+    setEditError(null);
+  };
+
+  const cancelEdit = () => {
+    setEditingId(null);
+    setEditError(null);
+  };
+
+  const updateSegmentField = (index, field, value) => {
+    setEditSegments((prev) => prev.map((s, i) => (i === index ? { ...s, [field]: value } : s)));
+  };
+
+  const saveEdit = async (draft) => {
+    if (!editTitle.trim() || editSegments.some((s) => !s.text.trim() || !s.onScreenText?.trim())) {
+      setEditError('Title, and every segment\u2019s spoken line + on-screen text, all need content');
+      return;
+    }
+    setSaving(true);
+    setEditError(null);
+    try {
+      const trimmedSegments = editSegments.map((s) => ({
+        ...s,
+        text: s.text.trim(),
+        onScreenText: s.onScreenText.trim(),
+      }));
+      const hookSegment = trimmedSegments.find((s) => s.type === 'hook');
+      await updateContentAsset(draft.id, {
+        title: editTitle.trim(),
+        body: hookSegment?.text || draft.body,
+        metadata: { ...draft.metadata, segments: trimmedSegments },
+      });
+      setEditingId(null);
+      await loadExistingDrafts(selectedAssetId);
+    } catch (err) {
+      setEditError(err.message);
+    } finally {
+      setSaving(false);
+    }
+  };
 
   useEffect(() => {
     const supabase = createBrowserClient();
@@ -170,35 +226,99 @@ export default function LessonLoopsPage() {
           <h2 className="font-bold text-sm text-gray-500 uppercase">Drafts</h2>
           {drafts.map((draft) => (
             <div key={draft.id} className="bg-white rounded-xl border p-4">
-              <div className="flex items-center justify-between gap-3">
-                <div className="min-w-0">
-                  <p className="font-semibold truncate">{draft.title}</p>
-                  {draft.status === 'generating' && (
-                    <p className="text-sm text-amber-600 mt-0.5">⏳ Generating script + narration…</p>
-                  )}
-                  {draft.status === 'failed' && (
-                    <p className="text-sm text-red-600 mt-0.5">
-                      ⚠️ Failed: {draft.metadata?.error_message || 'unknown error'}
-                    </p>
-                  )}
-                  {draft.metadata?.segments && (
-                    <p className="text-xs text-gray-500 mt-1">
-                      {draft.metadata.segments.length} segments · ~{Math.round(draft.metadata.totalDurationSeconds || 0)}s
-                      · {hasVideo(draft) ? '✅ recorded' : '⏳ not recorded'}
-                    </p>
+              {editingId === draft.id ? (
+                <div className="space-y-2">
+                  <label className="block text-xs font-semibold text-gray-500">Title</label>
+                  <input
+                    value={editTitle}
+                    onChange={(e) => setEditTitle(e.target.value)}
+                    className="w-full border rounded-lg px-3 py-2 text-sm"
+                  />
+                  <p className="text-xs text-amber-600">
+                    ⚠️ Editing "Spoken line" below changes what's on screen as text but does NOT
+                    regenerate the narration audio — the voiceover will still say the old words until
+                    you regenerate this lesson. Editing "On-screen text" is always safe.
+                  </p>
+                  <div className="space-y-3 max-h-96 overflow-y-auto pr-1">
+                    {editSegments.map((seg, i) => (
+                      <div key={i} className="border rounded-lg p-2 space-y-1">
+                        <span className="text-xs font-semibold text-gray-400">{seg.label || seg.type}</span>
+                        <label className="block text-xs text-gray-500">Spoken line (narration)</label>
+                        <textarea
+                          value={seg.text}
+                          onChange={(e) => updateSegmentField(i, 'text', e.target.value)}
+                          rows={2}
+                          className="w-full border rounded-lg px-2 py-1 text-sm"
+                        />
+                        <label className="block text-xs text-gray-500">On-screen text</label>
+                        <textarea
+                          value={seg.onScreenText || ''}
+                          onChange={(e) => updateSegmentField(i, 'onScreenText', e.target.value)}
+                          rows={1}
+                          className="w-full border rounded-lg px-2 py-1 text-sm"
+                        />
+                      </div>
+                    ))}
+                  </div>
+                  {editError && <p className="text-sm text-red-600">⚠️ {editError}</p>}
+                  <div className="flex gap-2">
+                    <button
+                      onClick={() => saveEdit(draft)}
+                      disabled={saving}
+                      className="bg-brand-blue text-white px-3 py-1.5 rounded-lg text-sm font-bold hover:opacity-90 disabled:opacity-50"
+                    >
+                      {saving ? 'Saving…' : 'Save'}
+                    </button>
+                    <button
+                      onClick={cancelEdit}
+                      disabled={saving}
+                      className="bg-gray-100 text-gray-700 px-3 py-1.5 rounded-lg text-sm font-bold hover:bg-gray-200"
+                    >
+                      Cancel
+                    </button>
+                  </div>
+                </div>
+              ) : (
+                <div className="flex items-center justify-between gap-3">
+                  <div className="min-w-0">
+                    <p className="font-semibold truncate">{draft.title}</p>
+                    {draft.status === 'generating' && (
+                      <p className="text-sm text-amber-600 mt-0.5">⏳ Generating script + narration…</p>
+                    )}
+                    {draft.status === 'failed' && (
+                      <p className="text-sm text-red-600 mt-0.5">
+                        ⚠️ Failed: {draft.metadata?.error_message || 'unknown error'}
+                      </p>
+                    )}
+                    {draft.metadata?.segments && (
+                      <p className="text-xs text-gray-500 mt-1">
+                        {draft.metadata.segments.length} segments · ~{Math.round(draft.metadata.totalDurationSeconds || 0)}s
+                        · {hasVideo(draft) ? '✅ recorded' : '⏳ not recorded'}
+                      </p>
+                    )}
+                  </div>
+                  {draft.status === 'draft' && (
+                    <div className="flex gap-2 whitespace-nowrap">
+                      {draft.metadata?.segments && (
+                        <button
+                          onClick={() => startEdit(draft)}
+                          className="bg-white border text-gray-700 px-3 py-2 rounded-lg text-sm font-bold hover:bg-gray-50"
+                        >
+                          Edit
+                        </button>
+                      )}
+                      <button
+                        onClick={() => setActiveDraft(draft)}
+                        className="bg-gray-100 text-gray-700 px-4 py-2 rounded-lg text-sm font-bold hover:bg-gray-200"
+                      >
+                        {hasVideo(draft) ? 'Re-record' : 'Record'}
+                      </button>
+                    </div>
                   )}
                 </div>
-                {draft.status === 'draft' && (
-                  <button
-                    onClick={() => setActiveDraft(draft)}
-                    className="bg-gray-100 text-gray-700 px-4 py-2 rounded-lg text-sm font-bold hover:bg-gray-200 whitespace-nowrap"
-                  >
-                    {hasVideo(draft) ? 'Re-record' : 'Record'}
-                  </button>
-                )}
-              </div>
+              )}
 
-              {draft.metadata?.youtube && (
+              {editingId !== draft.id && draft.metadata?.youtube && (
                 <details className="mt-3 text-sm">
                   <summary className="cursor-pointer text-gray-500 font-semibold">
                     View platform metadata (YouTube / Facebook / TikTok)

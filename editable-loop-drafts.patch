@@ -1,0 +1,1171 @@
+diff --git a/app/admin/countdown-loops/page.js b/app/admin/countdown-loops/page.js
+index 97ad35e..34e8213 100644
+--- a/app/admin/countdown-loops/page.js
++++ b/app/admin/countdown-loops/page.js
+@@ -18,6 +18,7 @@ import { useState, useEffect } from 'react';
+ import { createBrowserClient } from '@/lib/supabase';
+ import CountdownLoopRecorder from '@/components/CountdownLoopRecorder';
+ import PublishToChannels from '@/components/admin/PublishToChannels';
++import { updateContentAsset } from '@/lib/admin/updateContentAsset';
+ 
+ export default function CountdownLoopsPage() {
+   const [assets, setAssets] = useState([]);
+@@ -29,6 +30,59 @@ export default function CountdownLoopsPage() {
+   const [errorMsg, setErrorMsg] = useState(null);
+   const [warnings, setWarnings] = useState([]);
+ 
++  const [editingId, setEditingId] = useState(null);
++  const [editTitle, setEditTitle] = useState('');
++  const [editItems, setEditItems] = useState([]); // [{ rank, point, detail }]
++  const [editCta, setEditCta] = useState('');
++  const [saving, setSaving] = useState(false);
++  const [editError, setEditError] = useState(null);
++
++  const startEdit = (draft) => {
++    setEditingId(draft.id);
++    setEditTitle(draft.body || '');
++    setEditItems(
++      [...(draft.metadata?.items || [])]
++        .sort((a, b) => b.rank - a.rank)
++        .map((i) => ({ rank: i.rank, point: i.point, detail: i.detail }))
++    );
++    setEditCta(draft.metadata?.cta || '');
++    setEditError(null);
++  };
++
++  const cancelEdit = () => {
++    setEditingId(null);
++    setEditError(null);
++  };
++
++  const updateItem = (rank, field, value) => {
++    setEditItems((prev) => prev.map((i) => (i.rank === rank ? { ...i, [field]: value } : i)));
++  };
++
++  const saveEdit = async (draft) => {
++    if (!editTitle.trim() || !editCta.trim() || editItems.some((i) => !i.point.trim() || !i.detail.trim())) {
++      setEditError('Title, CTA, and every item\u2019s point + detail all need text');
++      return;
++    }
++    setSaving(true);
++    setEditError(null);
++    try {
++      await updateContentAsset(draft.id, {
++        body: editTitle.trim(),
++        metadata: {
++          ...draft.metadata,
++          items: editItems.map((i) => ({ ...i, point: i.point.trim(), detail: i.detail.trim() })),
++          cta: editCta.trim(),
++        },
++      });
++      setEditingId(null);
++      await loadExistingDrafts(selectedAssetId);
++    } catch (err) {
++      setEditError(err.message);
++    } finally {
++      setSaving(false);
++    }
++  };
++
+   useEffect(() => {
+     const supabase = createBrowserClient();
+     supabase
+@@ -136,32 +190,99 @@ export default function CountdownLoopsPage() {
+           <h2 className="font-bold text-sm text-gray-500 uppercase">Drafts</h2>
+           {drafts.map((draft) => (
+             <div key={draft.id} className="bg-white rounded-xl border p-4">
+-              <div className="flex items-center justify-between gap-3">
+-                <div>
+-                  <p className="font-semibold">{draft.body}</p>
+-                  <ol className="text-sm text-gray-600 mt-1 space-y-0.5">
+-                    {[...(draft.metadata?.items || [])]
+-                      .sort((a, b) => b.rank - a.rank)
+-                      .map((item) => (
+-                        <li key={item.rank} className={item.rank === 1 ? 'text-emerald-600 font-semibold' : ''}>
+-                          #{item.rank} {item.point}
+-                        </li>
+-                      ))}
+-                  </ol>
+-                  <p className="text-xs text-gray-500 mt-1">
+-                    {draft.metadata?.background?.type
+-                      ? `${draft.metadata.background.type} background (${draft.metadata.background.source})`
+-                      : 'no background found'}{' '}
+-                    · {hasVideo(draft) ? '✅ recorded' : '⏳ not recorded'}
+-                  </p>
++              {editingId === draft.id ? (
++                <div className="space-y-2">
++                  <label className="block text-xs font-semibold text-gray-500">Title</label>
++                  <textarea
++                    value={editTitle}
++                    onChange={(e) => setEditTitle(e.target.value)}
++                    rows={1}
++                    className="w-full border rounded-lg px-3 py-2 text-sm"
++                  />
++                  {editItems.map((item) => (
++                    <div key={item.rank} className="border rounded-lg p-2 space-y-1">
++                      <label className="block text-xs font-semibold text-gray-500">
++                        #{item.rank} point
++                      </label>
++                      <input
++                        value={item.point}
++                        onChange={(e) => updateItem(item.rank, 'point', e.target.value)}
++                        className="w-full border rounded-lg px-2 py-1 text-sm"
++                      />
++                      <label className="block text-xs font-semibold text-gray-500">Detail</label>
++                      <textarea
++                        value={item.detail}
++                        onChange={(e) => updateItem(item.rank, 'detail', e.target.value)}
++                        rows={2}
++                        className="w-full border rounded-lg px-2 py-1 text-sm"
++                      />
++                    </div>
++                  ))}
++                  <label className="block text-xs font-semibold text-gray-500">CTA</label>
++                  <input
++                    value={editCta}
++                    onChange={(e) => setEditCta(e.target.value)}
++                    className="w-full border rounded-lg px-3 py-2 text-sm"
++                  />
++                  {editError && <p className="text-sm text-red-600">⚠️ {editError}</p>}
++                  <div className="flex gap-2">
++                    <button
++                      onClick={() => saveEdit(draft)}
++                      disabled={saving}
++                      className="bg-brand-blue text-white px-3 py-1.5 rounded-lg text-sm font-bold hover:opacity-90 disabled:opacity-50"
++                    >
++                      {saving ? 'Saving…' : 'Save'}
++                    </button>
++                    <button
++                      onClick={cancelEdit}
++                      disabled={saving}
++                      className="bg-gray-100 text-gray-700 px-3 py-1.5 rounded-lg text-sm font-bold hover:bg-gray-200"
++                    >
++                      Cancel
++                    </button>
++                  </div>
++                </div>
++              ) : (
++                <div className="flex items-center justify-between gap-3">
++                  <div>
++                    <p className="font-semibold">{draft.body}</p>
++                    <ol className="text-sm text-gray-600 mt-1 space-y-0.5">
++                      {[...(draft.metadata?.items || [])]
++                        .sort((a, b) => b.rank - a.rank)
++                        .map((item) => (
++                          <li key={item.rank} className={item.rank === 1 ? 'text-emerald-600 font-semibold' : ''}>
++                            #{item.rank} {item.point}
++                          </li>
++                        ))}
++                    </ol>
++                    <p className="text-xs text-gray-500 mt-1">
++                      {draft.metadata?.background?.type
++                        ? `${draft.metadata.background.type} background (${draft.metadata.background.source})`
++                        : 'no background found'}{' '}
++                      · {hasVideo(draft) ? '✅ recorded' : '⏳ not recorded'}
++                    </p>
++                  </div>
++                  <div className="flex gap-2 whitespace-nowrap">
++                    <button
++                      onClick={() => startEdit(draft)}
++                      className="bg-white border text-gray-700 px-3 py-2 rounded-lg text-sm font-bold hover:bg-gray-50"
++                    >
++                      Edit
++                    </button>
++                    <button
++                      onClick={() => setActiveDraft(draft)}
++                      className="bg-gray-100 text-gray-700 px-4 py-2 rounded-lg text-sm font-bold hover:bg-gray-200"
++                    >
++                      {hasVideo(draft) ? 'Re-record' : 'Record'}
++                    </button>
++                  </div>
+                 </div>
+-                <button
+-                  onClick={() => setActiveDraft(draft)}
+-                  className="bg-gray-100 text-gray-700 px-4 py-2 rounded-lg text-sm font-bold hover:bg-gray-200 whitespace-nowrap"
+-                >
+-                  {hasVideo(draft) ? 'Re-record' : 'Record'}
+-                </button>
+-              </div>
++              )}
++              {hasVideo(draft) && (
++                <p className="text-xs text-amber-600 mt-2">
++                  If you edited the text above after recording, hit Re-record — the saved video won't update on its own.
++                </p>
++              )}
+               {hasVideo(draft) && <PublishToChannels contentAssetId={draft.id} />}
+             </div>
+           ))}
+diff --git a/app/admin/lesson-loops/page.js b/app/admin/lesson-loops/page.js
+index 54b2e16..41a92bd 100644
+--- a/app/admin/lesson-loops/page.js
++++ b/app/admin/lesson-loops/page.js
+@@ -18,6 +18,7 @@ import { useState, useEffect, useRef } from 'react';
+ import { createBrowserClient } from '@/lib/supabase';
+ import LessonLoopRecorder from '@/components/LessonLoopRecorder';
+ import PublishToChannels from '@/components/admin/PublishToChannels';
++import { updateContentAsset } from '@/lib/admin/updateContentAsset';
+ 
+ const POLL_INTERVAL_MS = 3000;
+ 
+@@ -31,6 +32,61 @@ export default function LessonLoopsPage() {
+   const [warnings, setWarnings] = useState([]);
+   const pollTimerRef = useRef(null);
+ 
++  // Inline edit. Unlike the other loops, each segment's spoken "text" here
++  // already has real narration audio baked in (synthesizeLine, see
++  // lesson-loops/generate's header) — editing it does NOT regenerate that
++  // audio, so we flag it clearly rather than pretend it's free. Editing
++  // onScreenText is safe either way — it's just the on-screen caption.
++  const [editingId, setEditingId] = useState(null);
++  const [editTitle, setEditTitle] = useState('');
++  const [editSegments, setEditSegments] = useState([]);
++  const [saving, setSaving] = useState(false);
++  const [editError, setEditError] = useState(null);
++
++  const startEdit = (draft) => {
++    setEditingId(draft.id);
++    setEditTitle(draft.title || '');
++    setEditSegments((draft.metadata?.segments || []).map((s) => ({ ...s })));
++    setEditError(null);
++  };
++
++  const cancelEdit = () => {
++    setEditingId(null);
++    setEditError(null);
++  };
++
++  const updateSegmentField = (index, field, value) => {
++    setEditSegments((prev) => prev.map((s, i) => (i === index ? { ...s, [field]: value } : s)));
++  };
++
++  const saveEdit = async (draft) => {
++    if (!editTitle.trim() || editSegments.some((s) => !s.text.trim() || !s.onScreenText?.trim())) {
++      setEditError('Title, and every segment\u2019s spoken line + on-screen text, all need content');
++      return;
++    }
++    setSaving(true);
++    setEditError(null);
++    try {
++      const trimmedSegments = editSegments.map((s) => ({
++        ...s,
++        text: s.text.trim(),
++        onScreenText: s.onScreenText.trim(),
++      }));
++      const hookSegment = trimmedSegments.find((s) => s.type === 'hook');
++      await updateContentAsset(draft.id, {
++        title: editTitle.trim(),
++        body: hookSegment?.text || draft.body,
++        metadata: { ...draft.metadata, segments: trimmedSegments },
++      });
++      setEditingId(null);
++      await loadExistingDrafts(selectedAssetId);
++    } catch (err) {
++      setEditError(err.message);
++    } finally {
++      setSaving(false);
++    }
++  };
++
+   useEffect(() => {
+     const supabase = createBrowserClient();
+     supabase
+@@ -170,35 +226,99 @@ export default function LessonLoopsPage() {
+           <h2 className="font-bold text-sm text-gray-500 uppercase">Drafts</h2>
+           {drafts.map((draft) => (
+             <div key={draft.id} className="bg-white rounded-xl border p-4">
+-              <div className="flex items-center justify-between gap-3">
+-                <div className="min-w-0">
+-                  <p className="font-semibold truncate">{draft.title}</p>
+-                  {draft.status === 'generating' && (
+-                    <p className="text-sm text-amber-600 mt-0.5">⏳ Generating script + narration…</p>
+-                  )}
+-                  {draft.status === 'failed' && (
+-                    <p className="text-sm text-red-600 mt-0.5">
+-                      ⚠️ Failed: {draft.metadata?.error_message || 'unknown error'}
+-                    </p>
+-                  )}
+-                  {draft.metadata?.segments && (
+-                    <p className="text-xs text-gray-500 mt-1">
+-                      {draft.metadata.segments.length} segments · ~{Math.round(draft.metadata.totalDurationSeconds || 0)}s
+-                      · {hasVideo(draft) ? '✅ recorded' : '⏳ not recorded'}
+-                    </p>
++              {editingId === draft.id ? (
++                <div className="space-y-2">
++                  <label className="block text-xs font-semibold text-gray-500">Title</label>
++                  <input
++                    value={editTitle}
++                    onChange={(e) => setEditTitle(e.target.value)}
++                    className="w-full border rounded-lg px-3 py-2 text-sm"
++                  />
++                  <p className="text-xs text-amber-600">
++                    ⚠️ Editing "Spoken line" below changes what's on screen as text but does NOT
++                    regenerate the narration audio — the voiceover will still say the old words until
++                    you regenerate this lesson. Editing "On-screen text" is always safe.
++                  </p>
++                  <div className="space-y-3 max-h-96 overflow-y-auto pr-1">
++                    {editSegments.map((seg, i) => (
++                      <div key={i} className="border rounded-lg p-2 space-y-1">
++                        <span className="text-xs font-semibold text-gray-400">{seg.label || seg.type}</span>
++                        <label className="block text-xs text-gray-500">Spoken line (narration)</label>
++                        <textarea
++                          value={seg.text}
++                          onChange={(e) => updateSegmentField(i, 'text', e.target.value)}
++                          rows={2}
++                          className="w-full border rounded-lg px-2 py-1 text-sm"
++                        />
++                        <label className="block text-xs text-gray-500">On-screen text</label>
++                        <textarea
++                          value={seg.onScreenText || ''}
++                          onChange={(e) => updateSegmentField(i, 'onScreenText', e.target.value)}
++                          rows={1}
++                          className="w-full border rounded-lg px-2 py-1 text-sm"
++                        />
++                      </div>
++                    ))}
++                  </div>
++                  {editError && <p className="text-sm text-red-600">⚠️ {editError}</p>}
++                  <div className="flex gap-2">
++                    <button
++                      onClick={() => saveEdit(draft)}
++                      disabled={saving}
++                      className="bg-brand-blue text-white px-3 py-1.5 rounded-lg text-sm font-bold hover:opacity-90 disabled:opacity-50"
++                    >
++                      {saving ? 'Saving…' : 'Save'}
++                    </button>
++                    <button
++                      onClick={cancelEdit}
++                      disabled={saving}
++                      className="bg-gray-100 text-gray-700 px-3 py-1.5 rounded-lg text-sm font-bold hover:bg-gray-200"
++                    >
++                      Cancel
++                    </button>
++                  </div>
++                </div>
++              ) : (
++                <div className="flex items-center justify-between gap-3">
++                  <div className="min-w-0">
++                    <p className="font-semibold truncate">{draft.title}</p>
++                    {draft.status === 'generating' && (
++                      <p className="text-sm text-amber-600 mt-0.5">⏳ Generating script + narration…</p>
++                    )}
++                    {draft.status === 'failed' && (
++                      <p className="text-sm text-red-600 mt-0.5">
++                        ⚠️ Failed: {draft.metadata?.error_message || 'unknown error'}
++                      </p>
++                    )}
++                    {draft.metadata?.segments && (
++                      <p className="text-xs text-gray-500 mt-1">
++                        {draft.metadata.segments.length} segments · ~{Math.round(draft.metadata.totalDurationSeconds || 0)}s
++                        · {hasVideo(draft) ? '✅ recorded' : '⏳ not recorded'}
++                      </p>
++                    )}
++                  </div>
++                  {draft.status === 'draft' && (
++                    <div className="flex gap-2 whitespace-nowrap">
++                      {draft.metadata?.segments && (
++                        <button
++                          onClick={() => startEdit(draft)}
++                          className="bg-white border text-gray-700 px-3 py-2 rounded-lg text-sm font-bold hover:bg-gray-50"
++                        >
++                          Edit
++                        </button>
++                      )}
++                      <button
++                        onClick={() => setActiveDraft(draft)}
++                        className="bg-gray-100 text-gray-700 px-4 py-2 rounded-lg text-sm font-bold hover:bg-gray-200"
++                      >
++                        {hasVideo(draft) ? 'Re-record' : 'Record'}
++                      </button>
++                    </div>
+                   )}
+                 </div>
+-                {draft.status === 'draft' && (
+-                  <button
+-                    onClick={() => setActiveDraft(draft)}
+-                    className="bg-gray-100 text-gray-700 px-4 py-2 rounded-lg text-sm font-bold hover:bg-gray-200 whitespace-nowrap"
+-                  >
+-                    {hasVideo(draft) ? 'Re-record' : 'Record'}
+-                  </button>
+-                )}
+-              </div>
+-
+-              {draft.metadata?.youtube && (
++              )}
++
++              {editingId !== draft.id && draft.metadata?.youtube && (
+                 <details className="mt-3 text-sm">
+                   <summary className="cursor-pointer text-gray-500 font-semibold">
+                     View platform metadata (YouTube / Facebook / TikTok)
+diff --git a/app/admin/meme-loops/page.js b/app/admin/meme-loops/page.js
+index 3ad7860..e703d89 100644
+--- a/app/admin/meme-loops/page.js
++++ b/app/admin/meme-loops/page.js
+@@ -16,6 +16,7 @@ import { useState, useEffect } from 'react';
+ import { createBrowserClient } from '@/lib/supabase';
+ import MemeLoopRecorder from '@/components/MemeLoopRecorder';
+ import PublishToChannels from '@/components/admin/PublishToChannels';
++import { updateContentAsset } from '@/lib/admin/updateContentAsset';
+ 
+ export default function MemeLoopsPage() {
+   const [assets, setAssets] = useState([]);
+@@ -27,6 +28,47 @@ export default function MemeLoopsPage() {
+   const [errorMsg, setErrorMsg] = useState(null);
+   const [warnings, setWarnings] = useState([]);
+ 
++  // Inline edit state — one draft editable at a time, mirrors the
++  // edit-in-place pattern already used on /admin/social-engine.
++  const [editingId, setEditingId] = useState(null);
++  const [editSetup, setEditSetup] = useState('');
++  const [editPunchline, setEditPunchline] = useState('');
++  const [saving, setSaving] = useState(false);
++  const [editError, setEditError] = useState(null);
++
++  const startEdit = (draft) => {
++    setEditingId(draft.id);
++    setEditSetup(draft.body || '');
++    setEditPunchline(draft.metadata?.punchline || '');
++    setEditError(null);
++  };
++
++  const cancelEdit = () => {
++    setEditingId(null);
++    setEditError(null);
++  };
++
++  const saveEdit = async (draft) => {
++    if (!editSetup.trim() || !editPunchline.trim()) {
++      setEditError('Setup and punchline can\u2019t be empty');
++      return;
++    }
++    setSaving(true);
++    setEditError(null);
++    try {
++      await updateContentAsset(draft.id, {
++        body: editSetup.trim(),
++        metadata: { ...draft.metadata, punchline: editPunchline.trim() },
++      });
++      setEditingId(null);
++      await loadExistingDrafts(selectedAssetId);
++    } catch (err) {
++      setEditError(err.message);
++    } finally {
++      setSaving(false);
++    }
++  };
++
+   useEffect(() => {
+     const supabase = createBrowserClient();
+     supabase
+@@ -134,28 +176,77 @@ export default function MemeLoopsPage() {
+           <h2 className="font-bold text-sm text-gray-500 uppercase">Drafts</h2>
+           {drafts.map((draft) => (
+             <div key={draft.id} className="bg-white rounded-xl border p-4">
+-              <div className="flex items-center justify-between gap-3">
+-                <div>
+-                  <p className="font-semibold">{draft.body}</p>
+-                  {draft.metadata?.punchline && (
+-                    <p className="text-sm text-gray-600 mt-0.5">
+-                      {draft.metadata.punchline} {draft.metadata?.emojis?.join(' ')}
++              {editingId === draft.id ? (
++                <div className="space-y-2">
++                  <label className="block text-xs font-semibold text-gray-500">Setup</label>
++                  <textarea
++                    value={editSetup}
++                    onChange={(e) => setEditSetup(e.target.value)}
++                    rows={2}
++                    className="w-full border rounded-lg px-3 py-2 text-sm"
++                  />
++                  <label className="block text-xs font-semibold text-gray-500">Punchline</label>
++                  <textarea
++                    value={editPunchline}
++                    onChange={(e) => setEditPunchline(e.target.value)}
++                    rows={2}
++                    className="w-full border rounded-lg px-3 py-2 text-sm"
++                  />
++                  {editError && <p className="text-sm text-red-600">⚠️ {editError}</p>}
++                  <div className="flex gap-2">
++                    <button
++                      onClick={() => saveEdit(draft)}
++                      disabled={saving}
++                      className="bg-brand-blue text-white px-3 py-1.5 rounded-lg text-sm font-bold hover:opacity-90 disabled:opacity-50"
++                    >
++                      {saving ? 'Saving…' : 'Save'}
++                    </button>
++                    <button
++                      onClick={cancelEdit}
++                      disabled={saving}
++                      className="bg-gray-100 text-gray-700 px-3 py-1.5 rounded-lg text-sm font-bold hover:bg-gray-200"
++                    >
++                      Cancel
++                    </button>
++                  </div>
++                </div>
++              ) : (
++                <div className="flex items-center justify-between gap-3">
++                  <div>
++                    <p className="font-semibold">{draft.body}</p>
++                    {draft.metadata?.punchline && (
++                      <p className="text-sm text-gray-600 mt-0.5">
++                        {draft.metadata.punchline} {draft.metadata?.emojis?.join(' ')}
++                      </p>
++                    )}
++                    <p className="text-xs text-gray-500 mt-1">
++                      {draft.metadata?.background?.type
++                        ? `${draft.metadata.background.type} background (${draft.metadata.background.source})`
++                        : 'no background found'}{' '}
++                      · {hasVideo(draft) ? '✅ recorded' : '⏳ not recorded'}
+                     </p>
+-                  )}
+-                  <p className="text-xs text-gray-500 mt-1">
+-                    {draft.metadata?.background?.type
+-                      ? `${draft.metadata.background.type} background (${draft.metadata.background.source})`
+-                      : 'no background found'}{' '}
+-                    · {hasVideo(draft) ? '✅ recorded' : '⏳ not recorded'}
+-                  </p>
++                  </div>
++                  <div className="flex gap-2 whitespace-nowrap">
++                    <button
++                      onClick={() => startEdit(draft)}
++                      className="bg-white border text-gray-700 px-3 py-2 rounded-lg text-sm font-bold hover:bg-gray-50"
++                    >
++                      Edit
++                    </button>
++                    <button
++                      onClick={() => setActiveDraft(draft)}
++                      className="bg-gray-100 text-gray-700 px-4 py-2 rounded-lg text-sm font-bold hover:bg-gray-200"
++                    >
++                      {hasVideo(draft) ? 'Re-record' : 'Record'}
++                    </button>
++                  </div>
+                 </div>
+-                <button
+-                  onClick={() => setActiveDraft(draft)}
+-                  className="bg-gray-100 text-gray-700 px-4 py-2 rounded-lg text-sm font-bold hover:bg-gray-200 whitespace-nowrap"
+-                >
+-                  {hasVideo(draft) ? 'Re-record' : 'Record'}
+-                </button>
+-              </div>
++              )}
++              {hasVideo(draft) && (
++                <p className="text-xs text-amber-600 mt-2">
++                  If you edited the text above after recording, hit Re-record — the saved video won't update on its own.
++                </p>
++              )}
+               {hasVideo(draft) && <PublishToChannels contentAssetId={draft.id} />}
+             </div>
+           ))}
+diff --git a/app/admin/past-question-loops/page.js b/app/admin/past-question-loops/page.js
+index 9d6de9d..4f3b70d 100644
+--- a/app/admin/past-question-loops/page.js
++++ b/app/admin/past-question-loops/page.js
+@@ -16,6 +16,7 @@ import { useState, useEffect } from 'react';
+ import { createBrowserClient } from '@/lib/supabase';
+ import PastQuestionLoopRecorder from '@/components/PastQuestionLoopRecorder';
+ import PublishToChannels from '@/components/admin/PublishToChannels';
++import { updateContentAsset } from '@/lib/admin/updateContentAsset';
+ 
+ export default function PastQuestionLoopsPage() {
+   const [assets, setAssets] = useState([]);
+@@ -27,6 +28,63 @@ export default function PastQuestionLoopsPage() {
+   const [errorMsg, setErrorMsg] = useState(null);
+   const [warnings, setWarnings] = useState([]);
+ 
++  // Inline edit state for one draft at a time.
++  const [editingId, setEditingId] = useState(null);
++  const [editQuestion, setEditQuestion] = useState('');
++  const [editOptions, setEditOptions] = useState([]); // [{ id, text }]
++  const [editCorrectId, setEditCorrectId] = useState('');
++  const [editExplanation, setEditExplanation] = useState('');
++  const [saving, setSaving] = useState(false);
++  const [editError, setEditError] = useState(null);
++
++  const startEdit = (draft) => {
++    setEditingId(draft.id);
++    setEditQuestion(draft.body || '');
++    setEditOptions((draft.metadata?.options || []).map((o) => ({ id: o.id, text: o.text })));
++    setEditCorrectId(draft.metadata?.correctOptionId || '');
++    setEditExplanation(draft.metadata?.explanation || '');
++    setEditError(null);
++  };
++
++  const cancelEdit = () => {
++    setEditingId(null);
++    setEditError(null);
++  };
++
++  const updateOptionText = (id, text) => {
++    setEditOptions((prev) => prev.map((o) => (o.id === id ? { ...o, text } : o)));
++  };
++
++  const saveEdit = async (draft) => {
++    if (!editQuestion.trim() || editOptions.some((o) => !o.text.trim()) || !editExplanation.trim()) {
++      setEditError('Question, every option, and the explanation all need text');
++      return;
++    }
++    if (!editOptions.some((o) => o.id === editCorrectId)) {
++      setEditError('Pick which option is correct');
++      return;
++    }
++    setSaving(true);
++    setEditError(null);
++    try {
++      await updateContentAsset(draft.id, {
++        body: editQuestion.trim(),
++        metadata: {
++          ...draft.metadata,
++          options: editOptions.map((o) => ({ ...o, text: o.text.trim() })),
++          correctOptionId: editCorrectId,
++          explanation: editExplanation.trim(),
++        },
++      });
++      setEditingId(null);
++      await loadExistingDrafts(selectedAssetId);
++    } catch (err) {
++      setEditError(err.message);
++    } finally {
++      setSaving(false);
++    }
++  };
++
+   useEffect(() => {
+     const supabase = createBrowserClient();
+     supabase
+@@ -134,30 +192,98 @@ export default function PastQuestionLoopsPage() {
+           <h2 className="font-bold text-sm text-gray-500 uppercase">Drafts</h2>
+           {drafts.map((draft) => (
+             <div key={draft.id} className="bg-white rounded-xl border p-4">
+-              <div className="flex items-center justify-between gap-3">
+-                <div>
+-                  <p className="font-semibold">{draft.body}</p>
+-                  <ul className="text-sm text-gray-600 mt-1 space-y-0.5">
+-                    {(draft.metadata?.options || []).map((opt) => (
+-                      <li key={opt.id} className={opt.id === draft.metadata?.correctOptionId ? 'text-emerald-600 font-semibold' : ''}>
+-                        {opt.id}) {opt.text} {opt.id === draft.metadata?.correctOptionId ? '✓' : ''}
+-                      </li>
+-                    ))}
+-                  </ul>
+-                  <p className="text-xs text-gray-500 mt-1">
+-                    {draft.metadata?.background?.type
+-                      ? `${draft.metadata.background.type} background (${draft.metadata.background.source})`
+-                      : 'no background found'}{' '}
+-                    · {hasVideo(draft) ? '✅ recorded' : '⏳ not recorded'}
+-                  </p>
++              {editingId === draft.id ? (
++                <div className="space-y-2">
++                  <label className="block text-xs font-semibold text-gray-500">Question</label>
++                  <textarea
++                    value={editQuestion}
++                    onChange={(e) => setEditQuestion(e.target.value)}
++                    rows={2}
++                    className="w-full border rounded-lg px-3 py-2 text-sm"
++                  />
++                  <label className="block text-xs font-semibold text-gray-500">
++                    Options (pick the correct one)
++                  </label>
++                  {editOptions.map((opt) => (
++                    <div key={opt.id} className="flex items-center gap-2">
++                      <input
++                        type="radio"
++                        name={`correct-${draft.id}`}
++                        checked={editCorrectId === opt.id}
++                        onChange={() => setEditCorrectId(opt.id)}
++                      />
++                      <span className="text-xs text-gray-400 w-4">{opt.id})</span>
++                      <input
++                        value={opt.text}
++                        onChange={(e) => updateOptionText(opt.id, e.target.value)}
++                        className="flex-1 border rounded-lg px-2 py-1 text-sm"
++                      />
++                    </div>
++                  ))}
++                  <label className="block text-xs font-semibold text-gray-500 pt-1">Explanation</label>
++                  <textarea
++                    value={editExplanation}
++                    onChange={(e) => setEditExplanation(e.target.value)}
++                    rows={2}
++                    className="w-full border rounded-lg px-3 py-2 text-sm"
++                  />
++                  {editError && <p className="text-sm text-red-600">⚠️ {editError}</p>}
++                  <div className="flex gap-2">
++                    <button
++                      onClick={() => saveEdit(draft)}
++                      disabled={saving}
++                      className="bg-brand-blue text-white px-3 py-1.5 rounded-lg text-sm font-bold hover:opacity-90 disabled:opacity-50"
++                    >
++                      {saving ? 'Saving…' : 'Save'}
++                    </button>
++                    <button
++                      onClick={cancelEdit}
++                      disabled={saving}
++                      className="bg-gray-100 text-gray-700 px-3 py-1.5 rounded-lg text-sm font-bold hover:bg-gray-200"
++                    >
++                      Cancel
++                    </button>
++                  </div>
++                </div>
++              ) : (
++                <div className="flex items-center justify-between gap-3">
++                  <div>
++                    <p className="font-semibold">{draft.body}</p>
++                    <ul className="text-sm text-gray-600 mt-1 space-y-0.5">
++                      {(draft.metadata?.options || []).map((opt) => (
++                        <li key={opt.id} className={opt.id === draft.metadata?.correctOptionId ? 'text-emerald-600 font-semibold' : ''}>
++                          {opt.id}) {opt.text} {opt.id === draft.metadata?.correctOptionId ? '✓' : ''}
++                        </li>
++                      ))}
++                    </ul>
++                    <p className="text-xs text-gray-500 mt-1">
++                      {draft.metadata?.background?.type
++                        ? `${draft.metadata.background.type} background (${draft.metadata.background.source})`
++                        : 'no background found'}{' '}
++                      · {hasVideo(draft) ? '✅ recorded' : '⏳ not recorded'}
++                    </p>
++                  </div>
++                  <div className="flex gap-2 whitespace-nowrap">
++                    <button
++                      onClick={() => startEdit(draft)}
++                      className="bg-white border text-gray-700 px-3 py-2 rounded-lg text-sm font-bold hover:bg-gray-50"
++                    >
++                      Edit
++                    </button>
++                    <button
++                      onClick={() => setActiveDraft(draft)}
++                      className="bg-gray-100 text-gray-700 px-4 py-2 rounded-lg text-sm font-bold hover:bg-gray-200"
++                    >
++                      {hasVideo(draft) ? 'Re-record' : 'Record'}
++                    </button>
++                  </div>
+                 </div>
+-                <button
+-                  onClick={() => setActiveDraft(draft)}
+-                  className="bg-gray-100 text-gray-700 px-4 py-2 rounded-lg text-sm font-bold hover:bg-gray-200 whitespace-nowrap"
+-                >
+-                  {hasVideo(draft) ? 'Re-record' : 'Record'}
+-                </button>
+-              </div>
++              )}
++              {hasVideo(draft) && (
++                <p className="text-xs text-amber-600 mt-2">
++                  If you edited the text above after recording, hit Re-record — the saved video won't update on its own.
++                </p>
++              )}
+               {hasVideo(draft) && <PublishToChannels contentAssetId={draft.id} />}
+             </div>
+           ))}
+diff --git a/app/admin/quote-loops/page.js b/app/admin/quote-loops/page.js
+index 3d1ecba..279dfb8 100644
+--- a/app/admin/quote-loops/page.js
++++ b/app/admin/quote-loops/page.js
+@@ -15,6 +15,7 @@ import { useState, useEffect } from 'react';
+ import { createBrowserClient } from '@/lib/supabase';
+ import QuoteLoopRecorder from '@/components/QuoteLoopRecorder';
+ import PublishToChannels from '@/components/admin/PublishToChannels';
++import { updateContentAsset } from '@/lib/admin/updateContentAsset';
+ 
+ export default function QuoteLoopsPage() {
+   const [assets, setAssets] = useState([]);
+@@ -26,6 +27,45 @@ export default function QuoteLoopsPage() {
+   const [errorMsg, setErrorMsg] = useState(null);
+   const [warnings, setWarnings] = useState([]);
+ 
++  const [editingId, setEditingId] = useState(null);
++  const [editHeadline, setEditHeadline] = useState('');
++  const [editFollowUp, setEditFollowUp] = useState('');
++  const [saving, setSaving] = useState(false);
++  const [editError, setEditError] = useState(null);
++
++  const startEdit = (draft) => {
++    setEditingId(draft.id);
++    setEditHeadline(draft.body || '');
++    setEditFollowUp(draft.metadata?.followUp || '');
++    setEditError(null);
++  };
++
++  const cancelEdit = () => {
++    setEditingId(null);
++    setEditError(null);
++  };
++
++  const saveEdit = async (draft) => {
++    if (!editHeadline.trim() || !editFollowUp.trim()) {
++      setEditError('Headline and follow-up can\u2019t be empty');
++      return;
++    }
++    setSaving(true);
++    setEditError(null);
++    try {
++      await updateContentAsset(draft.id, {
++        body: editHeadline.trim(),
++        metadata: { ...draft.metadata, followUp: editFollowUp.trim() },
++      });
++      setEditingId(null);
++      await loadExistingDrafts(selectedAssetId);
++    } catch (err) {
++      setEditError(err.message);
++    } finally {
++      setSaving(false);
++    }
++  };
++
+   useEffect(() => {
+     const supabase = createBrowserClient();
+     supabase
+@@ -133,26 +173,75 @@ export default function QuoteLoopsPage() {
+           <h2 className="font-bold text-sm text-gray-500 uppercase">Drafts</h2>
+           {drafts.map((draft) => (
+             <div key={draft.id} className="bg-white rounded-xl border p-4">
+-              <div className="flex items-center justify-between gap-3">
+-                <div>
+-                  <p className="font-semibold">{draft.body}</p>
+-                  {draft.metadata?.followUp && (
+-                    <p className="text-sm text-gray-600 mt-0.5">{draft.metadata.followUp}</p>
+-                  )}
+-                  <p className="text-xs text-gray-500 mt-1">
+-                    {draft.metadata?.background?.type
+-                      ? `${draft.metadata.background.type} background (${draft.metadata.background.source})`
+-                      : 'no background found'}{' '}
+-                    · {hasVideo(draft) ? '✅ recorded' : '⏳ not recorded'}
+-                  </p>
++              {editingId === draft.id ? (
++                <div className="space-y-2">
++                  <label className="block text-xs font-semibold text-gray-500">Headline</label>
++                  <textarea
++                    value={editHeadline}
++                    onChange={(e) => setEditHeadline(e.target.value)}
++                    rows={2}
++                    className="w-full border rounded-lg px-3 py-2 text-sm"
++                  />
++                  <label className="block text-xs font-semibold text-gray-500">Follow-up</label>
++                  <textarea
++                    value={editFollowUp}
++                    onChange={(e) => setEditFollowUp(e.target.value)}
++                    rows={3}
++                    className="w-full border rounded-lg px-3 py-2 text-sm"
++                  />
++                  {editError && <p className="text-sm text-red-600">⚠️ {editError}</p>}
++                  <div className="flex gap-2">
++                    <button
++                      onClick={() => saveEdit(draft)}
++                      disabled={saving}
++                      className="bg-brand-blue text-white px-3 py-1.5 rounded-lg text-sm font-bold hover:opacity-90 disabled:opacity-50"
++                    >
++                      {saving ? 'Saving…' : 'Save'}
++                    </button>
++                    <button
++                      onClick={cancelEdit}
++                      disabled={saving}
++                      className="bg-gray-100 text-gray-700 px-3 py-1.5 rounded-lg text-sm font-bold hover:bg-gray-200"
++                    >
++                      Cancel
++                    </button>
++                  </div>
++                </div>
++              ) : (
++                <div className="flex items-center justify-between gap-3">
++                  <div>
++                    <p className="font-semibold">{draft.body}</p>
++                    {draft.metadata?.followUp && (
++                      <p className="text-sm text-gray-600 mt-0.5">{draft.metadata.followUp}</p>
++                    )}
++                    <p className="text-xs text-gray-500 mt-1">
++                      {draft.metadata?.background?.type
++                        ? `${draft.metadata.background.type} background (${draft.metadata.background.source})`
++                        : 'no background found'}{' '}
++                      · {hasVideo(draft) ? '✅ recorded' : '⏳ not recorded'}
++                    </p>
++                  </div>
++                  <div className="flex gap-2 whitespace-nowrap">
++                    <button
++                      onClick={() => startEdit(draft)}
++                      className="bg-white border text-gray-700 px-3 py-2 rounded-lg text-sm font-bold hover:bg-gray-50"
++                    >
++                      Edit
++                    </button>
++                    <button
++                      onClick={() => setActiveDraft(draft)}
++                      className="bg-gray-100 text-gray-700 px-4 py-2 rounded-lg text-sm font-bold hover:bg-gray-200"
++                    >
++                      {hasVideo(draft) ? 'Re-record' : 'Record'}
++                    </button>
++                  </div>
+                 </div>
+-                <button
+-                  onClick={() => setActiveDraft(draft)}
+-                  className="bg-gray-100 text-gray-700 px-4 py-2 rounded-lg text-sm font-bold hover:bg-gray-200 whitespace-nowrap"
+-                >
+-                  {hasVideo(draft) ? 'Re-record' : 'Record'}
+-                </button>
+-              </div>
++              )}
++              {hasVideo(draft) && (
++                <p className="text-xs text-amber-600 mt-2">
++                  If you edited the text above after recording, hit Re-record — the saved video won't update on its own.
++                </p>
++              )}
+               {hasVideo(draft) && <PublishToChannels contentAssetId={draft.id} />}
+             </div>
+           ))}
+diff --git a/app/admin/teaching-loops/page.js b/app/admin/teaching-loops/page.js
+index 9ff245c..7423e4e 100644
+--- a/app/admin/teaching-loops/page.js
++++ b/app/admin/teaching-loops/page.js
+@@ -20,6 +20,7 @@ import { useState, useEffect } from 'react';
+ import { createBrowserClient } from '@/lib/supabase';
+ import TeachingLoopRecorder from '@/components/TeachingLoopRecorder';
+ import PublishToChannels from '@/components/admin/PublishToChannels';
++import { updateContentAsset } from '@/lib/admin/updateContentAsset';
+ 
+ export default function TeachingLoopsPage() {
+   const [assets, setAssets] = useState([]);
+@@ -30,6 +31,55 @@ export default function TeachingLoopsPage() {
+   const [errorMsg, setErrorMsg] = useState(null);
+   const [warnings, setWarnings] = useState([]);
+ 
++  // Inline edit — editable cards are the script's real substance here, so
++  // this edits `title` + every segment's `text` (holdSeconds/label stay as
++  // generated; TeachingLoopRecorder reads segments live off the browser,
++  // there's no server-synthesized audio to go stale, unlike lesson-loops).
++  const [editingId, setEditingId] = useState(null);
++  const [editTitle, setEditTitle] = useState('');
++  const [editSegments, setEditSegments] = useState([]); // [{ label, text, holdSeconds }]
++  const [saving, setSaving] = useState(false);
++  const [editError, setEditError] = useState(null);
++
++  const startEdit = (draft) => {
++    setEditingId(draft.id);
++    setEditTitle(draft.title || '');
++    setEditSegments((draft.metadata?.segments || []).map((s) => ({ ...s })));
++    setEditError(null);
++  };
++
++  const cancelEdit = () => {
++    setEditingId(null);
++    setEditError(null);
++  };
++
++  const updateSegmentText = (index, text) => {
++    setEditSegments((prev) => prev.map((s, i) => (i === index ? { ...s, text } : s)));
++  };
++
++  const saveEdit = async (draft) => {
++    if (!editTitle.trim() || editSegments.some((s) => !s.text.trim())) {
++      setEditError('Title and every card need text');
++      return;
++    }
++    setSaving(true);
++    setEditError(null);
++    try {
++      const trimmedSegments = editSegments.map((s) => ({ ...s, text: s.text.trim() }));
++      await updateContentAsset(draft.id, {
++        title: editTitle.trim(),
++        body: trimmedSegments.map((s) => s.text).join(' '),
++        metadata: { ...draft.metadata, segments: trimmedSegments },
++      });
++      setEditingId(null);
++      await loadExistingDrafts(selectedAssetId);
++    } catch (err) {
++      setEditError(err.message);
++    } finally {
++      setSaving(false);
++    }
++  };
++
+   useEffect(() => {
+     const supabase = createBrowserClient();
+     supabase
+@@ -126,25 +176,80 @@ export default function TeachingLoopsPage() {
+           <h2 className="font-bold text-sm text-gray-500 uppercase">Drafts</h2>
+           {drafts.map((draft) => (
+             <div key={draft.id} className="bg-white rounded-xl border p-4">
+-              <div className="flex items-center justify-between gap-3">
+-                <div>
+-                  <p className="font-semibold">{draft.title}</p>
+-                  <p className="text-xs text-gray-500 mt-1">
+-                    {(draft.metadata?.segments || []).length} cards ·{' '}
+-                    {draft.metadata?.estimated_seconds ? `~${draft.metadata.estimated_seconds}s` : ''} ·{' '}
+-                    {draft.metadata?.background?.type
+-                      ? `${draft.metadata.background.type} background (${draft.metadata.background.source})`
+-                      : 'no background found'}{' '}
+-                    · {hasVideo(draft) ? '✅ recorded' : '⏳ not recorded'}
+-                  </p>
++              {editingId === draft.id ? (
++                <div className="space-y-2">
++                  <label className="block text-xs font-semibold text-gray-500">Title</label>
++                  <input
++                    value={editTitle}
++                    onChange={(e) => setEditTitle(e.target.value)}
++                    className="w-full border rounded-lg px-3 py-2 text-sm"
++                  />
++                  <label className="block text-xs font-semibold text-gray-500 pt-1">Cards</label>
++                  <div className="space-y-2 max-h-96 overflow-y-auto pr-1">
++                    {editSegments.map((seg, i) => (
++                      <div key={i} className="flex items-start gap-2">
++                        <span className="text-xs text-gray-400 w-20 pt-2 shrink-0">{seg.label || `#${i + 1}`}</span>
++                        <textarea
++                          value={seg.text}
++                          onChange={(e) => updateSegmentText(i, e.target.value)}
++                          rows={2}
++                          className="flex-1 border rounded-lg px-2 py-1 text-sm"
++                        />
++                      </div>
++                    ))}
++                  </div>
++                  {editError && <p className="text-sm text-red-600">⚠️ {editError}</p>}
++                  <div className="flex gap-2">
++                    <button
++                      onClick={() => saveEdit(draft)}
++                      disabled={saving}
++                      className="bg-brand-blue text-white px-3 py-1.5 rounded-lg text-sm font-bold hover:opacity-90 disabled:opacity-50"
++                    >
++                      {saving ? 'Saving…' : 'Save'}
++                    </button>
++                    <button
++                      onClick={cancelEdit}
++                      disabled={saving}
++                      className="bg-gray-100 text-gray-700 px-3 py-1.5 rounded-lg text-sm font-bold hover:bg-gray-200"
++                    >
++                      Cancel
++                    </button>
++                  </div>
++                </div>
++              ) : (
++                <div className="flex items-center justify-between gap-3">
++                  <div>
++                    <p className="font-semibold">{draft.title}</p>
++                    <p className="text-xs text-gray-500 mt-1">
++                      {(draft.metadata?.segments || []).length} cards ·{' '}
++                      {draft.metadata?.estimated_seconds ? `~${draft.metadata.estimated_seconds}s` : ''} ·{' '}
++                      {draft.metadata?.background?.type
++                        ? `${draft.metadata.background.type} background (${draft.metadata.background.source})`
++                        : 'no background found'}{' '}
++                      · {hasVideo(draft) ? '✅ recorded' : '⏳ not recorded'}
++                    </p>
++                  </div>
++                  <div className="flex gap-2 whitespace-nowrap">
++                    <button
++                      onClick={() => startEdit(draft)}
++                      className="bg-white border text-gray-700 px-3 py-2 rounded-lg text-sm font-bold hover:bg-gray-50"
++                    >
++                      Edit
++                    </button>
++                    <button
++                      onClick={() => setActiveDraft(draft)}
++                      className="bg-gray-100 text-gray-700 px-4 py-2 rounded-lg text-sm font-bold hover:bg-gray-200"
++                    >
++                      {hasVideo(draft) ? 'Re-record' : 'Record'}
++                    </button>
++                  </div>
+                 </div>
+-                <button
+-                  onClick={() => setActiveDraft(draft)}
+-                  className="bg-gray-100 text-gray-700 px-4 py-2 rounded-lg text-sm font-bold hover:bg-gray-200 whitespace-nowrap"
+-                >
+-                  {hasVideo(draft) ? 'Re-record' : 'Record'}
+-                </button>
+-              </div>
++              )}
++              {hasVideo(draft) && (
++                <p className="text-xs text-amber-600 mt-2">
++                  If you edited the cards above after recording, hit Re-record — the saved video won't update on its own.
++                </p>
++              )}
+               {hasVideo(draft) && <PublishToChannels contentAssetId={draft.id} />}
+             </div>
+           ))}
+diff --git a/app/api/admin/content-assets/route.js b/app/api/admin/content-assets/route.js
+index f39ed7a..249852d 100644
+--- a/app/api/admin/content-assets/route.js
++++ b/app/api/admin/content-assets/route.js
+@@ -31,17 +31,36 @@ const PLATFORM_LIMITS = {
+   telegram: 4096,
+ };
+ 
++// PATCH also backs the "Edit" affordance on every /admin/*-loops draft list
++// (meme, past-question, teaching, lesson, quote, countdown) — see each
++// page's `handleSaveEdit` for the caller side. Those pages send `title`
++// and/or `metadata` alongside or instead of `body`/`status`; metadata is
++// a full replace (not a deep merge) because every caller already has the
++// complete current metadata object in state (it read it off the draft
++// before editing) and only mutates the one or two fields the user touched
++// — sending the whole object back is simpler and less surprising than a
++// server-side merge that could silently resurrect a field the client meant
++// to drop.
+ export async function PATCH(request) {
+-  const { id, status, body } = await request.json();
+-  if (!id || (!status && typeof body !== 'string')) {
+-    return NextResponse.json({ error: 'id and (status or body) are required' }, { status: 400 });
++  const { id, status, body, title, metadata } = await request.json();
++  const hasBody = typeof body === 'string';
++  const hasTitle = typeof title === 'string';
++  const hasMetadata = metadata && typeof metadata === 'object' && !Array.isArray(metadata);
++
++  if (!id || (!status && !hasBody && !hasTitle && !hasMetadata)) {
++    return NextResponse.json(
++      { error: 'id and at least one of status, body, title, or metadata are required' },
++      { status: 400 }
++    );
+   }
+   const supabase = createAdminClient();
+ 
+   const update = {};
+   if (status) update.status = status;
++  if (hasTitle) update.title = title;
++  if (hasMetadata) update.metadata = metadata;
+ 
+-  if (typeof body === 'string') {
++  if (hasBody) {
+     if (body.trim().length === 0) {
+       return NextResponse.json({ error: 'Body cannot be empty' }, { status: 400 });
+     }
+@@ -60,12 +79,16 @@ export async function PATCH(request) {
+       );
+     }
+     update.body = body;
+-    update.updated_at = new Date().toISOString();
+   }
+ 
+-  const { error } = await supabase.from('content_assets').update(update).eq('id', id);
++  if (Object.keys(update).length === 0) {
++    return NextResponse.json({ error: 'Nothing to update' }, { status: 400 });
++  }
++  update.updated_at = new Date().toISOString();
++
++  const { data, error } = await supabase.from('content_assets').update(update).eq('id', id).select().single();
+   if (error) return NextResponse.json({ error: error.message }, { status: 500 });
+-  return NextResponse.json({ success: true });
++  return NextResponse.json({ success: true, contentAsset: data });
+ }
+ 
+ export async function DELETE(request) {
+diff --git a/lib/admin/updateContentAsset.js b/lib/admin/updateContentAsset.js
+new file mode 100644
+index 0000000..830997a
+--- /dev/null
++++ b/lib/admin/updateContentAsset.js
+@@ -0,0 +1,26 @@
++// lib/admin/updateContentAsset.js
++//
++// Thin client-side wrapper around PATCH /api/admin/content-assets, shared
++// by every /admin/*-loops page's inline "Edit draft" UI (meme, quote,
++// past-question, countdown, teaching, lesson). See that route's header for
++// why `metadata` is a full replace, not a merge — callers here always pass
++// the complete current metadata object with only the edited keys changed.
++//
++// Throws on failure so callers can show it in their existing errorMsg state
++// the same way handleGenerate already does.
++export async function updateContentAsset(id, { title, body, metadata, status } = {}) {
++  const payload = { id };
++  if (typeof title === 'string') payload.title = title;
++  if (typeof body === 'string') payload.body = body;
++  if (metadata && typeof metadata === 'object') payload.metadata = metadata;
++  if (status) payload.status = status;
++
++  const res = await fetch('/api/admin/content-assets', {
++    method: 'PATCH',
++    headers: { 'Content-Type': 'application/json' },
++    body: JSON.stringify(payload),
++  });
++  const data = await res.json();
++  if (!res.ok) throw new Error(data.error || 'Save failed');
++  return data.contentAsset;
++}

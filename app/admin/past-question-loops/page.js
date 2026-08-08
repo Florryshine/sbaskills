@@ -16,6 +16,7 @@ import { useState, useEffect } from 'react';
 import { createBrowserClient } from '@/lib/supabase';
 import PastQuestionLoopRecorder from '@/components/PastQuestionLoopRecorder';
 import PublishToChannels from '@/components/admin/PublishToChannels';
+import { updateContentAsset } from '@/lib/admin/updateContentAsset';
 
 export default function PastQuestionLoopsPage() {
   const [assets, setAssets] = useState([]);
@@ -26,6 +27,63 @@ export default function PastQuestionLoopsPage() {
   const [generating, setGenerating] = useState(false);
   const [errorMsg, setErrorMsg] = useState(null);
   const [warnings, setWarnings] = useState([]);
+
+  // Inline edit state for one draft at a time.
+  const [editingId, setEditingId] = useState(null);
+  const [editQuestion, setEditQuestion] = useState('');
+  const [editOptions, setEditOptions] = useState([]); // [{ id, text }]
+  const [editCorrectId, setEditCorrectId] = useState('');
+  const [editExplanation, setEditExplanation] = useState('');
+  const [saving, setSaving] = useState(false);
+  const [editError, setEditError] = useState(null);
+
+  const startEdit = (draft) => {
+    setEditingId(draft.id);
+    setEditQuestion(draft.body || '');
+    setEditOptions((draft.metadata?.options || []).map((o) => ({ id: o.id, text: o.text })));
+    setEditCorrectId(draft.metadata?.correctOptionId || '');
+    setEditExplanation(draft.metadata?.explanation || '');
+    setEditError(null);
+  };
+
+  const cancelEdit = () => {
+    setEditingId(null);
+    setEditError(null);
+  };
+
+  const updateOptionText = (id, text) => {
+    setEditOptions((prev) => prev.map((o) => (o.id === id ? { ...o, text } : o)));
+  };
+
+  const saveEdit = async (draft) => {
+    if (!editQuestion.trim() || editOptions.some((o) => !o.text.trim()) || !editExplanation.trim()) {
+      setEditError('Question, every option, and the explanation all need text');
+      return;
+    }
+    if (!editOptions.some((o) => o.id === editCorrectId)) {
+      setEditError('Pick which option is correct');
+      return;
+    }
+    setSaving(true);
+    setEditError(null);
+    try {
+      await updateContentAsset(draft.id, {
+        body: editQuestion.trim(),
+        metadata: {
+          ...draft.metadata,
+          options: editOptions.map((o) => ({ ...o, text: o.text.trim() })),
+          correctOptionId: editCorrectId,
+          explanation: editExplanation.trim(),
+        },
+      });
+      setEditingId(null);
+      await loadExistingDrafts(selectedAssetId);
+    } catch (err) {
+      setEditError(err.message);
+    } finally {
+      setSaving(false);
+    }
+  };
 
   useEffect(() => {
     const supabase = createBrowserClient();
@@ -134,30 +192,98 @@ export default function PastQuestionLoopsPage() {
           <h2 className="font-bold text-sm text-gray-500 uppercase">Drafts</h2>
           {drafts.map((draft) => (
             <div key={draft.id} className="bg-white rounded-xl border p-4">
-              <div className="flex items-center justify-between gap-3">
-                <div>
-                  <p className="font-semibold">{draft.body}</p>
-                  <ul className="text-sm text-gray-600 mt-1 space-y-0.5">
-                    {(draft.metadata?.options || []).map((opt) => (
-                      <li key={opt.id} className={opt.id === draft.metadata?.correctOptionId ? 'text-emerald-600 font-semibold' : ''}>
-                        {opt.id}) {opt.text} {opt.id === draft.metadata?.correctOptionId ? '✓' : ''}
-                      </li>
-                    ))}
-                  </ul>
-                  <p className="text-xs text-gray-500 mt-1">
-                    {draft.metadata?.background?.type
-                      ? `${draft.metadata.background.type} background (${draft.metadata.background.source})`
-                      : 'no background found'}{' '}
-                    · {hasVideo(draft) ? '✅ recorded' : '⏳ not recorded'}
-                  </p>
+              {editingId === draft.id ? (
+                <div className="space-y-2">
+                  <label className="block text-xs font-semibold text-gray-500">Question</label>
+                  <textarea
+                    value={editQuestion}
+                    onChange={(e) => setEditQuestion(e.target.value)}
+                    rows={2}
+                    className="w-full border rounded-lg px-3 py-2 text-sm"
+                  />
+                  <label className="block text-xs font-semibold text-gray-500">
+                    Options (pick the correct one)
+                  </label>
+                  {editOptions.map((opt) => (
+                    <div key={opt.id} className="flex items-center gap-2">
+                      <input
+                        type="radio"
+                        name={`correct-${draft.id}`}
+                        checked={editCorrectId === opt.id}
+                        onChange={() => setEditCorrectId(opt.id)}
+                      />
+                      <span className="text-xs text-gray-400 w-4">{opt.id})</span>
+                      <input
+                        value={opt.text}
+                        onChange={(e) => updateOptionText(opt.id, e.target.value)}
+                        className="flex-1 border rounded-lg px-2 py-1 text-sm"
+                      />
+                    </div>
+                  ))}
+                  <label className="block text-xs font-semibold text-gray-500 pt-1">Explanation</label>
+                  <textarea
+                    value={editExplanation}
+                    onChange={(e) => setEditExplanation(e.target.value)}
+                    rows={2}
+                    className="w-full border rounded-lg px-3 py-2 text-sm"
+                  />
+                  {editError && <p className="text-sm text-red-600">⚠️ {editError}</p>}
+                  <div className="flex gap-2">
+                    <button
+                      onClick={() => saveEdit(draft)}
+                      disabled={saving}
+                      className="bg-brand-blue text-white px-3 py-1.5 rounded-lg text-sm font-bold hover:opacity-90 disabled:opacity-50"
+                    >
+                      {saving ? 'Saving…' : 'Save'}
+                    </button>
+                    <button
+                      onClick={cancelEdit}
+                      disabled={saving}
+                      className="bg-gray-100 text-gray-700 px-3 py-1.5 rounded-lg text-sm font-bold hover:bg-gray-200"
+                    >
+                      Cancel
+                    </button>
+                  </div>
                 </div>
-                <button
-                  onClick={() => setActiveDraft(draft)}
-                  className="bg-gray-100 text-gray-700 px-4 py-2 rounded-lg text-sm font-bold hover:bg-gray-200 whitespace-nowrap"
-                >
-                  {hasVideo(draft) ? 'Re-record' : 'Record'}
-                </button>
-              </div>
+              ) : (
+                <div className="flex items-center justify-between gap-3">
+                  <div>
+                    <p className="font-semibold">{draft.body}</p>
+                    <ul className="text-sm text-gray-600 mt-1 space-y-0.5">
+                      {(draft.metadata?.options || []).map((opt) => (
+                        <li key={opt.id} className={opt.id === draft.metadata?.correctOptionId ? 'text-emerald-600 font-semibold' : ''}>
+                          {opt.id}) {opt.text} {opt.id === draft.metadata?.correctOptionId ? '✓' : ''}
+                        </li>
+                      ))}
+                    </ul>
+                    <p className="text-xs text-gray-500 mt-1">
+                      {draft.metadata?.background?.type
+                        ? `${draft.metadata.background.type} background (${draft.metadata.background.source})`
+                        : 'no background found'}{' '}
+                      · {hasVideo(draft) ? '✅ recorded' : '⏳ not recorded'}
+                    </p>
+                  </div>
+                  <div className="flex gap-2 whitespace-nowrap">
+                    <button
+                      onClick={() => startEdit(draft)}
+                      className="bg-white border text-gray-700 px-3 py-2 rounded-lg text-sm font-bold hover:bg-gray-50"
+                    >
+                      Edit
+                    </button>
+                    <button
+                      onClick={() => setActiveDraft(draft)}
+                      className="bg-gray-100 text-gray-700 px-4 py-2 rounded-lg text-sm font-bold hover:bg-gray-200"
+                    >
+                      {hasVideo(draft) ? 'Re-record' : 'Record'}
+                    </button>
+                  </div>
+                </div>
+              )}
+              {hasVideo(draft) && (
+                <p className="text-xs text-amber-600 mt-2">
+                  If you edited the text above after recording, hit Re-record — the saved video won't update on its own.
+                </p>
+              )}
               {hasVideo(draft) && <PublishToChannels contentAssetId={draft.id} />}
             </div>
           ))}

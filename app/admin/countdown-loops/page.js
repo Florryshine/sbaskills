@@ -18,6 +18,7 @@ import { useState, useEffect } from 'react';
 import { createBrowserClient } from '@/lib/supabase';
 import CountdownLoopRecorder from '@/components/CountdownLoopRecorder';
 import PublishToChannels from '@/components/admin/PublishToChannels';
+import { updateContentAsset } from '@/lib/admin/updateContentAsset';
 
 export default function CountdownLoopsPage() {
   const [assets, setAssets] = useState([]);
@@ -28,6 +29,59 @@ export default function CountdownLoopsPage() {
   const [generating, setGenerating] = useState(false);
   const [errorMsg, setErrorMsg] = useState(null);
   const [warnings, setWarnings] = useState([]);
+
+  const [editingId, setEditingId] = useState(null);
+  const [editTitle, setEditTitle] = useState('');
+  const [editItems, setEditItems] = useState([]); // [{ rank, point, detail }]
+  const [editCta, setEditCta] = useState('');
+  const [saving, setSaving] = useState(false);
+  const [editError, setEditError] = useState(null);
+
+  const startEdit = (draft) => {
+    setEditingId(draft.id);
+    setEditTitle(draft.body || '');
+    setEditItems(
+      [...(draft.metadata?.items || [])]
+        .sort((a, b) => b.rank - a.rank)
+        .map((i) => ({ rank: i.rank, point: i.point, detail: i.detail }))
+    );
+    setEditCta(draft.metadata?.cta || '');
+    setEditError(null);
+  };
+
+  const cancelEdit = () => {
+    setEditingId(null);
+    setEditError(null);
+  };
+
+  const updateItem = (rank, field, value) => {
+    setEditItems((prev) => prev.map((i) => (i.rank === rank ? { ...i, [field]: value } : i)));
+  };
+
+  const saveEdit = async (draft) => {
+    if (!editTitle.trim() || !editCta.trim() || editItems.some((i) => !i.point.trim() || !i.detail.trim())) {
+      setEditError('Title, CTA, and every item\u2019s point + detail all need text');
+      return;
+    }
+    setSaving(true);
+    setEditError(null);
+    try {
+      await updateContentAsset(draft.id, {
+        body: editTitle.trim(),
+        metadata: {
+          ...draft.metadata,
+          items: editItems.map((i) => ({ ...i, point: i.point.trim(), detail: i.detail.trim() })),
+          cta: editCta.trim(),
+        },
+      });
+      setEditingId(null);
+      await loadExistingDrafts(selectedAssetId);
+    } catch (err) {
+      setEditError(err.message);
+    } finally {
+      setSaving(false);
+    }
+  };
 
   useEffect(() => {
     const supabase = createBrowserClient();
@@ -136,32 +190,99 @@ export default function CountdownLoopsPage() {
           <h2 className="font-bold text-sm text-gray-500 uppercase">Drafts</h2>
           {drafts.map((draft) => (
             <div key={draft.id} className="bg-white rounded-xl border p-4">
-              <div className="flex items-center justify-between gap-3">
-                <div>
-                  <p className="font-semibold">{draft.body}</p>
-                  <ol className="text-sm text-gray-600 mt-1 space-y-0.5">
-                    {[...(draft.metadata?.items || [])]
-                      .sort((a, b) => b.rank - a.rank)
-                      .map((item) => (
-                        <li key={item.rank} className={item.rank === 1 ? 'text-emerald-600 font-semibold' : ''}>
-                          #{item.rank} {item.point}
-                        </li>
-                      ))}
-                  </ol>
-                  <p className="text-xs text-gray-500 mt-1">
-                    {draft.metadata?.background?.type
-                      ? `${draft.metadata.background.type} background (${draft.metadata.background.source})`
-                      : 'no background found'}{' '}
-                    · {hasVideo(draft) ? '✅ recorded' : '⏳ not recorded'}
-                  </p>
+              {editingId === draft.id ? (
+                <div className="space-y-2">
+                  <label className="block text-xs font-semibold text-gray-500">Title</label>
+                  <textarea
+                    value={editTitle}
+                    onChange={(e) => setEditTitle(e.target.value)}
+                    rows={1}
+                    className="w-full border rounded-lg px-3 py-2 text-sm"
+                  />
+                  {editItems.map((item) => (
+                    <div key={item.rank} className="border rounded-lg p-2 space-y-1">
+                      <label className="block text-xs font-semibold text-gray-500">
+                        #{item.rank} point
+                      </label>
+                      <input
+                        value={item.point}
+                        onChange={(e) => updateItem(item.rank, 'point', e.target.value)}
+                        className="w-full border rounded-lg px-2 py-1 text-sm"
+                      />
+                      <label className="block text-xs font-semibold text-gray-500">Detail</label>
+                      <textarea
+                        value={item.detail}
+                        onChange={(e) => updateItem(item.rank, 'detail', e.target.value)}
+                        rows={2}
+                        className="w-full border rounded-lg px-2 py-1 text-sm"
+                      />
+                    </div>
+                  ))}
+                  <label className="block text-xs font-semibold text-gray-500">CTA</label>
+                  <input
+                    value={editCta}
+                    onChange={(e) => setEditCta(e.target.value)}
+                    className="w-full border rounded-lg px-3 py-2 text-sm"
+                  />
+                  {editError && <p className="text-sm text-red-600">⚠️ {editError}</p>}
+                  <div className="flex gap-2">
+                    <button
+                      onClick={() => saveEdit(draft)}
+                      disabled={saving}
+                      className="bg-brand-blue text-white px-3 py-1.5 rounded-lg text-sm font-bold hover:opacity-90 disabled:opacity-50"
+                    >
+                      {saving ? 'Saving…' : 'Save'}
+                    </button>
+                    <button
+                      onClick={cancelEdit}
+                      disabled={saving}
+                      className="bg-gray-100 text-gray-700 px-3 py-1.5 rounded-lg text-sm font-bold hover:bg-gray-200"
+                    >
+                      Cancel
+                    </button>
+                  </div>
                 </div>
-                <button
-                  onClick={() => setActiveDraft(draft)}
-                  className="bg-gray-100 text-gray-700 px-4 py-2 rounded-lg text-sm font-bold hover:bg-gray-200 whitespace-nowrap"
-                >
-                  {hasVideo(draft) ? 'Re-record' : 'Record'}
-                </button>
-              </div>
+              ) : (
+                <div className="flex items-center justify-between gap-3">
+                  <div>
+                    <p className="font-semibold">{draft.body}</p>
+                    <ol className="text-sm text-gray-600 mt-1 space-y-0.5">
+                      {[...(draft.metadata?.items || [])]
+                        .sort((a, b) => b.rank - a.rank)
+                        .map((item) => (
+                          <li key={item.rank} className={item.rank === 1 ? 'text-emerald-600 font-semibold' : ''}>
+                            #{item.rank} {item.point}
+                          </li>
+                        ))}
+                    </ol>
+                    <p className="text-xs text-gray-500 mt-1">
+                      {draft.metadata?.background?.type
+                        ? `${draft.metadata.background.type} background (${draft.metadata.background.source})`
+                        : 'no background found'}{' '}
+                      · {hasVideo(draft) ? '✅ recorded' : '⏳ not recorded'}
+                    </p>
+                  </div>
+                  <div className="flex gap-2 whitespace-nowrap">
+                    <button
+                      onClick={() => startEdit(draft)}
+                      className="bg-white border text-gray-700 px-3 py-2 rounded-lg text-sm font-bold hover:bg-gray-50"
+                    >
+                      Edit
+                    </button>
+                    <button
+                      onClick={() => setActiveDraft(draft)}
+                      className="bg-gray-100 text-gray-700 px-4 py-2 rounded-lg text-sm font-bold hover:bg-gray-200"
+                    >
+                      {hasVideo(draft) ? 'Re-record' : 'Record'}
+                    </button>
+                  </div>
+                </div>
+              )}
+              {hasVideo(draft) && (
+                <p className="text-xs text-amber-600 mt-2">
+                  If you edited the text above after recording, hit Re-record — the saved video won't update on its own.
+                </p>
+              )}
               {hasVideo(draft) && <PublishToChannels contentAssetId={draft.id} />}
             </div>
           ))}

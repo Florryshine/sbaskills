@@ -20,6 +20,7 @@ import { useState, useEffect } from 'react';
 import { createBrowserClient } from '@/lib/supabase';
 import TeachingLoopRecorder from '@/components/TeachingLoopRecorder';
 import PublishToChannels from '@/components/admin/PublishToChannels';
+import { updateContentAsset } from '@/lib/admin/updateContentAsset';
 
 export default function TeachingLoopsPage() {
   const [assets, setAssets] = useState([]);
@@ -29,6 +30,55 @@ export default function TeachingLoopsPage() {
   const [generating, setGenerating] = useState(false);
   const [errorMsg, setErrorMsg] = useState(null);
   const [warnings, setWarnings] = useState([]);
+
+  // Inline edit — editable cards are the script's real substance here, so
+  // this edits `title` + every segment's `text` (holdSeconds/label stay as
+  // generated; TeachingLoopRecorder reads segments live off the browser,
+  // there's no server-synthesized audio to go stale, unlike lesson-loops).
+  const [editingId, setEditingId] = useState(null);
+  const [editTitle, setEditTitle] = useState('');
+  const [editSegments, setEditSegments] = useState([]); // [{ label, text, holdSeconds }]
+  const [saving, setSaving] = useState(false);
+  const [editError, setEditError] = useState(null);
+
+  const startEdit = (draft) => {
+    setEditingId(draft.id);
+    setEditTitle(draft.title || '');
+    setEditSegments((draft.metadata?.segments || []).map((s) => ({ ...s })));
+    setEditError(null);
+  };
+
+  const cancelEdit = () => {
+    setEditingId(null);
+    setEditError(null);
+  };
+
+  const updateSegmentText = (index, text) => {
+    setEditSegments((prev) => prev.map((s, i) => (i === index ? { ...s, text } : s)));
+  };
+
+  const saveEdit = async (draft) => {
+    if (!editTitle.trim() || editSegments.some((s) => !s.text.trim())) {
+      setEditError('Title and every card need text');
+      return;
+    }
+    setSaving(true);
+    setEditError(null);
+    try {
+      const trimmedSegments = editSegments.map((s) => ({ ...s, text: s.text.trim() }));
+      await updateContentAsset(draft.id, {
+        title: editTitle.trim(),
+        body: trimmedSegments.map((s) => s.text).join(' '),
+        metadata: { ...draft.metadata, segments: trimmedSegments },
+      });
+      setEditingId(null);
+      await loadExistingDrafts(selectedAssetId);
+    } catch (err) {
+      setEditError(err.message);
+    } finally {
+      setSaving(false);
+    }
+  };
 
   useEffect(() => {
     const supabase = createBrowserClient();
@@ -126,25 +176,80 @@ export default function TeachingLoopsPage() {
           <h2 className="font-bold text-sm text-gray-500 uppercase">Drafts</h2>
           {drafts.map((draft) => (
             <div key={draft.id} className="bg-white rounded-xl border p-4">
-              <div className="flex items-center justify-between gap-3">
-                <div>
-                  <p className="font-semibold">{draft.title}</p>
-                  <p className="text-xs text-gray-500 mt-1">
-                    {(draft.metadata?.segments || []).length} cards ·{' '}
-                    {draft.metadata?.estimated_seconds ? `~${draft.metadata.estimated_seconds}s` : ''} ·{' '}
-                    {draft.metadata?.background?.type
-                      ? `${draft.metadata.background.type} background (${draft.metadata.background.source})`
-                      : 'no background found'}{' '}
-                    · {hasVideo(draft) ? '✅ recorded' : '⏳ not recorded'}
-                  </p>
+              {editingId === draft.id ? (
+                <div className="space-y-2">
+                  <label className="block text-xs font-semibold text-gray-500">Title</label>
+                  <input
+                    value={editTitle}
+                    onChange={(e) => setEditTitle(e.target.value)}
+                    className="w-full border rounded-lg px-3 py-2 text-sm"
+                  />
+                  <label className="block text-xs font-semibold text-gray-500 pt-1">Cards</label>
+                  <div className="space-y-2 max-h-96 overflow-y-auto pr-1">
+                    {editSegments.map((seg, i) => (
+                      <div key={i} className="flex items-start gap-2">
+                        <span className="text-xs text-gray-400 w-20 pt-2 shrink-0">{seg.label || `#${i + 1}`}</span>
+                        <textarea
+                          value={seg.text}
+                          onChange={(e) => updateSegmentText(i, e.target.value)}
+                          rows={2}
+                          className="flex-1 border rounded-lg px-2 py-1 text-sm"
+                        />
+                      </div>
+                    ))}
+                  </div>
+                  {editError && <p className="text-sm text-red-600">⚠️ {editError}</p>}
+                  <div className="flex gap-2">
+                    <button
+                      onClick={() => saveEdit(draft)}
+                      disabled={saving}
+                      className="bg-brand-blue text-white px-3 py-1.5 rounded-lg text-sm font-bold hover:opacity-90 disabled:opacity-50"
+                    >
+                      {saving ? 'Saving…' : 'Save'}
+                    </button>
+                    <button
+                      onClick={cancelEdit}
+                      disabled={saving}
+                      className="bg-gray-100 text-gray-700 px-3 py-1.5 rounded-lg text-sm font-bold hover:bg-gray-200"
+                    >
+                      Cancel
+                    </button>
+                  </div>
                 </div>
-                <button
-                  onClick={() => setActiveDraft(draft)}
-                  className="bg-gray-100 text-gray-700 px-4 py-2 rounded-lg text-sm font-bold hover:bg-gray-200 whitespace-nowrap"
-                >
-                  {hasVideo(draft) ? 'Re-record' : 'Record'}
-                </button>
-              </div>
+              ) : (
+                <div className="flex items-center justify-between gap-3">
+                  <div>
+                    <p className="font-semibold">{draft.title}</p>
+                    <p className="text-xs text-gray-500 mt-1">
+                      {(draft.metadata?.segments || []).length} cards ·{' '}
+                      {draft.metadata?.estimated_seconds ? `~${draft.metadata.estimated_seconds}s` : ''} ·{' '}
+                      {draft.metadata?.background?.type
+                        ? `${draft.metadata.background.type} background (${draft.metadata.background.source})`
+                        : 'no background found'}{' '}
+                      · {hasVideo(draft) ? '✅ recorded' : '⏳ not recorded'}
+                    </p>
+                  </div>
+                  <div className="flex gap-2 whitespace-nowrap">
+                    <button
+                      onClick={() => startEdit(draft)}
+                      className="bg-white border text-gray-700 px-3 py-2 rounded-lg text-sm font-bold hover:bg-gray-50"
+                    >
+                      Edit
+                    </button>
+                    <button
+                      onClick={() => setActiveDraft(draft)}
+                      className="bg-gray-100 text-gray-700 px-4 py-2 rounded-lg text-sm font-bold hover:bg-gray-200"
+                    >
+                      {hasVideo(draft) ? 'Re-record' : 'Record'}
+                    </button>
+                  </div>
+                </div>
+              )}
+              {hasVideo(draft) && (
+                <p className="text-xs text-amber-600 mt-2">
+                  If you edited the cards above after recording, hit Re-record — the saved video won't update on its own.
+                </p>
+              )}
               {hasVideo(draft) && <PublishToChannels contentAssetId={draft.id} />}
             </div>
           ))}

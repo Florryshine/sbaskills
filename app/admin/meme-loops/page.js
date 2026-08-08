@@ -16,6 +16,7 @@ import { useState, useEffect } from 'react';
 import { createBrowserClient } from '@/lib/supabase';
 import MemeLoopRecorder from '@/components/MemeLoopRecorder';
 import PublishToChannels from '@/components/admin/PublishToChannels';
+import { updateContentAsset } from '@/lib/admin/updateContentAsset';
 
 export default function MemeLoopsPage() {
   const [assets, setAssets] = useState([]);
@@ -26,6 +27,47 @@ export default function MemeLoopsPage() {
   const [generating, setGenerating] = useState(false);
   const [errorMsg, setErrorMsg] = useState(null);
   const [warnings, setWarnings] = useState([]);
+
+  // Inline edit state — one draft editable at a time, mirrors the
+  // edit-in-place pattern already used on /admin/social-engine.
+  const [editingId, setEditingId] = useState(null);
+  const [editSetup, setEditSetup] = useState('');
+  const [editPunchline, setEditPunchline] = useState('');
+  const [saving, setSaving] = useState(false);
+  const [editError, setEditError] = useState(null);
+
+  const startEdit = (draft) => {
+    setEditingId(draft.id);
+    setEditSetup(draft.body || '');
+    setEditPunchline(draft.metadata?.punchline || '');
+    setEditError(null);
+  };
+
+  const cancelEdit = () => {
+    setEditingId(null);
+    setEditError(null);
+  };
+
+  const saveEdit = async (draft) => {
+    if (!editSetup.trim() || !editPunchline.trim()) {
+      setEditError('Setup and punchline can\u2019t be empty');
+      return;
+    }
+    setSaving(true);
+    setEditError(null);
+    try {
+      await updateContentAsset(draft.id, {
+        body: editSetup.trim(),
+        metadata: { ...draft.metadata, punchline: editPunchline.trim() },
+      });
+      setEditingId(null);
+      await loadExistingDrafts(selectedAssetId);
+    } catch (err) {
+      setEditError(err.message);
+    } finally {
+      setSaving(false);
+    }
+  };
 
   useEffect(() => {
     const supabase = createBrowserClient();
@@ -134,28 +176,77 @@ export default function MemeLoopsPage() {
           <h2 className="font-bold text-sm text-gray-500 uppercase">Drafts</h2>
           {drafts.map((draft) => (
             <div key={draft.id} className="bg-white rounded-xl border p-4">
-              <div className="flex items-center justify-between gap-3">
-                <div>
-                  <p className="font-semibold">{draft.body}</p>
-                  {draft.metadata?.punchline && (
-                    <p className="text-sm text-gray-600 mt-0.5">
-                      {draft.metadata.punchline} {draft.metadata?.emojis?.join(' ')}
-                    </p>
-                  )}
-                  <p className="text-xs text-gray-500 mt-1">
-                    {draft.metadata?.background?.type
-                      ? `${draft.metadata.background.type} background (${draft.metadata.background.source})`
-                      : 'no background found'}{' '}
-                    · {hasVideo(draft) ? '✅ recorded' : '⏳ not recorded'}
-                  </p>
+              {editingId === draft.id ? (
+                <div className="space-y-2">
+                  <label className="block text-xs font-semibold text-gray-500">Setup</label>
+                  <textarea
+                    value={editSetup}
+                    onChange={(e) => setEditSetup(e.target.value)}
+                    rows={2}
+                    className="w-full border rounded-lg px-3 py-2 text-sm"
+                  />
+                  <label className="block text-xs font-semibold text-gray-500">Punchline</label>
+                  <textarea
+                    value={editPunchline}
+                    onChange={(e) => setEditPunchline(e.target.value)}
+                    rows={2}
+                    className="w-full border rounded-lg px-3 py-2 text-sm"
+                  />
+                  {editError && <p className="text-sm text-red-600">⚠️ {editError}</p>}
+                  <div className="flex gap-2">
+                    <button
+                      onClick={() => saveEdit(draft)}
+                      disabled={saving}
+                      className="bg-brand-blue text-white px-3 py-1.5 rounded-lg text-sm font-bold hover:opacity-90 disabled:opacity-50"
+                    >
+                      {saving ? 'Saving…' : 'Save'}
+                    </button>
+                    <button
+                      onClick={cancelEdit}
+                      disabled={saving}
+                      className="bg-gray-100 text-gray-700 px-3 py-1.5 rounded-lg text-sm font-bold hover:bg-gray-200"
+                    >
+                      Cancel
+                    </button>
+                  </div>
                 </div>
-                <button
-                  onClick={() => setActiveDraft(draft)}
-                  className="bg-gray-100 text-gray-700 px-4 py-2 rounded-lg text-sm font-bold hover:bg-gray-200 whitespace-nowrap"
-                >
-                  {hasVideo(draft) ? 'Re-record' : 'Record'}
-                </button>
-              </div>
+              ) : (
+                <div className="flex items-center justify-between gap-3">
+                  <div>
+                    <p className="font-semibold">{draft.body}</p>
+                    {draft.metadata?.punchline && (
+                      <p className="text-sm text-gray-600 mt-0.5">
+                        {draft.metadata.punchline} {draft.metadata?.emojis?.join(' ')}
+                      </p>
+                    )}
+                    <p className="text-xs text-gray-500 mt-1">
+                      {draft.metadata?.background?.type
+                        ? `${draft.metadata.background.type} background (${draft.metadata.background.source})`
+                        : 'no background found'}{' '}
+                      · {hasVideo(draft) ? '✅ recorded' : '⏳ not recorded'}
+                    </p>
+                  </div>
+                  <div className="flex gap-2 whitespace-nowrap">
+                    <button
+                      onClick={() => startEdit(draft)}
+                      className="bg-white border text-gray-700 px-3 py-2 rounded-lg text-sm font-bold hover:bg-gray-50"
+                    >
+                      Edit
+                    </button>
+                    <button
+                      onClick={() => setActiveDraft(draft)}
+                      className="bg-gray-100 text-gray-700 px-4 py-2 rounded-lg text-sm font-bold hover:bg-gray-200"
+                    >
+                      {hasVideo(draft) ? 'Re-record' : 'Record'}
+                    </button>
+                  </div>
+                </div>
+              )}
+              {hasVideo(draft) && (
+                <p className="text-xs text-amber-600 mt-2">
+                  If you edited the text above after recording, hit Re-record — the saved video won't update on its own.
+                </p>
+              )}
               {hasVideo(draft) && <PublishToChannels contentAssetId={draft.id} />}
             </div>
           ))}

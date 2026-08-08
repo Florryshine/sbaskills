@@ -15,6 +15,7 @@ import { useState, useEffect } from 'react';
 import { createBrowserClient } from '@/lib/supabase';
 import QuoteLoopRecorder from '@/components/QuoteLoopRecorder';
 import PublishToChannels from '@/components/admin/PublishToChannels';
+import { updateContentAsset } from '@/lib/admin/updateContentAsset';
 
 export default function QuoteLoopsPage() {
   const [assets, setAssets] = useState([]);
@@ -25,6 +26,45 @@ export default function QuoteLoopsPage() {
   const [generating, setGenerating] = useState(false);
   const [errorMsg, setErrorMsg] = useState(null);
   const [warnings, setWarnings] = useState([]);
+
+  const [editingId, setEditingId] = useState(null);
+  const [editHeadline, setEditHeadline] = useState('');
+  const [editFollowUp, setEditFollowUp] = useState('');
+  const [saving, setSaving] = useState(false);
+  const [editError, setEditError] = useState(null);
+
+  const startEdit = (draft) => {
+    setEditingId(draft.id);
+    setEditHeadline(draft.body || '');
+    setEditFollowUp(draft.metadata?.followUp || '');
+    setEditError(null);
+  };
+
+  const cancelEdit = () => {
+    setEditingId(null);
+    setEditError(null);
+  };
+
+  const saveEdit = async (draft) => {
+    if (!editHeadline.trim() || !editFollowUp.trim()) {
+      setEditError('Headline and follow-up can\u2019t be empty');
+      return;
+    }
+    setSaving(true);
+    setEditError(null);
+    try {
+      await updateContentAsset(draft.id, {
+        body: editHeadline.trim(),
+        metadata: { ...draft.metadata, followUp: editFollowUp.trim() },
+      });
+      setEditingId(null);
+      await loadExistingDrafts(selectedAssetId);
+    } catch (err) {
+      setEditError(err.message);
+    } finally {
+      setSaving(false);
+    }
+  };
 
   useEffect(() => {
     const supabase = createBrowserClient();
@@ -133,26 +173,75 @@ export default function QuoteLoopsPage() {
           <h2 className="font-bold text-sm text-gray-500 uppercase">Drafts</h2>
           {drafts.map((draft) => (
             <div key={draft.id} className="bg-white rounded-xl border p-4">
-              <div className="flex items-center justify-between gap-3">
-                <div>
-                  <p className="font-semibold">{draft.body}</p>
-                  {draft.metadata?.followUp && (
-                    <p className="text-sm text-gray-600 mt-0.5">{draft.metadata.followUp}</p>
-                  )}
-                  <p className="text-xs text-gray-500 mt-1">
-                    {draft.metadata?.background?.type
-                      ? `${draft.metadata.background.type} background (${draft.metadata.background.source})`
-                      : 'no background found'}{' '}
-                    · {hasVideo(draft) ? '✅ recorded' : '⏳ not recorded'}
-                  </p>
+              {editingId === draft.id ? (
+                <div className="space-y-2">
+                  <label className="block text-xs font-semibold text-gray-500">Headline</label>
+                  <textarea
+                    value={editHeadline}
+                    onChange={(e) => setEditHeadline(e.target.value)}
+                    rows={2}
+                    className="w-full border rounded-lg px-3 py-2 text-sm"
+                  />
+                  <label className="block text-xs font-semibold text-gray-500">Follow-up</label>
+                  <textarea
+                    value={editFollowUp}
+                    onChange={(e) => setEditFollowUp(e.target.value)}
+                    rows={3}
+                    className="w-full border rounded-lg px-3 py-2 text-sm"
+                  />
+                  {editError && <p className="text-sm text-red-600">⚠️ {editError}</p>}
+                  <div className="flex gap-2">
+                    <button
+                      onClick={() => saveEdit(draft)}
+                      disabled={saving}
+                      className="bg-brand-blue text-white px-3 py-1.5 rounded-lg text-sm font-bold hover:opacity-90 disabled:opacity-50"
+                    >
+                      {saving ? 'Saving…' : 'Save'}
+                    </button>
+                    <button
+                      onClick={cancelEdit}
+                      disabled={saving}
+                      className="bg-gray-100 text-gray-700 px-3 py-1.5 rounded-lg text-sm font-bold hover:bg-gray-200"
+                    >
+                      Cancel
+                    </button>
+                  </div>
                 </div>
-                <button
-                  onClick={() => setActiveDraft(draft)}
-                  className="bg-gray-100 text-gray-700 px-4 py-2 rounded-lg text-sm font-bold hover:bg-gray-200 whitespace-nowrap"
-                >
-                  {hasVideo(draft) ? 'Re-record' : 'Record'}
-                </button>
-              </div>
+              ) : (
+                <div className="flex items-center justify-between gap-3">
+                  <div>
+                    <p className="font-semibold">{draft.body}</p>
+                    {draft.metadata?.followUp && (
+                      <p className="text-sm text-gray-600 mt-0.5">{draft.metadata.followUp}</p>
+                    )}
+                    <p className="text-xs text-gray-500 mt-1">
+                      {draft.metadata?.background?.type
+                        ? `${draft.metadata.background.type} background (${draft.metadata.background.source})`
+                        : 'no background found'}{' '}
+                      · {hasVideo(draft) ? '✅ recorded' : '⏳ not recorded'}
+                    </p>
+                  </div>
+                  <div className="flex gap-2 whitespace-nowrap">
+                    <button
+                      onClick={() => startEdit(draft)}
+                      className="bg-white border text-gray-700 px-3 py-2 rounded-lg text-sm font-bold hover:bg-gray-50"
+                    >
+                      Edit
+                    </button>
+                    <button
+                      onClick={() => setActiveDraft(draft)}
+                      className="bg-gray-100 text-gray-700 px-4 py-2 rounded-lg text-sm font-bold hover:bg-gray-200"
+                    >
+                      {hasVideo(draft) ? 'Re-record' : 'Record'}
+                    </button>
+                  </div>
+                </div>
+              )}
+              {hasVideo(draft) && (
+                <p className="text-xs text-amber-600 mt-2">
+                  If you edited the text above after recording, hit Re-record — the saved video won't update on its own.
+                </p>
+              )}
               {hasVideo(draft) && <PublishToChannels contentAssetId={draft.id} />}
             </div>
           ))}

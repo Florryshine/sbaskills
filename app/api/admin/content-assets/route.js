@@ -31,17 +31,36 @@ const PLATFORM_LIMITS = {
   telegram: 4096,
 };
 
+// PATCH also backs the "Edit" affordance on every /admin/*-loops draft list
+// (meme, past-question, teaching, lesson, quote, countdown) — see each
+// page's `handleSaveEdit` for the caller side. Those pages send `title`
+// and/or `metadata` alongside or instead of `body`/`status`; metadata is
+// a full replace (not a deep merge) because every caller already has the
+// complete current metadata object in state (it read it off the draft
+// before editing) and only mutates the one or two fields the user touched
+// — sending the whole object back is simpler and less surprising than a
+// server-side merge that could silently resurrect a field the client meant
+// to drop.
 export async function PATCH(request) {
-  const { id, status, body } = await request.json();
-  if (!id || (!status && typeof body !== 'string')) {
-    return NextResponse.json({ error: 'id and (status or body) are required' }, { status: 400 });
+  const { id, status, body, title, metadata } = await request.json();
+  const hasBody = typeof body === 'string';
+  const hasTitle = typeof title === 'string';
+  const hasMetadata = metadata && typeof metadata === 'object' && !Array.isArray(metadata);
+
+  if (!id || (!status && !hasBody && !hasTitle && !hasMetadata)) {
+    return NextResponse.json(
+      { error: 'id and at least one of status, body, title, or metadata are required' },
+      { status: 400 }
+    );
   }
   const supabase = createAdminClient();
 
   const update = {};
   if (status) update.status = status;
+  if (hasTitle) update.title = title;
+  if (hasMetadata) update.metadata = metadata;
 
-  if (typeof body === 'string') {
+  if (hasBody) {
     if (body.trim().length === 0) {
       return NextResponse.json({ error: 'Body cannot be empty' }, { status: 400 });
     }
@@ -60,12 +79,16 @@ export async function PATCH(request) {
       );
     }
     update.body = body;
-    update.updated_at = new Date().toISOString();
   }
 
-  const { error } = await supabase.from('content_assets').update(update).eq('id', id);
+  if (Object.keys(update).length === 0) {
+    return NextResponse.json({ error: 'Nothing to update' }, { status: 400 });
+  }
+  update.updated_at = new Date().toISOString();
+
+  const { data, error } = await supabase.from('content_assets').update(update).eq('id', id).select().single();
   if (error) return NextResponse.json({ error: error.message }, { status: 500 });
-  return NextResponse.json({ success: true });
+  return NextResponse.json({ success: true, contentAsset: data });
 }
 
 export async function DELETE(request) {
