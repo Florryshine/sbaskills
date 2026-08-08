@@ -1,0 +1,1411 @@
+From ec5e4da31614f8b8cde6429c647a7ad818b59d77 Mon Sep 17 00:00:00 2001
+From: Claude <assistant@anthropic.com>
+Date: Fri, 7 Aug 2026 22:54:02 +0000
+Subject: [PATCH] Add 2-Minute Lesson Loop content type (landscape, narrated)
+MIME-Version: 1.0
+Content-Type: text/plain; charset=UTF-8
+Content-Transfer-Encoding: 8bit
+
+The 'authority machine' loop type — a ~2-minute landscape (16:9) real
+YouTube video, not a Shorts/Reels loop, cross-posted to Facebook and
+TikTok as landscape content. Script structure: hook -> 2-4 teach beats
+-> worked example -> answer/explanation -> follow CTA, ~260-320 words
+total narration (~100-130s spoken).
+
+Generation follows the fast-return + background-pipeline shape already
+established by lib/podcastGenerate.js (create the row as status
+'generating', return its id immediately, do script+narration+background
+work via runInBackground, flip to 'draft' or 'failed' when done) since a
+5-8 segment script+narration job can run close to the per-invocation
+time budget. New status route for the client to poll, same pattern as
+/api/content-engine/podcast/status.
+
+Narration is real per-segment TTS via the same synthesizeLine/VOICES.host_a
+(Ezinne) the podcast engine already uses server-side — the local-only
+edge-tts-universal path in lib/video-engine/narration.js can't run on
+Vercel, see that file's own header. TTS + background search run with
+the same TTS_CONCURRENCY=4 pattern as podcastGenerate.js.
+
+Recorder (LessonLoopRecorder) plays every segment's real MP3 in sequence
+and captures a live canvas+audio stream, same technique as
+AudiogramRecorder (segment-advance-on-'ended' logic) fused with
+QuoteLoopRecorder's background layering (video/photo/gradient, Ken Burns
+on photos), just switched per-segment and landscape instead of 9:16.
+Each segment gets a type badge (HOOK/KEY IDEA/EXAMPLE/ANSWER/FOLLOW), a
+short on-screen keyword caption, and a subtitle band of the full
+narration line for muted/sound-off viewers.
+
+Generation also produces real per-platform metadata grounded in the
+actual script (not the generic metadata-engine fallback): a genuinely
+detailed YouTube title+description+tags, a conversational Facebook
+caption, and a punchy TikTok caption+hashtags — surfaced in the admin
+page and propagated to platform-specific content_assets rows on save.
+Needs a 'lesson-loops' bucket in Supabase storage (public read,
+authenticated upload) before first use. Added to AdminSidebar.
+---
+ app/admin/lesson-loops/page.js               | 255 ++++++++++
+ app/api/admin/lesson-loops/generate/route.js | 303 ++++++++++++
+ app/api/admin/lesson-loops/list/route.js     |  32 ++
+ app/api/admin/lesson-loops/save/route.js     | 187 +++++++
+ app/api/admin/lesson-loops/status/route.js   |  37 ++
+ components/AdminSidebar.js                   |   1 +
+ components/LessonLoopRecorder.js             | 486 +++++++++++++++++++
+ 7 files changed, 1301 insertions(+)
+ create mode 100644 app/admin/lesson-loops/page.js
+ create mode 100644 app/api/admin/lesson-loops/generate/route.js
+ create mode 100644 app/api/admin/lesson-loops/list/route.js
+ create mode 100644 app/api/admin/lesson-loops/save/route.js
+ create mode 100644 app/api/admin/lesson-loops/status/route.js
+ create mode 100644 components/LessonLoopRecorder.js
+
+diff --git a/app/admin/lesson-loops/page.js b/app/admin/lesson-loops/page.js
+new file mode 100644
+index 0000000..54b2e16
+--- /dev/null
++++ b/app/admin/lesson-loops/page.js
+@@ -0,0 +1,255 @@
++'use client';
++
++// app/admin/lesson-loops/page.js
++//
++// Pick a knowledge asset -> generate a 2-minute landscape lesson script
++// (script+narration+backgrounds run in the background — see
++// lesson-loops/generate's header — so this page polls
++// /api/admin/lesson-loops/status until it flips from 'generating' to
++// 'draft'/'failed') -> record it with LessonLoopRecorder -> saved into
++// content_assets/media_files plus per-platform (YouTube/Facebook/TikTok)
++// metadata rows, ready for the existing social-engine review dashboard.
++//
++// Needs a `lesson-loops` bucket in Supabase storage (public read,
++// authenticated upload — same policy shape as `quote-loops`) before the
++// first save.
++
++import { useState, useEffect, useRef } from 'react';
++import { createBrowserClient } from '@/lib/supabase';
++import LessonLoopRecorder from '@/components/LessonLoopRecorder';
++import PublishToChannels from '@/components/admin/PublishToChannels';
++
++const POLL_INTERVAL_MS = 3000;
++
++export default function LessonLoopsPage() {
++  const [assets, setAssets] = useState([]);
++  const [selectedAssetId, setSelectedAssetId] = useState('');
++  const [drafts, setDrafts] = useState([]);
++  const [activeDraft, setActiveDraft] = useState(null);
++  const [generating, setGenerating] = useState(false);
++  const [errorMsg, setErrorMsg] = useState(null);
++  const [warnings, setWarnings] = useState([]);
++  const pollTimerRef = useRef(null);
++
++  useEffect(() => {
++    const supabase = createBrowserClient();
++    supabase
++      .from('knowledge_assets')
++      .select('id, keyword, subject')
++      .order('created_at', { ascending: false })
++      .limit(200)
++      .then(({ data }) => setAssets(data || []));
++
++    return () => {
++      if (pollTimerRef.current) clearTimeout(pollTimerRef.current);
++    };
++  }, []);
++
++  const loadExistingDrafts = async (assetId) => {
++    try {
++      const res = await fetch(`/api/admin/lesson-loops/list?knowledgeAssetId=${assetId}`);
++      const data = await res.json();
++      if (!res.ok) throw new Error(data.error || 'Failed to load drafts');
++      setDrafts(data.contentAssets || []);
++      return data.contentAssets || [];
++    } catch (err) {
++      setErrorMsg(err.message);
++      setDrafts([]);
++      return [];
++    }
++  };
++
++  useEffect(() => {
++    if (pollTimerRef.current) clearTimeout(pollTimerRef.current);
++    if (selectedAssetId) loadExistingDrafts(selectedAssetId);
++    else setDrafts([]);
++    // eslint-disable-next-line react-hooks/exhaustive-deps
++  }, [selectedAssetId]);
++
++  const pollUntilReady = (contentAssetId) => {
++    const poll = async () => {
++      try {
++        const res = await fetch(`/api/admin/lesson-loops/status?contentAssetId=${contentAssetId}`);
++        const data = await res.json();
++        if (!res.ok) throw new Error(data.error || 'Status check failed');
++
++        if (data.status === 'generating') {
++          pollTimerRef.current = setTimeout(poll, POLL_INTERVAL_MS);
++          return;
++        }
++        if (data.status === 'failed') {
++          setErrorMsg(`Generation failed: ${data.errorMessage || 'unknown error'}`);
++          setGenerating(false);
++          await loadExistingDrafts(selectedAssetId);
++          return;
++        }
++        // status === 'draft' — ready.
++        setGenerating(false);
++        await loadExistingDrafts(selectedAssetId);
++      } catch (err) {
++        setErrorMsg(err.message);
++        setGenerating(false);
++      }
++    };
++    poll();
++  };
++
++  const handleGenerate = async () => {
++    if (!selectedAssetId) return;
++    setGenerating(true);
++    setErrorMsg(null);
++    setWarnings([]);
++    try {
++      const res = await fetch('/api/admin/lesson-loops/generate', {
++        method: 'POST',
++        headers: { 'Content-Type': 'application/json' },
++        body: JSON.stringify({ knowledgeAssetId: selectedAssetId }),
++      });
++      const data = await res.json();
++      if (!res.ok) throw new Error(data.error || 'Generation failed to start');
++      await loadExistingDrafts(selectedAssetId);
++      pollUntilReady(data.contentAssetId);
++    } catch (err) {
++      setErrorMsg(err.message);
++      setGenerating(false);
++    }
++  };
++
++  const hasVideo = (draft) => (draft.media_files || []).some((m) => m.media_type === 'video' && m.role === 'primary');
++
++  return (
++    <div className="max-w-3xl mx-auto p-6 space-y-6">
++      <div>
++        <h1 className="text-2xl font-bold">📘 2-Minute Lesson Loops</h1>
++        <p className="text-sm text-gray-500">
++          Landscape, narrated micro-lessons — hook → teach → example → answer → follow. Built for a real
++          YouTube upload, cross-posted to Facebook and TikTok.
++        </p>
++      </div>
++
++      <div className="bg-white rounded-xl border p-4 space-y-3">
++        <label className="block text-sm font-semibold">Knowledge asset / topic</label>
++        <select
++          value={selectedAssetId}
++          onChange={(e) => setSelectedAssetId(e.target.value)}
++          className="w-full border rounded-lg px-3 py-2 text-sm"
++        >
++          <option value="">Select a topic…</option>
++          {assets.map((a) => (
++            <option key={a.id} value={a.id}>
++              {a.keyword} {a.subject ? `— ${a.subject}` : ''}
++            </option>
++          ))}
++        </select>
++
++        <button
++          onClick={handleGenerate}
++          disabled={!selectedAssetId || generating}
++          className="bg-brand-blue text-white px-4 py-2 rounded-lg text-sm font-bold hover:opacity-90 disabled:opacity-50"
++        >
++          {generating ? '✨ Generating (script + narration)…' : '✨ Generate Lesson'}
++        </button>
++        {generating && (
++          <p className="text-xs text-gray-400">
++            Script, narration, and backgrounds are being generated in the background — this can take a
++            minute for a full 2-minute lesson. Feel free to leave this page; it'll show up in the drafts list
++            below once ready.
++          </p>
++        )}
++
++        {errorMsg && <p className="text-sm text-red-600">⚠️ {errorMsg}</p>}
++        {warnings.map((w, i) => (
++          <p key={i} className="text-sm text-amber-600">
++            ⚠️ {w}
++          </p>
++        ))}
++      </div>
++
++      {drafts.length > 0 && (
++        <div className="space-y-2">
++          <h2 className="font-bold text-sm text-gray-500 uppercase">Drafts</h2>
++          {drafts.map((draft) => (
++            <div key={draft.id} className="bg-white rounded-xl border p-4">
++              <div className="flex items-center justify-between gap-3">
++                <div className="min-w-0">
++                  <p className="font-semibold truncate">{draft.title}</p>
++                  {draft.status === 'generating' && (
++                    <p className="text-sm text-amber-600 mt-0.5">⏳ Generating script + narration…</p>
++                  )}
++                  {draft.status === 'failed' && (
++                    <p className="text-sm text-red-600 mt-0.5">
++                      ⚠️ Failed: {draft.metadata?.error_message || 'unknown error'}
++                    </p>
++                  )}
++                  {draft.metadata?.segments && (
++                    <p className="text-xs text-gray-500 mt-1">
++                      {draft.metadata.segments.length} segments · ~{Math.round(draft.metadata.totalDurationSeconds || 0)}s
++                      · {hasVideo(draft) ? '✅ recorded' : '⏳ not recorded'}
++                    </p>
++                  )}
++                </div>
++                {draft.status === 'draft' && (
++                  <button
++                    onClick={() => setActiveDraft(draft)}
++                    className="bg-gray-100 text-gray-700 px-4 py-2 rounded-lg text-sm font-bold hover:bg-gray-200 whitespace-nowrap"
++                  >
++                    {hasVideo(draft) ? 'Re-record' : 'Record'}
++                  </button>
++                )}
++              </div>
++
++              {draft.metadata?.youtube && (
++                <details className="mt-3 text-sm">
++                  <summary className="cursor-pointer text-gray-500 font-semibold">
++                    View platform metadata (YouTube / Facebook / TikTok)
++                  </summary>
++                  <div className="mt-2 space-y-3 bg-gray-50 rounded-lg p-3">
++                    <div>
++                      <p className="font-bold text-xs text-gray-500 uppercase">YouTube title</p>
++                      <p>{draft.metadata.youtube.title}</p>
++                    </div>
++                    <div>
++                      <p className="font-bold text-xs text-gray-500 uppercase">YouTube description</p>
++                      <p className="whitespace-pre-wrap text-gray-700">{draft.metadata.youtube.description}</p>
++                    </div>
++                    <div>
++                      <p className="font-bold text-xs text-gray-500 uppercase">YouTube tags</p>
++                      <p className="text-gray-700">{(draft.metadata.youtube.tags || []).join(', ')}</p>
++                    </div>
++                    <div>
++                      <p className="font-bold text-xs text-gray-500 uppercase">Facebook caption</p>
++                      <p className="text-gray-700">{draft.metadata.facebook?.caption}</p>
++                    </div>
++                    <div>
++                      <p className="font-bold text-xs text-gray-500 uppercase">TikTok caption</p>
++                      <p className="text-gray-700">
++                        {draft.metadata.tiktok?.caption} {(draft.metadata.tiktok?.hashtags || []).join(' ')}
++                      </p>
++                    </div>
++                  </div>
++                </details>
++              )}
++
++              {hasVideo(draft) && <PublishToChannels contentAssetId={draft.id} />}
++            </div>
++          ))}
++        </div>
++      )}
++
++      {activeDraft && (
++        <div className="bg-white rounded-xl border p-4 space-y-3">
++          <div className="flex items-center justify-between">
++            <h2 className="font-bold">Recording: “{activeDraft.title}”</h2>
++            <button onClick={() => setActiveDraft(null)} className="text-sm text-gray-400 hover:text-gray-600">
++              ✕ Close
++            </button>
++          </div>
++          <LessonLoopRecorder
++            contentAsset={activeDraft}
++            onSaved={() => loadExistingDrafts(selectedAssetId)}
++          />
++        </div>
++      )}
++    </div>
++  );
++}
+diff --git a/app/api/admin/lesson-loops/generate/route.js b/app/api/admin/lesson-loops/generate/route.js
+new file mode 100644
+index 0000000..95a3c97
+--- /dev/null
++++ b/app/api/admin/lesson-loops/generate/route.js
+@@ -0,0 +1,303 @@
++// app/api/admin/lesson-loops/generate/route.js
++//
++// The "authority machine" loop type — turns a knowledge_assets row into a
++// ~2-minute landscape (16:9) micro-lesson: hook -> teach -> example ->
++// answer -> CTA, each segment narrated server-side (synthesizeLine, the
++// Render-hosted TTS endpoint already used by the podcast engine — the
++// local-only edge-tts-universal path in lib/video-engine/narration.js
++// can't run here, see that file's header) and given its own background
++// candidate. Unlike quote-loops/meme-loops this is landscape, matching a
++// real YouTube video upload rather than a Shorts/Reels loop, and carries
++// full per-platform metadata (YouTube title+description+tags, Facebook
++// caption, TikTok caption+hashtags) since a 2-minute video needs a real
++// description, not just a caption line.
++//
++// Follows the exact same fast-return + background-pipeline shape as
++// lib/podcastGenerate.js (createPodcastEpisodeRow + runPodcastEpisodePipeline
++// via runInBackground) — see that file's header for why: script+narration
++// for several segments can run close to Vercel's per-invocation time
++// budget, so this route creates the content_assets row as status
++// 'generating' and returns immediately with its id; the client polls
++// /api/admin/lesson-loops/status the same way podcast/paste's page polls
++// /api/content-engine/podcast/status. Recording (LessonLoopRecorder) plays
++// every segment's real MP3 in sequence and captures canvas+audio live,
++// same technique as AudiogramRecorder.
++
++import { NextResponse } from 'next/server';
++import { createAdminClient } from '@/lib/supabase-admin';
++import { generateWithFallback } from '@/lib/llmFallbackChain';
++import { parseJsonFromText } from '@/lib/robustJsonParse';
++import { synthesizeLine, estimateDurationSeconds } from '@/lib/podcastTTS';
++import { PLATFORM_LIMITS } from '@/lib/content-factory/generators/_shared';
++import { runInBackground } from '@/lib/backgroundTask';
++import {
++  searchPexelsVideoMulti,
++  searchPixabayVideoMulti,
++  searchPexelsMulti,
++  searchPixabayMulti,
++} from '@/lib/image-search';
++
++export const maxDuration = 60;
++
++const BUCKET = 'lesson-loops';
++const TTS_CONCURRENCY = 4; // same value/reasoning as podcastGenerate.js
++
++const EMOTION_BY_TYPE = {
++  hook: 'excited',
++  teach: 'curious',
++  example: 'playful',
++  answer: 'emphatic',
++  cta: 'excited',
++};
++
++const SEGMENT_TYPE_LABEL = {
++  hook: '🎯 HOOK',
++  teach: '📘 KEY IDEA',
++  example: '🧠 EXAMPLE',
++  answer: '✅ ANSWER',
++  cta: '🔔 FOLLOW',
++};
++
++async function mapWithConcurrency(items, limit, worker) {
++  const results = new Array(items.length);
++  let next = 0;
++  async function runNext() {
++    while (next < items.length) {
++      const i = next++;
++      results[i] = await worker(items[i], i);
++    }
++  }
++  const workers = Array.from({ length: Math.min(limit, items.length) }, runNext);
++  await Promise.all(workers);
++  return results;
++}
++
++async function generateLessonScript(asset) {
++  const keyConcepts = (asset.key_concepts || []).slice(0, 6).join(', ') || 'none listed';
++  const facts = (asset.facts || []).slice(0, 6).join('; ') || 'none listed';
++
++  const prompt = `You are scripting a 2-minute landscape (16:9) micro-lesson video for Shiney Brain Academy, a Nigerian exam-prep brand (JAMB/WAEC/NECO/Post-UTME). This is the "authority machine" format — real teaching, not just a hook, meant to be uploaded as a genuine YouTube video (not a Short/Reel) and cross-posted to Facebook and TikTok as landscape content.
++
++Structure — return a "segments" array in this exact order and these exact "type" values:
++1. type "hook" (one segment, ~15-25 words spoken): a scroll-stopping opening line using a real hook formula — stakes ("this mistake costs you X marks"), a confident claim, a curiosity gap, or a pattern interrupt. Must be honestly earned by what follows, not empty clickbait.
++2. type "teach" (2 to 4 segments, ~40-55 words spoken each): the actual lesson, broken into digestible beats — one idea per segment, building logically. This is the substance; don't pad it, and don't just restate the hook.
++3. type "example" (one segment, ~30-45 words spoken): a concrete worked example or a quick question the viewer can try to answer, grounded in the actual concept just taught.
++4. type "answer" (one segment, ~30-45 words spoken): reveal + explain the example/question's answer — the "why", not just the "what".
++5. type "cta" (one segment, ~10-18 words spoken): a warm, direct call to action — follow for another lesson, not a generic "like and subscribe".
++
++For EVERY segment also write:
++- "onScreenText" — a short on-screen keyword/caption, 3-8 words, NOT a repeat of the full spoken text — this is what a viewer scrolling with sound off sees and reads in under 2 seconds.
++- "visualHint" — 3-6 words describing a specific, concrete, filmable landscape scene matching this segment's content (e.g. "student solving equation whiteboard", "clock ticking exam hall", "close-up textbook diagram"). Each segment's visualHint should describe a genuinely different scene from the others.
++
++Topic: "${asset.keyword}"
++Subject: ${asset.subject || 'General'}
++Summary: ${asset.summary || 'No summary available.'}
++Key concepts: ${keyConcepts}
++Facts: ${facts}
++
++Also write platform metadata for the finished 2-minute video:
++- "youtube": { "title" (unique, specific, under ${PLATFORM_LIMITS.youtube.title} characters, built from the hook/topic, not generic), "description" (a genuinely detailed YouTube description: 3-5 sentences summarizing what the lesson covers and who it's for, naturally including the topic/subject/exam keywords for search, under ${PLATFORM_LIMITS.youtube.description} characters — this is a real description, not a caption), "tags" (8-12 lowercase SEO keyword phrases) }
++- "facebook": { "caption" (2-4 sentences, conversational, inviting comments/shares, can be longer than a tweet — Facebook rewards a real caption, not just a headline) }
++- "tiktok": { "caption" (short, punchy, under 150 characters, hook-forward since TikTok captions get cut off fast), "hashtags" (5-8 hashtags with #, mixing topic-specific and #jamb #waec #studytok style tags) }
++
++Rules:
++- Total spoken word count across all segments should land around 260-320 words (roughly 100-130 seconds of narration at natural speaking pace) — don't run dramatically short or long of that.
++- The teach segments must deliver real, correct educational substance grounded in the topic above — this is the credibility-building format, get the facts right.
++- Vary sentence rhythm — this is spoken narration, not written prose; write it the way a confident teacher actually talks, contractions are fine.
++
++Return ONLY JSON:
++{
++  "segments": [{ "type": "...", "text": "...", "onScreenText": "...", "visualHint": "..." }, ...],
++  "youtube": { "title": "...", "description": "...", "tags": ["...", ...] },
++  "facebook": { "caption": "..." },
++  "tiktok": { "caption": "...", "hashtags": ["...", ...] }
++}`;
++
++  const { result, errors } = await generateWithFallback(
++    prompt,
++    (text) => parseJsonFromText(text, 'object'),
++    (parsed) =>
++      parsed &&
++      Array.isArray(parsed.segments) &&
++      parsed.segments.length >= 5 &&
++      parsed.segments.every((s) => s && s.type && s.text) &&
++      parsed.youtube?.title &&
++      parsed.youtube?.description &&
++      parsed.facebook?.caption &&
++      parsed.tiktok?.caption,
++    3500
++  );
++
++  if (!result) {
++    throw new Error(
++      `Lesson script generation failed across all providers.${errors?.length ? ' Errors: ' + errors.join('; ') : ''}`
++    );
++  }
++  return result;
++}
++
++async function findBackgroundCandidate(query, usedUrls) {
++  for (const search of [searchPexelsVideoMulti, searchPixabayVideoMulti]) {
++    try {
++      const hits = await search(query, 8);
++      const fresh = hits.filter((h) => !usedUrls.has(h.url));
++      const pool = fresh.length > 0 ? fresh : hits;
++      if (pool.length > 0) {
++        const pick = pool[Math.floor(Math.random() * pool.length)];
++        usedUrls.add(pick.url);
++        return { type: 'video', url: pick.url, source: pick.source, sourceUrl: pick.sourceUrl };
++      }
++    } catch (err) {
++      console.warn(`Background video search failed (${search.name}):`, err.message);
++    }
++  }
++  for (const search of [searchPexelsMulti, searchPixabayMulti]) {
++    try {
++      const hits = await search(query, 8);
++      const fresh = hits.filter((h) => !usedUrls.has(h.url));
++      const pool = fresh.length > 0 ? fresh : hits;
++      if (pool.length > 0) {
++        const pick = pool[Math.floor(Math.random() * pool.length)];
++        usedUrls.add(pick.url);
++        return { type: 'photo', url: pick.url, source: pick.source, sourceUrl: pick.sourceUrl };
++      }
++    } catch (err) {
++      console.warn(`Background photo search failed (${search.name}):`, err.message);
++    }
++  }
++  return null;
++}
++
++async function uploadSegmentAudio(supabase, contentAssetId, position, buffer) {
++  const path_ = `${contentAssetId}/audio/${String(position).padStart(2, '0')}.mp3`;
++  const { error } = await supabase.storage
++    .from(BUCKET)
++    .upload(path_, buffer, { contentType: 'audio/mpeg', upsert: true });
++  if (error) throw new Error(`Storage upload failed: ${error.message}`);
++  const { data: urlData } = supabase.storage.from(BUCKET).getPublicUrl(path_);
++  return urlData.publicUrl;
++}
++
++/**
++ * The actual script -> narration -> backgrounds pipeline, run via
++ * runInBackground so the route itself can return fast. Mirrors
++ * runPodcastEpisodePipeline's status handling: 'generating' -> 'draft' on
++ * success, 'generating' -> 'failed' (with error_message) if the script
++ * itself can't be produced. Same maxDuration ceiling caveat applies — see
++ * podcastGenerate.js's runPodcastEpisodePipeline header.
++ */
++async function runLessonLoopPipeline(contentAssetId, asset) {
++  const supabase = createAdminClient();
++
++  let script;
++  try {
++    script = await generateLessonScript(asset);
++  } catch (err) {
++    await supabase
++      .from('content_assets')
++      .update({ status: 'failed', metadata: { error_message: err.message.slice(0, 2000) } })
++      .eq('id', contentAssetId);
++    return;
++  }
++
++  const usedUrls = new Set();
++  const fallbackQuery = [asset.subject, asset.keyword].filter(Boolean).join(' ');
++
++  const segmentsWithMedia = await mapWithConcurrency(script.segments, TTS_CONCURRENCY, async (seg, i) => {
++    const [background, audioResult] = await Promise.all([
++      findBackgroundCandidate(seg.visualHint || fallbackQuery, usedUrls),
++      (async () => {
++        const emotion = EMOTION_BY_TYPE[seg.type] || 'neutral';
++        try {
++          const buffer = await synthesizeLine(seg.text, 'host_a', emotion);
++          const audioUrl = await uploadSegmentAudio(supabase, contentAssetId, i, buffer);
++          return { audioUrl };
++        } catch (err) {
++          console.warn(`Segment ${i} (${seg.type}) narration failed:`, err.message);
++          return { audioUrl: null };
++        }
++      })(),
++    ]);
++
++    return {
++      type: seg.type,
++      label: SEGMENT_TYPE_LABEL[seg.type] || seg.type.toUpperCase(),
++      text: seg.text,
++      onScreenText: seg.onScreenText,
++      visualHint: seg.visualHint,
++      audioUrl: audioResult.audioUrl,
++      durationSeconds: estimateDurationSeconds(seg.text),
++      background,
++    };
++  });
++
++  const totalDuration = segmentsWithMedia.reduce((sum, s) => sum + (s.durationSeconds || 0), 0);
++  const hookSegment = segmentsWithMedia.find((s) => s.type === 'hook');
++
++  await supabase
++    .from('content_assets')
++    .update({
++      title: script.youtube.title,
++      body: hookSegment?.text || asset.keyword,
++      status: 'draft',
++      metadata: {
++        youtube: script.youtube,
++        facebook: script.facebook,
++        tiktok: script.tiktok,
++        segments: segmentsWithMedia,
++        totalDurationSeconds: totalDuration,
++      },
++    })
++    .eq('id', contentAssetId);
++}
++
++export async function POST(request) {
++  let body;
++  try {
++    body = await request.json();
++  } catch {
++    return NextResponse.json({ error: 'Invalid JSON body' }, { status: 400 });
++  }
++
++  const { knowledgeAssetId } = body || {};
++  if (!knowledgeAssetId) {
++    return NextResponse.json({ error: 'knowledgeAssetId is required' }, { status: 400 });
++  }
++
++  const supabase = createAdminClient();
++
++  const { data: asset, error: assetError } = await supabase
++    .from('knowledge_assets')
++    .select('*')
++    .eq('id', knowledgeAssetId)
++    .single();
++  if (assetError || !asset) {
++    return NextResponse.json({ error: 'Knowledge asset not found' }, { status: 404 });
++  }
++
++  const { data: contentAsset, error: insertError } = await supabase
++    .from('content_assets')
++    .insert({
++      knowledge_asset_id: knowledgeAssetId,
++      asset_type: 'lesson_loop',
++      platform: null,
++      format: 'video',
++      title: asset.keyword,
++      body: asset.keyword,
++      status: 'generating',
++      generated_by: 'lesson-loop-generator',
++      metadata: {},
++    })
++    .select()
++    .single();
++
++  if (insertError || !contentAsset) {
++    return NextResponse.json({ error: insertError?.message || 'Failed to create draft' }, { status: 500 });
++  }
++
++  const response = NextResponse.json({ success: true, contentAssetId: contentAsset.id, status: 'generating' });
++
++  runInBackground(() => runLessonLoopPipeline(contentAsset.id, asset));
++
++  return response;
++}
+diff --git a/app/api/admin/lesson-loops/list/route.js b/app/api/admin/lesson-loops/list/route.js
+new file mode 100644
+index 0000000..59991b2
+--- /dev/null
++++ b/app/api/admin/lesson-loops/list/route.js
+@@ -0,0 +1,32 @@
++// app/api/admin/lesson-loops/list/route.js
++//
++// Same server-route-around-RLS reasoning as quote-loops/list — scoped to
++// lesson_loop rows for one knowledge asset. Includes rows still in
++// status 'generating' so the admin page can show them as in-progress
++// rather than them just being invisible until done.
++
++import { NextResponse } from 'next/server';
++import { createAdminClient } from '@/lib/supabase-admin';
++
++export async function GET(request) {
++  const { searchParams } = new URL(request.url);
++  const knowledgeAssetId = searchParams.get('knowledgeAssetId');
++  if (!knowledgeAssetId) {
++    return NextResponse.json({ error: 'knowledgeAssetId is required' }, { status: 400 });
++  }
++
++  const supabase = createAdminClient();
++
++  const { data, error } = await supabase
++    .from('content_assets')
++    .select('*, media_files(url, media_type, role)')
++    .eq('knowledge_asset_id', knowledgeAssetId)
++    .eq('asset_type', 'lesson_loop')
++    .order('created_at', { ascending: false });
++
++  if (error) {
++    return NextResponse.json({ error: error.message }, { status: 500 });
++  }
++
++  return NextResponse.json({ contentAssets: data || [] });
++}
+diff --git a/app/api/admin/lesson-loops/save/route.js b/app/api/admin/lesson-loops/save/route.js
+new file mode 100644
+index 0000000..0a69635
+--- /dev/null
++++ b/app/api/admin/lesson-loops/save/route.js
+@@ -0,0 +1,187 @@
++// app/api/admin/lesson-loops/save/route.js
++//
++// Same shape as quote-loops/save (create/update the primary media_files
++// row, mark approved, queue publish_jobs in the background) with one
++// difference: lesson-loops/generate already produced real per-platform
++// metadata (youtube title+description+tags, facebook caption, tiktok
++// caption+hashtags) grounded in the actual script — so this creates the
++// platform-specific content_assets rows directly from that instead of
++// calling the generic metadata-engine fallback quote-loops/meme-loops
++// use. lib/publishers/youtube.js (and the other publishers) just read
++// metadata.title/description/hashtags off whatever row is linked to the
++// publish_jobs entry — they don't branch on asset_type, so
++// 'youtube_video' here (vs 'youtube_short' elsewhere) is purely an
++// internal label for our own tracking, not something YouTube's Shorts
++// detection reads; that's driven entirely by the video's own
++// landscape dimensions/duration.
++
++import { NextResponse } from 'next/server';
++import { createAdminClient } from '@/lib/supabase-admin';
++import { runInBackground } from '@/lib/backgroundTask';
++
++export const maxDuration = 60;
++
++const PLATFORM_ASSET_TYPE = {
++  youtube: 'youtube_video',
++  facebook: 'facebook_post',
++  tiktok: 'tiktok_video',
++};
++
++export async function POST(request) {
++  let body;
++  try {
++    body = await request.json();
++  } catch {
++    return NextResponse.json({ error: 'Invalid JSON body' }, { status: 400 });
++  }
++
++  const { contentAssetId, videoUrl, durationSeconds, autoPublish = true } = body || {};
++  if (!contentAssetId || !videoUrl) {
++    return NextResponse.json({ error: 'contentAssetId and videoUrl are required' }, { status: 400 });
++  }
++
++  const supabase = createAdminClient();
++
++  const { data: contentAsset, error: fetchError } = await supabase
++    .from('content_assets')
++    .select('id, title, asset_type, knowledge_asset_id, metadata')
++    .eq('id', contentAssetId)
++    .eq('asset_type', 'lesson_loop')
++    .single();
++  if (fetchError || !contentAsset) {
++    return NextResponse.json({ error: 'Lesson-loop content asset not found' }, { status: 404 });
++  }
++
++  const { data: existingMedia } = await supabase
++    .from('media_files')
++    .select('id')
++    .eq('content_asset_id', contentAssetId)
++    .eq('media_type', 'video')
++    .eq('role', 'primary')
++    .maybeSingle();
++
++  if (existingMedia) {
++    const { error: updateError } = await supabase
++      .from('media_files')
++      .update({ url: videoUrl, duration_seconds: durationSeconds || null })
++      .eq('id', existingMedia.id);
++    if (updateError) {
++      return NextResponse.json({ error: updateError.message }, { status: 500 });
++    }
++  } else {
++    const { error: insertError } = await supabase.from('media_files').insert({
++      content_asset_id: contentAssetId,
++      media_type: 'video',
++      role: 'primary',
++      position: 0,
++      url: videoUrl,
++      duration_seconds: durationSeconds || null,
++      source: 'render',
++      alt_text: contentAsset.title,
++    });
++    if (insertError) {
++      return NextResponse.json({ error: insertError.message }, { status: 500 });
++    }
++  }
++
++  await supabase.from('content_assets').update({ status: 'approved' }).eq('id', contentAssetId);
++
++  const response = NextResponse.json({ success: true, videoUrl });
++
++  runInBackground(async () => {
++    const meta = contentAsset.metadata || {};
++
++    const platformPayload = {
++      youtube: meta.youtube && {
++        title: meta.youtube.title,
++        body: meta.youtube.description,
++        metadata: { title: meta.youtube.title, description: meta.youtube.description, hashtags: (meta.youtube.tags || []).map((t) => `#${t.replace(/\s+/g, '')}`) },
++      },
++      facebook: meta.facebook && {
++        title: contentAsset.title,
++        body: meta.facebook.caption,
++        metadata: { title: contentAsset.title, description: meta.facebook.caption },
++      },
++      tiktok: meta.tiktok && {
++        title: contentAsset.title,
++        body: meta.tiktok.caption,
++        metadata: { title: contentAsset.title, description: meta.tiktok.caption, hashtags: meta.tiktok.hashtags || [] },
++      },
++    };
++
++    for (const [platform, payload] of Object.entries(platformPayload)) {
++      if (!payload) continue;
++      try {
++        const { data: existingPlatformAsset } = await supabase
++          .from('content_assets')
++          .select('id')
++          .eq('knowledge_asset_id', contentAsset.knowledge_asset_id)
++          .eq('platform', platform)
++          .eq('format', 'video')
++          .order('created_at', { ascending: false })
++          .limit(1)
++          .maybeSingle();
++
++        if (existingPlatformAsset) {
++          await supabase
++            .from('content_assets')
++            .update({ title: payload.title, body: payload.body, metadata: payload.metadata })
++            .eq('id', existingPlatformAsset.id);
++        } else {
++          await supabase.from('content_assets').insert({
++            knowledge_asset_id: contentAsset.knowledge_asset_id,
++            asset_type: PLATFORM_ASSET_TYPE[platform],
++            platform,
++            format: 'video',
++            title: payload.title,
++            body: payload.body,
++            metadata: payload.metadata,
++            status: 'draft',
++            generated_by: 'lesson-loop-auto-publish',
++          });
++        }
++      } catch (err) {
++        console.warn(`Platform metadata row failed for ${platform}:`, err.message);
++      }
++    }
++
++    if (autoPublish) {
++      try {
++        const { data: channels } = await supabase
++          .from('social_channels_v2')
++          .select('id, platform')
++          .eq('is_active', true)
++          .in('platform', ['youtube', 'tiktok', 'facebook']);
++
++        if (channels && channels.length > 0) {
++          const jobsToCreate = [];
++          for (const channel of channels) {
++            const { data: platformAsset } = await supabase
++              .from('content_assets')
++              .select('id')
++              .eq('knowledge_asset_id', contentAsset.knowledge_asset_id)
++              .eq('platform', channel.platform)
++              .eq('format', 'video')
++              .order('created_at', { ascending: false })
++              .limit(1)
++              .maybeSingle();
++
++            jobsToCreate.push({
++              content_asset_id: platformAsset?.id || contentAssetId,
++              channel_id: channel.id,
++              status: 'queued',
++              created_by: 'lesson-loop-auto-publish',
++            });
++          }
++          if (jobsToCreate.length > 0) {
++            await supabase.from('publish_jobs').insert(jobsToCreate);
++          }
++        }
++      } catch (jobErr) {
++        console.warn('Auto-publish job creation failed:', jobErr.message);
++      }
++    }
++  });
++
++  return response;
++}
+diff --git a/app/api/admin/lesson-loops/status/route.js b/app/api/admin/lesson-loops/status/route.js
+new file mode 100644
+index 0000000..ad4e850
+--- /dev/null
++++ b/app/api/admin/lesson-loops/status/route.js
+@@ -0,0 +1,37 @@
++// app/api/admin/lesson-loops/status/route.js
++//
++// Polled by app/admin/lesson-loops/page.js while a lesson loop's
++// background pipeline (script -> narration -> backgrounds) runs — same
++// pattern as /api/content-engine/podcast/status. Once status flips to
++// 'draft' the metadata.segments array is populated and ready to record;
++// 'failed' surfaces metadata.error_message.
++
++import { NextResponse } from 'next/server';
++import { createAdminClient } from '@/lib/supabase-admin';
++
++export async function GET(request) {
++  const contentAssetId = request.nextUrl.searchParams.get('contentAssetId');
++  if (!contentAssetId) {
++    return NextResponse.json({ error: 'contentAssetId is required' }, { status: 400 });
++  }
++
++  const supabase = createAdminClient();
++
++  const { data, error } = await supabase
++    .from('content_assets')
++    .select('*, media_files(url, media_type, role)')
++    .eq('id', contentAssetId)
++    .eq('asset_type', 'lesson_loop')
++    .single();
++
++  if (error || !data) {
++    return NextResponse.json({ error: 'Lesson loop not found' }, { status: 404 });
++  }
++
++  return NextResponse.json({
++    contentAssetId: data.id,
++    status: data.status,
++    errorMessage: data.status === 'failed' ? data.metadata?.error_message : undefined,
++    contentAsset: data.status !== 'generating' ? data : undefined,
++  });
++}
+diff --git a/components/AdminSidebar.js b/components/AdminSidebar.js
+index f62c8d8..c82e9d9 100644
+--- a/components/AdminSidebar.js
++++ b/components/AdminSidebar.js
+@@ -41,6 +41,7 @@ const navItems = [
+   { href: '/admin/social-engine', label: 'Social Engine', icon: '\ud83d\ude80' },
+   { href: '/admin/quote-loops', label: 'Quote Loops', icon: '\ud83c\udfac' },
+   { href: '/admin/meme-loops', label: 'Meme/Joke Loops', icon: '\ud83d\ude02' },
++  { href: '/admin/lesson-loops', label: '2-Min Lesson Loops', icon: '\ud83d\udcd8' },
+   { href: '/admin/past-question-loops', label: 'Past Question Loops', icon: '\ud83d\udcdd' },
+   { href: '/admin/countdown-loops', label: 'Countdown Loops', icon: '\ud83d\udd22' },
+   { href: '/admin/channels', label: 'Channels', icon: '\ud83d\udd0c' },
+diff --git a/components/LessonLoopRecorder.js b/components/LessonLoopRecorder.js
+new file mode 100644
+index 0000000..0289b0b
+--- /dev/null
++++ b/components/LessonLoopRecorder.js
+@@ -0,0 +1,486 @@
++'use client';
++
++// components/LessonLoopRecorder.js
++//
++// Renders one lesson_loop content_assets row's metadata.segments (each
++// already carrying real narration MP3 + a background candidate, from
++// lesson-loops/generate) into a single landscape (16:9) ~2-minute video:
++// background switches per segment, a segment-type badge, a short
++// on-screen keyword caption, a subtitle band of the full narration line
++// (for muted/sound-off viewers — most social autoplay is muted), and a
++// progress bar — entirely in the browser via <canvas> + Web Audio API +
++// MediaRecorder. Segment-advance logic (play segment -> on 'ended' move to
++// the next -> stop after the last) is the same technique as
++// AudiogramRecorder; background layering (video/photo/gradient, Ken Burns
++// zoom on photos) is the same technique as QuoteLoopRecorder, just
++// switched per-segment instead of being static for the whole clip.
++//
++// Same realtime tradeoff as AudiogramRecorder: a 2-minute lesson takes 2
++// real minutes to record, because this captures a live stream rather than
++// rendering faster than realtime.
++
++import { useRef, useState, useEffect, useCallback } from 'react';
++import { createBrowserClient } from '@/lib/supabase';
++
++const CANVAS_W = 1920;
++const CANVAS_H = 1080; // 16:9 landscape — real YouTube upload, not Shorts/Reels
++const BRAND_BLUE = '#1a73e8';
++const BRAND_YELLOW = '#FFCC00';
++const DARK = '#0f172a';
++const BUCKET = 'lesson-loops'; // create this bucket in Supabase storage (public read, authenticated upload) before first use
++
++function wrapText(ctx, text, maxWidth) {
++  const words = String(text || '').split(' ');
++  const lines = [];
++  let current = '';
++  for (const word of words) {
++    const test = current ? `${current} ${word}` : word;
++    if (ctx.measureText(test).width > maxWidth && current) {
++      lines.push(current);
++      current = word;
++    } else {
++      current = test;
++    }
++  }
++  if (current) lines.push(current);
++  return lines;
++}
++
++function pickMimeType() {
++  const candidates = [
++    'video/mp4;codecs=avc1.42E01E,mp4a.40.2',
++    'video/mp4;codecs=avc1,mp4a.40.2',
++    'video/mp4',
++    'video/webm;codecs=vp9,opus',
++    'video/webm;codecs=vp8,opus',
++    'video/webm',
++  ];
++  for (const type of candidates) {
++    if (typeof MediaRecorder !== 'undefined' && MediaRecorder.isTypeSupported(type)) return type;
++  }
++  return '';
++}
++
++function extensionForMimeType(mimeType) {
++  return (mimeType || '').includes('mp4') ? 'mp4' : 'webm';
++}
++
++/**
++ * @param {Object} props
++ * @param {Object} props.contentAsset - a content_assets row (id, title, metadata.segments[], metadata.totalDurationSeconds)
++ * @param {(videoUrl: string) => void} [props.onSaved]
++ */
++export default function LessonLoopRecorder({ contentAsset, onSaved }) {
++  const canvasRef = useRef(null);
++  const audioRef = useRef(null);
++  const audioCtxRef = useRef(null);
++  const rafRef = useRef(null);
++  const recorderRef = useRef(null);
++  const chunksRef = useRef([]);
++  const elapsedBeforeCurrentRef = useRef(0);
++  const bgVideoRefs = useRef([]);
++  const bgImageRefs = useRef([]);
++  const segmentStartRef = useRef(0); // performance.now() when the current segment's audio started
++
++  const segments = contentAsset.metadata?.segments || [];
++  const totalDuration =
++    contentAsset.metadata?.totalDurationSeconds || segments.reduce((sum, s) => sum + (s.durationSeconds || 0), 0);
++
++  const [index, setIndex] = useState(-1); // -1 = idle
++  const [status, setStatus] = useState('idle');
++  const [videoBlobUrl, setVideoBlobUrl] = useState(null);
++  const [videoBlob, setVideoBlob] = useState(null);
++  const [errorMsg, setErrorMsg] = useState(null);
++  const [assetsReady, setAssetsReady] = useState(false);
++
++  // Preload every segment's background up front (small counts — 5-8
++  // items — so this is cheap) instead of loading lazily per-segment,
++  // which would stall the recording mid-clip waiting on a network fetch.
++  useEffect(() => {
++    if (segments.length === 0) {
++      setAssetsReady(true);
++      return;
++    }
++    let pending = segments.length;
++    const checkDone = () => {
++      pending -= 1;
++      if (pending <= 0) setAssetsReady(true);
++    };
++
++    segments.forEach((seg, i) => {
++      const bg = seg.background;
++      if (bg?.type === 'video') {
++        const vid = document.createElement('video');
++        vid.src = bg.url;
++        vid.crossOrigin = 'anonymous';
++        vid.muted = true;
++        vid.loop = true;
++        vid.playsInline = true;
++        vid.oncanplaythrough = checkDone;
++        vid.onerror = checkDone;
++        vid.load();
++        bgVideoRefs.current[i] = vid;
++      } else if (bg?.type === 'photo') {
++        const img = new Image();
++        img.crossOrigin = 'anonymous';
++        img.onload = checkDone;
++        img.onerror = checkDone;
++        img.src = bg.url;
++        bgImageRefs.current[i] = img;
++      } else {
++        checkDone();
++      }
++    });
++    // eslint-disable-next-line react-hooks/exhaustive-deps
++  }, []);
++
++  const draw = useCallback(() => {
++    const canvas = canvasRef.current;
++    if (!canvas) return;
++    const ctx = canvas.getContext('2d');
++    const W = CANVAS_W, H = CANVAS_H;
++    const current = index >= 0 ? segments[index] : null;
++    const localElapsed = audioRef.current?.currentTime || 0;
++
++    // ── Background — switches per segment. ──
++    const bg = current?.background;
++    const vid = index >= 0 ? bgVideoRefs.current[index] : null;
++    const img = index >= 0 ? bgImageRefs.current[index] : null;
++
++    if (bg?.type === 'video' && vid?.readyState >= 2) {
++      const scale = Math.max(W / vid.videoWidth, H / vid.videoHeight);
++      const dw = vid.videoWidth * scale, dh = vid.videoHeight * scale;
++      ctx.drawImage(vid, (W - dw) / 2, (H - dh) / 2, dw, dh);
++      ctx.fillStyle = 'rgba(15,23,42,0.3)';
++      ctx.fillRect(0, 0, W, H);
++    } else if (bg?.type === 'photo' && img?.complete && img.naturalWidth) {
++      const segDuration = current?.durationSeconds || 1;
++      const t = Math.min(1, localElapsed / segDuration);
++      const zoom = 1 + 0.08 * t;
++      const scale = Math.max(W / img.naturalWidth, H / img.naturalHeight) * zoom;
++      const dw = img.naturalWidth * scale, dh = img.naturalHeight * scale;
++      ctx.drawImage(img, (W - dw) / 2, (H - dh) / 2, dw, dh);
++      ctx.fillStyle = 'rgba(15,23,42,0.3)';
++      ctx.fillRect(0, 0, W, H);
++    } else {
++      const elapsed = elapsedBeforeCurrentRef.current + localElapsed;
++      const t = totalDuration > 0 ? elapsed / totalDuration : 0;
++      const angle = t * Math.PI * 0.3;
++      const gradient = ctx.createLinearGradient(
++        W / 2 + Math.cos(angle) * W, H / 2 + Math.sin(angle) * H,
++        W / 2 - Math.cos(angle) * W, H / 2 - Math.sin(angle) * H
++      );
++      gradient.addColorStop(0, DARK);
++      gradient.addColorStop(1, BRAND_BLUE);
++      ctx.fillStyle = gradient;
++      ctx.fillRect(0, 0, W, H);
++    }
++
++    if (!current) return;
++
++    // ── Segment-type badge, top-left. ──
++    ctx.font = 'bold 30px Arial';
++    const badgeText = current.label || current.type.toUpperCase();
++    const badgePad = 20;
++    const badgeW = ctx.measureText(badgeText).width + badgePad * 2;
++    ctx.fillStyle = 'rgba(15,23,42,0.7)';
++    ctx.fillRect(50, 46, badgeW, 56);
++    ctx.fillStyle = BRAND_YELLOW;
++    ctx.textBaseline = 'middle';
++    ctx.fillText(badgeText, 50 + badgePad, 46 + 28);
++
++    // Fade-in for the segment's own text (keyword + subtitle) over its
++    // first 400ms so a segment switch reads as a clean cut, not a smear.
++    const introT = Math.min(1, localElapsed / 0.4);
++    const introEased = 1 - Math.pow(1 - introT, 3);
++
++    // ── Big on-screen keyword/caption, lower-third. ──
++    ctx.font = '800 64px Arial';
++    const keywordLines = wrapText(ctx, current.onScreenText || '', W - 200).slice(0, 2);
++    const keywordLineH = 76;
++    const keywordTop = H * 0.68;
++
++    const scrimTop = keywordTop - 60;
++    const scrimBottom = H - 90;
++    const scrim = ctx.createLinearGradient(0, scrimTop, 0, scrimBottom);
++    scrim.addColorStop(0, 'rgba(15,23,42,0)');
++    scrim.addColorStop(0.25, 'rgba(15,23,42,0.72)');
++    scrim.addColorStop(1, 'rgba(15,23,42,0.82)');
++    ctx.fillStyle = scrim;
++    ctx.fillRect(0, scrimTop, W, scrimBottom - scrimTop);
++
++    ctx.save();
++    ctx.globalAlpha = introEased;
++    ctx.textAlign = 'left';
++    ctx.textBaseline = 'alphabetic';
++    ctx.fillStyle = '#ffffff';
++    ctx.shadowColor = 'rgba(0,0,0,0.5)';
++    ctx.shadowBlur = 10;
++    keywordLines.forEach((line, i) => {
++      ctx.fillText(line, 60, keywordTop + i * keywordLineH + (1 - introEased) * 14);
++    });
++    ctx.restore();
++
++    // ── Subtitle band — full spoken line, smaller, for muted viewers. ──
++    ctx.font = '500 30px Arial';
++    const subtitleLines = wrapText(ctx, current.text || '', W - 200).slice(0, 2);
++    const subtitleTop = keywordTop + keywordLines.length * keywordLineH + 20;
++    ctx.save();
++    ctx.globalAlpha = introEased * 0.92;
++    ctx.fillStyle = 'rgba(255,255,255,0.85)';
++    subtitleLines.forEach((line, i) => {
++      ctx.fillText(line, 60, subtitleTop + i * 38);
++    });
++    ctx.restore();
++
++    // ── Brand mark + progress bar, bottom. ──
++    ctx.font = 'bold 24px Arial';
++    ctx.fillStyle = BRAND_YELLOW;
++    ctx.fillText('SHINEY BRAIN ACADEMY', 60, H - 34);
++
++    const elapsedTotal = elapsedBeforeCurrentRef.current + localElapsed;
++    const pct = totalDuration > 0 ? Math.min(1, elapsedTotal / totalDuration) : 0;
++    ctx.fillStyle = 'rgba(255,255,255,0.25)';
++    ctx.fillRect(60, H - 14, W - 120, 5);
++    ctx.fillStyle = BRAND_YELLOW;
++    ctx.fillRect(60, H - 14, (W - 120) * pct, 5);
++  }, [index, segments, totalDuration]);
++
++  useEffect(() => {
++    function loop() {
++      draw();
++      rafRef.current = requestAnimationFrame(loop);
++    }
++    if (status === 'recording') {
++      rafRef.current = requestAnimationFrame(loop);
++    } else {
++      draw();
++    }
++    return () => {
++      if (rafRef.current) cancelAnimationFrame(rafRef.current);
++    };
++  }, [status, draw]);
++
++  // ── Segment advancing — same shape as AudiogramRecorder. ──
++  useEffect(() => {
++    const audio = audioRef.current;
++    if (!audio || index < 0) return;
++
++    const seg = segments[index];
++
++    // Play/pause background videos so only the active one is decoding.
++    bgVideoRefs.current.forEach((v, i) => {
++      if (!v) return;
++      if (i === index) {
++        v.currentTime = 0;
++        v.play().catch(() => {});
++      } else {
++        v.pause();
++      }
++    });
++
++    const handleEnded = () => {
++      elapsedBeforeCurrentRef.current += seg.durationSeconds || audio.duration || 0;
++      if (index < segments.length - 1) {
++        setIndex(index + 1);
++      } else {
++        finishRecording();
++      }
++    };
++
++    if (!seg.audioUrl) {
++      // No narration for this segment (TTS failed) — hold it on screen
++      // for its estimated duration instead of skipping straight past a
++      // silent gap, so the timing/visuals still make sense.
++      const holdMs = (seg.durationSeconds || 2) * 1000;
++      const t = setTimeout(handleEnded, holdMs);
++      return () => clearTimeout(t);
++    }
++
++    audio.src = seg.audioUrl;
++    audio.load();
++    audio.play().catch((err) => {
++      setStatus('error');
++      setErrorMsg(`Playback failed: ${err.message}`);
++    });
++
++    audio.addEventListener('ended', handleEnded);
++    return () => audio.removeEventListener('ended', handleEnded);
++    // eslint-disable-next-line react-hooks/exhaustive-deps
++  }, [index]);
++
++  const startRecording = async () => {
++    setErrorMsg(null);
++    setVideoBlobUrl(null);
++    setVideoBlob(null);
++    elapsedBeforeCurrentRef.current = 0;
++
++    if (segments.length === 0) {
++      setErrorMsg('This lesson has no segments yet — still generating, or generation failed.');
++      return;
++    }
++
++    try {
++      const AudioContextCls = window.AudioContext || window.webkitAudioContext;
++      const audioCtx = new AudioContextCls();
++      audioCtxRef.current = audioCtx;
++
++      const source = audioCtx.createMediaElementSource(audioRef.current);
++      const dest = audioCtx.createMediaStreamDestination();
++      source.connect(dest);
++      source.connect(audioCtx.destination); // so you can hear it while it records
++
++      const canvasStream = canvasRef.current.captureStream(30);
++      const combined = new MediaStream([
++        ...canvasStream.getVideoTracks(),
++        ...dest.stream.getAudioTracks(),
++      ]);
++
++      // ~600kbps video / 96kbps audio -- a 2-minute clip lands around
++      // ~5.5MB, comfortably inside typical Supabase bucket size limits.
++      const recorderOptions = { videoBitsPerSecond: 600_000, audioBitsPerSecond: 96_000 };
++      const mimeType = pickMimeType();
++      if (mimeType) recorderOptions.mimeType = mimeType;
++
++      const recorder = new MediaRecorder(combined, recorderOptions);
++      chunksRef.current = [];
++      recorder.ondataavailable = (e) => {
++        if (e.data.size > 0) chunksRef.current.push(e.data);
++      };
++      recorder.onstop = () => {
++        const blob = new Blob(chunksRef.current, { type: mimeType || 'video/webm' });
++        setVideoBlob(blob);
++        setVideoBlobUrl(URL.createObjectURL(blob));
++        setStatus('finished');
++      };
++      recorderRef.current = recorder;
++
++      recorder.start();
++      setStatus('recording');
++      setIndex(0);
++    } catch (err) {
++      setStatus('error');
++      setErrorMsg(`Could not start recording: ${err.message}`);
++    }
++  };
++
++  function finishRecording() {
++    if (recorderRef.current && recorderRef.current.state !== 'inactive') recorderRef.current.stop();
++    if (audioCtxRef.current) audioCtxRef.current.close().catch(() => {});
++    bgVideoRefs.current.forEach((v) => v?.pause());
++    setIndex(-1);
++  }
++
++  const cancelRecording = () => {
++    if (recorderRef.current) recorderRef.current.onstop = null;
++    if (recorderRef.current && recorderRef.current.state !== 'inactive') recorderRef.current.stop();
++    if (audioRef.current) audioRef.current.pause();
++    if (audioCtxRef.current) audioCtxRef.current.close().catch(() => {});
++    bgVideoRefs.current.forEach((v) => v?.pause());
++    setIndex(-1);
++    setStatus('idle');
++  };
++
++  const saveToContentAsset = async () => {
++    if (!videoBlob) return;
++    setStatus('uploading');
++    setErrorMsg(null);
++    try {
++      const supabase = createBrowserClient();
++      const ext = extensionForMimeType(videoBlob.type);
++      const path = `${contentAsset.id}/video/${Date.now()}.${ext}`;
++
++      const { error: uploadError } = await supabase.storage
++        .from(BUCKET)
++        .upload(path, videoBlob, { contentType: videoBlob.type || 'video/webm', upsert: true });
++      if (uploadError) throw uploadError;
++
++      const { data: urlData } = supabase.storage.from(BUCKET).getPublicUrl(path);
++
++      const res = await fetch('/api/admin/lesson-loops/save', {
++        method: 'POST',
++        headers: { 'Content-Type': 'application/json' },
++        body: JSON.stringify({
++          contentAssetId: contentAsset.id,
++          videoUrl: urlData.publicUrl,
++          durationSeconds: Math.round(totalDuration),
++        }),
++      });
++      const data = await res.json();
++      if (!res.ok) throw new Error(data.error || 'Save failed');
++
++      setStatus('saved');
++      onSaved?.(urlData.publicUrl);
++    } catch (err) {
++      setStatus('finished');
++      setErrorMsg(err.message);
++    }
++  };
++
++  return (
++    <div className="space-y-4">
++      <canvas
++        ref={canvasRef}
++        width={CANVAS_W}
++        height={CANVAS_H}
++        className="w-full max-w-2xl aspect-video mx-auto rounded-2xl border shadow-sm bg-black"
++      />
++      <audio ref={audioRef} crossOrigin="anonymous" className="hidden" />
++
++      <p className="text-xs text-gray-500 text-center">
++        Landscape, {segments.length} segments, ~{Math.round(totalDuration)}s total. Recording plays in realtime — keep
++        this tab open and active while it runs (about {Math.max(1, Math.round(totalDuration / 60))} minute
++        {totalDuration >= 90 ? 's' : ''}).
++      </p>
++
++      {errorMsg && <p className="text-sm text-red-600 text-center">⚠️ {errorMsg}</p>}
++      {!assetsReady && status === 'idle' && (
++        <p className="text-xs text-gray-400 text-center">Loading backgrounds…</p>
++      )}
++
++      <div className="flex justify-center gap-2">
++        {status === 'idle' && (
++          <button
++            onClick={startRecording}
++            disabled={!assetsReady || segments.length === 0}
++            className="bg-brand-blue text-white px-5 py-2.5 rounded-xl text-sm font-bold hover:opacity-90 disabled:opacity-50"
++          >
++            🔴 Start Recording
++          </button>
++        )}
++        {status === 'recording' && (
++          <button
++            onClick={cancelRecording}
++            className="bg-red-100 text-red-600 px-5 py-2.5 rounded-xl text-sm font-bold hover:bg-red-200"
++          >
++            ⏹ Cancel
++          </button>
++        )}
++        {(status === 'finished' || status === 'saved') && videoBlobUrl && (
++          <>
++            <a
++              href={videoBlobUrl}
++              download={`${(contentAsset.title || 'lesson-loop').replace(/[^a-z0-9]+/gi, '-').toLowerCase()}.${extensionForMimeType(videoBlob?.type)}`}
++              className="bg-gray-100 text-gray-700 px-5 py-2.5 rounded-xl text-sm font-bold hover:bg-gray-200"
++            >
++              ⬇ Download
++            </a>
++            {status === 'finished' ? (
++              <button
++                onClick={saveToContentAsset}
++                className="bg-emerald-600 text-white px-5 py-2.5 rounded-xl text-sm font-bold hover:opacity-90"
++              >
++                💾 Save
++              </button>
++            ) : (
++              <span className="text-sm font-bold text-emerald-600 px-3 py-2.5">✓ Saved</span>
++            )}
++          </>
++        )}
++        {status === 'uploading' && (
++          <span className="text-sm font-bold text-gray-500 px-3 py-2.5">Uploading…</span>
++        )}
++      </div>
++    </div>
++  );
++}
+-- 
+2.43.0
+
