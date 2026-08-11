@@ -13,6 +13,8 @@ const navItems = [
   { href: '/admin/testimonials', label: 'Testimonials', icon: '💬' },
   { href: '/admin/quizzes', label: 'Quizzes', icon: '🧠' },
   { href: '/admin/submissions', label: 'Submissions', icon: '📋' },
+  { href: '/admin/landing/coupons', label: 'JAMB Coupons', icon: '🎟️' },
+  { href: '/admin/landing/testimonials', label: 'JAMB Testimonials', icon: '🖼️' },
 ];
 
 function NavLink({ href, label, icon, mobile }) {

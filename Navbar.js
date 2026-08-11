@@ -3,13 +3,14 @@
 import Link from 'next/link';
 import { useState, useEffect } from 'react';
 import { createBrowserClient } from '@/lib/supabase';
-import { useRouter } from 'next/navigation';
+import { useRouter, usePathname } from 'next/navigation';
 
 export default function Navbar() {
   const [menuOpen, setMenuOpen] = useState(false);
   const [user, setUser] = useState(null);
   const router = useRouter();
   const supabase = createBrowserClient();
+  const pathname = usePathname();
 
   useEffect(() => {
     async function getUser() {
@@ -29,6 +30,11 @@ export default function Navbar() {
     await supabase.auth.signOut();
     router.push('/');
   };
+
+  // Hide navbar on the /jamb-playbook route (and any sub‑routes)
+  if (pathname?.startsWith('/jamb-playbook')) {
+    return null;
+  }
 
   return (
     <header className="sticky top-0 z-50 border-b border-blue-100 bg-white/95 backdrop-blur shadow-sm">
