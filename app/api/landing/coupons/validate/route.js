@@ -11,6 +11,7 @@ export async function GET(req) {
   const { searchParams } = new URL(req.url);
   const code = searchParams.get('code')?.toUpperCase();
   const product = searchParams.get('product') || 'jamb-playbook';
+  const basePrice = Number(searchParams.get('basePrice')) || 0;
 
   if (!code) {
     return NextResponse.json(
@@ -44,11 +45,34 @@ export async function GET(req) {
       });
     }
 
+    if (coupon.expires_at && new Date(coupon.expires_at) < new Date()) {
+      return NextResponse.json({
+        valid: false,
+        error: 'This coupon has expired'
+      });
+    }
+
+    // The table stores discount_type ('fixed_price' | 'amount_off') and
+    // discount_value — NOT a discount_percent field. Compute the actual
+    // final price here, server-side, so the client never has to (and
+    // can't) fudge the math.
+    let finalPrice = basePrice;
+    if (coupon.discount_type === 'fixed_price') {
+      finalPrice = coupon.discount_value;
+    } else if (coupon.discount_type === 'amount_off') {
+      finalPrice = basePrice - coupon.discount_value;
+    }
+    finalPrice = Math.max(0, Math.round(finalPrice));
+    const discountAmount = Math.max(0, basePrice - finalPrice);
+
     // Coupon is valid
     return NextResponse.json({
       valid: true,
-      discountPercent: coupon.discount_percent || 0,
       code: coupon.code,
+      discountType: coupon.discount_type,
+      discountValue: coupon.discount_value,
+      discountAmount,
+      finalPrice,
       maxUses: coupon.max_uses,
       usedCount: coupon.used_count,
     });
@@ -61,3 +85,4 @@ export async function GET(req) {
     );
   }
 }
+

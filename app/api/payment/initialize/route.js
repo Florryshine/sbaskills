@@ -1,16 +1,47 @@
 import { NextResponse } from 'next/server';
+import { createClient } from '@supabase/supabase-js';
+
+const supabaseAdmin = createClient(
+  process.env.NEXT_PUBLIC_SUPABASE_URL,
+  process.env.SUPABASE_SERVICE_ROLE_KEY
+);
 
 export async function POST(req) {
   try {
     const body = await req.json();
-    const { amount, coupon, product } = body;
+    const { basePrice, coupon, product, email } = body;
 
-    // Validate amount
-    if (!amount || amount <= 0) {
+    if (!basePrice || basePrice <= 0) {
       return NextResponse.json(
         { error: 'Invalid amount' },
         { status: 400 }
       );
+    }
+
+    // Never trust a client-sent final amount — recompute it here from the
+    // coupon table so a tampered request can't pay less than it should.
+    let amount = basePrice;
+    let appliedCoupon = null;
+    if (coupon) {
+      const { data: couponRow } = await supabaseAdmin
+        .from('landing_coupons')
+        .select('*')
+        .eq('code', coupon.toUpperCase())
+        .eq('product_slug', product || 'jamb-playbook')
+        .eq('active', true)
+        .single();
+
+      if (couponRow && (!couponRow.max_uses || couponRow.used_count < couponRow.max_uses)) {
+        if (couponRow.discount_type === 'fixed_price') {
+          amount = couponRow.discount_value;
+        } else if (couponRow.discount_type === 'amount_off') {
+          amount = basePrice - couponRow.discount_value;
+        }
+        amount = Math.max(0, Math.round(amount));
+        appliedCoupon = couponRow.code;
+      }
+      // If the coupon doesn't validate here, silently fall back to
+      // basePrice rather than trusting anything else from the client.
     }
 
     // Generate unique reference
@@ -24,7 +55,7 @@ export async function POST(req) {
         'Content-Type': 'application/json',
       },
       body: JSON.stringify({
-        email: body.email || 'customer@example.com', // Get from request
+        email: email || 'customer@example.com',
         amount: amount * 100, // Paystack uses kobo
         reference: reference,
         callback_url: `${process.env.NEXT_PUBLIC_APP_URL || 'https://shineybrainacademy.vercel.app'}/jamb-playbook/thank-you`,
@@ -38,7 +69,7 @@ export async function POST(req) {
             {
               display_name: "Coupon",
               variable_name: "coupon",
-              value: coupon || 'none'
+              value: appliedCoupon || 'none'
             }
           ]
         }

@@ -99,21 +99,18 @@ export default function LandingClient({ basePrice = 40000, screenshots = [], quo
 
     try {
       const res = await fetch(
-        `/api/landing/coupons/validate?code=${encodeURIComponent(couponCode)}&product=jamb-playbook`
+        `/api/landing/coupons/validate?code=${encodeURIComponent(couponCode)}&product=jamb-playbook&basePrice=${basePrice}`
       );
       const data = await res.json();
 
       if (data.valid) {
-        const discount = Math.round((basePrice * data.discountPercent) / 100);
-        const newPrice = Math.max(0, basePrice - discount);
-        
-        setCouponDiscount(discount);
-        setFinalPrice(newPrice);
+        setCouponDiscount(data.discountAmount);
+        setFinalPrice(data.finalPrice);
         setCouponApplied(true);
         setCouponError('');
         
         // Show success message
-        alert(`✅ Coupon applied! You saved ${naira(discount)}. Final price: ${naira(newPrice)}`);
+        alert(`✅ Coupon applied! You saved ${naira(data.discountAmount)}. Final price: ${naira(data.finalPrice)}`);
       } else {
         setCouponError(data.error || 'Invalid coupon code.');
         setCouponApplied(false);
@@ -143,7 +140,7 @@ export default function LandingClient({ basePrice = 40000, screenshots = [], quo
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          amount: finalPrice,
+          basePrice: basePrice,
           email: email,
           coupon: couponApplied ? couponCode : null,
           product: 'jamb-playbook'
