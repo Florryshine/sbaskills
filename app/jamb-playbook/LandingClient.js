@@ -63,6 +63,68 @@ function naira(n) {
 }
 
 export default function LandingClient({ basePrice, screenshots = [], quotes = [] }) {
+  const [isAdmin, setIsAdmin] = useState(false);
+  const [slotShots, setSlotShots] = useState(screenshots);
+  const [uploadingSlot, setUploadingSlot] = useState(null);
+  const slotFileRefs = [useRef(null), useRef(null), useRef(null)];
+
+  useEffect(() => {
+    fetch('/api/admin/landing/is-admin')
+      .then(r => r.json())
+      .then(d => setIsAdmin(!!d.isAdmin))
+      .catch(() => {});
+  }, []);
+
+  async function handleSlotFile(slot, file) {
+    if (!file) return;
+    setUploadingSlot(slot);
+    try {
+      const fd = new FormData();
+      fd.append('slot', String(slot));
+      fd.append('image', file);
+      const res = await fetch('/api/admin/landing/testimonials/screenshot-slot', {
+        method: 'POST',
+        body: fd,
+      });
+      const data = await res.json();
+      if (res.ok && data.testimonial) {
+        setSlotShots(prev => {
+          const next = prev.filter(s => s.sort_order !== slot);
+          next.push(data.testimonial);
+          return next;
+        });
+      } else {
+        alert(data.error || 'Upload failed.');
+      }
+    } catch {
+      alert('Upload failed.');
+    } finally {
+      setUploadingSlot(null);
+    }
+  }
+
+  async function handleSlotRemove(slot) {
+    if (!confirm('Remove this screenshot?')) return;
+    setUploadingSlot(slot);
+    try {
+      const res = await fetch('/api/admin/landing/testimonials/screenshot-slot', {
+        method: 'DELETE',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ slot }),
+      });
+      const data = await res.json();
+      if (res.ok) {
+        setSlotShots(prev => prev.filter(s => s.sort_order !== slot));
+      } else {
+        alert(data.error || 'Remove failed.');
+      }
+    } catch {
+      alert('Remove failed.');
+    } finally {
+      setUploadingSlot(null);
+    }
+  }
+
   const heroPinRef = useRef(null);
   const fieldRef = useRef(null);
   const captionRef = useRef(null);
@@ -283,9 +345,10 @@ export default function LandingClient({ basePrice, screenshots = [], quotes = []
           </div>
           <div className="proof-grid">
             {[0, 1, 2].map(idx => {
-              const shot = screenshots[idx];
+              const shot = slotShots.find(s => s.sort_order === idx);
+              const busy = uploadingSlot === idx;
               return (
-                <div className="phone" key={idx}>
+                <div className="phone" key={idx} style={{ position: 'relative' }}>
                   <div className="phone-bar" />
                   {shot ? (
                     // eslint-disable-next-line @next/next/no-img-element
@@ -297,11 +360,50 @@ export default function LandingClient({ basePrice, screenshots = [], quotes = []
                       <span className="cap">{['Mock score\nprogression', "312 in JAMB —\nthe founder's own result", 'Before / after\nstudy plan'][idx]}</span>
                     </div>
                   )}
+
+                  {isAdmin && (
+                    <div style={{ position: 'absolute', bottom: 8, left: 0, right: 0, display: 'flex', justifyContent: 'center', gap: 8 }}>
+                      <input
+                        ref={slotFileRefs[idx]}
+                        type="file"
+                        accept="image/*"
+                        capture="environment"
+                        style={{ display: 'none' }}
+                        onChange={e => handleSlotFile(idx, e.target.files?.[0])}
+                      />
+                      <button
+                        type="button"
+                        disabled={busy}
+                        onClick={() => slotFileRefs[idx].current?.click()}
+                        style={{
+                          fontSize: 12, padding: '5px 10px', borderRadius: 999,
+                          background: 'rgba(0,0,0,0.75)', color: '#fff', border: '1px solid rgba(255,255,255,0.3)',
+                          cursor: busy ? 'default' : 'pointer',
+                        }}
+                      >
+                        {busy ? '…' : shot ? '+ Replace' : '+ Add'}
+                      </button>
+                      {shot && (
+                        <button
+                          type="button"
+                          disabled={busy}
+                          onClick={() => handleSlotRemove(idx)}
+                          style={{
+                            fontSize: 12, padding: '5px 10px', borderRadius: 999,
+                            background: 'rgba(0,0,0,0.75)', color: '#fff', border: '1px solid rgba(255,255,255,0.3)',
+                            cursor: busy ? 'default' : 'pointer',
+                          }}
+                        >
+                          ✕
+                        </button>
+                      )}
+                    </div>
+                  )}
                 </div>
               );
             })}
           </div>
-          {screenshots.length === 0 && (
+          {slotShots.length === 0 && !isAdmin && (
             <p className="proof-note">Screenshot space reserved for real results — added from the admin panel as they come in.</p>
           )}
         </div>
