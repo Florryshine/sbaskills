@@ -17,15 +17,15 @@ export default function LessonList({ lessons = [], enrolled = false, courseId, c
               {isCompleted ? (
                 <span className="rounded-full bg-emerald-100 px-3 py-1 text-xs font-bold text-emerald-700">Completed</span>
               ) : null}
-              {!lesson.video_url ? (
+              {lesson.content_type === 'video' && !lesson.video_url ? (
                 <span className="rounded-full bg-brand-yellow px-3 py-1 text-xs font-bold text-brand-dark">Coming Soon</span>
               ) : null}
-              {enrolled && lesson.video_url ? (
+              {enrolled && lesson.is_published && (lesson.content_type !== 'video' || lesson.video_url) ? (
                 <Link
                   href={`/courses/${courseId}/lessons/${lesson.id}`}
                   className="rounded-full bg-brand-blue px-4 py-2 text-sm font-semibold text-white"
                 >
-                  Watch Lesson
+                  {lesson.content_type === 'bite_sized' ? 'Learn Lesson' : 'Watch Lesson'}
                 </Link>
               ) : null}
             </div>
