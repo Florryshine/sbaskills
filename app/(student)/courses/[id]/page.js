@@ -12,6 +12,7 @@ import MarkDoneButton from '@/components/MarkDoneButton';
 export default function CoursePage() {
   const [course, setCourse] = useState(null);
   const [lessons, setLessons] = useState([]);
+  const [modules, setModules] = useState([]);
   const [enrollment, setEnrollment] = useState(null);
   const [loading, setLoading] = useState(true);
   const [processing, setProcessing] = useState(false);
@@ -35,6 +36,13 @@ export default function CoursePage() {
           .eq('course_id', id)
           .order('order_index', { ascending: true });
         setLessons(lessonsData || []);
+
+        const { data: modulesData } = await supabase
+          .from('course_modules')
+          .select('*')
+          .eq('course_id', id)
+          .order('order_index', { ascending: true });
+        setModules(modulesData || []);
 
         const { data: { user } } = await supabase.auth.getUser();
         if (user) {
@@ -170,6 +178,12 @@ export default function CoursePage() {
 
   const isEnrolled = enrollment?.status === 'active';
   const lessonCount = lessons.length;
+  const lessonGroups = modules.length
+    ? [
+        ...modules.map((module) => ({ ...module, lessons: lessons.filter((lesson) => lesson.module_id === module.id) })),
+        ...(lessons.some((lesson) => !lesson.module_id) ? [{ id: 'ungrouped', title: 'Other Lessons', lessons: lessons.filter((lesson) => !lesson.module_id) }] : []),
+      ]
+    : [{ id: 'all', title: null, lessons }];
 
   return (
     <>
@@ -218,18 +232,24 @@ export default function CoursePage() {
             {lessons.length === 0 ? (
               <p className="text-gray-400">No lessons yet.</p>
             ) : (
-              <div className="divide-y divide-gray-100">
-                {lessons.map((lesson, idx) => (
-                  <div key={lesson.id} className="py-3 flex items-center gap-4">
-                    <span className="font-bold text-brand-blue w-8">{idx + 1}.</span>
-                    <span className="flex-1 font-medium text-gray-800">{lesson.title}</span>
-                    {isEnrolled && lesson.video_url && (
-                      <Link href={`/courses/${id}/lessons/${lesson.id}`}
-                        className="text-brand-blue font-bold text-sm hover:underline">
-                        Watch →
-                      </Link>
-                    )}
-                  </div>
+              <div className="space-y-5">
+                {lessonGroups.map((group, groupIndex) => (
+                  <section key={group.id}>
+                    {group.title ? <h3 className="mb-2 text-sm font-extrabold uppercase tracking-wide text-brand-blue">{group.title}</h3> : null}
+                    <div className="divide-y divide-gray-100 rounded-xl border border-gray-100">
+                      {group.lessons.map((lesson) => (
+                        <div key={lesson.id} className="flex items-center gap-4 px-3 py-3">
+                          <span className="w-8 font-bold text-brand-blue">{lesson.order_index + 1 || groupIndex + 1}.</span>
+                          <span className="flex-1 font-medium text-gray-800">{lesson.title}</span>
+                          {isEnrolled && lesson.is_published && (lesson.content_type !== 'video' || lesson.video_url) && (
+                            <Link href={`/courses/${id}/lessons/${lesson.id}`} className="text-sm font-bold text-brand-blue hover:underline">
+                              {lesson.content_type === 'bite_sized' ? 'Learn →' : 'Watch →'}
+                            </Link>
+                          )}
+                        </div>
+                      ))}
+                    </div>
+                  </section>
                 ))}
               </div>
             )}
