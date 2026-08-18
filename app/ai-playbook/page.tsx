@@ -69,7 +69,6 @@ export default function AIPlaybookLandingPage() {
           email,
           name,
           productSlug: "ai-playbook",
-          couponCode: "STUDENT100",
         }),
       });
 
@@ -114,7 +113,7 @@ export default function AIPlaybookLandingPage() {
       className="relative flex flex-col items-center overflow-x-hidden min-h-screen pb-36"
       style={{ backgroundColor: "#08236B", color: "#FFFFFF" }}
     >
-      {/* 1. TOP FLASH BANNER (SOLID YELLOW BG + BLACK TEXT) */}
+      {/* 1. TOP FLASH BANNER */}
       <div
         className="w-full py-2.5 px-4 text-center text-xs sm:text-sm font-black flex items-center justify-center space-x-2 shadow-md"
         style={{ backgroundColor: "#FFD000", color: "#000000" }}
@@ -206,7 +205,6 @@ export default function AIPlaybookLandingPage() {
             </div>
           </div>
 
-          {/* MAIN HERO CTA BUTTON */}
           <div className="pt-2">
             <button
               onClick={handleOpenCheckout}
@@ -347,7 +345,6 @@ export default function AIPlaybookLandingPage() {
 
         {/* Detailed 6 Deliverables Cards */}
         <div className="grid grid-cols-1 md:grid-cols-2 gap-6 pt-4">
-          
           <div
             className="rounded-2xl border-2 p-6 space-y-3"
             style={{ backgroundColor: "rgba(255, 255, 255, 0.08)", borderColor: "rgba(255, 255, 255, 0.15)" }}
@@ -462,11 +459,10 @@ export default function AIPlaybookLandingPage() {
               <li className="flex items-center gap-2"><span style={{ color: "#FFD000", fontWeight: "bold" }}>✓</span> Direct prompt templates and updates</li>
             </ul>
           </div>
-
         </div>
       </section>
 
-      {/* 6. SOCIAL PROOF / RESULTS */}
+      {/* 6. SOCIAL PROOF */}
       <section
         className="w-full border-y py-16 px-4"
         style={{
@@ -619,7 +615,7 @@ export default function AIPlaybookLandingPage() {
               <span className="text-4xl sm:text-5xl font-black" style={{ color: "#FFD000" }}>₦5,000</span>
             </div>
             <div className="text-xs text-white font-bold">
-              Coupon code <span style={{ color: "#FFD000" }} className="underline">STUDENT100</span> automatically applied at checkout
+              Discount automatically applied for launch access
             </div>
           </div>
 
@@ -732,7 +728,7 @@ export default function AIPlaybookLandingPage() {
         </div>
       </footer>
 
-      {/* 13. PERSISTENT FLOATING BOTTOM BAR (HIGH CONTRAST & NO OVERLAPS) */}
+      {/* 13. PERSISTENT FLOATING BOTTOM BAR */}
       <div
         className="fixed bottom-0 left-0 right-0 w-full p-3.5 z-40 border-t-2 shadow-2xl"
         style={{
