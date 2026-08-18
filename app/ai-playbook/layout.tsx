@@ -1,4 +1,5 @@
 import type { Metadata } from "next";
+import "../globals.css";
 
 export const metadata: Metadata = {
   title: "100/100 AI Playbook for Students | Shiney Brain Academy",

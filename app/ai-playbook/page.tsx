@@ -30,7 +30,7 @@ export default function AIPlaybookLandingPage() {
   };
 
   return (
-    <main className="relative flex flex-col items-center overflow-x-hidden bg-[#070E1F] text-slate-100 selection:bg-[#FFC42B] selection:text-black">
+    <main className="relative flex flex-col items-center overflow-x-hidden bg-[#070E1F] text-slate-100 selection:bg-[#FFC42B] selection:text-black min-h-screen">
       {/* Top Header Bar */}
       <header className="w-full border-b border-blue-900/40 bg-[#0B1528]/90 backdrop-blur-md sticky top-0 z-40">
         <div className="max-w-6xl mx-auto px-4 h-16 flex items-center justify-between">
@@ -89,10 +89,10 @@ export default function AIPlaybookLandingPage() {
           </div>
         </div>
 
-        {/* Hero Section Right: Real 100/100 Playbook Image */}
+        {/* Hero Section Right: Playbook Image */}
         <div className="lg:col-span-5 flex justify-center">
           <div className="relative w-full max-w-xs sm:max-w-sm rounded-2xl p-2 bg-gradient-to-b from-blue-500/20 to-transparent border border-blue-500/30 shadow-2xl shadow-blue-900/50">
-            <div className="overflow-hidden rounded-xl bg-[#0B1528] relative">
+            <div className="overflow-hidden rounded-xl bg-[#0B1528]">
               <img
                 src="https://cdn.phototourl.com/free/2026-08-17-b9bf12f2-e477-4495-bd83-0d5dfd74e19e.png"
                 alt="100/100 AI Playbook of Exam Success for Students"
@@ -116,7 +116,7 @@ export default function AIPlaybookLandingPage() {
           </div>
 
           <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-            <div className="rounded-2xl border border-red-900/30 bg-red-950/10 p-6 space-y-3">
+            <div className="rounded-2xl border border-red-900/30 bg-red-950/20 p-6 space-y-3">
               <h3 className="text-base font-bold text-red-400">The Painful Route</h3>
               <ul className="space-y-2.5 text-xs sm:text-sm text-slate-300">
                 <li className="flex items-start gap-2">
@@ -131,7 +131,7 @@ export default function AIPlaybookLandingPage() {
               </ul>
             </div>
 
-            <div className="rounded-2xl border border-emerald-900/30 bg-emerald-950/10 p-6 space-y-3">
+            <div className="rounded-2xl border border-emerald-900/30 bg-emerald-950/20 p-6 space-y-3">
               <h3 className="text-base font-bold text-emerald-400">The 100/100 AI System</h3>
               <ul className="space-y-2.5 text-xs sm:text-sm text-slate-300">
                 <li className="flex items-start gap-2">
@@ -177,14 +177,6 @@ export default function AIPlaybookLandingPage() {
               className="w-full h-auto object-cover rounded-xl"
             />
           </div>
-        </div>
-
-        <div className="max-w-4xl mx-auto rounded-2xl overflow-hidden border border-blue-500/30 bg-[#0B1528] p-3 shadow-xl">
-          <img
-            src="https://cdn.phototourl.com/free/2026-08-17-75bcdf44-f2b5-43c8-8087-456e87ee434c.png"
-            alt="100/100 AI Playbook Bundle Overview"
-            className="w-full h-auto object-cover rounded-xl"
-          />
         </div>
 
         {/* Feature Cards Grid */}
@@ -286,7 +278,7 @@ export default function AIPlaybookLandingPage() {
 
       {/* 21-DAY GUARANTEE */}
       <section className="w-full max-w-3xl px-4 pb-16">
-        <div className="rounded-xl border border-emerald-500/30 bg-emerald-950/10 p-6 flex flex-col sm:flex-row items-center gap-4 text-center sm:text-left">
+        <div className="rounded-xl border border-emerald-500/30 bg-emerald-950/20 p-6 flex flex-col sm:flex-row items-center gap-4 text-center sm:text-left">
           <ShieldCheck className="w-12 h-12 text-emerald-400 shrink-0" />
           <div className="space-y-1">
             <h4 className="font-bold text-white text-sm sm:text-base">21-Day Money Back Guarantee</h4>
