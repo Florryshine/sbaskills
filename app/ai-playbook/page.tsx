@@ -14,17 +14,53 @@ import {
   Phone,
   Mail,
   Sparkles,
+  X,
+  Loader2,
 } from "lucide-react";
 
 export default function AIPlaybookLandingPage() {
+  const [isModalOpen, setIsModalOpen] = useState(false);
+  const [email, setEmail] = useState("");
+  const [name, setName] = useState("");
   const [loading, setLoading] = useState(false);
+  const [error, setError] = useState("");
 
-  const handlePayment = async () => {
+  const handleOpenCheckout = () => {
+    setIsModalOpen(true);
+    setError("");
+  };
+
+  const handleSubmitCheckout = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!email) {
+      setError("Please enter your email address.");
+      return;
+    }
+
     setLoading(true);
+    setError("");
+
     try {
-      window.location.href = "/ai-playbook/confirmation";
-    } catch (err) {
-      console.error("Payment error:", err);
+      const res = await fetch("/api/landing/checkout", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          email,
+          name,
+          productSlug: "ai-playbook",
+        }),
+      });
+
+      const data = await res.json();
+
+      if (!res.ok || !data.authorization_url) {
+        throw new Error(data.error || "Failed to initialize Paystack.");
+      }
+
+      // Redirect student to Paystack checkout screen
+      window.location.href = data.authorization_url;
+    } catch (err: any) {
+      setError(err.message || "Something went wrong. Please try again.");
       setLoading(false);
     }
   };
@@ -40,7 +76,7 @@ export default function AIPlaybookLandingPage() {
             </span>
           </div>
           <button
-            onClick={handlePayment}
+            onClick={handleOpenCheckout}
             className="px-4 py-2 text-xs sm:text-sm font-bold rounded-lg bg-[#1E5AFF] hover:bg-blue-600 text-white transition-all shadow-md shadow-blue-500/20"
           >
             Get It Now — ₦5,000
@@ -70,11 +106,10 @@ export default function AIPlaybookLandingPage() {
 
           <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-4 pt-2">
             <button
-              onClick={handlePayment}
-              disabled={loading}
+              onClick={handleOpenCheckout}
               className="px-8 py-4 text-base font-bold rounded-xl bg-[#1E5AFF] hover:bg-blue-600 text-white transition-all shadow-xl shadow-blue-600/30 text-center flex items-center justify-center space-x-2"
             >
-              <span>{loading ? "Processing..." : "Get Instant Access — ₦5,000"}</span>
+              <span>Get Instant Access — ₦5,000</span>
               <ArrowRight className="w-5 h-5" />
             </button>
           </div>
@@ -179,6 +214,14 @@ export default function AIPlaybookLandingPage() {
           </div>
         </div>
 
+        <div className="max-w-4xl mx-auto rounded-2xl overflow-hidden border border-blue-500/30 bg-[#0B1528] p-3 shadow-xl">
+          <img
+            src="https://cdn.phototourl.com/free/2026-08-17-75bcdf44-f2b5-43c8-8087-456e87ee434c.png"
+            alt="100/100 AI Playbook Bundle Overview"
+            className="w-full h-auto object-cover rounded-xl"
+          />
+        </div>
+
         {/* Feature Cards Grid */}
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6 pt-6">
           <div className="rounded-2xl border border-blue-900/40 bg-[#0B1528] p-6 space-y-3">
@@ -266,11 +309,10 @@ export default function AIPlaybookLandingPage() {
           </div>
 
           <button
-            onClick={handlePayment}
-            disabled={loading}
+            onClick={handleOpenCheckout}
             className="w-full py-4 text-base font-bold rounded-xl bg-[#1E5AFF] hover:bg-blue-600 text-white transition-all shadow-lg shadow-blue-600/30 text-center flex items-center justify-center space-x-2"
           >
-            <span>{loading ? "Processing..." : "Get Instant Access Now — ₦5,000"}</span>
+            <span>Get Instant Access Now — ₦5,000</span>
             <ArrowRight className="w-5 h-5" />
           </button>
         </div>
@@ -323,12 +365,87 @@ export default function AIPlaybookLandingPage() {
           <span className="text-sm font-black text-[#FFC42B]">₦5,000</span>
         </div>
         <button
-          onClick={handlePayment}
+          onClick={handleOpenCheckout}
           className="px-6 py-2 text-xs sm:text-sm font-bold rounded-lg bg-[#1E5AFF] hover:bg-blue-600 text-white transition-all shadow-md shadow-blue-500/20"
         >
           Buy Now
         </button>
       </div>
+
+      {/* CHECKOUT MODAL */}
+      {isModalOpen && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/80 backdrop-blur-sm">
+          <div className="relative w-full max-w-md bg-[#0B1528] border border-blue-500/40 rounded-2xl p-6 sm:p-8 shadow-2xl space-y-5">
+            <button
+              onClick={() => setIsModalOpen(false)}
+              className="absolute top-4 right-4 text-slate-400 hover:text-white p-1"
+            >
+              <X className="w-5 h-5" />
+            </button>
+
+            <div className="space-y-1 text-center">
+              <h3 className="text-xl font-bold text-white">Secure Checkout</h3>
+              <p className="text-xs text-slate-300">
+                Enter your details to proceed to Paystack
+              </p>
+            </div>
+
+            {error && (
+              <div className="p-3 text-xs bg-red-950/50 border border-red-500/40 rounded-lg text-red-300">
+                {error}
+              </div>
+            )}
+
+            <form onSubmit={handleSubmitCheckout} className="space-y-4">
+              <div className="space-y-1 text-left">
+                <label className="text-xs font-semibold text-slate-300">Full Name (Optional)</label>
+                <input
+                  type="text"
+                  value={name}
+                  onChange={(e) => setName(e.target.value)}
+                  placeholder="e.g. Florry Igberhi"
+                  className="w-full px-3.5 py-2.5 rounded-lg bg-[#070E1F] border border-white/10 text-white text-sm focus:outline-none focus:border-blue-500"
+                />
+              </div>
+
+              <div className="space-y-1 text-left">
+                <label className="text-xs font-semibold text-slate-300">Email Address (Required)</label>
+                <input
+                  type="email"
+                  required
+                  value={email}
+                  onChange={(e) => setEmail(e.target.value)}
+                  placeholder="e.g. student@gmail.com"
+                  className="w-full px-3.5 py-2.5 rounded-lg bg-[#070E1F] border border-white/10 text-white text-sm focus:outline-none focus:border-blue-500"
+                />
+              </div>
+
+              <div className="p-3 rounded-lg bg-[#070E1F] border border-white/5 flex justify-between items-center text-xs">
+                <span className="text-slate-400">Total Due:</span>
+                <span className="font-bold text-[#FFC42B] text-base">₦5,000</span>
+              </div>
+
+              <button
+                type="submit"
+                disabled={loading}
+                className="w-full py-3.5 px-4 rounded-xl bg-[#1E5AFF] hover:bg-blue-600 text-white font-bold text-sm transition-all shadow-lg shadow-blue-600/30 flex items-center justify-center space-x-2"
+              >
+                {loading ? (
+                  <>
+                    <Loader2 className="w-4 h-4 animate-spin" />
+                    <span>Connecting to Paystack...</span>
+                  </>
+                ) : (
+                  <>
+                    <span>Pay ₦5,000 with Paystack</span>
+                    <ArrowRight className="w-4 h-4" />
+                  </>
+                )}
+              </button>
+            </form>
+          </div>
+        </div>
+      )}
     </main>
   );
 }
