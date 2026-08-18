@@ -15,10 +15,10 @@ export default function PlaybookLayout({
   return (
     <html lang="en" className="dark scroll-smooth">
       <body
-        className="bg-[#070E1F] text-slate-100 selection:bg-[#FFC42B] selection:text-black antialiased m-0 p-0"
-        style={{ backgroundColor: "#070E1F", color: "#F1F5F9" }}
+        className="bg-[#08236B] text-white selection:bg-[#FFD000] selection:text-black antialiased m-0 p-0"
+        style={{ backgroundColor: "#08236B", color: "#FFFFFF" }}
       >
-        <div className="min-h-screen bg-[#070E1F] text-slate-100">
+        <div className="min-h-screen bg-gradient-to-b from-[#0B2F8A] via-[#08236B] to-[#05184B] text-white">
           {children}
         </div>
       </body>
