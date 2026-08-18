@@ -31,7 +31,7 @@ export default function AIPlaybookLandingPage() {
   const [error, setError] = useState("");
   const [openFaq, setOpenFaq] = useState<number | null>(null);
 
-  // Dynamic urgency countdown timer
+  // Urgency countdown timer
   const [timeLeft, setTimeLeft] = useState({ hours: 4, minutes: 27, seconds: 45 });
 
   useEffect(() => {
@@ -97,14 +97,14 @@ export default function AIPlaybookLandingPage() {
     },
     {
       q: "Is this a monthly subscription or one-time payment?",
-      a: "This is a strictly one-time payment of ₦5,000. You get lifetime access to all 6 modules and future bonus updates without any monthly fees.",
+      a: "This is a strictly one-time payment of ₦5,000. You get lifetime access to all modules and future bonus updates without any recurring monthly fees.",
     },
     {
       q: "Do I need a laptop to use this system?",
-      a: "No. Everything in the playbook—from prompt workflows to study templates and AI claims—works directly on your Android or iPhone as well as on a computer.",
+      a: "No. Everything in the playbook—from prompt workflows to study templates and AI claims—works directly on your smartphone (Android or iPhone) as well as on a computer.",
     },
     {
-      q: "What if this doesn't work for my department/courses?",
+      q: "What if this doesn't work for my courses?",
       a: "The prompt and active-recall systems work for all academic disciplines (Sciences, Engineering, Arts, Law, Management, Medicine). You're backed by our 21-day money-back guarantee if it doesn't transform your study results.",
     },
   ];
@@ -112,7 +112,7 @@ export default function AIPlaybookLandingPage() {
   return (
     <main className="relative flex flex-col items-center overflow-x-hidden bg-[#070E1F] text-slate-100 selection:bg-[#FFC42B] selection:text-black min-h-screen pb-32">
       {/* Urgency Ribbon */}
-      <div className="w-full bg-[#1E5AFF] text-white py-1.5 px-4 text-center text-xs font-bold flex items-center justify-center space-x-2">
+      <div className="w-full bg-[#1E5AFF] text-white py-2 px-4 text-center text-xs font-bold flex items-center justify-center space-x-2">
         <Clock className="w-3.5 h-3.5" />
         <span>
           Flash Launch Discount Ends In: {String(timeLeft.hours).padStart(2, "0")}:
@@ -232,20 +232,20 @@ export default function AIPlaybookLandingPage() {
         </div>
       </section>
 
-      {/* WHAT YOU GET (6 PILLARS - AD-SAFE REWORK) */}
+      {/* WHAT YOU GET (SHOWCASING ALL ARTWORKS) */}
       <section className="w-full max-w-6xl px-4 py-16 space-y-12">
         <div className="text-center space-y-2">
           <span className="text-xs font-bold text-[#FFC42B] uppercase tracking-widest">
             THIS BUNDLE FIXES THAT
           </span>
           <h2 className="text-2xl sm:text-3xl font-extrabold text-white">
-            Here's Exactly What You're Getting
+            Here's Exactly What You're Getting Inside
           </h2>
         </div>
 
-        {/* Visual Artwork Showcase */}
-        <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 items-center">
-          <div className="lg:col-span-7 rounded-2xl overflow-hidden border border-blue-500/30 bg-[#0B1528] p-2 shadow-xl">
+        {/* Visual Artwork Grid Including Sanishtech Image */}
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6 items-stretch">
+          <div className="rounded-2xl overflow-hidden border border-blue-500/30 bg-[#0B1528] p-2 shadow-xl flex flex-col justify-center">
             <img
               src="https://cdn.phototourl.com/free/2026-08-17-3f5342b7-66d5-4330-b35e-58f0a039de0f.png"
               alt="Complete 100/100 AI Playbook Bundle Art"
@@ -253,7 +253,15 @@ export default function AIPlaybookLandingPage() {
             />
           </div>
 
-          <div className="lg:col-span-5 rounded-2xl overflow-hidden border border-blue-500/30 bg-[#0B1528] p-2 shadow-xl">
+          <div className="rounded-2xl overflow-hidden border border-blue-500/30 bg-[#0B1528] p-2 shadow-xl flex flex-col justify-center">
+            <img
+              src="https://img.sanishtech.com/u/c526a5e31b5b303e0146072ad6bd2a24.png"
+              alt="AI 100/100 Playbook Student Resources Bundle"
+              className="w-full h-auto object-cover rounded-xl"
+            />
+          </div>
+
+          <div className="rounded-2xl overflow-hidden border border-blue-500/30 bg-[#0B1528] p-2 shadow-xl flex flex-col justify-center md:col-span-2 lg:col-span-1">
             <img
               src="https://cdn.phototourl.com/free/2026-08-17-04e7c22b-e0ca-4f24-8b11-1c2c7b015390.png"
               alt="Premium AI Tools Access Breakdown"
@@ -264,7 +272,6 @@ export default function AIPlaybookLandingPage() {
 
         {/* Detailed 6 Deliverables */}
         <div className="grid grid-cols-1 md:grid-cols-2 gap-6 pt-4">
-          {/* 1 */}
           <div className="rounded-2xl border border-blue-900/40 bg-[#0B1528] p-6 space-y-3">
             <div className="flex items-center gap-3">
               <BookOpen className="w-6 h-6 text-[#FFC42B]" />
@@ -280,7 +287,6 @@ export default function AIPlaybookLandingPage() {
             </ul>
           </div>
 
-          {/* 2 - Policy Safe Premium AI Access */}
           <div className="rounded-2xl border border-blue-900/40 bg-[#0B1528] p-6 space-y-3">
             <div className="flex items-center gap-3">
               <Cloud className="w-6 h-6 text-[#1E5AFF]" />
@@ -296,7 +302,6 @@ export default function AIPlaybookLandingPage() {
             <div className="text-[11px] font-bold text-[#FFC42B]">Value: Priceless (Included Free with Bundle)</div>
           </div>
 
-          {/* 3 */}
           <div className="rounded-2xl border border-blue-900/40 bg-[#0B1528] p-6 space-y-3">
             <div className="flex items-center gap-3">
               <Terminal className="w-6 h-6 text-[#FFC42B]" />
@@ -312,7 +317,6 @@ export default function AIPlaybookLandingPage() {
             <div className="text-[11px] text-slate-400">Just copy, paste, and get results instantly.</div>
           </div>
 
-          {/* 4 */}
           <div className="rounded-2xl border border-blue-900/40 bg-[#0B1528] p-6 space-y-3">
             <div className="flex items-center gap-3">
               <Layers className="w-6 h-6 text-[#1E5AFF]" />
@@ -326,7 +330,6 @@ export default function AIPlaybookLandingPage() {
             </ul>
           </div>
 
-          {/* 5 */}
           <div className="rounded-2xl border border-blue-900/40 bg-[#0B1528] p-6 space-y-3">
             <div className="flex items-center gap-3">
               <DollarSign className="w-6 h-6 text-[#FFC42B]" />
@@ -341,7 +344,6 @@ export default function AIPlaybookLandingPage() {
             </ul>
           </div>
 
-          {/* 6 */}
           <div className="rounded-2xl border border-blue-900/40 bg-[#0B1528] p-6 space-y-3">
             <div className="flex items-center gap-3">
               <Gift className="w-6 h-6 text-[#1E5AFF]" />
@@ -357,7 +359,7 @@ export default function AIPlaybookLandingPage() {
         </div>
       </section>
 
-      {/* SOCIAL PROOF / REAL STUDENT RESULTS */}
+      {/* SOCIAL PROOF */}
       <section className="w-full bg-[#0B1528] border-y border-blue-900/40 py-16 px-4">
         <div className="max-w-5xl mx-auto space-y-10">
           <div className="text-center space-y-2">
@@ -392,7 +394,7 @@ export default function AIPlaybookLandingPage() {
         </div>
       </section>
 
-      {/* MEET THE AUTHOR SECTION */}
+      {/* MEET THE CREATOR */}
       <section className="w-full max-w-4xl px-4 py-16">
         <div className="rounded-2xl border border-blue-500/30 bg-[#0B1528] p-6 sm:p-8 flex flex-col md:flex-row items-center gap-6 text-left">
           <div className="w-24 h-24 sm:w-28 sm:h-28 rounded-full bg-gradient-to-tr from-[#1E5AFF] to-[#FFC42B] p-1 shrink-0 flex items-center justify-center">
@@ -410,7 +412,7 @@ export default function AIPlaybookLandingPage() {
         </div>
       </section>
 
-      {/* VALUE STACK & PRICING (RECALIBRATED TO SAFE ₦195K) */}
+      {/* VALUE STACK & PRICING */}
       <section className="w-full max-w-3xl px-4 py-10">
         <div className="rounded-2xl border-2 border-blue-500/50 bg-gradient-to-b from-[#101F42] to-[#0B1528] p-6 sm:p-8 shadow-2xl space-y-6">
           <div className="text-center space-y-1">
@@ -534,7 +536,7 @@ export default function AIPlaybookLandingPage() {
 
       {/* FOOTER */}
       <footer className="w-full border-t border-white/5 bg-[#070E1F] py-8 px-4 text-center text-xs text-slate-500 space-y-2">
-        <div>© {new Date().getFullYear()} Shiney Brain Academy. All rights reserved.</div>
+        <div>© 2026 Shiney Brain Academy. All rights reserved.</div>
         <div className="flex justify-center space-x-4 text-[11px] text-slate-400">
           <Link href="/privacy-policy" className="hover:underline">Privacy Policy</Link>
           <span>•</span>
@@ -543,7 +545,7 @@ export default function AIPlaybookLandingPage() {
       </footer>
 
       {/* PERSISTENT FLOATING BOTTOM BAR */}
-      <div className="fixed bottom-0 left-0 right-0 w-full bg-[#0B1528]/95 border-t border-blue-500/40 p-3 backdrop-blur-lg z-50 shadow-2xl">
+      <div className="fixed bottom-0 left-0 right-0 w-full bg-[#0B1528]/95 border-t border-blue-500/40 p-3 backdrop-blur-lg z-40 shadow-2xl">
         <div className="max-w-4xl mx-auto flex items-center justify-between px-2 sm:px-4">
           <div className="flex flex-col">
             <span className="text-xs font-bold text-white leading-tight">100/100 AI Student Bundle</span>
@@ -561,13 +563,16 @@ export default function AIPlaybookLandingPage() {
         </div>
       </div>
 
-      {/* CHECKOUT MODAL */}
+      {/* SECURE CHECKOUT MODAL (WITH HARD-STYLED DARK INPUTS AND HIGH CONTRAST) */}
       {isModalOpen && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/80 backdrop-blur-sm">
-          <div className="relative w-full max-w-md bg-[#0B1528] border border-blue-500/40 rounded-2xl p-6 sm:p-8 shadow-2xl space-y-5">
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/80 backdrop-blur-md">
+          <div
+            className="relative w-full max-w-md border border-blue-500/50 rounded-2xl p-6 sm:p-8 shadow-2xl space-y-5"
+            style={{ backgroundColor: "#0B1528", color: "#F1F5F9" }}
+          >
             <button
               onClick={() => setIsModalOpen(false)}
-              className="absolute top-4 right-4 text-slate-400 hover:text-white p-1"
+              className="absolute top-4 right-4 text-slate-400 hover:text-white p-1 rounded-full hover:bg-white/10 transition-colors"
             >
               <X className="w-5 h-5" />
             </button>
@@ -580,44 +585,67 @@ export default function AIPlaybookLandingPage() {
             </div>
 
             {error && (
-              <div className="p-3 text-xs bg-red-950/50 border border-red-500/40 rounded-lg text-red-300">
+              <div
+                className="p-3 text-xs rounded-lg border border-red-500/50 text-red-200"
+                style={{ backgroundColor: "rgba(127, 29, 29, 0.4)" }}
+              >
                 {error}
               </div>
             )}
 
             <form onSubmit={handleSubmitCheckout} className="space-y-4">
-              <div className="space-y-1 text-left">
-                <label className="text-xs font-semibold text-slate-300">Full Name (Optional)</label>
+              <div className="space-y-1.5 text-left">
+                <label className="text-xs font-bold text-slate-200 block">Full Name (Optional)</label>
                 <input
                   type="text"
                   value={name}
                   onChange={(e) => setName(e.target.value)}
                   placeholder="e.g. Florryshine"
-                  className="w-full px-3.5 py-2.5 rounded-lg bg-[#070E1F] border border-white/10 text-white text-sm focus:outline-none focus:border-blue-500"
+                  style={{
+                    backgroundColor: "#070E1F",
+                    color: "#FFFFFF",
+                    borderColor: "rgba(255, 255, 255, 0.2)",
+                  }}
+                  className="w-full px-4 py-3 rounded-xl border text-sm focus:outline-none focus:border-[#1E5AFF] focus:ring-1 focus:ring-[#1E5AFF] placeholder:text-slate-500"
                 />
               </div>
 
-              <div className="space-y-1 text-left">
-                <label className="text-xs font-semibold text-slate-300">Email Address (Required)</label>
+              <div className="space-y-1.5 text-left">
+                <label className="text-xs font-bold text-slate-200 block">Email Address (Required)</label>
                 <input
                   type="email"
                   required
                   value={email}
                   onChange={(e) => setEmail(e.target.value)}
                   placeholder="e.g. student@gmail.com"
-                  className="w-full px-3.5 py-2.5 rounded-lg bg-[#070E1F] border border-white/10 text-white text-sm focus:outline-none focus:border-blue-500"
+                  style={{
+                    backgroundColor: "#070E1F",
+                    color: "#FFFFFF",
+                    borderColor: "rgba(255, 255, 255, 0.2)",
+                  }}
+                  className="w-full px-4 py-3 rounded-xl border text-sm focus:outline-none focus:border-[#1E5AFF] focus:ring-1 focus:ring-[#1E5AFF] placeholder:text-slate-500"
                 />
               </div>
 
-              <div className="p-3 rounded-lg bg-[#070E1F] border border-white/5 flex justify-between items-center text-xs">
-                <span className="text-slate-400">Total Price:</span>
-                <span className="font-extrabold text-[#FFC42B] text-lg">₦5,000</span>
+              <div
+                className="p-3.5 rounded-xl border flex justify-between items-center text-xs"
+                style={{
+                  backgroundColor: "#070E1F",
+                  borderColor: "rgba(30, 90, 255, 0.3)",
+                }}
+              >
+                <span className="text-slate-400 font-medium">Total Payable:</span>
+                <span className="font-black text-[#FFC42B] text-lg">₦5,000</span>
               </div>
 
               <button
                 type="submit"
                 disabled={loading}
-                className="w-full py-3.5 px-4 rounded-xl bg-[#1E5AFF] hover:bg-blue-600 text-white font-black text-sm transition-all shadow-lg shadow-blue-600/40 flex items-center justify-center space-x-2"
+                style={{
+                  backgroundColor: "#1E5AFF",
+                  color: "#FFFFFF",
+                }}
+                className="w-full py-4 px-4 rounded-xl font-extrabold text-sm transition-all shadow-xl shadow-blue-600/40 hover:bg-blue-600 flex items-center justify-center space-x-2 cursor-pointer"
               >
                 {loading ? (
                   <>
