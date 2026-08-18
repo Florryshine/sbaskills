@@ -13,8 +13,15 @@ export default function PlaybookLayout({
   children: React.ReactNode;
 }) {
   return (
-    <div className="min-h-screen bg-[#070E1F] text-slate-100 selection:bg-[#FFC42B] selection:text-black font-sans antialiased">
-      {children}
-    </div>
+    <html lang="en" className="dark scroll-smooth">
+      <body
+        className="bg-[#070E1F] text-slate-100 selection:bg-[#FFC42B] selection:text-black antialiased m-0 p-0"
+        style={{ backgroundColor: "#070E1F", color: "#F1F5F9" }}
+      >
+        <div className="min-h-screen bg-[#070E1F] text-slate-100">
+          {children}
+        </div>
+      </body>
+    </html>
   );
 }
