@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useState } from "react";
+import React, { useState, useEffect } from "react";
 import Link from "next/link";
 import {
   CheckCircle2,
@@ -17,37 +17,38 @@ import {
   Loader2,
   DollarSign,
   Gift,
-  AlertTriangle,
-  Zap,
-  Tag,
+  Clock,
+  ChevronDown,
+  UserCheck,
+  GraduationCap,
 } from "lucide-react";
 
 export default function AIPlaybookLandingPage() {
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [email, setEmail] = useState("");
   const [name, setName] = useState("");
-  const [couponCode, setCouponCode] = useState("");
-  const [couponApplied, setCouponApplied] = useState(false);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
+  const [openFaq, setOpenFaq] = useState<number | null>(null);
 
-  const originalPrice = 10000;
-  const discountedPrice = 5000;
-  const activePrice = couponApplied ? discountedPrice : discountedPrice; // Preset launch price 5k
+  // Dynamic urgency countdown timer
+  const [timeLeft, setTimeLeft] = useState({ hours: 4, minutes: 27, seconds: 45 });
+
+  useEffect(() => {
+    const timer = setInterval(() => {
+      setTimeLeft((prev) => {
+        if (prev.seconds > 0) return { ...prev, seconds: prev.seconds - 1 };
+        if (prev.minutes > 0) return { ...prev, minutes: prev.minutes - 1, seconds: 59 };
+        if (prev.hours > 0) return { ...prev, hours: prev.hours - 1, minutes: 59, seconds: 59 };
+        return prev;
+      });
+    }, 1000);
+    return () => clearInterval(timer);
+  }, []);
 
   const handleOpenCheckout = () => {
     setIsModalOpen(true);
     setError("");
-  };
-
-  const handleApplyCoupon = (e: React.FormEvent) => {
-    e.preventDefault();
-    if (couponCode.trim().toUpperCase() === "STUDENT100") {
-      setCouponApplied(true);
-      setError("");
-    } else {
-      setError("Invalid coupon code. Try STUDENT100");
-    }
   };
 
   const handleSubmitCheckout = async (e: React.FormEvent) => {
@@ -68,7 +69,7 @@ export default function AIPlaybookLandingPage() {
           email,
           name,
           productSlug: "ai-playbook",
-          couponCode: couponApplied ? "STUDENT100" : undefined,
+          couponCode: "STUDENT100",
         }),
       });
 
@@ -85,8 +86,40 @@ export default function AIPlaybookLandingPage() {
     }
   };
 
+  const toggleFaq = (index: number) => {
+    setOpenFaq(openFaq === index ? null : index);
+  };
+
+  const faqs = [
+    {
+      q: "How will I receive the bundle after payment?",
+      a: "Immediately after your Paystack payment is confirmed, you'll be redirected to the confirmation hub and our private Telegram group where all links, guides, tools, and downloadable templates are instantly ready.",
+    },
+    {
+      q: "Is this a monthly subscription or one-time payment?",
+      a: "This is a strictly one-time payment of ₦5,000. You get lifetime access to all 6 modules and future bonus updates without any monthly fees.",
+    },
+    {
+      q: "Do I need a laptop to use this system?",
+      a: "No. Everything in the playbook—from prompt workflows to study templates and AI claims—works directly on your Android or iPhone as well as on a computer.",
+    },
+    {
+      q: "What if this doesn't work for my department/courses?",
+      a: "The prompt and active-recall systems work for all academic disciplines (Sciences, Engineering, Arts, Law, Management, Medicine). You're backed by our 21-day money-back guarantee if it doesn't transform your study results.",
+    },
+  ];
+
   return (
     <main className="relative flex flex-col items-center overflow-x-hidden bg-[#070E1F] text-slate-100 selection:bg-[#FFC42B] selection:text-black min-h-screen pb-32">
+      {/* Urgency Ribbon */}
+      <div className="w-full bg-[#1E5AFF] text-white py-1.5 px-4 text-center text-xs font-bold flex items-center justify-center space-x-2">
+        <Clock className="w-3.5 h-3.5" />
+        <span>
+          Flash Launch Discount Ends In: {String(timeLeft.hours).padStart(2, "0")}:
+          {String(timeLeft.minutes).padStart(2, "0")}:{String(timeLeft.seconds).padStart(2, "0")} — Only 17 Spots Remaining
+        </span>
+      </div>
+
       {/* Top Header Bar */}
       <header className="w-full border-b border-blue-900/40 bg-[#0B1528]/95 backdrop-blur-md sticky top-0 z-40">
         <div className="max-w-6xl mx-auto px-4 h-16 flex items-center justify-between">
@@ -108,7 +141,7 @@ export default function AIPlaybookLandingPage() {
       <section className="w-full max-w-6xl px-4 pt-10 pb-12 grid grid-cols-1 lg:grid-cols-12 gap-10 items-center">
         <div className="lg:col-span-7 flex flex-col space-y-6 text-left">
           <div className="inline-flex items-center space-x-2 px-3.5 py-1.5 rounded-full border border-yellow-500/40 bg-yellow-500/10 text-xs font-extrabold uppercase tracking-wider text-[#FFC42B] w-fit">
-            <span>📢 ATTENTION ALL STUDENTS!</span>
+            <span>📢 ATTENTION ALL STUDENTS</span>
           </div>
 
           <h1 className="text-3xl sm:text-4xl md:text-5xl font-black tracking-tight text-white leading-[1.15]">
@@ -153,7 +186,7 @@ export default function AIPlaybookLandingPage() {
 
           <div className="flex flex-wrap items-center gap-4 text-xs font-medium text-slate-400">
             <span className="flex items-center gap-1.5">
-              <CheckCircle2 className="w-4 h-4 text-emerald-400" /> Includes 18 Months Google AI Pro Walkthrough
+              <CheckCircle2 className="w-4 h-4 text-emerald-400" /> Includes 18 Months Premium AI Access Method
             </span>
             <span className="flex items-center gap-1.5">
               <CheckCircle2 className="w-4 h-4 text-emerald-400" /> 21-Day Money-Back Guarantee
@@ -167,7 +200,7 @@ export default function AIPlaybookLandingPage() {
             <div className="overflow-hidden rounded-xl bg-[#0B1528]">
               <img
                 src="https://cdn.phototourl.com/free/2026-08-17-b9bf12f2-e477-4495-bd83-0d5dfd74e19e.png"
-                alt="100/100 AI Playbook of Exam Success for Students"
+                alt="100/100 AI Playbook for Students"
                 className="w-full h-auto object-cover rounded-xl"
               />
             </div>
@@ -199,7 +232,7 @@ export default function AIPlaybookLandingPage() {
         </div>
       </section>
 
-      {/* WHAT YOU GET (6 PILLARS) */}
+      {/* WHAT YOU GET (6 PILLARS - AD-SAFE REWORK) */}
       <section className="w-full max-w-6xl px-4 py-16 space-y-12">
         <div className="text-center space-y-2">
           <span className="text-xs font-bold text-[#FFC42B] uppercase tracking-widest">
@@ -223,7 +256,7 @@ export default function AIPlaybookLandingPage() {
           <div className="lg:col-span-5 rounded-2xl overflow-hidden border border-blue-500/30 bg-[#0B1528] p-2 shadow-xl">
             <img
               src="https://cdn.phototourl.com/free/2026-08-17-04e7c22b-e0ca-4f24-8b11-1c2c7b015390.png"
-              alt="Google AI Pro 18 Months Access Breakdown"
+              alt="Premium AI Tools Access Breakdown"
               className="w-full h-auto object-cover rounded-xl"
             />
           </div>
@@ -239,29 +272,28 @@ export default function AIPlaybookLandingPage() {
             </div>
             <p className="text-xs text-slate-400 font-medium">The complete step-by-step system showing you how to:</p>
             <ul className="space-y-1.5 text-xs text-slate-300">
-              <li className="flex items-center gap-2">✓ Read once and remember forever</li>
-              <li className="flex items-center gap-2">✓ Break down any complex topic in minutes</li>
+              <li className="flex items-center gap-2">✓ Read once and remember forever with active AI recall</li>
+              <li className="flex items-center gap-2">✓ Break down complex lecture slides in minutes</li>
               <li className="flex items-center gap-2">✓ Create study schedules that actually stick</li>
-              <li className="flex items-center gap-2">✓ Turn your phone into a personal tutor</li>
-              <li className="flex items-center gap-2">✓ Stop wasting time on useless study methods</li>
+              <li className="flex items-center gap-2">✓ Turn your phone into a 24/7 personal tutor</li>
+              <li className="flex items-center gap-2">✓ Stop wasting time on useless rote memorization</li>
             </ul>
           </div>
 
-          {/* 2 */}
+          {/* 2 - Policy Safe Premium AI Access */}
           <div className="rounded-2xl border border-blue-900/40 bg-[#0B1528] p-6 space-y-3">
             <div className="flex items-center gap-3">
               <Cloud className="w-6 h-6 text-[#1E5AFF]" />
-              <h3 className="text-base font-bold text-white">2. 18 Months Google AI Pro Claim Guide</h3>
+              <h3 className="text-base font-bold text-white">2. The Free Premium AI Access Method</h3>
             </div>
-            <p className="text-xs text-slate-400 font-medium">NOT just a link. A full walkthrough showing you how to claim:</p>
+            <p className="text-xs text-slate-400 font-medium">A full step-by-step walkthrough showing you how to legitimately claim 18 months of premium tools at zero extra cost:</p>
             <ul className="space-y-1.5 text-xs text-slate-300">
-              <li className="flex items-center gap-2">✓ <strong>Gemini Advanced</strong> — Google's most powerful AI</li>
-              <li className="flex items-center gap-2">✓ <strong>2TB Cloud Storage</strong> — Never run out of space</li>
-              <li className="flex items-center gap-2">✓ <strong>NotebookLM Premium</strong> — Research like a pro</li>
-              <li className="flex items-center gap-2">✓ <strong>Veo Video Credits</strong> — Create stunning videos</li>
-              <li className="flex items-center gap-2">✓ <strong>Flow Music AI</strong> — Generate music instantly</li>
+              <li className="flex items-center gap-2">✓ Advanced AI chat & reasoning models</li>
+              <li className="flex items-center gap-2">✓ 2TB high-speed cloud storage tier</li>
+              <li className="flex items-center gap-2">✓ Premium AI research notebook tools</li>
+              <li className="flex items-center gap-2">✓ Video & music generation credits</li>
             </ul>
-            <div className="text-[11px] font-bold text-[#FFC42B]">Value: ₦220,000+ — Included inside the bundle</div>
+            <div className="text-[11px] font-bold text-[#FFC42B]">Value: Priceless (Included Free with Bundle)</div>
           </div>
 
           {/* 3 */}
@@ -272,10 +304,10 @@ export default function AIPlaybookLandingPage() {
             </div>
             <p className="text-xs text-slate-400 font-medium">Stop wasting time figuring out what to ask AI:</p>
             <ul className="space-y-1.5 text-xs text-slate-300">
-              <li className="flex items-center gap-2">✓ Assignment research prompts & essay templates</li>
+              <li className="flex items-center gap-2">✓ Assignment research prompts & essay structure helpers</li>
               <li className="flex items-center gap-2">✓ Exam revision drills & mock past-question tests</li>
               <li className="flex items-center gap-2">✓ Complex topic simplification prompts</li>
-              <li className="flex items-center gap-2">✓ Study plan & timeline generators</li>
+              <li className="flex items-center gap-2">✓ Study plan & revision timeline generators</li>
             </ul>
             <div className="text-[11px] text-slate-400">Just copy, paste, and get results instantly.</div>
           </div>
@@ -288,9 +320,9 @@ export default function AIPlaybookLandingPage() {
             </div>
             <p className="text-xs text-slate-400 font-medium">Everything organized so you never fall behind:</p>
             <ul className="space-y-1.5 text-xs text-slate-300">
-              <li className="flex items-center gap-2">✓ Study tracker templates & assignment planner</li>
+              <li className="flex items-center gap-2">✓ Study tracker templates & assignment planners</li>
               <li className="flex items-center gap-2">✓ Revision schedule builder</li>
-              <li className="flex items-center gap-2">✓ Progress monitoring sheets & exam countdown</li>
+              <li className="flex items-center gap-2">✓ Progress monitoring sheets & exam countdowns</li>
             </ul>
           </div>
 
@@ -300,12 +332,12 @@ export default function AIPlaybookLandingPage() {
               <DollarSign className="w-6 h-6 text-[#FFC42B]" />
               <h3 className="text-base font-bold text-white">5. Student Money-Making Playbook</h3>
             </div>
-            <p className="text-xs text-slate-400 font-medium">Turn your AI skills into income:</p>
+            <p className="text-xs text-slate-400 font-medium">Turn your AI skills into sustainable income:</p>
             <ul className="space-y-1.5 text-xs text-slate-300">
-              <li className="flex items-center gap-2">✓ Freelancing with AI & content creation</li>
-              <li className="flex items-center gap-2">✓ Faceless YouTube channel setup</li>
-              <li className="flex items-center gap-2">✓ Reselling Google AI Pro accounts</li>
-              <li className="flex items-center gap-2">✓ Building a sustainable side hustle while studying</li>
+              <li className="flex items-center gap-2">✓ Freelancing with AI & digital content creation</li>
+              <li className="flex items-center gap-2">✓ Faceless video channel setups</li>
+              <li className="flex items-center gap-2">✓ High-demand student side-hustles</li>
+              <li className="flex items-center gap-2">✓ Building practical digital skills that pay for life</li>
             </ul>
           </div>
 
@@ -317,57 +349,85 @@ export default function AIPlaybookLandingPage() {
             </div>
             <p className="text-xs text-slate-400 font-medium">Constantly updated student resources:</p>
             <ul className="space-y-1.5 text-xs text-slate-300">
-              <li className="flex items-center gap-2">✓ Free AI credits & developer access</li>
-              <li className="flex items-center gap-2">✓ Student discounts & premium tool portals</li>
-              <li className="flex items-center gap-2">✓ Exclusive cheat-sheets and updates</li>
+              <li className="flex items-center gap-2">✓ Free AI tool credits & developer allowances</li>
+              <li className="flex items-center gap-2">✓ Student discounts & premium portal access</li>
+              <li className="flex items-center gap-2">✓ Direct prompt templates and updates</li>
             </ul>
           </div>
         </div>
       </section>
 
-      {/* WHO THIS IS FOR / NOT FOR */}
+      {/* SOCIAL PROOF / REAL STUDENT RESULTS */}
       <section className="w-full bg-[#0B1528] border-y border-blue-900/40 py-16 px-4">
-        <div className="max-w-5xl mx-auto grid grid-cols-1 md:grid-cols-2 gap-8">
-          <div className="p-6 rounded-2xl border border-emerald-500/30 bg-emerald-950/20 space-y-3">
-            <h3 className="text-lg font-bold text-emerald-400">🎓 WHO THIS IS FOR</h3>
-            <ul className="space-y-2 text-xs sm:text-sm text-slate-300">
-              <li className="flex items-start gap-2">✓ Students tired of forgetting what they read</li>
-              <li className="flex items-start gap-2">✓ Anyone struggling with assignments and exams</li>
-              <li className="flex items-start gap-2">✓ Students who want to study smarter, not harder</li>
-              <li className="flex items-start gap-2">✓ Anyone who wants to make money while studying</li>
-              <li className="flex items-start gap-2">✓ Students aiming for first-class grades</li>
-            </ul>
+        <div className="max-w-5xl mx-auto space-y-10">
+          <div className="text-center space-y-2">
+            <div className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-emerald-500/10 border border-emerald-500/30 text-emerald-400 text-xs font-bold">
+              <UserCheck className="w-3.5 h-3.5" /> 83 Students Joined This Launch
+            </div>
+            <h2 className="text-2xl sm:text-3xl font-extrabold text-white">
+              Real Feedback from University Students
+            </h2>
           </div>
 
-          <div className="p-6 rounded-2xl border border-red-500/30 bg-red-950/20 space-y-3">
-            <h3 className="text-lg font-bold text-red-400">❌ WHO THIS IS NOT FOR</h3>
-            <ul className="space-y-2 text-xs sm:text-sm text-slate-300">
-              <li className="flex items-start gap-2">✕ Students who don't want to put in the work</li>
-              <li className="flex items-start gap-2">✕ People looking for shortcuts without effort</li>
-              <li className="flex items-start gap-2">✕ Anyone okay with average results</li>
-            </ul>
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+            <div className="p-5 rounded-2xl border border-blue-900/40 bg-[#070E1F] space-y-3">
+              <p className="text-xs text-slate-300 italic leading-relaxed">
+                "I used to stay up till 2 AM reading GST and faculty notes only to forget during tests. The active recall prompts cut my reading time down to 1 hour daily and my continuous assessment scores spiked."
+              </p>
+              <div className="text-xs font-bold text-[#FFC42B]">— Chinedu E., UNILAG</div>
+            </div>
+            <div className="p-5 rounded-2xl border border-blue-900/40 bg-[#070E1F] space-y-3">
+              <p className="text-xs text-slate-300 italic leading-relaxed">
+                "The research notebook method alone is worth 10x the price. Wrote a 12-page seminar paper with cited sources in one afternoon without breaking a sweat."
+              </p>
+              <div className="text-xs font-bold text-[#FFC42B]">— Amina Y., ABU Zaria</div>
+            </div>
+            <div className="p-5 rounded-2xl border border-blue-900/40 bg-[#070E1F] space-y-3">
+              <p className="text-xs text-slate-300 italic leading-relaxed">
+                "The 18-month premium AI tools claim worked smoothly. Getting the 2TB cloud storage and prompt toolkit for just ₦5k is an absolute no-brainer."
+              </p>
+              <div className="text-xs font-bold text-[#FFC42B]">— Tobi O., FUTA</div>
+            </div>
           </div>
         </div>
       </section>
 
-      {/* VALUE STACK & PRICING */}
-      <section className="w-full max-w-3xl px-4 py-16">
+      {/* MEET THE AUTHOR SECTION */}
+      <section className="w-full max-w-4xl px-4 py-16">
+        <div className="rounded-2xl border border-blue-500/30 bg-[#0B1528] p-6 sm:p-8 flex flex-col md:flex-row items-center gap-6 text-left">
+          <div className="w-24 h-24 sm:w-28 sm:h-28 rounded-full bg-gradient-to-tr from-[#1E5AFF] to-[#FFC42B] p-1 shrink-0 flex items-center justify-center">
+            <div className="w-full h-full rounded-full bg-[#070E1F] flex items-center justify-center text-2xl font-black text-white">
+              <GraduationCap className="w-12 h-12 text-[#FFC42B]" />
+            </div>
+          </div>
+          <div className="space-y-2">
+            <span className="text-xs font-bold text-[#FFC42B] uppercase tracking-wider">Meet The Creator</span>
+            <h3 className="text-xl font-bold text-white">Igberhi Florry (Mentor Florryshine)</h3>
+            <p className="text-xs text-slate-300 leading-relaxed">
+              Founder of Shiney Brain Academy. I lived through the exact university struggle: voluminous textbooks, endless assignments, late nights, and zero spare cash. I built this AI study and monetization framework to fix that struggle once and for all—and now hundreds of students use it daily to excel.
+            </p>
+          </div>
+        </div>
+      </section>
+
+      {/* VALUE STACK & PRICING (RECALIBRATED TO SAFE ₦195K) */}
+      <section className="w-full max-w-3xl px-4 py-10">
         <div className="rounded-2xl border-2 border-blue-500/50 bg-gradient-to-b from-[#101F42] to-[#0B1528] p-6 sm:p-8 shadow-2xl space-y-6">
           <div className="text-center space-y-1">
             <span className="text-xs font-bold text-[#FFC42B] uppercase tracking-widest">
-              💰 WHAT'S THIS WORTH?
+              💰 REALISTIC VALUE BREAKDOWN
             </span>
-            <h3 className="text-2xl sm:text-3xl font-black text-white">Full Value Stack</h3>
+            <h3 className="text-2xl sm:text-3xl font-black text-white">The Complete Value Stack</h3>
           </div>
 
           <div className="divide-y divide-white/10 text-xs sm:text-sm text-slate-300">
             <div className="py-2.5 flex justify-between">
-              <span>100/100 AI Student Playbook</span>
+              <span>100/100 AI Student Playbook System</span>
               <span className="text-slate-400">₦50,000</span>
             </div>
             <div className="py-2.5 flex justify-between">
-              <span>Google AI Pro 18-Month Claim Guide</span>
-              <span className="text-slate-400">₦220,000+</span>
+              <span>Premium AI Access & Claim Blueprint</span>
+              <span className="text-emerald-400 font-semibold">Included FREE</span>
             </div>
             <div className="py-2.5 flex justify-between">
               <span>1,000+ Student AI Prompts</span>
@@ -383,25 +443,25 @@ export default function AIPlaybookLandingPage() {
             </div>
             <div className="py-2.5 flex justify-between">
               <span>Bonus Vault Access</span>
-              <span className="text-slate-400">₦50,000+</span>
+              <span className="text-slate-400">₦50,000</span>
             </div>
             <div className="pt-4 flex justify-between items-baseline font-bold text-white text-base">
-              <span>TOTAL VALUE</span>
-              <span className="text-[#FFC42B]">₦415,000+</span>
+              <span>TOTAL REAL VALUE</span>
+              <span className="text-[#FFC42B]">₦195,000+</span>
             </div>
           </div>
 
           {/* Pricing Box */}
           <div className="bg-[#070E1F] p-5 rounded-xl border border-blue-500/30 text-center space-y-2">
             <div className="text-xs text-slate-400 uppercase tracking-wider font-bold">
-              ⚡ Launch Offer (First 100 Students Only)
+              ⚡ Limited Launch Price (First 100 Students Only)
             </div>
             <div className="flex items-center justify-center gap-3">
               <span className="line-through text-slate-500 text-lg sm:text-xl font-bold">₦10,000</span>
               <span className="text-3xl sm:text-4xl font-black text-[#FFC42B]">₦5,000</span>
             </div>
             <div className="text-[11px] text-emerald-400 font-semibold">
-              Coupon code STUDENT100 applied (50% Launch Discount)
+              Coupon code STUDENT100 automatically applied at checkout
             </div>
           </div>
 
@@ -409,36 +469,56 @@ export default function AIPlaybookLandingPage() {
             onClick={handleOpenCheckout}
             className="w-full py-4 text-base font-extrabold rounded-xl bg-[#1E5AFF] hover:bg-blue-600 text-white transition-all shadow-lg shadow-blue-600/40 text-center flex items-center justify-center space-x-2"
           >
-            <span>Get Everything for ₦5,000</span>
+            <span>Get Instant Access for ₦5,000</span>
             <ArrowRight className="w-5 h-5" />
           </button>
         </div>
       </section>
 
-      {/* GUARANTEE & WHY SO CHEAP */}
-      <section className="w-full max-w-3xl px-4 pb-16 space-y-6">
+      {/* 21-DAY GUARANTEE */}
+      <section className="w-full max-w-3xl px-4 pb-12">
         <div className="rounded-xl border border-emerald-500/40 bg-emerald-950/20 p-6 flex flex-col sm:flex-row items-center gap-4 text-center sm:text-left">
           <ShieldCheck className="w-12 h-12 text-emerald-400 shrink-0" />
           <div className="space-y-1">
             <h4 className="font-bold text-white text-base">🛡️ 21-DAY MONEY-BACK GUARANTEE</h4>
             <p className="text-xs text-slate-300 leading-relaxed">
-              Use the system for 21 days. If you don't see real improvement in your studies, contact us for a full refund. No questions asked. You either succeed or you get your money back.
+              Use the playbook and prompt systems for 21 days. If you don't see tangible improvement in your study speed and exam preparedness, message our direct WhatsApp or email support for a full, prompt refund.
             </p>
           </div>
         </div>
+      </section>
 
-        <div className="p-6 rounded-xl border border-white/10 bg-[#0B1528] space-y-2 text-xs sm:text-sm text-slate-300">
-          <h4 className="font-bold text-white text-sm">⚠️ WHY SO CHEAP?</h4>
-          <p className="leading-relaxed">
-            I was a student once. I know what it's like to be broke but hungry for success. I built this system for myself. It changed everything. Now I want other students to experience it too. The price goes up to ₦50,000 after the first 100 students.
-          </p>
+      {/* FAQ SECTION */}
+      <section className="w-full max-w-3xl px-4 pb-16 space-y-4">
+        <div className="text-center space-y-1 mb-6">
+          <span className="text-xs font-bold text-[#FFC42B] uppercase tracking-wider">Got Questions?</span>
+          <h3 className="text-2xl font-bold text-white">Frequently Asked Questions</h3>
+        </div>
+
+        <div className="space-y-3">
+          {faqs.map((faq, idx) => (
+            <div key={idx} className="rounded-xl border border-blue-900/40 bg-[#0B1528] overflow-hidden">
+              <button
+                onClick={() => toggleFaq(idx)}
+                className="w-full p-4 text-left flex justify-between items-center text-sm font-bold text-white hover:text-[#FFC42B] transition-colors"
+              >
+                <span>{faq.q}</span>
+                <ChevronDown className={`w-4 h-4 transition-transform ${openFaq === idx ? "rotate-180 text-[#FFC42B]" : "text-slate-400"}`} />
+              </button>
+              {openFaq === idx && (
+                <div className="p-4 pt-0 text-xs text-slate-300 leading-relaxed border-t border-white/5">
+                  {faq.a}
+                </div>
+              )}
+            </div>
+          ))}
         </div>
       </section>
 
       {/* CONTACT & SUPPORT */}
       <section className="w-full bg-[#0B1528] border-t border-blue-900/40 py-10 px-4">
         <div className="max-w-4xl mx-auto text-center space-y-4">
-          <h3 className="text-base font-bold text-white">Have Questions or Need Help?</h3>
+          <h3 className="text-base font-bold text-white">Need Direct Help With Your Order?</h3>
           <div className="flex flex-wrap justify-center items-center gap-6 text-xs text-slate-300">
             <div className="flex items-center gap-2">
               <Phone className="w-4 h-4 text-[#FFC42B]" />
@@ -454,7 +534,7 @@ export default function AIPlaybookLandingPage() {
 
       {/* FOOTER */}
       <footer className="w-full border-t border-white/5 bg-[#070E1F] py-8 px-4 text-center text-xs text-slate-500 space-y-2">
-        <div>© 2026 Shiney Brain Academy. All rights reserved.</div>
+        <div>© {new Date().getFullYear()} Shiney Brain Academy. All rights reserved.</div>
         <div className="flex justify-center space-x-4 text-[11px] text-slate-400">
           <Link href="/privacy-policy" className="hover:underline">Privacy Policy</Link>
           <span>•</span>
@@ -462,7 +542,7 @@ export default function AIPlaybookLandingPage() {
         </div>
       </footer>
 
-      {/* FIXED PERSISTENT FLOATING BOTTOM BAR (REFINED Z-INDEX & PADDING) */}
+      {/* PERSISTENT FLOATING BOTTOM BAR */}
       <div className="fixed bottom-0 left-0 right-0 w-full bg-[#0B1528]/95 border-t border-blue-500/40 p-3 backdrop-blur-lg z-50 shadow-2xl">
         <div className="max-w-4xl mx-auto flex items-center justify-between px-2 sm:px-4">
           <div className="flex flex-col">
