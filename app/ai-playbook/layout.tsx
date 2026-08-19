@@ -2,9 +2,9 @@ import type { Metadata } from "next";
 import "../globals.css";
 
 export const metadata: Metadata = {
-  title: "100/100 AI Playbook for Students | Shiney Brain Academy",
+  title: "100/100 AI Playbook for University Students | Shiney Brain Academy",
   description:
-    "The complete AI system to study smarter, retain what you read, and finish assignments in half the time.",
+    "Pass Exams, Save Time, Build Valuable Skills & Graduate Ahead of Your Peers Using AI.",
 };
 
 export default function PlaybookLayout({

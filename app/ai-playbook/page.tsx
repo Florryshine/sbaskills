@@ -21,6 +21,8 @@ import {
   UserCheck,
   GraduationCap,
   Zap,
+  Flame,
+  TrendingUp,
 } from "lucide-react";
 
 export default function AIPlaybookLandingPage() {
@@ -91,20 +93,20 @@ export default function AIPlaybookLandingPage() {
 
   const faqs = [
     {
-      q: "How will I receive the bundle after payment?",
-      a: "Immediately after your Paystack payment is confirmed, you'll be redirected to the confirmation hub and our private Telegram group where all links, guides, tools, and downloadable templates are instantly ready.",
+      q: "How will I receive the playbook and bonuses after payment?",
+      a: "Immediately after your Paystack payment is confirmed, you'll be redirected to the confirmation hub and our private Telegram group where the complete 100/100 AI Playbook, prompt libraries, bonus tools, and templates are instantly ready for download.",
     },
     {
       q: "Is this a monthly subscription or one-time payment?",
-      a: "This is a strictly one-time payment of ₦5,000. You get lifetime access to all modules and future bonus updates without any recurring monthly fees.",
+      a: "This is a strictly one-time payment of ₦5,000. You get lifetime access to all 14 chapters, prompts, and future bonus updates without any recurring monthly fees.",
+    },
+    {
+      q: "Will this work for my course (Medicine, Law, Engineering, Social Sciences)?",
+      a: "Yes! The Active Recall, Mock Exam generation, and research frameworks work seamlessly across all academic departments. Whether you study STEM, Arts, Management, or Social Sciences, the AI prompts adapt directly to your course syllabus.",
     },
     {
       q: "Do I need a laptop to use this system?",
-      a: "No. Everything in the playbook—from prompt workflows to study templates and AI claims—works directly on your smartphone (Android or iPhone) as well as on a computer.",
-    },
-    {
-      q: "What if this doesn't work for my courses?",
-      a: "The prompt and active-recall systems work for all academic disciplines (Sciences, Engineering, Arts, Law, Management, Medicine). You're backed by our 21-day money-back guarantee if it doesn't transform your study results.",
+      a: "No. Everything in the playbook—from prompt workflows to study templates and AI tools—works directly on your smartphone (Android or iPhone) as well as on a computer.",
     },
   ];
 
@@ -120,8 +122,8 @@ export default function AIPlaybookLandingPage() {
       >
         <Clock className="w-4 h-4 text-black shrink-0" />
         <span>
-          ⚡ LIMITED FLASH OFFER: ₦5,000 CLOSING IN {String(timeLeft.hours).padStart(2, "0")}:
-          {String(timeLeft.minutes).padStart(2, "0")}:{String(timeLeft.seconds).padStart(2, "0")} (ONLY 17 SPOTS LEFT)
+          ⚡ LIMITED LAUNCH OFFER: ₦5,000 CLOSING IN {String(timeLeft.hours).padStart(2, "0")}:
+          {String(timeLeft.minutes).padStart(2, "0")}:{String(timeLeft.seconds).padStart(2, "0")} (ONLY 17 SLOTS LEFT)
         </span>
       </div>
 
@@ -162,16 +164,16 @@ export default function AIPlaybookLandingPage() {
             }}
           >
             <Zap className="w-4 h-4 shrink-0" style={{ color: "#FFD000" }} />
-            <span>ATTENTION ALL STUDENTS</span>
+            <span>FOR ALL UNIVERSITY STUDENTS</span>
           </div>
 
           <h1 className="text-3xl sm:text-5xl lg:text-6xl font-black tracking-tight text-white leading-[1.12]">
-            THE 100/100 AI <br className="hidden sm:inline" />
-            <span style={{ color: "#FFD000" }}>STUDENT BUNDLE</span>
+            100/100 AI PLAYBOOK FOR <br className="hidden sm:inline" />
+            <span style={{ color: "#FFD000" }}>UNIVERSITY STUDENTS</span>
           </h1>
 
-          <p className="text-base sm:text-lg font-semibold text-blue-100 leading-relaxed">
-            The proven study and earning system designed to give you an unfair advantage:
+          <p className="text-base sm:text-xl font-bold text-blue-100 leading-snug">
+            Pass Exams, Save Time, Build Valuable Skills & Graduate Ahead of Your Peers Using AI.
           </p>
 
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 text-xs sm:text-sm font-bold text-white">
@@ -180,38 +182,39 @@ export default function AIPlaybookLandingPage() {
               style={{ backgroundColor: "rgba(255, 255, 255, 0.08)", borderColor: "rgba(255, 255, 255, 0.2)" }}
             >
               <CheckCircle2 className="w-5 h-5 shrink-0" style={{ color: "#FFD000" }} />
-              <span>Cut study time in half</span>
+              <span>Read Once & Remember for Exams</span>
             </div>
             <div
               className="flex items-center gap-2.5 p-3 rounded-xl border"
               style={{ backgroundColor: "rgba(255, 255, 255, 0.08)", borderColor: "rgba(255, 255, 255, 0.2)" }}
             >
               <CheckCircle2 className="w-5 h-5 shrink-0" style={{ color: "#FFD000" }} />
-              <span>Score higher on tests & exams</span>
+              <span>Score Higher with AI Mock Exams</span>
             </div>
             <div
               className="flex items-center gap-2.5 p-3 rounded-xl border"
               style={{ backgroundColor: "rgba(255, 255, 255, 0.08)", borderColor: "rgba(255, 255, 255, 0.2)" }}
             >
               <CheckCircle2 className="w-5 h-5 shrink-0" style={{ color: "#FFD000" }} />
-              <span>Finish assignments in minutes</span>
+              <span>Finish 3-Day Assignments in Hours</span>
             </div>
             <div
               className="flex items-center gap-2.5 p-3 rounded-xl border"
               style={{ backgroundColor: "rgba(255, 255, 255, 0.08)", borderColor: "rgba(255, 255, 255, 0.2)" }}
             >
               <CheckCircle2 className="w-5 h-5 shrink-0" style={{ color: "#FFD000" }} />
-              <span>Start making money as a student</span>
+              <span>Make ₦50k-₦200k/mo While in School</span>
             </div>
           </div>
 
+          {/* MAIN HERO CTA BUTTON */}
           <div className="pt-2">
             <button
               onClick={handleOpenCheckout}
               style={{ backgroundColor: "#FFD000", color: "#000000" }}
               className="w-full sm:w-auto px-10 py-4 text-base sm:text-lg font-black rounded-2xl shadow-xl flex items-center justify-center space-x-3 hover:opacity-90 transition-all cursor-pointer"
             >
-              <span>Get Everything for ₦5,000</span>
+              <span>Get the Playbook + Bundle for ₦5,000</span>
               <ArrowRight className="w-5 h-5 text-black shrink-0" />
             </button>
           </div>
@@ -238,7 +241,7 @@ export default function AIPlaybookLandingPage() {
             <div className="overflow-hidden rounded-2xl">
               <img
                 src="https://cdn.phototourl.com/free/2026-08-17-b9bf12f2-e477-4495-bd83-0d5dfd74e19e.png"
-                alt="100/100 AI Playbook for Students"
+                alt="100/100 AI Playbook for University Students"
                 className="w-full h-auto object-cover rounded-2xl"
               />
             </div>
@@ -246,7 +249,7 @@ export default function AIPlaybookLandingPage() {
         </div>
       </section>
 
-      {/* 4. HOW IS THIS POSSIBLE / PAIN SECTION */}
+      {/* 4. THE 4 ACUTE UNIVERSITY PAIN POINTS (DEEP EMOTIONAL HOOK) */}
       <section
         className="w-full border-y py-16 px-4"
         style={{
@@ -254,8 +257,8 @@ export default function AIPlaybookLandingPage() {
           borderColor: "rgba(255, 255, 255, 0.15)",
         }}
       >
-        <div className="max-w-4xl mx-auto space-y-8 text-center">
-          <div className="space-y-2">
+        <div className="max-w-5xl mx-auto space-y-10">
+          <div className="text-center space-y-2">
             <span
               className="text-xs font-extrabold uppercase tracking-widest px-3 py-1 rounded-full border"
               style={{
@@ -264,32 +267,86 @@ export default function AIPlaybookLandingPage() {
                 backgroundColor: "rgba(255, 208, 0, 0.1)",
               }}
             >
-              HOW IS THIS POSSIBLE?
+              THE BRUTAL REALITY OF UNIVERSITY LIFE
             </span>
             <h2 className="text-2xl sm:text-4xl font-black text-white pt-2">
-              The problem isn't your intelligence. <br className="hidden sm:inline" />
-              <span style={{ color: "#FFD000" }}>The problem is your method.</span>
+              Working Harder Isn't Working. <br className="hidden sm:inline" />
+              <span style={{ color: "#FFD000" }}>The problem isn't your brain — it's your method.</span>
             </h2>
           </div>
 
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+            <div
+              className="p-6 rounded-2xl border-2 space-y-3"
+              style={{ backgroundColor: "rgba(255, 255, 255, 0.05)", borderColor: "rgba(239, 68, 68, 0.4)" }}
+            >
+              <div className="flex items-center gap-2 text-red-400 font-bold text-base">
+                <Flame className="w-5 h-5 text-red-400" />
+                <span>1. The 100-Page Passive Reading Trap</span>
+              </div>
+              <p className="text-xs sm:text-sm text-slate-200 leading-relaxed font-medium">
+                You spend 6 hours in the library reading voluminous PDFs and highlighting every line. By the next morning, 90% of it is completely gone from your memory.
+              </p>
+            </div>
+
+            <div
+              className="p-6 rounded-2xl border-2 space-y-3"
+              style={{ backgroundColor: "rgba(255, 255, 255, 0.05)", borderColor: "rgba(239, 68, 68, 0.4)" }}
+            >
+              <div className="flex items-center gap-2 text-red-400 font-bold text-base">
+                <Flame className="w-5 h-5 text-red-400" />
+                <span>2. Exam Hall Panic & Blind Guesswork</span>
+              </div>
+              <p className="text-xs sm:text-sm text-slate-200 leading-relaxed font-medium">
+                Walking into the hall with racing heart and sweaty palms because you never practiced real exam-standard questions under timed conditions.
+              </p>
+            </div>
+
+            <div
+              className="p-6 rounded-2xl border-2 space-y-3"
+              style={{ backgroundColor: "rgba(255, 255, 255, 0.05)", borderColor: "rgba(239, 68, 68, 0.4)" }}
+            >
+              <div className="flex items-center gap-2 text-red-400 font-bold text-base">
+                <Flame className="w-5 h-5 text-red-400" />
+                <span>3. 11:00 PM Assignment & Seminar Panic</span>
+              </div>
+              <p className="text-xs sm:text-sm text-slate-200 leading-relaxed font-medium">
+                Staring at a blank screen for days, or worse, raw copy-pasting from default AI and risking zero marks, suspension, or expulsion for academic misconduct.
+              </p>
+            </div>
+
+            <div
+              className="p-6 rounded-2xl border-2 space-y-3"
+              style={{ backgroundColor: "rgba(255, 255, 255, 0.05)", borderColor: "rgba(239, 68, 68, 0.4)" }}
+            >
+              <div className="flex items-center gap-2 text-red-400 font-bold text-base">
+                <Flame className="w-5 h-5 text-red-400" />
+                <span>4. The "Broke Graduate" Trap</span>
+              </div>
+              <p className="text-xs sm:text-sm text-slate-200 leading-relaxed font-medium">
+                Spending 4 to 5 years collecting a paper degree, while possessing zero high-income digital skills, no portfolio, and no income stream to survive post-graduation.
+              </p>
+            </div>
+          </div>
+
           <div
-            className="p-7 rounded-2xl border text-left space-y-4 shadow-xl"
+            className="p-6 rounded-2xl border text-center space-y-2"
             style={{
-              backgroundColor: "rgba(255, 255, 255, 0.05)",
-              borderColor: "rgba(255, 255, 255, 0.15)",
+              backgroundColor: "rgba(255, 208, 0, 0.1)",
+              borderColor: "#FFD000",
             }}
           >
-            <p className="text-sm sm:text-base text-blue-100 leading-relaxed font-medium">
-              You're probably spending hours reading, only to forget everything the next morning. You're struggling with assignments, stressed about exams, and wondering how others seem to have it all figured out.
-            </p>
-            <p className="text-base sm:text-lg font-black" style={{ color: "#FFD000" }}>
-              This bundle completely fixes that.
+            <h3 className="text-lg sm:text-xl font-black text-white">
+              The 100/100 AI Playbook was written to destroy these 4 problems forever.
+            </h3>
+            <p className="text-xs sm:text-sm text-blue-100 font-medium">
+              It turns your smartphone into a 24/7 personal tutor, exam simulator, research assistant, and cash-generating machine.
             </p>
           </div>
         </div>
       </section>
 
-      {/* 5. WHAT YOU GET SECTION */}
+      {/* 5. WHAT YOU GET (CORE BOOK + 5 ACCELERATORS) */}
       <section className="w-full max-w-6xl px-4 py-20 space-y-12">
         <div className="text-center space-y-2">
           <span
@@ -300,10 +357,10 @@ export default function AIPlaybookLandingPage() {
               backgroundColor: "rgba(255, 208, 0, 0.1)",
             }}
           >
-            THIS BUNDLE FIXES THAT
+            THE COMPLETE ACADEMIC & FINANCIAL ENGINE
           </span>
           <h2 className="text-2xl sm:text-4xl font-black text-white pt-2">
-            Here's Exactly What You're Getting Inside
+            Everything You Get Inside the 100/100 Bundle
           </h2>
         </div>
 
@@ -345,26 +402,28 @@ export default function AIPlaybookLandingPage() {
 
         {/* Detailed 6 Deliverables Cards */}
         <div className="grid grid-cols-1 md:grid-cols-2 gap-6 pt-4">
+          
+          {/* 1. Core Playbook */}
           <div
             className="rounded-2xl border-2 p-6 space-y-3"
-            style={{ backgroundColor: "rgba(255, 255, 255, 0.08)", borderColor: "rgba(255, 255, 255, 0.15)" }}
+            style={{ backgroundColor: "rgba(255, 255, 255, 0.08)", borderColor: "#FFD000" }}
           >
             <div className="flex items-center gap-3">
               <div className="p-2 rounded-xl" style={{ backgroundColor: "#FFD000", color: "#000000" }}>
                 <BookOpen className="w-6 h-6" />
               </div>
-              <h3 className="text-base font-extrabold text-white">1. The 100/100 AI Student Playbook</h3>
+              <h3 className="text-base font-extrabold text-white">1. The 100/100 AI Student Playbook (Core 175-Page Guide)</h3>
             </div>
-            <p className="text-xs text-blue-200 font-semibold">The complete step-by-step system showing you how to:</p>
+            <p className="text-xs text-blue-200 font-semibold">The complete 14-chapter system showing you how to:</p>
             <ul className="space-y-1.5 text-xs text-slate-100 font-medium">
-              <li className="flex items-center gap-2"><span style={{ color: "#FFD000", fontWeight: "bold" }}>✓</span> Read once and remember forever with active AI recall</li>
-              <li className="flex items-center gap-2"><span style={{ color: "#FFD000", fontWeight: "bold" }}>✓</span> Break down complex lecture slides in minutes</li>
-              <li className="flex items-center gap-2"><span style={{ color: "#FFD000", fontWeight: "bold" }}>✓</span> Create study schedules that actually stick</li>
-              <li className="flex items-center gap-2"><span style={{ color: "#FFD000", fontWeight: "bold" }}>✓</span> Turn your phone into a 24/7 personal tutor</li>
-              <li className="flex items-center gap-2"><span style={{ color: "#FFD000", fontWeight: "bold" }}>✓</span> Stop wasting time on useless rote memorization</li>
+              <li className="flex items-center gap-2"><span style={{ color: "#FFD000", fontWeight: "bold" }}>✓</span> Master the <strong>6-Step Active Recall System</strong> (Preview $\rightarrow$ Read $\rightarrow$ Question $\rightarrow$ Recall $\rightarrow$ Review $\rightarrow$ Teach)</li>
+              <li className="flex items-center gap-2"><span style={{ color: "#FFD000", fontWeight: "bold" }}>✓</span> Generate <strong>AI Timed Mock Exams</strong> (40 objectives + 5 theory questions) directly from your course outline</li>
+              <li className="flex items-center gap-2"><span style={{ color: "#FFD000", fontWeight: "bold" }}>✓</span> Execute the <strong>8-Step Ethical Assignment Workflow</strong> without plagiarism</li>
+              <li className="flex items-center gap-2"><span style={{ color: "#FFD000", fontWeight: "bold" }}>✓</span> Structure Seminar Papers & Final-Year Projects in weeks using Mendeley & APA 7th citations</li>
             </ul>
           </div>
 
+          {/* 2. Free Premium AI Access */}
           <div
             className="rounded-2xl border-2 p-6 space-y-3"
             style={{ backgroundColor: "rgba(255, 255, 255, 0.08)", borderColor: "rgba(255, 255, 255, 0.15)" }}
@@ -373,18 +432,19 @@ export default function AIPlaybookLandingPage() {
               <div className="p-2 rounded-xl" style={{ backgroundColor: "#FFD000", color: "#000000" }}>
                 <Cloud className="w-6 h-6" />
               </div>
-              <h3 className="text-base font-extrabold text-white">2. The Free Premium AI Access Method</h3>
+              <h3 className="text-base font-extrabold text-white">2. 18 Months Free Premium AI Access Method</h3>
             </div>
-            <p className="text-xs text-blue-200 font-semibold">Step-by-step walkthrough to claim 18 months of premium tools at zero extra cost:</p>
+            <p className="text-xs text-blue-200 font-semibold">Step-by-step walkthrough to legitimately claim 18 months of premium AI tools:</p>
             <ul className="space-y-1.5 text-xs text-slate-100 font-medium">
-              <li className="flex items-center gap-2"><span style={{ color: "#FFD000", fontWeight: "bold" }}>✓</span> Advanced AI chat & reasoning models</li>
-              <li className="flex items-center gap-2"><span style={{ color: "#FFD000", fontWeight: "bold" }}>✓</span> 2TB high-speed cloud storage tier</li>
-              <li className="flex items-center gap-2"><span style={{ color: "#FFD000", fontWeight: "bold" }}>✓</span> Premium AI research notebook tools</li>
+              <li className="flex items-center gap-2"><span style={{ color: "#FFD000", fontWeight: "bold" }}>✓</span> Advanced AI reasoning models for complex coursework</li>
+              <li className="flex items-center gap-2"><span style={{ color: "#FFD000", fontWeight: "bold" }}>✓</span> 2TB high-speed cloud storage tier for all project files</li>
+              <li className="flex items-center gap-2"><span style={{ color: "#FFD000", fontWeight: "bold" }}>✓</span> Premium AI research notebook tools for instant literature reviews</li>
               <li className="flex items-center gap-2"><span style={{ color: "#FFD000", fontWeight: "bold" }}>✓</span> Video & music generation credits</li>
             </ul>
             <div className="text-xs font-black" style={{ color: "#FFD000" }}>Value: Priceless (Included Free with Bundle)</div>
           </div>
 
+          {/* 3. Prompts Library */}
           <div
             className="rounded-2xl border-2 p-6 space-y-3"
             style={{ backgroundColor: "rgba(255, 255, 255, 0.08)", borderColor: "rgba(255, 255, 255, 0.15)" }}
@@ -393,18 +453,19 @@ export default function AIPlaybookLandingPage() {
               <div className="p-2 rounded-xl" style={{ backgroundColor: "#FFD000", color: "#000000" }}>
                 <Terminal className="w-6 h-6" />
               </div>
-              <h3 className="text-base font-extrabold text-white">3. 1,000+ AI Prompts for Students</h3>
+              <h3 className="text-base font-extrabold text-white">3. 1,000+ Academic AI Prompts Library</h3>
             </div>
-            <p className="text-xs text-blue-200 font-semibold">Stop wasting time figuring out what to ask AI:</p>
+            <p className="text-xs text-blue-200 font-semibold">Never struggle with what to ask AI again:</p>
             <ul className="space-y-1.5 text-xs text-slate-100 font-medium">
               <li className="flex items-center gap-2"><span style={{ color: "#FFD000", fontWeight: "bold" }}>✓</span> Assignment research prompts & essay structure helpers</li>
               <li className="flex items-center gap-2"><span style={{ color: "#FFD000", fontWeight: "bold" }}>✓</span> Exam revision drills & mock past-question tests</li>
-              <li className="flex items-center gap-2"><span style={{ color: "#FFD000", fontWeight: "bold" }}>✓</span> Complex topic simplification prompts</li>
-              <li className="flex items-center gap-2"><span style={{ color: "#FFD000", fontWeight: "bold" }}>✓</span> Study plan & revision timeline generators</li>
+              <li className="flex items-center gap-2"><span style={{ color: "#FFD000", fontWeight: "bold" }}>✓</span> 24-Hour emergency exam revision frameworks</li>
+              <li className="flex items-center gap-2"><span style={{ color: "#FFD000", fontWeight: "bold" }}>✓</span> Memory mnemonics and analogy generators</li>
             </ul>
-            <div className="text-[11px] text-blue-200">Just copy, paste, and get results instantly.</div>
+            <div className="text-[11px] text-blue-200">Copy, paste, and get instant results.</div>
           </div>
 
+          {/* 4. Student Study & Project Toolkit */}
           <div
             className="rounded-2xl border-2 p-6 space-y-3"
             style={{ backgroundColor: "rgba(255, 255, 255, 0.08)", borderColor: "rgba(255, 255, 255, 0.15)" }}
@@ -415,17 +476,18 @@ export default function AIPlaybookLandingPage() {
               </div>
               <h3 className="text-base font-extrabold text-white">4. Student Study & Project Toolkit</h3>
             </div>
-            <p className="text-xs text-blue-200 font-semibold">Everything organized so you never fall behind:</p>
+            <p className="text-xs text-blue-200 font-semibold">Keep your entire semester running with military precision:</p>
             <ul className="space-y-1.5 text-xs text-slate-100 font-medium">
-              <li className="flex items-center gap-2"><span style={{ color: "#FFD000", fontWeight: "bold" }}>✓</span> Study tracker templates & assignment planners</li>
-              <li className="flex items-center gap-2"><span style={{ color: "#FFD000", fontWeight: "bold" }}>✓</span> Revision schedule builder</li>
-              <li className="flex items-center gap-2"><span style={{ color: "#FFD000", fontWeight: "bold" }}>✓</span> Progress monitoring sheets & exam countdowns</li>
+              <li className="flex items-center gap-2"><span style={{ color: "#FFD000", fontWeight: "bold" }}>✓</span> Semester dashboard & assignment priority planners</li>
+              <li className="flex items-center gap-2"><span style={{ color: "#FFD000", fontWeight: "bold" }}>✓</span> Spaced repetition revision schedule builders</li>
+              <li className="flex items-center gap-2"><span style={{ color: "#FFD000", fontWeight: "bold" }}>✓</span> Progress monitoring sheets & exam countdown systems</li>
             </ul>
           </div>
 
+          {/* 5. Student Money-Making Playbook */}
           <div
             className="rounded-2xl border-2 p-6 space-y-3"
-            style={{ backgroundColor: "rgba(255, 255, 255, 0.08)", borderColor: "rgba(255, 255, 255, 0.15)" }}
+            style={{ backgroundColor: "rgba(255, 255, 255, 0.08)", borderColor: "#FFD000" }}
           >
             <div className="flex items-center gap-3">
               <div className="p-2 rounded-xl" style={{ backgroundColor: "#FFD000", color: "#000000" }}>
@@ -433,15 +495,16 @@ export default function AIPlaybookLandingPage() {
               </div>
               <h3 className="text-base font-extrabold text-white">5. Student Money-Making Playbook</h3>
             </div>
-            <p className="text-xs text-blue-200 font-semibold">Turn your AI skills into sustainable income:</p>
+            <p className="text-xs text-blue-200 font-semibold">Turn your AI mastery into steady campus cash:</p>
             <ul className="space-y-1.5 text-xs text-slate-100 font-medium">
-              <li className="flex items-center gap-2"><span style={{ color: "#FFD000", fontWeight: "bold" }}>✓</span> Freelancing with AI & digital content creation</li>
-              <li className="flex items-center gap-2"><span style={{ color: "#FFD000", fontWeight: "bold" }}>✓</span> Faceless video channel setups</li>
-              <li className="flex items-center gap-2"><span style={{ color: "#FFD000", fontWeight: "bold" }}>✓</span> High-demand student side-hustles</li>
-              <li className="flex items-center gap-2"><span style={{ color: "#FFD000", fontWeight: "bold" }}>✓</span> Building practical digital skills that pay for life</li>
+              <li className="flex items-center gap-2"><span style={{ color: "#FFD000", fontWeight: "bold" }}>✓</span> <strong>Ethical Campus Services:</strong> AI tutoring, editing, and study guide packs (make ₦20k-₦50k/wk)</li>
+              <li className="flex items-center gap-2"><span style={{ color: "#FFD000", fontWeight: "bold" }}>✓</span> <strong>Freelancing:</strong> Writing, design, and data analysis client acquisition templates</li>
+              <li className="flex items-center gap-2"><span style={{ color: "#FFD000", fontWeight: "bold" }}>✓</span> <strong>Digital Products:</strong> How to package and sell revision materials online</li>
+              <li className="flex items-center gap-2"><span style={{ color: "#FFD000", fontWeight: "bold" }}>✓</span> <strong>Post-Graduation Career:</strong> ATS-friendly CV & LinkedIn optimization prompts</li>
             </ul>
           </div>
 
+          {/* 6. Bonus Vault */}
           <div
             className="rounded-2xl border-2 p-6 space-y-3"
             style={{ backgroundColor: "rgba(255, 255, 255, 0.08)", borderColor: "rgba(255, 255, 255, 0.15)" }}
@@ -450,13 +513,13 @@ export default function AIPlaybookLandingPage() {
               <div className="p-2 rounded-xl" style={{ backgroundColor: "#FFD000", color: "#000000" }}>
                 <Gift className="w-6 h-6" />
               </div>
-              <h3 className="text-base font-extrabold text-white">6. Bonus Vault</h3>
+              <h3 className="text-base font-extrabold text-white">6. Bonus Vault & 30-Day Success Plan</h3>
             </div>
-            <p className="text-xs text-blue-200 font-semibold">Constantly updated student resources:</p>
+            <p className="text-xs text-blue-200 font-semibold">Day-by-day action roadmap for total academic transformation:</p>
             <ul className="space-y-1.5 text-xs text-slate-100 font-medium">
-              <li className="flex items-center gap-2"><span style={{ color: "#FFD000", fontWeight: "bold" }}>✓</span> Free AI tool credits & developer allowances</li>
-              <li className="flex items-center gap-2"><span style={{ color: "#FFD000", fontWeight: "bold" }}>✓</span> Student discounts & premium portal access</li>
-              <li className="flex items-center gap-2"><span style={{ color: "#FFD000", fontWeight: "bold" }}>✓</span> Direct prompt templates and updates</li>
+              <li className="flex items-center gap-2"><span style={{ color: "#FFD000", fontWeight: "bold" }}>✓</span> The 30-Day AI Success Plan (Week 1: Toolkit $\rightarrow$ Week 4: Scale & Monetize)</li>
+              <li className="flex items-center gap-2"><span style={{ color: "#FFD000", fontWeight: "bold" }}>✓</span> Student discounts & free developer tools access list</li>
+              <li className="flex items-center gap-2"><span style={{ color: "#FFD000", fontWeight: "bold" }}>✓</span> Private Telegram student community access</li>
             </ul>
           </div>
         </div>
@@ -540,7 +603,7 @@ export default function AIPlaybookLandingPage() {
             </div>
           </div>
           <div className="space-y-2">
-            <span className="text-xs font-black uppercase tracking-wider" style={{ color: "#FFD000" }}>Meet The Creator</span>
+            <span className="text-xs font-black uppercase tracking-wider" style={{ color: "#FFD000" }}>Meet The Author</span>
             <h3 className="text-xl sm:text-2xl font-black text-white">Igberhi Florry (Mentor Florryshine)</h3>
             <p className="text-xs sm:text-sm text-blue-100 leading-relaxed font-medium">
               Founder of Shiney Brain Academy. I lived through the exact university struggle: voluminous textbooks, endless assignments, late nights, and zero spare cash. I built this AI study and monetization framework to fix that struggle once and for all—and now students use it daily to excel.
@@ -560,7 +623,7 @@ export default function AIPlaybookLandingPage() {
         >
           <div className="text-center space-y-1">
             <span className="text-xs font-black uppercase tracking-widest" style={{ color: "#FFD000" }}>
-              💰 REALISTIC VALUE BREAKDOWN
+              💰 WHAT IS THIS SYSTEM WORTH?
             </span>
             <h3 className="text-2xl sm:text-4xl font-black text-white">The Complete Value Stack</h3>
           </div>
@@ -570,19 +633,19 @@ export default function AIPlaybookLandingPage() {
             style={{ borderColor: "rgba(255, 255, 255, 0.15)" }}
           >
             <div className="py-3 flex justify-between">
-              <span>100/100 AI Student Playbook System</span>
+              <span>100/100 AI Playbook for University Students</span>
               <span className="text-blue-200">₦50,000</span>
             </div>
             <div className="py-3 flex justify-between">
-              <span>Premium AI Access & Claim Blueprint</span>
+              <span>18 Months Premium AI Access Method</span>
               <span style={{ color: "#FFD000", fontWeight: "bold" }}>Included FREE</span>
             </div>
             <div className="py-3 flex justify-between">
-              <span>1,000+ Student AI Prompts</span>
+              <span>1,000+ Academic Student AI Prompts</span>
               <span className="text-blue-200">₦30,000</span>
             </div>
             <div className="py-3 flex justify-between">
-              <span>Study & Project Toolkit</span>
+              <span>Student Study & Project Toolkit</span>
               <span className="text-blue-200">₦25,000</span>
             </div>
             <div className="py-3 flex justify-between">
@@ -590,7 +653,7 @@ export default function AIPlaybookLandingPage() {
               <span className="text-blue-200">₦40,000</span>
             </div>
             <div className="py-3 flex justify-between">
-              <span>Bonus Vault Access</span>
+              <span>Bonus Vault & 30-Day Plan</span>
               <span className="text-blue-200">₦50,000</span>
             </div>
             <div className="pt-4 flex justify-between items-baseline font-black text-white text-base sm:text-lg">
@@ -608,7 +671,7 @@ export default function AIPlaybookLandingPage() {
             }}
           >
             <div className="text-xs uppercase tracking-wider font-black" style={{ color: "#FFD000" }}>
-              ⚡ Limited Launch Price (First 100 Students Only)
+              ⚡ Limited Launch Offer (First 100 Students Only)
             </div>
             <div className="flex items-center justify-center gap-4">
               <span className="line-through text-white/50 text-xl font-bold">₦10,000</span>
@@ -624,7 +687,7 @@ export default function AIPlaybookLandingPage() {
             style={{ backgroundColor: "#FFD000", color: "#000000" }}
             className="w-full py-4 text-base sm:text-lg font-black rounded-2xl shadow-xl flex items-center justify-center space-x-2 hover:opacity-90 transition-all cursor-pointer"
           >
-            <span>Get Instant Access for ₦5,000</span>
+            <span>Get the Playbook + Bundle for ₦5,000</span>
             <ArrowRight className="w-6 h-6 text-black shrink-0" />
           </button>
         </div>
@@ -738,7 +801,7 @@ export default function AIPlaybookLandingPage() {
       >
         <div className="max-w-4xl mx-auto flex items-center justify-between px-2 sm:px-4">
           <div className="flex flex-col text-left">
-            <span className="text-xs font-bold text-white leading-tight">100/100 AI Student Bundle</span>
+            <span className="text-xs font-bold text-white leading-tight">100/100 AI Playbook for University Students</span>
             <div className="flex items-center gap-2 pt-0.5">
               <span className="text-xs line-through text-white/60 font-semibold">₦10,000</span>
               <span className="text-base sm:text-lg font-black" style={{ color: "#FFD000" }}>₦5,000</span>
