@@ -32,6 +32,12 @@ export default function AIPlaybookLandingPage() {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
   const [openFaq, setOpenFaq] = useState<number | null>(null);
+  const [showLeadPopup, setShowLeadPopup] = useState(false);
+  const [leadPopupShown, setLeadPopupShown] = useState(false);
+  const [leadEmail, setLeadEmail] = useState("");
+  const [leadLoading, setLeadLoading] = useState(false);
+  const [leadSuccess, setLeadSuccess] = useState(false);
+  const [hasOpenedCheckout, setHasOpenedCheckout] = useState(false);
 
   // Urgency countdown timer
   const [timeLeft, setTimeLeft] = useState({ hours: 4, minutes: 27, seconds: 45 });
@@ -48,8 +54,69 @@ export default function AIPlaybookLandingPage() {
     return () => clearInterval(timer);
   }, []);
 
+  useEffect(() => {
+    let idleTimer;
+    let hasScrolled = false;
+
+    const trigger = () => {
+      if (!leadPopupShown && !hasOpenedCheckout) {
+        setShowLeadPopup(true);
+        setLeadPopupShown(true);
+      }
+    };
+
+    const onScroll = () => { hasScrolled = true; };
+
+    const resetIdle = () => {
+      clearTimeout(idleTimer);
+      idleTimer = setTimeout(() => {
+        if (hasScrolled) trigger();
+      }, 30000);
+    };
+
+    const onMouseOut = (e) => {
+      if (!e.relatedTarget && e.clientY < 10) trigger();
+    };
+
+    window.addEventListener("scroll", onScroll, { passive: true });
+    document.addEventListener("mouseout", onMouseOut);
+    ["scroll", "touchstart", "mousemove", "keydown"].forEach((evt) =>
+      document.addEventListener(evt, resetIdle, { passive: true })
+    );
+    resetIdle();
+
+    return () => {
+      clearTimeout(idleTimer);
+      window.removeEventListener("scroll", onScroll);
+      document.removeEventListener("mouseout", onMouseOut);
+      ["scroll", "touchstart", "mousemove", "keydown"].forEach((evt) =>
+        document.removeEventListener(evt, resetIdle)
+      );
+    };
+  }, [leadPopupShown, hasOpenedCheckout]);
+
+  const handleLeadSubmit = async (e) => {
+    e.preventDefault();
+    if (!leadEmail) return;
+    setLeadLoading(true);
+    try {
+      await fetch("/api/landing/lead", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ email: leadEmail, source: "popup", productSlug: "ai-playbook" }),
+      });
+      setLeadSuccess(true);
+      setTimeout(() => setShowLeadPopup(false), 2200);
+    } catch (err) {
+      console.error("Lead capture failed:", err);
+    } finally {
+      setLeadLoading(false);
+    }
+  };
+
   const handleOpenCheckout = () => {
     setIsModalOpen(true);
+    setHasOpenedCheckout(true);
     setError("");
   };
 
@@ -914,6 +981,63 @@ export default function AIPlaybookLandingPage() {
                 )}
               </button>
             </form>
+
+
+      {/* LEAD CAPTURE POPUP - free prompts */}
+      {showLeadPopup && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/85 backdrop-blur-md">
+          <div
+            className="relative w-full max-w-md border-2 rounded-3xl p-6 sm:p-8 shadow-2xl space-y-5"
+            style={{ backgroundColor: "#08236B", borderColor: "#FFD000", color: "#FFFFFF" }}
+          >
+            <button
+              onClick={() => setShowLeadPopup(false)}
+              className="absolute top-4 right-4 text-white/70 hover:text-white p-1.5 rounded-full hover:bg-white/10 transition-colors"
+            >
+              <X className="w-5 h-5" />
+            </button>
+
+            <div className="space-y-1 text-center">
+              <h3 className="text-2xl font-black text-white">Wait, before you go</h3>
+              <p className="text-xs text-blue-200 font-medium">
+                Get 100 free AI prompts for assignments. A real sample from the 1,000+ inside the playbook.
+              </p>
+            </div>
+
+            {!leadSuccess ? (
+              <form onSubmit={handleLeadSubmit} className="space-y-4">
+                <input
+                  type="email"
+                  required
+                  value={leadEmail}
+                  onChange={(e) => setLeadEmail(e.target.value)}
+                  placeholder="e.g. student@gmail.com"
+                  style={{
+                    backgroundColor: "#05184B",
+                    color: "#FFFFFF",
+                    borderColor: "rgba(255, 255, 255, 0.25)",
+                  }}
+                  className="w-full px-4 py-3.5 rounded-xl border text-sm focus:outline-none placeholder:text-blue-300/50 font-medium"
+                />
+                <button
+                  type="submit"
+                  disabled={leadLoading}
+                  style={{ backgroundColor: "#FFD000", color: "#000000" }}
+                  className="w-full py-3.5 rounded-xl font-black text-sm shadow-lg hover:opacity-90 transition-all flex items-center justify-center gap-2"
+                >
+                  {leadLoading ? <Loader2 className="w-4 h-4 animate-spin" /> : "Send Me the Free Prompts"}
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setShowLeadPopup(false)}
+                  className="w-full text-center text-xs text-blue-200 font-medium"
+                >
+                  No thanks, I will pay now
+                </button>
+              </form>
+            ) : (
+              <p className="text-center text-sm font-bold text-green-300">Sent! Check your inbox.</p>
+            )}
           </div>
         </div>
       )}
