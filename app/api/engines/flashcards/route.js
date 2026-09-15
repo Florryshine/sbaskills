@@ -19,11 +19,7 @@ const GROQ_KEYS = [
 const OPENROUTER_API_KEY = process.env.OPENROUTER_API_KEY;
 const HUGGINGFACE_API_KEY = process.env.HUGGINGFACE_API_KEY;
 
-const GEMINI_MODELS = [
-  'gemini-3.5-flash',
-  'gemini-2.5-flash',
-  'gemini-2.5-flash-lite',
-];
+import { GEMINI_MODELS, GROQ_MODEL, OPENROUTER_MODEL } from '@/lib/aiModels';
 
 
 async function tryOpenRouter(prompt) {
@@ -35,7 +31,7 @@ async function tryOpenRouter(prompt) {
       'Content-Type': 'application/json',
     },
     body: JSON.stringify({
-      model: 'meta-llama/llama-3.1-8b-instruct:free',
+      model: OPENROUTER_MODEL,
       messages: [{ role: 'user', content: prompt }],
       max_tokens: 4096,
       temperature: 0.7,
@@ -162,7 +158,11 @@ export async function POST(request) {
           const model = client.getGenerativeModel({ model: modelName });
           const genResult = await model.generateContent({
             contents: [{ role: 'user', parts: [{ text: prompt }] }],
-            generationConfig: { maxOutputTokens: 4096, temperature: 0.7 },
+            generationConfig: {
+              maxOutputTokens: 8192,
+              temperature: 0.7,
+              responseMimeType: 'application/json',
+            },
           });
           const text = genResult.response.text();
           const parsed = parseJsonFromText(text);
@@ -186,7 +186,7 @@ export async function POST(request) {
           const groq = new Groq({ apiKey: groqKey });
           const groqResponse = await groq.chat.completions.create({
             messages: [{ role: 'user', content: prompt }],
-            model: 'llama-3.3-70b-versatile',
+            model: GROQ_MODEL,
             max_tokens: 4096,
             temperature: 0.7,
           });

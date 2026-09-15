@@ -46,7 +46,7 @@ GOAL: [your specific goal]`;
     try {
       const completion = await groq.chat.completions.create({
         messages: [{ role: 'user', content: prompt }],
-        model: 'llama-3.3-70b-versatile',
+        model: 'openai/gpt-oss-120b',
         max_tokens: 300,
         temperature: 0.7,
       });
@@ -60,7 +60,7 @@ GOAL: [your specific goal]`;
         const geminiKey = process.env.GEMINI_API_KEY_1 || process.env.GEMINI_API_KEY_2;
         if (!geminiKey) throw new Error('No Gemini key available');
         const genAI = new GoogleGenerativeAI(geminiKey);
-        const model = genAI.getGenerativeModel({ model: 'gemini-1.5-flash' });
+        const model = genAI.getGenerativeModel({ model: 'gemini-3.1-flash-lite' });
         const result = await model.generateContent(prompt);
         aiResponse = result.response.text().trim();
         usedModel = 'Gemini';

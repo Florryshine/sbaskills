@@ -5,8 +5,9 @@ import { parseJsonFromText } from '@/lib/robustJsonParse';
 
 // NOTE: this used to carry its own duplicated Gemini/Groq/OpenRouter/
 // HuggingFace loop with a hardcoded model list that still included
-// gemini-3.5-pro (never available for generateContent -> 404) and
-// gemini-2.0-flash (shut down by Google on 2026-06-01 -> permanent 429).
+// Model IDs now come from lib/aiModels.js. Historical note: gemini-2.0-flash
+// was shut down 2026-06-01 and 'gemini-3.5-flash' never existed for
+// generateContent, so both returned permanent 404/429s.
 // Every boss-battle generation burned two guaranteed-dead attempts before
 // ever reaching a model that could work, then still had no shared-tuned
 // max token budget. Now uses the same tested provider chain as blog/

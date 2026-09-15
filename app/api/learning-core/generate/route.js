@@ -20,12 +20,7 @@ const GROQ_KEYS = [
 const OPENROUTER_API_KEY = process.env.OPENROUTER_API_KEY;
 const HUGGINGFACE_API_KEY = process.env.HUGGINGFACE_API_KEY;
 
-const GEMINI_MODELS = [
-  'gemini-3.5-flash',
-  'gemini-3.5-pro',
-  'gemini-2.5-flash',
-  'gemini-2.0-flash',
-];
+import { GEMINI_MODELS, GROQ_MODEL, OPENROUTER_MODEL } from '@/lib/aiModels';
 
 // ── Research-only prompt ────────────────────────────────────────────
 function buildKnowledgePrompt(keyword, category = 'General') {
@@ -90,7 +85,7 @@ async function tryOpenRouter(prompt) {
       'Content-Type': 'application/json',
     },
     body: JSON.stringify({
-      model: 'meta-llama/llama-3.1-8b-instruct:free',
+      model: OPENROUTER_MODEL,
       messages: [{ role: 'user', content: prompt }],
       max_tokens: 4096,
       temperature: 0.7,
@@ -166,7 +161,8 @@ export async function POST(request) {
           const genResult = await model.generateContent({
             contents: [{ role: 'user', parts: [{ text: prompt }] }],
             generationConfig: {
-              maxOutputTokens: 4096,
+              maxOutputTokens: 8192,
+              responseMimeType: 'application/json',
               temperature: 0.7,
             },
           });
@@ -192,7 +188,7 @@ export async function POST(request) {
           const groq = new Groq({ apiKey: groqKey });
           const groqResponse = await groq.chat.completions.create({
             messages: [{ role: 'user', content: prompt }],
-            model: 'llama-3.3-70b-versatile',
+            model: GROQ_MODEL,
             max_tokens: 4096,
             temperature: 0.7,
           });
