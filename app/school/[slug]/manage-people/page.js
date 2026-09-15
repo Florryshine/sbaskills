@@ -116,6 +116,7 @@ export default function ManagePeoplePage() {
           <p className="mt-1 text-sm text-slate-500">
             {isAdmin ? 'Add staff, promote a principal, or manage anyone at this school.' : 'Add the people your role is allowed to add.'}
           </p>
+          <a href={`/school/${slug}/import`} className="inline-block mt-3 rounded-full bg-brand-yellow px-4 py-2 text-sm font-bold text-brand-dark">Bulk import CSV roster</a>
         </div>
 
         {message && <div className="rounded-xl bg-green-50 border border-green-100 px-4 py-3 text-sm text-green-700 break-words">{message}</div>}

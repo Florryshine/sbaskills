@@ -24,6 +24,7 @@ export default function ParentDashboardPage() {
   const [children, setChildren] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
+  const [paying, setPaying] = useState(null);
 
   useEffect(() => {
     (async () => {
@@ -34,6 +35,19 @@ export default function ParentDashboardPage() {
       setLoading(false);
     })();
   }, []);
+
+  async function startPayment(child, fee) {
+    setPaying(fee.id);
+    const res = await fetch('/api/school/fees/pay', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ school: window.location.pathname.split('/')[2], student_id: child.id, fee_structure_id: fee.id }),
+    });
+    const json = await res.json();
+    setPaying(null);
+    if (!res.ok) { setError(json.error || 'Could not start payment.'); return; }
+    window.location.href = json.authorization_url;
+  }
 
   if (loading) return <div className="min-h-screen bg-slate-50 flex items-center justify-center text-slate-500">Loading...</div>;
 
@@ -89,6 +103,29 @@ export default function ParentDashboardPage() {
                           title={`${rc.term} ${rc.session}: ${average(rc)}%`}
                         />
                         <span className="text-[10px] text-slate-400 mt-1 text-center">{rc.term.replace(' Term', '')}</span>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
+
+              {/* Outstanding fees */}
+              {child.outstandingFees?.length > 0 && (
+                <div className="p-6 border-t border-slate-100 bg-amber-50/60">
+                  <div className="flex items-center justify-between mb-3">
+                    <h3 className="text-sm font-bold text-brand-dark">Outstanding school fees</h3>
+                    <span className="text-xs text-slate-500">Online payment is secured by Paystack</span>
+                  </div>
+                  <div className="space-y-3">
+                    {child.outstandingFees.map(fee => (
+                      <div key={fee.id} className="rounded-xl bg-white border border-amber-100 p-4 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+                        <div>
+                          <p className="font-bold text-brand-dark">{fee.title}</p>
+                          <p className="text-xs text-slate-500">{fee.term} · {fee.session} · Balance ₦{Number(fee.balance).toLocaleString('en-NG')}</p>
+                        </div>
+                        <button type="button" onClick={() => startPayment(child, fee)} disabled={paying === fee.id} className="rounded-full px-4 py-2 text-xs font-bold bg-brand-yellow text-brand-dark disabled:opacity-50">
+                          {paying === fee.id ? 'Starting…' : 'Pay Now'}
+                        </button>
                       </div>
                     ))}
                   </div>

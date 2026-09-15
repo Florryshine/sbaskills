@@ -15,6 +15,11 @@ export default function FeesPage() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
   const [message, setMessage] = useState('');
+  const [me, setMe] = useState(null);
+  const [paymentInfo, setPaymentInfo] = useState(null);
+  const [accountForm, setAccountForm] = useState({ bankCode: '', accountNumber: '' });
+  const [reminderChannel, setReminderChannel] = useState('email');
+  const [reminderHistory, setReminderHistory] = useState([]);
 
   const [newFee, setNewFee] = useState({ title: 'School Fees', amount: '', class_level: '', due_date: '' });
   const [paymentDraft, setPaymentDraft] = useState({});
@@ -35,7 +40,18 @@ export default function FeesPage() {
     setLoading(false);
   };
 
-  useEffect(() => { load(); }, [slug, term, session]);
+  const loadMeta = async () => {
+    const [meRes, accountRes, historyRes] = await Promise.all([
+      fetch(`/api/school/me?school=${slug}`),
+      fetch(`/api/school/payment-account?school=${slug}`),
+      fetch(`/api/school/fees/reminders?school=${slug}`),
+    ]);
+    if (meRes.ok) setMe((await meRes.json()).profile);
+    if (accountRes.ok) setPaymentInfo(await accountRes.json());
+    if (historyRes.ok) setReminderHistory((await historyRes.json()).reminders || []);
+  };
+
+  useEffect(() => { load(); loadMeta(); }, [slug, term, session]);
 
   const createStructure = async (e) => {
     e.preventDefault();
@@ -72,18 +88,26 @@ export default function FeesPage() {
     }
   };
 
+  const connectAccount = async (e) => {
+    e.preventDefault(); setError(null); setMessage('');
+    const res = await fetch('/api/school/payment-account', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ school: slug, ...accountForm }) });
+    const json = await res.json();
+    if (!res.ok) setError(json.error || 'Could not connect payment account.'); else { setMessage('Payment account connected.'); setPaymentInfo({ ...paymentInfo, ...json }); }
+  };
+
   const sendReminders = async () => {
     const studentIds = Object.keys(selected).filter(id => selected[id]);
     if (studentIds.length === 0) return;
     const res = await fetch('/api/school/fees/reminders', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ school: slug, student_ids: studentIds, channel: 'email' }),
+      body: JSON.stringify({ school: slug, student_ids: studentIds, fee_structure_id: balances.find(b => selected[b.student_id])?.fee_structure_id || null, channel: reminderChannel }),
     });
     const json = await res.json();
     if (res.ok) {
-      setMessage(`Queued ${json.queued} reminder(s).`);
+      setMessage(`Sent ${json.sentCount} reminder(s); ${json.failedCount} failed.`);
       setSelected({});
+      loadMeta();
     }
   };
 
@@ -116,6 +140,13 @@ export default function FeesPage() {
         {message && <div className="rounded-xl bg-green-50 border border-green-100 px-4 py-3 text-sm text-green-700">{message}</div>}
         {error && <div className="rounded-xl bg-red-50 border border-red-100 px-4 py-3 text-sm text-red-600">{error}</div>}
 
+        {me && ['principal', 'admin'].includes(me.role) && (
+          <div className="rounded-2xl bg-white p-5 shadow-sm border border-slate-100">
+            <div className="flex items-start justify-between gap-3 flex-wrap"><div><h2 className="font-extrabold text-brand-blue">Online fee payments</h2><p className="mt-1 text-sm text-slate-500">Connect the school’s Nigerian bank account so Paystack settles school fees directly to it.</p></div><span className={`rounded-full px-3 py-1 text-xs font-bold ${paymentInfo?.status === 'connected' ? 'bg-green-100 text-green-700' : 'bg-slate-100 text-slate-600'}`}>{paymentInfo?.status || 'not connected'}</span></div>
+            {paymentInfo?.status === 'connected' ? <p className="mt-4 text-sm text-slate-600">{paymentInfo.account_name || 'Connected account'} · {paymentInfo.bank_name || 'Bank'} · {paymentInfo.account_number_masked}</p> : <form onSubmit={connectAccount} className="mt-4 flex flex-wrap gap-2 items-end"><label className="text-xs font-bold text-slate-500">Bank<select required value={accountForm.bankCode} onChange={e => setAccountForm({ ...accountForm, bankCode: e.target.value })} className="mt-1 block rounded-lg border border-slate-200 px-3 py-2 text-sm"><option value="">Select bank</option>{(paymentInfo?.banks || []).map(bank => <option key={bank.code} value={bank.code}>{bank.name}</option>)}</select></label><label className="text-xs font-bold text-slate-500">Account number<input required inputMode="numeric" maxLength="10" value={accountForm.accountNumber} onChange={e => setAccountForm({ ...accountForm, accountNumber: e.target.value })} className="mt-1 block rounded-lg border border-slate-200 px-3 py-2 text-sm" /></label><button className="rounded-full bg-brand-blue text-white text-sm font-bold px-4 py-2">Connect account</button></form>}
+          </div>
+        )}
+
         {/* Fee structures */}
         <div className="rounded-2xl bg-white p-5 shadow-sm border border-slate-100">
           <h2 className="font-extrabold text-brand-blue mb-3">Fee Structures for {term}, {session}</h2>
@@ -141,9 +172,7 @@ export default function FeesPage() {
         <div className="rounded-2xl bg-white shadow-sm border border-slate-100 overflow-hidden">
           <div className="p-5 border-b border-slate-100 flex items-center justify-between">
             <h2 className="font-extrabold text-brand-blue">Student Balances</h2>
-            <button onClick={sendReminders} className="text-xs font-bold rounded-full px-4 py-2 bg-amber-100 text-amber-700 hover:bg-amber-200">
-              🔔 Send reminder to selected
-            </button>
+            <div className="flex items-center gap-2"><select value={reminderChannel} onChange={e => setReminderChannel(e.target.value)} className="text-xs rounded-lg border border-slate-200 px-2 py-2"><option value="email">Email</option><option value="whatsapp">WhatsApp</option><option value="both">Both</option></select><button onClick={sendReminders} className="text-xs font-bold rounded-full px-4 py-2 bg-amber-100 text-amber-700 hover:bg-amber-200">Send reminder to selected</button></div>
           </div>
           {loading ? (
             <p className="p-6 text-slate-500">Loading...</p>
@@ -201,6 +230,8 @@ export default function FeesPage() {
             </div>
           )}
         </div>
+
+        <div className="rounded-2xl bg-white shadow-sm border border-slate-100 overflow-hidden"><div className="p-5 border-b border-slate-100"><h2 className="font-extrabold text-brand-blue">Reminder history</h2><p className="mt-1 text-xs text-slate-500">Actual provider outcome per student and channel.</p></div><div className="overflow-x-auto"><table className="min-w-full text-sm"><thead className="bg-slate-50 text-slate-500 text-left"><tr><th className="px-4 py-3">Student</th><th className="px-4 py-3">Channel</th><th className="px-4 py-3">Status</th><th className="px-4 py-3">Detail</th></tr></thead><tbody className="divide-y divide-slate-100">{reminderHistory.map(reminder => <tr key={reminder.id}><td className="px-4 py-3">{reminder.student?.full_name || reminder.student_id}</td><td className="px-4 py-3">{reminder.channel}</td><td className="px-4 py-3"><span className={`rounded-full px-2 py-1 text-xs font-bold ${reminder.status === 'sent' ? 'bg-green-100 text-green-700' : 'bg-red-100 text-red-700'}`}>{reminder.status}</span></td><td className="px-4 py-3 text-xs text-slate-500">{reminder.error_message || reminder.provider_message_id || reminder.provider || '—'}</td></tr>)}</tbody></table>{reminderHistory.length === 0 && <p className="p-5 text-sm text-slate-500">No reminders have been sent yet.</p>}</div></div>
       </div>
     </div>
   );

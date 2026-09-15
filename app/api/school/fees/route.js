@@ -39,8 +39,9 @@ export async function GET(request) {
   if (structureIds.length > 0) {
     const { data: paymentRows } = await supabase
       .from('fee_payments')
-      .select('student_id, fee_structure_id, amount')
+      .select('student_id, fee_structure_id, amount, status')
       .eq('school_id', school.id)
+      .eq('status', 'confirmed')
       .in('fee_structure_id', structureIds);
     payments = paymentRows || [];
   }
@@ -93,6 +94,8 @@ export async function POST(request) {
       fee_structure_id: fee_structure_id || null,
       amount,
       method: method || 'cash',
+      status: 'confirmed',
+      paid_at: new Date().toISOString(),
       note: note || null,
       recorded_by: profile.id,
     })

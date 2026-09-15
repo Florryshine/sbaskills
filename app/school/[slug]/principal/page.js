@@ -52,6 +52,7 @@ export default function PrincipalDashboard() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
   const [demoMode, setDemoMode] = useState(false);
+  const [notifications, setNotifications] = useState([]);
 
   useEffect(() => {
     const supabase = createBrowserClient();
@@ -91,6 +92,14 @@ export default function PrincipalDashboard() {
       }
 
       setSchool(schoolData);
+
+      const { data: notificationRows } = await supabase
+        .from('school_notifications')
+        .select('id, type, title, body, link, is_read, created_at')
+        .eq('school_id', schoolData.id)
+        .order('created_at', { ascending: false })
+        .limit(15);
+      setNotifications(notificationRows || []);
 
       const { data: studentRows } = await supabase
         .from('profiles')
@@ -220,6 +229,10 @@ export default function PrincipalDashboard() {
               ['📝 Daily Observations', `/school/${slug}/observations`],
               ['⏰ Teacher Check-in', `/school/${slug}/teacher-attendance`],
               ['💳 Fees', `/school/${slug}/fees`],
+              ['💼 Payroll', `/school/${slug}/payroll`],
+              ['🧾 My Payslips', `/school/${slug}/payslips`],
+              ['📊 Finance', `/school/${slug}/finance`],
+              ['🗓️ Timetable', `/school/${slug}/timetable`],
               ['📄 Report Cards', `/school/${slug}/report-cards`],
               ['📢 Announcements', `/school/${slug}/announcements`],
               ['➕ Manage People', `/school/${slug}/manage-people`],
@@ -234,6 +247,31 @@ export default function PrincipalDashboard() {
               </a>
             ))}
           </div>
+        </section>
+
+        <section className="rounded-2xl bg-white p-6 shadow-sm border border-slate-100">
+          <div className="flex items-center justify-between gap-3 mb-4">
+            <div>
+              <p className="text-xs font-bold uppercase tracking-widest text-brand-yellow">Activity feed</p>
+              <h2 className="mt-1 text-lg font-extrabold text-brand-blue">School notifications</h2>
+            </div>
+            <span className="text-xs text-slate-400">Latest 15</span>
+          </div>
+          {notifications.length === 0 ? (
+            <p className="text-sm text-slate-500">No school notifications yet.</p>
+          ) : (
+            <div className="divide-y divide-slate-100">
+              {notifications.map(notification => (
+                <a key={notification.id} href={notification.link || '#'} className="block py-3 first:pt-0 last:pb-0 hover:bg-slate-50 rounded-lg px-2 -mx-2">
+                  <div className="flex items-start justify-between gap-3">
+                    <p className="font-bold text-sm text-brand-dark">{notification.title}</p>
+                    <time className="shrink-0 text-[11px] text-slate-400">{new Date(notification.created_at).toLocaleString('en-NG')}</time>
+                  </div>
+                  <p className="mt-1 text-sm text-slate-500">{notification.body}</p>
+                </a>
+              ))}
+            </div>
+          )}
         </section>
 
         {/* Summary cards */}

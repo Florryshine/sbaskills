@@ -1,0 +1,39 @@
+'use client';
+
+import { useEffect, useState } from 'react';
+import { useParams } from 'next/navigation';
+
+export default function PayrollPage() {
+  const { slug } = useParams();
+  const [staff, setStaff] = useState([]); const [salaries, setSalaries] = useState([]); const [runs, setRuns] = useState([]);
+  const [form, setForm] = useState({ staff_id: '', basic_salary: '', allowance_label: 'Transport', allowance_amount: '', deduction_label: 'Pension', deduction_amount: '', effective_from: new Date().toISOString().slice(0, 10) });
+  const [month, setMonth] = useState(new Date().toISOString().slice(0, 7)); const [me, setMe] = useState(null); const [message, setMessage] = useState(''); const [error, setError] = useState('');
+
+  async function load() {
+    const [meRes, staffRes, salaryRes, runRes] = await Promise.all([fetch(`/api/school/me?school=${slug}`), fetch(`/api/school/staff?school=${slug}`), fetch(`/api/school/payroll/salaries?school=${slug}`), fetch(`/api/school/payroll/run?school=${slug}`)]);
+    if (meRes.ok) setMe((await meRes.json()).profile);
+    if (staffRes.ok) setStaff(((await staffRes.json()).people || []).filter(person => ['teacher', 'principal'].includes(person.role) && person.is_active !== false));
+    if (salaryRes.ok) setSalaries((await salaryRes.json()).salaries || []);
+    if (runRes.ok) setRuns((await runRes.json()).runs || []);
+  }
+  useEffect(() => { if (slug) load(); }, [slug]);
+  const principal = me && ['principal', 'admin'].includes(me.role);
+  if (me && !principal) return <div className="max-w-xl mx-auto mt-20 rounded-2xl bg-red-50 p-6 text-red-700">Only a principal or admin can manage payroll.</div>;
+
+  async function saveSalary(event) {
+    event.preventDefault(); setError(''); setMessage('');
+    const response = await fetch('/api/school/payroll/salaries', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ school: slug, staff_id: form.staff_id, basic_salary: form.basic_salary, allowances: [{ label: form.allowance_label, amount: form.allowance_amount }], deductions: [{ label: form.deduction_label, amount: form.deduction_amount }], effective_from: form.effective_from }) });
+    const json = await response.json(); if (!response.ok) setError(json.error || 'Could not save salary.'); else { setMessage('Salary structure saved.'); load(); }
+  }
+  async function runPayroll() {
+    setError(''); setMessage(''); const response = await fetch('/api/school/payroll/run', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ school: slug, month }) }); const json = await response.json(); if (!response.ok) setError(json.error || 'Could not run payroll.'); else { setMessage('Payroll run created as draft.'); load(); }
+  }
+  async function finalize(runId) {
+    const response = await fetch('/api/school/payroll/run', { method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ school: slug, run_id: runId }) }); const json = await response.json(); if (!response.ok) setError(json.error || 'Could not finalize payroll.'); else { setMessage('Payroll run finalized and recorded in finance.'); load(); }
+  }
+
+  return <main className="min-h-screen bg-slate-50"><div className="max-w-6xl mx-auto px-4 py-10 space-y-6"><div className="flex justify-between flex-wrap gap-3"><div><p className="text-xs font-bold uppercase tracking-widest text-brand-yellow">School operations</p><h1 className="mt-1 text-2xl font-extrabold text-brand-blue">Payroll & payslips</h1></div><a href={`/school/${slug}/principal`} className="text-sm font-bold text-brand-blue">Back to dashboard</a></div>{message && <p className="rounded-xl bg-emerald-50 p-3 text-sm text-emerald-700">{message}</p>}{error && <p className="rounded-xl bg-red-50 p-3 text-sm text-red-600">{error}</p>}
+    <section className="rounded-2xl bg-white border border-slate-100 shadow-sm p-6"><h2 className="text-lg font-extrabold text-brand-blue">Set a salary structure</h2><form onSubmit={saveSalary} className="mt-4 grid sm:grid-cols-2 lg:grid-cols-4 gap-3"><select required value={form.staff_id} onChange={e => setForm({ ...form, staff_id: e.target.value })} className="rounded-xl border border-slate-200 px-3 py-2"><option value="">Select staff member</option>{staff.map(person => <option key={person.id} value={person.id}>{person.full_name} ({person.role})</option>)}</select><input required type="number" min="0" placeholder="Basic salary" value={form.basic_salary} onChange={e => setForm({ ...form, basic_salary: e.target.value })} className="rounded-xl border border-slate-200 px-3 py-2" /><input required placeholder="Allowance label" value={form.allowance_label} onChange={e => setForm({ ...form, allowance_label: e.target.value })} className="rounded-xl border border-slate-200 px-3 py-2" /><input required type="number" min="0" placeholder="Allowance amount" value={form.allowance_amount} onChange={e => setForm({ ...form, allowance_amount: e.target.value })} className="rounded-xl border border-slate-200 px-3 py-2" /><input required placeholder="Deduction label" value={form.deduction_label} onChange={e => setForm({ ...form, deduction_label: e.target.value })} className="rounded-xl border border-slate-200 px-3 py-2" /><input required type="number" min="0" placeholder="Deduction amount" value={form.deduction_amount} onChange={e => setForm({ ...form, deduction_amount: e.target.value })} className="rounded-xl border border-slate-200 px-3 py-2" /><input required type="date" value={form.effective_from} onChange={e => setForm({ ...form, effective_from: e.target.value })} className="rounded-xl border border-slate-200 px-3 py-2" /><button className="rounded-full bg-brand-blue text-white font-bold px-4 py-2">Save salary</button></form><div className="mt-5 overflow-x-auto"><table className="min-w-full text-sm"><thead><tr><th className="text-left py-2 text-slate-500">Staff</th><th className="text-left py-2 text-slate-500">Basic</th><th className="text-left py-2 text-slate-500">Allowances</th><th className="text-left py-2 text-slate-500">Deductions</th><th className="text-left py-2 text-slate-500">Effective</th></tr></thead><tbody>{salaries.map(salary => <tr key={salary.id} className="border-t border-slate-100"><td className="py-2">{salary.staff?.full_name}</td><td>₦{Number(salary.basic_salary).toLocaleString('en-NG')}</td><td>{Number((salary.allowances || []).reduce((sum, line) => sum + Number(line.amount || 0), 0)).toLocaleString('en-NG')}</td><td>{Number((salary.deductions || []).reduce((sum, line) => sum + Number(line.amount || 0), 0)).toLocaleString('en-NG')}</td><td>{salary.effective_from}</td></tr>)}</tbody></table></div></section>
+    <section className="rounded-2xl bg-white border border-slate-100 shadow-sm p-6"><div className="flex flex-wrap gap-3 items-end"><label className="text-sm font-semibold">Payroll month<input type="month" value={month} onChange={e => setMonth(e.target.value)} className="mt-1 block rounded-xl border border-slate-200 px-3 py-2" /></label><button onClick={runPayroll} className="rounded-full bg-brand-yellow text-brand-dark font-bold px-5 py-2">Run payroll</button></div><div className="mt-5 space-y-3">{runs.map(run => <div key={run.id} className="rounded-xl border border-slate-100 p-4"><div className="flex justify-between gap-3 flex-wrap"><div><p className="font-bold text-brand-dark">{new Date(run.month).toLocaleDateString('en-NG', { month: 'long', year: 'numeric' })}</p><p className="text-xs text-slate-500">{run.payslips?.length || 0} payslips · Total ₦{Number(run.total_paid || 0).toLocaleString('en-NG')} · {run.status}</p></div>{run.status === 'draft' && <button onClick={() => finalize(run.id)} className="rounded-full bg-emerald-100 text-emerald-700 px-4 py-2 text-xs font-bold">Finalize run</button>}</div></div>)}{runs.length === 0 && <p className="text-sm text-slate-500">No payroll runs yet.</p>}</div></section>
+  </div></main>;
+}
