@@ -1,0 +1,167 @@
+diff --git a/app/api/landing/coupons/validate/route.js b/app/api/landing/coupons/validate/route.js
+index e2ea52e..f020e61 100644
+--- a/app/api/landing/coupons/validate/route.js
++++ b/app/api/landing/coupons/validate/route.js
+@@ -11,6 +11,7 @@ export async function GET(req) {
+   const { searchParams } = new URL(req.url);
+   const code = searchParams.get('code')?.toUpperCase();
+   const product = searchParams.get('product') || 'jamb-playbook';
++  const basePrice = Number(searchParams.get('basePrice')) || 0;
+ 
+   if (!code) {
+     return NextResponse.json(
+@@ -44,11 +45,34 @@ export async function GET(req) {
+       });
+     }
+ 
++    if (coupon.expires_at && new Date(coupon.expires_at) < new Date()) {
++      return NextResponse.json({
++        valid: false,
++        error: 'This coupon has expired'
++      });
++    }
++
++    // The table stores discount_type ('fixed_price' | 'amount_off') and
++    // discount_value — NOT a discount_percent field. Compute the actual
++    // final price here, server-side, so the client never has to (and
++    // can't) fudge the math.
++    let finalPrice = basePrice;
++    if (coupon.discount_type === 'fixed_price') {
++      finalPrice = coupon.discount_value;
++    } else if (coupon.discount_type === 'amount_off') {
++      finalPrice = basePrice - coupon.discount_value;
++    }
++    finalPrice = Math.max(0, Math.round(finalPrice));
++    const discountAmount = Math.max(0, basePrice - finalPrice);
++
+     // Coupon is valid
+     return NextResponse.json({
+       valid: true,
+-      discountPercent: coupon.discount_percent || 0,
+       code: coupon.code,
++      discountType: coupon.discount_type,
++      discountValue: coupon.discount_value,
++      discountAmount,
++      finalPrice,
+       maxUses: coupon.max_uses,
+       usedCount: coupon.used_count,
+     });
+@@ -61,3 +85,4 @@ export async function GET(req) {
+     );
+   }
+ }
++
+diff --git a/app/api/payment/initialize/route.js b/app/api/payment/initialize/route.js
+index d93723e..b85d8c0 100644
+--- a/app/api/payment/initialize/route.js
++++ b/app/api/payment/initialize/route.js
+@@ -1,18 +1,49 @@
+ import { NextResponse } from 'next/server';
++import { createClient } from '@supabase/supabase-js';
++
++const supabaseAdmin = createClient(
++  process.env.NEXT_PUBLIC_SUPABASE_URL,
++  process.env.SUPABASE_SERVICE_ROLE_KEY
++);
+ 
+ export async function POST(req) {
+   try {
+     const body = await req.json();
+-    const { amount, coupon, product } = body;
++    const { basePrice, coupon, product, email } = body;
+ 
+-    // Validate amount
+-    if (!amount || amount <= 0) {
++    if (!basePrice || basePrice <= 0) {
+       return NextResponse.json(
+         { error: 'Invalid amount' },
+         { status: 400 }
+       );
+     }
+ 
++    // Never trust a client-sent final amount — recompute it here from the
++    // coupon table so a tampered request can't pay less than it should.
++    let amount = basePrice;
++    let appliedCoupon = null;
++    if (coupon) {
++      const { data: couponRow } = await supabaseAdmin
++        .from('landing_coupons')
++        .select('*')
++        .eq('code', coupon.toUpperCase())
++        .eq('product_slug', product || 'jamb-playbook')
++        .eq('active', true)
++        .single();
++
++      if (couponRow && (!couponRow.max_uses || couponRow.used_count < couponRow.max_uses)) {
++        if (couponRow.discount_type === 'fixed_price') {
++          amount = couponRow.discount_value;
++        } else if (couponRow.discount_type === 'amount_off') {
++          amount = basePrice - couponRow.discount_value;
++        }
++        amount = Math.max(0, Math.round(amount));
++        appliedCoupon = couponRow.code;
++      }
++      // If the coupon doesn't validate here, silently fall back to
++      // basePrice rather than trusting anything else from the client.
++    }
++
+     // Generate unique reference
+     const reference = 'JAMB-' + Date.now() + '-' + Math.random().toString(36).substring(2, 7);
+ 
+@@ -24,7 +55,7 @@ export async function POST(req) {
+         'Content-Type': 'application/json',
+       },
+       body: JSON.stringify({
+-        email: body.email || 'customer@example.com', // Get from request
++        email: email || 'customer@example.com',
+         amount: amount * 100, // Paystack uses kobo
+         reference: reference,
+         callback_url: `${process.env.NEXT_PUBLIC_APP_URL || 'https://shineybrainacademy.vercel.app'}/jamb-playbook/thank-you`,
+@@ -38,7 +69,7 @@ export async function POST(req) {
+             {
+               display_name: "Coupon",
+               variable_name: "coupon",
+-              value: coupon || 'none'
++              value: appliedCoupon || 'none'
+             }
+           ]
+         }
+diff --git a/app/jamb-playbook/LandingClient.js b/app/jamb-playbook/LandingClient.js
+index 652e9e4..9b8f576 100644
+--- a/app/jamb-playbook/LandingClient.js
++++ b/app/jamb-playbook/LandingClient.js
+@@ -99,21 +99,18 @@ export default function LandingClient({ basePrice = 40000, screenshots = [], quo
+ 
+     try {
+       const res = await fetch(
+-        `/api/landing/coupons/validate?code=${encodeURIComponent(couponCode)}&product=jamb-playbook`
++        `/api/landing/coupons/validate?code=${encodeURIComponent(couponCode)}&product=jamb-playbook&basePrice=${basePrice}`
+       );
+       const data = await res.json();
+ 
+       if (data.valid) {
+-        const discount = Math.round((basePrice * data.discountPercent) / 100);
+-        const newPrice = Math.max(0, basePrice - discount);
+-        
+-        setCouponDiscount(discount);
+-        setFinalPrice(newPrice);
++        setCouponDiscount(data.discountAmount);
++        setFinalPrice(data.finalPrice);
+         setCouponApplied(true);
+         setCouponError('');
+         
+         // Show success message
+-        alert(`✅ Coupon applied! You saved ${naira(discount)}. Final price: ${naira(newPrice)}`);
++        alert(`✅ Coupon applied! You saved ${naira(data.discountAmount)}. Final price: ${naira(data.finalPrice)}`);
+       } else {
+         setCouponError(data.error || 'Invalid coupon code.');
+         setCouponApplied(false);
+@@ -143,7 +140,7 @@ export default function LandingClient({ basePrice = 40000, screenshots = [], quo
+         method: 'POST',
+         headers: { 'Content-Type': 'application/json' },
+         body: JSON.stringify({
+-          amount: finalPrice,
++          basePrice: basePrice,
+           email: email,
+           coupon: couponApplied ? couponCode : null,
+           product: 'jamb-playbook'

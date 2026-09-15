@@ -4,10 +4,12 @@ import { useEffect, useState, useRef } from 'react';
 import { createBrowserClient } from '@/lib/supabase';
 import { useRouter, useParams } from 'next/navigation';
 import Link from 'next/link';
+import BiteSizedLessonEditor from '@/components/BiteSizedLessonEditor';
 
 export default function AdminCourseEditorPage() {
   const [course, setCourse] = useState(null);
   const [lessons, setLessons] = useState([]);
+  const [modules, setModules] = useState([]);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [uploading, setUploading] = useState(false);
@@ -65,7 +67,14 @@ export default function AdminCourseEditorPage() {
           .eq('course_id', courseId)
           .order('order_index', { ascending: true });
 
+        const { data: modulesData } = await supabase
+          .from('course_modules')
+          .select('*')
+          .eq('course_id', courseId)
+          .order('order_index', { ascending: true });
+
         setLessons(lessonsData || []);
+        setModules(modulesData || []);
       } else {
         setCourse({ id: 'new' });
         setFormData({
@@ -302,6 +311,33 @@ export default function AdminCourseEditorPage() {
     setLessons(lessons.filter(l => l.id !== id));
   }
 
+  async function addModule() {
+    const title = prompt('Module/topic title:');
+    if (!title) return;
+    const { data, error } = await supabase
+      .from('course_modules')
+      .insert({ course_id: courseId, title, order_index: modules.length, is_published: true })
+      .select('*')
+      .single();
+    if (error) {
+      alert(error.message);
+      return;
+    }
+    setModules((current) => [...current, data].sort((a, b) => a.order_index - b.order_index));
+  }
+
+  async function assignLessonModule(lessonId, moduleId) {
+    const { error } = await supabase
+      .from('lessons')
+      .update({ module_id: moduleId || null })
+      .eq('id', lessonId);
+    if (error) {
+      alert(error.message);
+      return;
+    }
+    setLessons((current) => current.map((lesson) => lesson.id === lessonId ? { ...lesson, module_id: moduleId || null } : lesson));
+  }
+
   if (loading) return <div className="p-8 text-center">Loading course editor...</div>;
 
   return (
@@ -415,6 +451,28 @@ export default function AdminCourseEditorPage() {
         </div>
       </section>
 
+      {/* Modules / Topics */}
+      <section className="rounded-2xl bg-white p-6 shadow-sm border border-slate-100">
+        <div className="flex items-center justify-between mb-4">
+          <div>
+            <h2 className="text-base font-extrabold text-brand-blue">Modules / Topics</h2>
+            <p className="mt-1 text-xs text-slate-500">Optional grouping for mixed video and bite-sized courses. Lessons may remain ungrouped.</p>
+          </div>
+          <button onClick={addModule} className="rounded-full bg-brand-yellow px-4 py-2 text-xs font-bold text-brand-dark">+ Add Module</button>
+        </div>
+        {modules.length ? (
+          <div className="grid gap-2 sm:grid-cols-2">
+            {modules.map((module, index) => (
+              <div key={module.id} className="rounded-xl border border-slate-100 px-4 py-3">
+                <p className="text-xs font-bold uppercase tracking-wide text-slate-400">Module {index + 1}</p>
+                <p className="font-semibold text-slate-800">{module.title}</p>
+                <p className="text-xs text-slate-500">{lessons.filter((lesson) => lesson.module_id === module.id).length} lessons</p>
+              </div>
+            ))}
+          </div>
+        ) : <p className="rounded-xl border border-dashed border-slate-200 p-4 text-center text-sm text-slate-500">No modules yet. The course will use its flat lesson list.</p>}
+      </section>
+
       {/* Lessons Manager */}
       <section className="rounded-2xl bg-white p-6 shadow-sm border border-slate-100">
         <div className="flex items-center justify-between mb-4">
@@ -456,6 +514,17 @@ export default function AdminCourseEditorPage() {
                         <option value="video">🎬 Video</option>
                         <option value="text">📝 Text</option>
                         <option value="pdf">📄 PDF</option>
+                        <option value="bite_sized">✨ Bite-Sized</option>
+                      </select>
+
+                      <select
+                        value={lesson.module_id || ''}
+                        onChange={(event) => assignLessonModule(lesson.id, event.target.value)}
+                        className="text-xs border border-slate-200 rounded-lg px-2 py-1"
+                        aria-label="Assign lesson to module"
+                      >
+                        <option value="">No module</option>
+                        {modules.map((module) => <option key={module.id} value={module.id}>{module.title}</option>)}
                       </select>
 
                       {lesson.content_type === 'video' && (
@@ -535,6 +604,15 @@ export default function AdminCourseEditorPage() {
                             className="hidden"
                           />
                         </div>
+                      )}
+
+                      {lesson.content_type === 'bite_sized' && (
+                        <BiteSizedLessonEditor
+                          lesson={lesson}
+                          onLessonUpdated={(updatedLesson) => {
+                            setLessons((current) => current.map((item) => item.id === lesson.id ? updatedLesson : item));
+                          }}
+                        />
                       )}
                     </div>
                   </div>

@@ -1,0 +1,479 @@
+diff --git a/app/admin/layout.js b/app/admin/layout.js
+index 6780e43..d50c23e 100644
+--- a/app/admin/layout.js
++++ b/app/admin/layout.js
+@@ -1,4 +1,5 @@
+ import AdminSidebar from '@/components/AdminSidebar';
++import AdminNavbar from '@/components/AdminNavbar';
+ 
+ export default function AdminLayout({ children }) {
+   return (
+@@ -7,7 +8,10 @@ export default function AdminLayout({ children }) {
+       {/* pt-20 on mobile clears the fixed hamburger button in the top-left
+           corner; lg:pt-0 removes that spacing on desktop where the sidebar
+           is static (in-flow) and there's no floating button to clear. */}
+-      <main className="flex-1 overflow-y-auto pt-20 lg:pt-0">{children}</main>
++      <div className="flex-1 flex flex-col overflow-y-auto pt-20 lg:pt-0">
++        <AdminNavbar />
++        <main className="flex-1">{children}</main>
++      </div>
+     </div>
+   );
+ }
+diff --git a/app/api/admin/landing/is-admin/route.js b/app/api/admin/landing/is-admin/route.js
+new file mode 100644
+index 0000000..053b24a
+--- /dev/null
++++ b/app/api/admin/landing/is-admin/route.js
+@@ -0,0 +1,11 @@
++import { NextResponse } from 'next/server';
++import { requireLandingAdmin } from '@/lib/requireLandingAdmin';
++
++// Lightweight, client-callable check used by public pages to decide
++// whether to render admin-only controls (e.g. the inline screenshot
++// uploader on the JAMB playbook landing page). Never leaks anything
++// beyond a boolean.
++export async function GET() {
++  const auth = await requireLandingAdmin();
++  return NextResponse.json({ isAdmin: !!auth.ok });
++}
+diff --git a/app/api/admin/landing/testimonials/screenshot-slot/route.js b/app/api/admin/landing/testimonials/screenshot-slot/route.js
+new file mode 100644
+index 0000000..af245e6
+--- /dev/null
++++ b/app/api/admin/landing/testimonials/screenshot-slot/route.js
+@@ -0,0 +1,117 @@
++import { NextResponse } from 'next/server';
++import { requireLandingAdmin } from '@/lib/requireLandingAdmin';
++import { landingSupabaseAdmin } from '@/lib/landingSupabaseAdmin';
++
++const PRODUCT_SLUG = 'jamb-playbook';
++
++// Powers the tap-to-upload buttons on the live landing page's "proof"
++// section. Each of the 3 phone boxes is identified by `slot` (0, 1, 2),
++// stored as sort_order on a kind:'screenshot' row. Unlike the general
++// admin form, rows created here are auto-approved so they appear on the
++// page immediately — no separate approval step, since the admin is
++// looking at the live page while doing this.
++//
++// POST: multipart/form-data with "slot" (0-2) and "image" (file).
++//       Replaces whatever screenshot currently occupies that slot.
++// DELETE: JSON body { slot }. Clears that slot back to placeholder.
++
++export async function POST(req) {
++  const auth = await requireLandingAdmin();
++  if (!auth.ok) return NextResponse.json({ error: 'Unauthorized' }, { status: auth.status });
++
++  const form = await req.formData();
++  const slot = Number(form.get('slot'));
++  const file = form.get('image');
++
++  if (![0, 1, 2].includes(slot)) {
++    return NextResponse.json({ error: 'Invalid slot.' }, { status: 400 });
++  }
++  if (!file || typeof file !== 'object' || file.size === 0) {
++    return NextResponse.json({ error: 'No image provided.' }, { status: 400 });
++  }
++
++  const bytes = Buffer.from(await file.arrayBuffer());
++  const base64 = `data:${file.type};base64,${bytes.toString('base64')}`;
++
++  const cloudRes = await fetch(
++    `https://api.cloudinary.com/v1_1/${process.env.CLOUDINARY_CLOUD_NAME}/image/upload`,
++    {
++      method: 'POST',
++      body: (() => {
++        const fd = new FormData();
++        fd.append('file', base64);
++        fd.append('upload_preset', process.env.CLOUDINARY_UPLOAD_PRESET);
++        fd.append('folder', 'landing/jamb-playbook');
++        return fd;
++      })(),
++    }
++  );
++  const cloudData = await cloudRes.json();
++  if (!cloudData.secure_url) {
++    return NextResponse.json({ error: 'Image upload failed.' }, { status: 502 });
++  }
++
++  const supabase = landingSupabaseAdmin();
++
++  // A slot is identified by (product_slug, kind:'screenshot', sort_order).
++  // Replace whatever's currently there rather than stacking duplicates.
++  const { data: existing } = await supabase
++    .from('landing_testimonials')
++    .select('id')
++    .eq('product_slug', PRODUCT_SLUG)
++    .eq('kind', 'screenshot')
++    .eq('sort_order', slot)
++    .maybeSingle();
++
++  let row;
++  if (existing) {
++    const { data, error } = await supabase
++      .from('landing_testimonials')
++      .update({ image_url: cloudData.secure_url, approved: true })
++      .eq('id', existing.id)
++      .select()
++      .single();
++    if (error) return NextResponse.json({ error: error.message }, { status: 500 });
++    row = data;
++  } else {
++    const { data, error } = await supabase
++      .from('landing_testimonials')
++      .insert({
++        student_name: 'Student',
++        quote: '',
++        kind: 'screenshot',
++        product_slug: PRODUCT_SLUG,
++        sort_order: slot,
++        image_url: cloudData.secure_url,
++        approved: true,
++      })
++      .select()
++      .single();
++    if (error) return NextResponse.json({ error: error.message }, { status: 500 });
++    row = data;
++  }
++
++  return NextResponse.json({ testimonial: row });
++}
++
++export async function DELETE(req) {
++  const auth = await requireLandingAdmin();
++  if (!auth.ok) return NextResponse.json({ error: 'Unauthorized' }, { status: auth.status });
++
++  const body = await req.json().catch(() => ({}));
++  const slot = Number(body.slot);
++  if (![0, 1, 2].includes(slot)) {
++    return NextResponse.json({ error: 'Invalid slot.' }, { status: 400 });
++  }
++
++  const supabase = landingSupabaseAdmin();
++  const { error } = await supabase
++    .from('landing_testimonials')
++    .delete()
++    .eq('product_slug', PRODUCT_SLUG)
++    .eq('kind', 'screenshot')
++    .eq('sort_order', slot);
++
++  if (error) return NextResponse.json({ error: error.message }, { status: 500 });
++  return NextResponse.json({ ok: true });
++}
+diff --git a/app/api/landing/verify/route.js b/app/api/landing/verify/route.js
+new file mode 100644
+index 0000000..0a516ec
+--- /dev/null
++++ b/app/api/landing/verify/route.js
+@@ -0,0 +1,35 @@
++import { NextResponse } from 'next/server';
++
++// GET /api/landing/verify?reference=xxx
++// Confirms a Paystack transaction actually succeeded before the thank-you
++// page sends the student on to Telegram. Never trust the mere presence of
++// a callback hit as proof of payment — always verify server-side against
++// Paystack directly using the secret key.
++export async function GET(req) {
++  const { searchParams } = new URL(req.url);
++  const reference = searchParams.get('reference');
++
++  if (!reference) {
++    return NextResponse.json({ error: 'Missing reference.' }, { status: 400 });
++  }
++
++  const res = await fetch(
++    `https://api.paystack.co/transaction/verify/${encodeURIComponent(reference)}`,
++    {
++      headers: { Authorization: `Bearer ${process.env.PAYSTACK_SECRET_KEY}` },
++    }
++  );
++  const data = await res.json();
++
++  const success = !!data.status && data.data?.status === 'success';
++
++  // ADAPT: this is also the right place to mark the order as paid in your
++  // DB and increment coupon usage, if that isn't already handled by a
++  // separate Paystack webhook route elsewhere in the codebase.
++
++  return NextResponse.json({
++    success,
++    amount: data.data?.amount ? data.data.amount / 100 : null,
++    email: data.data?.customer?.email || null,
++  });
++}
+diff --git a/app/jamb-playbook/LandingClient.js b/app/jamb-playbook/LandingClient.js
+index 125dc71..67ab3d6 100644
+--- a/app/jamb-playbook/LandingClient.js
++++ b/app/jamb-playbook/LandingClient.js
+@@ -63,6 +63,68 @@ function naira(n) {
+ }
+ 
+ export default function LandingClient({ basePrice, screenshots = [], quotes = [] }) {
++  const [isAdmin, setIsAdmin] = useState(false);
++  const [slotShots, setSlotShots] = useState(screenshots);
++  const [uploadingSlot, setUploadingSlot] = useState(null);
++  const slotFileRefs = [useRef(null), useRef(null), useRef(null)];
++
++  useEffect(() => {
++    fetch('/api/admin/landing/is-admin')
++      .then(r => r.json())
++      .then(d => setIsAdmin(!!d.isAdmin))
++      .catch(() => {});
++  }, []);
++
++  async function handleSlotFile(slot, file) {
++    if (!file) return;
++    setUploadingSlot(slot);
++    try {
++      const fd = new FormData();
++      fd.append('slot', String(slot));
++      fd.append('image', file);
++      const res = await fetch('/api/admin/landing/testimonials/screenshot-slot', {
++        method: 'POST',
++        body: fd,
++      });
++      const data = await res.json();
++      if (res.ok && data.testimonial) {
++        setSlotShots(prev => {
++          const next = prev.filter(s => s.sort_order !== slot);
++          next.push(data.testimonial);
++          return next;
++        });
++      } else {
++        alert(data.error || 'Upload failed.');
++      }
++    } catch {
++      alert('Upload failed.');
++    } finally {
++      setUploadingSlot(null);
++    }
++  }
++
++  async function handleSlotRemove(slot) {
++    if (!confirm('Remove this screenshot?')) return;
++    setUploadingSlot(slot);
++    try {
++      const res = await fetch('/api/admin/landing/testimonials/screenshot-slot', {
++        method: 'DELETE',
++        headers: { 'Content-Type': 'application/json' },
++        body: JSON.stringify({ slot }),
++      });
++      const data = await res.json();
++      if (res.ok) {
++        setSlotShots(prev => prev.filter(s => s.sort_order !== slot));
++      } else {
++        alert(data.error || 'Remove failed.');
++      }
++    } catch {
++      alert('Remove failed.');
++    } finally {
++      setUploadingSlot(null);
++    }
++  }
++
+   const heroPinRef = useRef(null);
+   const fieldRef = useRef(null);
+   const captionRef = useRef(null);
+@@ -283,9 +345,10 @@ export default function LandingClient({ basePrice, screenshots = [], quotes = []
+           </div>
+           <div className="proof-grid">
+             {[0, 1, 2].map(idx => {
+-              const shot = screenshots[idx];
++              const shot = slotShots.find(s => s.sort_order === idx);
++              const busy = uploadingSlot === idx;
+               return (
+-                <div className="phone" key={idx}>
++                <div className="phone" key={idx} style={{ position: 'relative' }}>
+                   <div className="phone-bar" />
+                   {shot ? (
+                     // eslint-disable-next-line @next/next/no-img-element
+@@ -297,11 +360,50 @@ export default function LandingClient({ basePrice, screenshots = [], quotes = []
+                       <span className="cap">{['Mock score\nprogression', "312 in JAMB —\nthe founder's own result", 'Before / after\nstudy plan'][idx]}</span>
+                     </div>
+                   )}
++
++                  {isAdmin && (
++                    <div style={{ position: 'absolute', bottom: 8, left: 0, right: 0, display: 'flex', justifyContent: 'center', gap: 8 }}>
++                      <input
++                        ref={slotFileRefs[idx]}
++                        type="file"
++                        accept="image/*"
++                        capture="environment"
++                        style={{ display: 'none' }}
++                        onChange={e => handleSlotFile(idx, e.target.files?.[0])}
++                      />
++                      <button
++                        type="button"
++                        disabled={busy}
++                        onClick={() => slotFileRefs[idx].current?.click()}
++                        style={{
++                          fontSize: 12, padding: '5px 10px', borderRadius: 999,
++                          background: 'rgba(0,0,0,0.75)', color: '#fff', border: '1px solid rgba(255,255,255,0.3)',
++                          cursor: busy ? 'default' : 'pointer',
++                        }}
++                      >
++                        {busy ? '…' : shot ? '+ Replace' : '+ Add'}
++                      </button>
++                      {shot && (
++                        <button
++                          type="button"
++                          disabled={busy}
++                          onClick={() => handleSlotRemove(idx)}
++                          style={{
++                            fontSize: 12, padding: '5px 10px', borderRadius: 999,
++                            background: 'rgba(0,0,0,0.75)', color: '#fff', border: '1px solid rgba(255,255,255,0.3)',
++                            cursor: busy ? 'default' : 'pointer',
++                          }}
++                        >
++                          ✕
++                        </button>
++                      )}
++                    </div>
++                  )}
+                 </div>
+               );
+             })}
+           </div>
+-          {screenshots.length === 0 && (
++          {slotShots.length === 0 && !isAdmin && (
+             <p className="proof-note">Screenshot space reserved for real results — added from the admin panel as they come in.</p>
+           )}
+         </div>
+diff --git a/app/jamb-playbook/thank-you/page.js b/app/jamb-playbook/thank-you/page.js
+new file mode 100644
+index 0000000..ae51707
+--- /dev/null
++++ b/app/jamb-playbook/thank-you/page.js
+@@ -0,0 +1,85 @@
++'use client';
++
++import { useEffect, useState } from 'react';
++import { useSearchParams } from 'next/navigation';
++
++// Students land here right after Paystack. We verify the transaction
++// server-side (never trust the redirect alone), then send them to the
++// Telegram group only once payment is confirmed. If verification fails,
++// they see a support message instead of being dropped into the group
++// unpaid or left on a blank page.
++const TELEGRAM_URL = 'https://t.me/+rtQ4PBtFxCtkYWNk';
++
++export default function ThankYouPage() {
++  const searchParams = useSearchParams();
++  const reference = searchParams.get('reference') || searchParams.get('trxref');
++  const [status, setStatus] = useState('checking'); // checking | success | failed
++
++  useEffect(() => {
++    if (!reference) {
++      setStatus('failed');
++      return;
++    }
++    fetch(`/api/landing/verify?reference=${encodeURIComponent(reference)}`)
++      .then((r) => r.json())
++      .then((data) => {
++        if (data.success) {
++          setStatus('success');
++          // Small delay so the confirmation is visible before the jump.
++          setTimeout(() => {
++            window.location.href = TELEGRAM_URL;
++          }, 1500);
++        } else {
++          setStatus('failed');
++        }
++      })
++      .catch(() => setStatus('failed'));
++  }, [reference]);
++
++  return (
++    <div
++      style={{
++        minHeight: '100vh',
++        display: 'flex',
++        flexDirection: 'column',
++        alignItems: 'center',
++        justifyContent: 'center',
++        textAlign: 'center',
++        padding: 24,
++        gap: 16,
++        background: '#0b0f1a',
++        color: '#fff',
++      }}
++    >
++      {status === 'checking' && (
++        <>
++          <h1 style={{ fontSize: 22, fontWeight: 700 }}>Confirming your payment…</h1>
++          <p style={{ color: '#9aa4bb' }}>This takes a few seconds. Please don't close this tab.</p>
++        </>
++      )}
++
++      {status === 'success' && (
++        <>
++          <h1 style={{ fontSize: 22, fontWeight: 700 }}>Payment confirmed 🎉</h1>
++          <p style={{ color: '#9aa4bb' }}>Taking you to the Telegram group now…</p>
++          <a
++            href={TELEGRAM_URL}
++            style={{ color: '#5eead4', textDecoration: 'underline', fontSize: 14 }}
++          >
++            Tap here if it doesn't open automatically
++          </a>
++        </>
++      )}
++
++      {status === 'failed' && (
++        <>
++          <h1 style={{ fontSize: 22, fontWeight: 700 }}>We couldn't confirm that payment</h1>
++          <p style={{ color: '#9aa4bb', maxWidth: 420 }}>
++            If money left your account, don't worry — message us with your payment reference
++            and we'll sort it out right away.
++          </p>
++        </>
++      )}
++    </div>
++  );
++}
+diff --git a/components/AdminNavbar.js b/components/AdminNavbar.js
+new file mode 100644
+index 0000000..023cc20
+--- /dev/null
++++ b/components/AdminNavbar.js
+@@ -0,0 +1,41 @@
++'use client';
++
++import Link from 'next/link';
++import { usePathname } from 'next/navigation';
++
++// Slim top bar for the admin area, separate from the left AdminSidebar.
++// Purpose: quick access to the "landing page" tools (coupons, testimonials,
++// and the inline screenshot editor) which aren't in the main sidebar's
++// long feature list and are easy to lose track of.
++const navItems = [
++  { href: '/admin/landing/coupons', label: 'Landing Coupons' },
++  { href: '/admin/landing/testimonials', label: 'Landing Testimonials' },
++  { href: '/jamb-playbook', label: 'Edit Landing Page (live)' },
++];
++
++export default function AdminNavbar() {
++  const pathname = usePathname();
++
++  return (
++    <div className="w-full border-b border-black/10 bg-white/95 backdrop-blur sticky top-0 z-30">
++      <nav className="flex flex-wrap items-center gap-2 px-4 py-3 lg:px-6">
++        {navItems.map((item) => {
++          const active = pathname === item.href || pathname.startsWith(`${item.href}/`);
++          return (
++            <Link
++              key={item.href}
++              href={item.href}
++              className={`rounded-full px-4 py-2 text-sm font-semibold transition ${
++                active
++                  ? 'bg-brand-blue text-white'
++                  : 'bg-black/5 text-brand-blue hover:bg-black/10'
++              }`}
++            >
++              {item.label}
++            </Link>
++          );
++        })}
++      </nav>
++    </div>
++  );
++}

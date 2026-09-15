@@ -38,11 +38,14 @@ export default function AdminCourseEditor({ course = null, initialLessons = [] }
     try {
       setSavingCourse(true);
 
-      if (course?.id) {
-        const { error } = await supabase.from('courses').update(courseForm).eq('id', course.id);
+      const existingCourseId = course?.id && course.id !== 'new' ? course.id : null;
+      const { id: _ignoredId, ...coursePayload } = courseForm;
+
+      if (existingCourseId) {
+        const { error } = await supabase.from('courses').update(coursePayload).eq('id', existingCourseId);
         if (error) throw error;
       } else {
-        const { data, error } = await supabase.from('courses').insert(courseForm).select('*').single();
+        const { data, error } = await supabase.from('courses').insert(coursePayload).select('*').single();
         if (error) throw error;
         router.push(`/admin/courses/${data.id}`);
       }
