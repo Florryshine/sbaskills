@@ -23,13 +23,13 @@ const sections = [
       { href: '/admin/flashcard-drafts', label: 'Flashcards' },
       { href: '/admin/study-note-drafts', label: 'Study Notes' },
       { href: '/admin/past-questions/upload', label: 'Past Questions' },
+      { href: '/admin/submissions', label: 'Assignment Submissions' },
     ],
   },
   {
     label: 'SCHOOLS',
     items: [
       { href: '/admin/schools', label: 'Schools' },
-      { href: '/admin/submissions', label: 'School Submissions' },
     ],
   },
   {
@@ -72,7 +72,7 @@ const sections = [
       { href: '/admin/content-engine/drafts', label: 'Content Drafts' },
       { href: '/admin/carousel-drafts', label: 'Carousel Drafts' },
       { href: '/admin/video-scripts', label: 'Video Scripts' },
-      { href: '/admin/social-post-drafts', label: 'Social Post Drafts (old)' },
+      { href: '/admin/social-post-drafts', label: 'Legacy Social Dashboard' },
       { href: '/admin/quote-loops', label: 'Quote Loops' },
       { href: '/admin/teaching-loops', label: 'Teaching Loops' },
       { href: '/admin/meme-loops', label: 'Meme / Joke Loops' },
@@ -85,10 +85,10 @@ const sections = [
     label: 'OTHERS',
     items: [
       { href: '/admin/landing/coupons', label: 'Landing Coupons' },
-      { href: '/admin/landing/testimonials', label: 'Landing Testimonials' },
+      { href: '/admin/landing/testimonials', label: 'Landing Page Testimonials' },
       { href: '/jamb-playbook', label: 'Edit Landing Page' },
       { href: '/admin/feature-unlocks', label: 'Feature Unlocks' },
-      { href: '/admin/testimonials', label: 'Testimonials' },
+      { href: '/admin/testimonials', label: 'Student Testimonials' },
     ],
   },
 ];
