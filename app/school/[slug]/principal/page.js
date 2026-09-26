@@ -67,7 +67,7 @@ export default function PrincipalDashboard() {
         .eq('id', user.id)
         .single();
 
-      if (!profile || !['principal', 'teacher', 'admin'].includes(profile.role)) {
+      if (!profile || !['principal', 'admin'].includes(profile.role)) {
         setError('This page is only available to school staff.');
         setLoading(false);
         return;
@@ -137,7 +137,7 @@ export default function PrincipalDashboard() {
         .from('profiles')
         .select('id', { count: 'exact', head: true })
         .eq('school_id', schoolData.id)
-        .in('role', ['teacher', 'principal']);
+        .eq('role', 'teacher');
       setTeacherCount(teacherTotal || 0);
 
       if (studentIds.length > 0) {
