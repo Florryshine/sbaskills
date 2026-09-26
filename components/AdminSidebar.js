@@ -95,7 +95,7 @@ const sections = [
 
 export default function AdminSidebar() {
   const pathname = usePathname();
-  const [open, setOpen] = useState(false);
+  const [open, setOpen] = useState(false);\n  const [expanded, setExpanded] = useState(() => {\n    const activeSection = sections.find((section) =>\n      section.items.some((item) => pathname === item.href || pathname.startsWith(`${item.href}/`))\n    );\n    return activeSection?.label || null;\n  });
 
   useEffect(() => {
     setOpen(false);
@@ -155,29 +155,44 @@ export default function AdminSidebar() {
             {isActive('/admin/dashboard') && <span className="h-2 w-2 rounded-full bg-brand-yellow" />}
           </Link>
 
-          {sections.map((section) => (
-            <div key={section.label}>
-              <p className="mb-2 px-4 text-[10px] font-extrabold uppercase tracking-[0.24em] text-blue-200">
-                {section.label}
-              </p>
-              <div className="space-y-1">
-                {section.items.map((item) => {
-                  const active = isActive(item.href);
-                  return (
-                    <Link
-                      key={item.href}
-                      href={item.href}
-                      className={`flex items-center justify-between rounded-xl px-4 py-2.5 text-sm font-medium transition
-                        ${active ? 'bg-white text-brand-blue' : 'text-white/90 hover:bg-white/10 hover:text-white'}`}
-                    >
-                      <span>{item.label}</span>
-                      {active && <span className="h-1.5 w-1.5 rounded-full bg-brand-yellow" />}
-                    </Link>
-                  );
-                })}
+          {sections.map((section) => {
+            const sectionOpen = expanded === section.label;
+            const sectionActive = section.items.some((item) => isActive(item.href));
+
+            return (
+              <div key={section.label}>
+                <button
+                  type="button"
+                  onClick={() => setExpanded(sectionOpen ? null : section.label)}
+                  className={`flex w-full items-center justify-between rounded-xl px-4 py-3 text-left text-xs font-extrabold uppercase tracking-[0.18em] transition
+                    ${sectionActive ? 'bg-white/10 text-white' : 'text-blue-100 hover:bg-white/10 hover:text-white'}`}
+                  aria-expanded={sectionOpen}
+                >
+                  <span>{section.label}</span>
+                  <span className={`text-sm transition-transform ${sectionOpen ? 'rotate-180' : ''}`}>⌄</span>
+                </button>
+
+                {sectionOpen && (
+                  <div className="mt-1 space-y-1 pl-2">
+                    {section.items.map((item) => {
+                      const active = isActive(item.href);
+                      return (
+                        <Link
+                          key={item.href}
+                          href={item.href}
+                          className={`flex items-center justify-between rounded-lg px-4 py-2.5 text-sm font-medium transition
+                            ${active ? 'bg-white text-brand-blue' : 'text-white/90 hover:bg-white/10 hover:text-white'}`}
+                        >
+                          <span>{item.label}</span>
+                          {active && <span className="h-1.5 w-1.5 rounded-full bg-brand-yellow" />}
+                        </Link>
+                      );
+                    })}
+                  </div>
+                )}
               </div>
-            </div>
-          ))}
+            );
+          })}
         </nav>
 
         <div className="space-y-3 border-t border-white/10 pt-4">
