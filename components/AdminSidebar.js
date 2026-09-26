@@ -1,77 +1,111 @@
-﻿'use client';
+'use client';
 
-import { useState, useEffect } from 'react';
+import { useEffect, useState } from 'react';
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
 import LogoutButton from '@/components/LogoutButton';
 
-const navItems = [
-  { href: '/admin/dashboard', label: 'Overview', icon: '\ud83d\udcca' },
-  { href: '/admin/students', label: 'Students', icon: '\ud83d\udc68\u200d\ud83c\udf93' },
-  { href: '/admin/tutor-activity', label: 'Tutor Activity', icon: '\ud83e\uddd1\u200d\ud83c\udfeb' },
-  { href: '/admin/roles', label: 'Roles', icon: '\ud83d\udd11' },
-  { href: '/admin/schools', label: 'Schools', icon: 'ðŸ«' },
-  { href: '/admin/feature-unlocks', label: 'Feature Unlocks', icon: '\ud83d\udd12' },
-
-  { href: '/admin/knowledge-assets', label: 'Knowledge Assets', icon: '\ud83e\udde0' },
-  { href: '/admin/content-engine', label: 'Content Engine', icon: '\u26a1' },
-  { href: '/admin/content-engine/queue', label: 'Content Queue', icon: '\ud83d\udce5' },
-  { href: '/admin/content-engine/drafts', label: 'Content Drafts', icon: '\ud83d\uddd2\ufe0f' },
-  { href: '/admin/content-engine/upload', label: 'Content Upload', icon: '\ud83d\udce4' },
-  { href: '/admin/generation-jobs', label: 'Generation Jobs', icon: '\u2699\ufe0f' },
-  { href: '/admin/generate', label: 'Generate', icon: '\u2728' },
-
-  { href: '/admin/courses', label: 'Courses', icon: '\ud83d\udcda' },
-  { href: '/admin/library', label: 'Library', icon: '\ud83d\udcd6' },
-  { href: '/admin/books', label: 'Books', icon: '\ud83d\udcd5' },
-  { href: '/admin/quizzes', label: 'Quizzes', icon: '\ud83e\udde9' },
-  { href: '/admin/quiz-drafts', label: 'Quiz Drafts', icon: '\ud83d\udccb' },
-  { href: '/admin/flashcard-drafts', label: 'Flashcard Drafts', icon: '\ud83d\uddc2\ufe0f' },
-  { href: '/admin/study-note-drafts', label: 'Study Note Drafts', icon: '\ud83d\udcdd' },
-  { href: '/admin/boss-battles', label: 'Boss Battles', icon: '\ud83d\udc79' },
-  { href: '/admin/boss-battle-drafts', label: 'Boss Battle Drafts', icon: '\u2694\ufe0f' },
-  { href: '/admin/daily-challenge', label: 'Daily Challenge', icon: '\ud83d\udcc5' },
-  { href: '/admin/achievements', label: 'Achievements', icon: '\ud83c\udfc6' },
-
-  { href: '/admin/blog', label: 'Blog', icon: '\ud83d\udcf0' },
-  { href: '/admin/blog-drafts', label: 'Blog Drafts', icon: '\u270f\ufe0f' },
-  { href: '/admin/podcasts', label: 'Podcasts', icon: '\ud83c\udf99\ufe0f' },
-  { href: '/admin/audio', label: 'Audio', icon: '\ud83c\udfb5' },
-  { href: '/admin/asset-images', label: 'Image Engine', icon: '\ud83d\uddbc\ufe0f' },
-  { href: '/admin/social-engine', label: 'Social Engine', icon: '\ud83d\ude80' },
-  { href: '/admin/quote-loops', label: 'Quote Loops', icon: '\ud83c\udfac' },
-  { href: '/admin/teaching-loops', label: 'Teaching Loops', icon: '\ud83e\uddd1\u200d\ud83c\udfeb' },
-  { href: '/admin/meme-loops', label: 'Meme/Joke Loops', icon: '\ud83d\ude02' },
-  { href: '/admin/lesson-loops', label: '2-Min Lesson Loops', icon: '\ud83d\udcd8' },
-  { href: '/admin/past-question-loops', label: 'Past Question Loops', icon: '\ud83d\udcdd' },
-  { href: '/admin/countdown-loops', label: 'Countdown Loops', icon: '\ud83d\udd22' },
-  { href: '/admin/channels', label: 'Channels', icon: '\ud83d\udd0c' },
-  { href: '/admin/carousel-drafts', label: 'Carousel Drafts', icon: '\ud83c\udfa0' },
-  { href: '/admin/video-scripts', label: 'Video Scripts', icon: '\ud83c\udfac' },
-  { href: '/admin/social-post-drafts', label: 'Social Post Drafts (old)', icon: '\ud83d\udce3' },
-
-  { href: '/admin/past-questions/upload', label: 'Upload Past Qs', icon: '\ud83d\udce4' },
-  { href: '/admin/submissions', label: 'Submissions', icon: '\ud83d\udcee' },
-  { href: '/admin/testimonials', label: 'Testimonials', icon: '\ud83d\udcac' },
+const sections = [
+  {
+    label: 'PEOPLE',
+    items: [
+      { href: '/admin/students', label: 'Students' },
+      { href: '/admin/tutor-activity', label: 'Tutors / Teachers' },
+      { href: '/admin/roles', label: 'Roles & Permissions' },
+    ],
+  },
+  {
+    label: 'LEARNING',
+    items: [
+      { href: '/admin/courses', label: 'AI & Digital Skills' },
+      { href: '/admin/quizzes', label: 'Quizzes' },
+      { href: '/admin/flashcard-drafts', label: 'Flashcards' },
+      { href: '/admin/study-note-drafts', label: 'Study Notes' },
+      { href: '/admin/past-questions/upload', label: 'Past Questions' },
+    ],
+  },
+  {
+    label: 'SCHOOLS',
+    items: [
+      { href: '/admin/schools', label: 'Schools' },
+      { href: '/admin/submissions', label: 'School Submissions' },
+    ],
+  },
+  {
+    label: 'GAMES',
+    items: [
+      { href: '/admin/boss-battles', label: 'Boss Battles' },
+      { href: '/admin/boss-battle-drafts', label: 'Boss Battle Drafts' },
+      { href: '/admin/daily-challenge', label: 'Daily Challenges' },
+      { href: '/admin/achievements', label: 'Achievements' },
+    ],
+  },
+  {
+    label: 'CONTENT',
+    items: [
+      { href: '/admin/knowledge-assets', label: 'Knowledge Assets' },
+      { href: '/admin/content-engine', label: 'Content Engine' },
+      { href: '/admin/generate', label: 'Generate' },
+      { href: '/admin/generation-jobs', label: 'Generation Jobs' },
+      { href: '/admin/blog', label: 'Blog' },
+      { href: '/admin/blog-drafts', label: 'Blog Drafts' },
+      { href: '/admin/podcasts', label: 'Podcasts' },
+      { href: '/admin/audio', label: 'Audio' },
+      { href: '/admin/asset-images', label: 'Image Engine' },
+    ],
+  },
+  {
+    label: 'LIBRARY',
+    items: [
+      { href: '/admin/library', label: 'E-Library' },
+      { href: '/admin/books', label: 'Books' },
+    ],
+  },
+  {
+    label: 'PUBLISHING',
+    items: [
+      { href: '/admin/social-engine', label: 'Social Engine' },
+      { href: '/admin/channels', label: 'Channels' },
+      { href: '/admin/content-engine/queue', label: 'Content Queue' },
+      { href: '/admin/content-engine/drafts', label: 'Content Drafts' },
+      { href: '/admin/carousel-drafts', label: 'Carousel Drafts' },
+      { href: '/admin/video-scripts', label: 'Video Scripts' },
+      { href: '/admin/social-post-drafts', label: 'Social Post Drafts (old)' },
+      { href: '/admin/quote-loops', label: 'Quote Loops' },
+      { href: '/admin/teaching-loops', label: 'Teaching Loops' },
+      { href: '/admin/meme-loops', label: 'Meme / Joke Loops' },
+      { href: '/admin/lesson-loops', label: '2-Min Lesson Loops' },
+      { href: '/admin/past-question-loops', label: 'Past Question Loops' },
+      { href: '/admin/countdown-loops', label: 'Countdown Loops' },
+    ],
+  },
+  {
+    label: 'SYSTEM',
+    items: [
+      { href: '/admin/feature-unlocks', label: 'Feature Unlocks' },
+      { href: '/admin/submissions', label: 'Submissions' },
+      { href: '/admin/testimonials', label: 'Testimonials' },
+      { href: '/admin/content-engine/upload', label: 'Content Upload' },
+    ],
+  },
 ];
 
 export default function AdminSidebar() {
   const pathname = usePathname();
   const [open, setOpen] = useState(false);
 
-  // Auto-close the mobile drawer whenever the route changes (e.g. after
-  // tapping a nav link), so it doesn't stay open covering the new page.
   useEffect(() => {
     setOpen(false);
   }, [pathname]);
 
+  const isActive = (href) => pathname === href || pathname.startsWith(`${href}/`);
+
   return (
     <>
-      {/* Mobile-only hamburger button */}
       <button
         onClick={() => setOpen(true)}
         aria-label="Open admin menu"
-        className="fixed top-4 left-4 z-50 flex h-11 w-11 items-center justify-center rounded-xl bg-brand-blue text-white shadow-lg lg:hidden"
+        className="fixed left-4 top-4 z-50 flex h-11 w-11 items-center justify-center rounded-xl bg-brand-blue text-white shadow-lg lg:hidden"
       >
         <span className="flex flex-col gap-1" aria-hidden="true">
           <span className="block h-0.5 w-5 rounded-full bg-white" />
@@ -80,7 +114,6 @@ export default function AdminSidebar() {
         </span>
       </button>
 
-      {/* Backdrop, mobile only, closes the drawer on tap outside it */}
       {open && (
         <div
           onClick={() => setOpen(false)}
@@ -88,51 +121,67 @@ export default function AdminSidebar() {
         />
       )}
 
-      {/* The sidebar itself.
-          - Mobile (<lg): fixed drawer, slides in/out via translate-x,
-            capped at a sane width (w-72) instead of the old w-full that
-            covered the entire screen with no way to dismiss it.
-          - Desktop (lg+): back to the original static, always-visible
-            column, taking its place in the parent flex row. */}
       <aside
-        className={`fixed inset-y-0 left-0 z-50 flex h-screen w-72 flex-col overflow-y-auto bg-brand-blue p-6 text-white transition-transform duration-300 ease-in-out
+        className={`fixed inset-y-0 left-0 z-50 flex h-screen w-72 flex-col overflow-y-auto bg-brand-blue p-5 text-white transition-transform duration-300 ease-in-out
           ${open ? 'translate-x-0' : '-translate-x-full'}
           lg:static lg:z-auto lg:w-72 lg:translate-x-0 lg:transition-none`}
       >
-        <div className="flex items-center justify-between">
-          <div className="min-w-0">
-            <img
-              src="https://user24606.cn.imgto.link/public/20260926/1003107782.avif?v=2"
-              alt="Shiney Brain Academy"
-              width="190"
-              height="48"
-              loading="eager"
-              decoding="async"
-              referrerPolicy="no-referrer"
-              className="h-12 w-auto max-w-[190px] object-contain"
-            />
-            <p className="mt-3 text-xs font-semibold uppercase tracking-[0.3em] text-blue-100">Admin Panel</p>
-          </div>
+        <div className="border-b border-white/10 pb-5">
+          <img
+            src="https://user24606.cn.imgto.link/public/20260926/1003107782.avif?v=2"
+            alt="Shiney Brain Academy"
+            width="190"
+            height="48"
+            loading="eager"
+            decoding="async"
+            referrerPolicy="no-referrer"
+            className="h-12 w-auto max-w-[190px] object-contain"
+          />
+          <p className="mt-3 text-xs font-semibold uppercase tracking-[0.3em] text-blue-100">
+            Admin Panel
+          </p>
         </div>
-        <nav className="mt-10 space-y-2 overflow-y-auto">
-          {navItems.map((link) => {
-            const active = pathname === link.href || pathname.startsWith(`${link.href}/`);
-            return (
-              <Link
-                key={link.href}
-                href={link.href}
-                className={`flex items-center justify-between rounded-2xl px-4 py-3 text-sm font-semibold transition ${
-                  active ? 'bg-white text-brand-blue' : 'text-white hover:bg-white/10'
-                }`}
-              >
-                <span>{link.label}</span>
-                {active ? <span className="h-2 w-2 rounded-full bg-brand-yellow" /> : null}
-              </Link>
-            );
-          })}
+
+        <nav className="mt-5 flex-1 space-y-6 overflow-y-auto pr-1">
+          <Link
+            href="/admin/dashboard"
+            className={`flex items-center justify-between rounded-xl px-4 py-3 text-sm font-bold transition
+              ${isActive('/admin/dashboard') ? 'bg-white text-brand-blue' : 'text-white hover:bg-white/10'}`}
+          >
+            <span>Overview</span>
+            {isActive('/admin/dashboard') && <span className="h-2 w-2 rounded-full bg-brand-yellow" />}
+          </Link>
+
+          {sections.map((section) => (
+            <div key={section.label}>
+              <p className="mb-2 px-4 text-[10px] font-extrabold uppercase tracking-[0.24em] text-blue-200">
+                {section.label}
+              </p>
+              <div className="space-y-1">
+                {section.items.map((item) => {
+                  const active = isActive(item.href);
+                  return (
+                    <Link
+                      key={item.href}
+                      href={item.href}
+                      className={`flex items-center justify-between rounded-xl px-4 py-2.5 text-sm font-medium transition
+                        ${active ? 'bg-white text-brand-blue' : 'text-white/90 hover:bg-white/10 hover:text-white'}`}
+                    >
+                      <span>{item.label}</span>
+                      {active && <span className="h-1.5 w-1.5 rounded-full bg-brand-yellow" />}
+                    </Link>
+                  );
+                })}
+              </div>
+            </div>
+          ))}
         </nav>
-        <div className="mt-auto space-y-4 pt-4">
-          <Link href="/" className="block rounded-2xl border border-white/20 px-4 py-3 text-sm font-semibold hover:bg-white/10">
+
+        <div className="space-y-3 border-t border-white/10 pt-4">
+          <Link
+            href="/"
+            className="block rounded-xl border border-white/20 px-4 py-3 text-sm font-semibold hover:bg-white/10"
+          >
             View Website
           </Link>
           <LogoutButton redirectTo="/admin/login" />
@@ -141,4 +190,3 @@ export default function AdminSidebar() {
     </>
   );
 }
-
