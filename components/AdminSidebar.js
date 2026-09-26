@@ -80,8 +80,11 @@ const sections = [
     ],
   },
   {
-    label: 'SYSTEM',
+    label: 'OTHERS',
     items: [
+      { href: '/admin/landing/coupons', label: 'Landing Coupons' },
+      { href: '/admin/landing/testimonials', label: 'Landing Testimonials' },
+      { href: '/jamb-playbook', label: 'Edit Landing Page' },
       { href: '/admin/feature-unlocks', label: 'Feature Unlocks' },
       { href: '/admin/submissions', label: 'Submissions' },
       { href: '/admin/testimonials', label: 'Testimonials' },
