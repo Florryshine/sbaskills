@@ -8,15 +8,15 @@
   "background_color": "#ffffff",
   "icons": [
     {
-      "src": "https://user24606.cn.imgto.link/public/20260926/1003107782.avif",
+      "src": "https://user24606.cn.imgto.link/public/20260926/1003107782.avif?v=2",
       "sizes": "192x192",
-      "type": "image/png",
+      "type": "image/avif",
       "purpose": "any maskable"
     },
     {
-      "src": "https://user24606.cn.imgto.link/public/20260926/1003107782.avif",
+      "src": "https://user24606.cn.imgto.link/public/20260926/1003107782.avif?v=2",
       "sizes": "512x512",
-      "type": "image/png",
+      "type": "image/avif",
       "purpose": "any maskable"
     }
   ]
