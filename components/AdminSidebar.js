@@ -95,7 +95,13 @@ const sections = [
 
 export default function AdminSidebar() {
   const pathname = usePathname();
-  const [open, setOpen] = useState(false);\n  const [expanded, setExpanded] = useState(() => {\n    const activeSection = sections.find((section) =>\n      section.items.some((item) => pathname === item.href || pathname.startsWith(`${item.href}/`))\n    );\n    return activeSection?.label || null;\n  });
+  const [open, setOpen] = useState(false);
+  const [expanded, setExpanded] = useState(() => {
+    const activeSection = sections.find((section) =>
+      section.items.some((item) => pathname === item.href || pathname.startsWith(`${item.href}/`))
+    );
+    return activeSection?.label || null;
+  });
 
   useEffect(() => {
     setOpen(false);
