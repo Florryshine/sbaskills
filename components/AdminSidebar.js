@@ -67,14 +67,13 @@ export default function AdminSidebar() {
 
   return (
     <>
-      {/* Mobile-only hamburger button â€” was completely missing before, so
-          there was no way to open/close the sidebar on small screens. */}
+      {/* Mobile-only hamburger button */}
       <button
         onClick={() => setOpen(true)}
         aria-label="Open admin menu"
         className="fixed top-4 left-4 z-50 flex h-11 w-11 items-center justify-center rounded-xl bg-brand-blue text-white shadow-lg lg:hidden"
       >
-        <span className="text-xl leading-none">\u2630</span>
+        <span className="text-xl leading-none">☰</span>
       </button>
 
       {/* Backdrop, mobile only, closes the drawer on tap outside it */}
