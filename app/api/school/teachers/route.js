@@ -9,7 +9,7 @@ export async function GET(request) {
   const schoolSlug = searchParams.get('school');
   if (!schoolSlug) return NextResponse.json({ error: 'Missing school.' }, { status: 400 });
 
-  const { supabase, school, error } = await requireSchoolStaff(schoolSlug);
+  const { supabase, profile, school, error } = await requireSchoolStaff(schoolSlug);
   if (error) return NextResponse.json({ error: error.message }, { status: error.status });
 
   const { data, error: fetchError } = await supabase
@@ -37,6 +37,7 @@ export async function PATCH(request) {
 
   const { supabase, school, error } = await requireSchoolStaff(schoolSlug);
   if (error) return NextResponse.json({ error: error.message }, { status: error.status });
+  if (!['principal', 'admin'].includes(profile.role)) return NextResponse.json({ error: 'Only the principal or platform admin can assign teacher classes.' }, { status: 403 });
 
   const { data, error: updateError } = await supabase
     .from('profiles')
