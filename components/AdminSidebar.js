@@ -97,9 +97,13 @@ export default function AdminSidebar() {
           lg:static lg:z-auto lg:w-72 lg:translate-x-0 lg:transition-none`}
       >
         <div className="flex items-center justify-between">
-          <div>
-            <p className="text-sm font-semibold uppercase tracking-[0.3em] text-blue-100">Admin Panel</p>
-            <h2 className="mt-2 text-2xl font-bold">Shiney Brain Academy</h2>
+          <div className="min-w-0">
+            <img
+              src="https://user24606.cn.imgto.link/public/20260926/1003107782.avif"
+              alt="Shiney Brain Academy"
+              className="h-12 w-auto max-w-[190px] object-contain"
+            />
+            <p className="mt-3 text-xs font-semibold uppercase tracking-[0.3em] text-blue-100">Admin Panel</p>
           </div>
           {/* Close button, mobile only */}
           <button
