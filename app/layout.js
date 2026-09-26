@@ -3,10 +3,16 @@ import Script from 'next/script';
 import { UnlockSystemProvider } from '@/context/UnlockSystemContext';
 import NotificationContainer from '@/components/NotificationContainer';
 
+const SBA_LOGO = 'https://user24606.cn.imgto.link/public/20260926/1003107782.avif';
+
 export const metadata = {
   metadataBase: new URL('https://shineybrainacademy.vercel.app'),
   title: 'Shiney Brain Academy',
   description: 'Where Champions Are Made – JAMB, Tech Skills, and Career Development for Nigerian students.',
+  icons: {
+    icon: SBA_LOGO,
+    apple: SBA_LOGO,
+  },
 };
 
 export default function RootLayout({ children }) {
@@ -17,9 +23,8 @@ export default function RootLayout({ children }) {
         <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
         <meta name="theme-color" content="#1a73e8" />
         <link rel="manifest" href="/manifest.json" />
-        <link rel="icon" href="/favicon.ico" sizes="any" />
-        <link rel="icon" href="/logo.png" type="image/png" />
-        <link rel="apple-touch-icon" href="/logo.png" />
+        <link rel="icon" href={SBA_LOGO} type="image/avif" />
+        <link rel="apple-touch-icon" href={SBA_LOGO} />
       </head>
       <body>
         <UnlockSystemProvider>
