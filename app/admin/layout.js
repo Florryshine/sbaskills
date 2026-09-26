@@ -1,5 +1,4 @@
 import AdminSidebar from '@/components/AdminSidebar';
-import AdminNavbar from '@/components/AdminNavbar';
 
 export default function AdminLayout({ children }) {
   return (
@@ -7,7 +6,6 @@ export default function AdminLayout({ children }) {
       <AdminSidebar />
 
       <div className="flex min-h-screen min-w-0 flex-1 flex-col pt-20 lg:pt-0">
-        <AdminNavbar />
         <main className="flex-1 p-4 sm:p-6 lg:p-8">
           <div className="mx-auto w-full max-w-[1600px]">
             {children}
