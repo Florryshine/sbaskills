@@ -73,7 +73,11 @@ export default function AdminSidebar() {
         aria-label="Open admin menu"
         className="fixed top-4 left-4 z-50 flex h-11 w-11 items-center justify-center rounded-xl bg-brand-blue text-white shadow-lg lg:hidden"
       >
-        <span className="text-xl leading-none">☰</span>
+        <span className="flex flex-col gap-1" aria-hidden="true">
+          <span className="block h-0.5 w-5 rounded-full bg-white" />
+          <span className="block h-0.5 w-5 rounded-full bg-white" />
+          <span className="block h-0.5 w-5 rounded-full bg-white" />
+        </span>
       </button>
 
       {/* Backdrop, mobile only, closes the drawer on tap outside it */}
