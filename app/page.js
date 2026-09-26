@@ -6,52 +6,50 @@ import { createServerClient } from '@/lib/supabase-server';
 const stats = [
   { number: '1,000+', label: 'Students' },
   { number: '20+', label: 'Courses' },
-  { number: '6', label: 'Skill Categories' },
+  { number: '5', label: 'Learning Worlds' },
   { number: '100%', label: 'Flexible Learning' },
 ];
 
 const categories = [
   {
     emoji: '🎓',
-    title: 'JAMB & Post-UTME',
-    desc: 'Structured exam prep to help you score high and gain admission.',
+    title: 'JAMB',
+    desc: 'Your focused JAMB world: CBT practice, past questions, study tools and exam preparation.',
+    href: '/jamb',
     color: 'bg-blue-50 border-blue-100',
     accent: 'text-blue-700',
   },
   {
-    emoji: '💻',
-    title: 'Tech Skills',
-    desc: 'Coding, web dev, app development, data analysis and more.',
+    emoji: '📚',
+    title: 'WAEC & NECO',
+    desc: 'Prepare for WAEC and NECO with focused revision, past questions and study resources.',
+    href: '/waec-neco',
     color: 'bg-yellow-50 border-yellow-100',
     accent: 'text-yellow-700',
   },
   {
-    emoji: '🎨',
-    title: 'Graphics & Video Editing',
-    desc: 'Design, UI/UX, content creation and digital creative skills.',
+    emoji: '🎯',
+    title: 'POST-UTME',
+    desc: 'Prepare for university screening tests with targeted practice and admission-focused tools.',
+    href: '/post-utme',
     color: 'bg-pink-50 border-pink-100',
     accent: 'text-pink-700',
   },
   {
-    emoji: '💼',
-    title: 'Business & Freelancing',
-    desc: 'Sales, e-commerce, personal branding and entrepreneurship.',
-    color: 'bg-green-50 border-green-100',
-    accent: 'text-green-700',
-  },
-  {
-    emoji: '🚀',
-    title: 'Career Development',
-    desc: 'CV writing, interview prep, LinkedIn and remote job skills.',
+    emoji: '🎓',
+    title: 'UNIVERSITY',
+    desc: 'Tools, learning resources and skills designed for life beyond admission.',
+    href: '/university',
     color: 'bg-purple-50 border-purple-100',
     accent: 'text-purple-700',
   },
   {
-    emoji: '🧠',
-    title: 'Personal Growth',
-    desc: 'Leadership, confidence, financial literacy and productivity.',
-    color: 'bg-orange-50 border-orange-100',
-    accent: 'text-orange-700',
+    emoji: '🤖',
+    title: 'AI & SKILLS',
+    desc: 'Build practical AI, technology, creative, business and career skills.',
+    href: '/ai-skills',
+    color: 'bg-green-50 border-green-100',
+    accent: 'text-green-700',
   },
 ];
 
@@ -140,7 +138,7 @@ export default async function HomePage() {
               <span className="text-brand-yellow">Academic Excellence</span>
             </h1>
             <p className="mt-6 max-w-xl text-lg leading-8 text-blue-100">
-              Nigeria's learning platform for exam prep, tech skills, business, career development and personal growth — all in one place.
+              A learning platform organized around the goal you are working on — from JAMB and WAEC to university, AI and practical skills.
             </p>
             <div className="mt-10 flex flex-wrap gap-4">
               <a
@@ -180,17 +178,17 @@ export default async function HomePage() {
               What We Teach
             </p>
             <h2 className="mt-3 text-3xl font-extrabold text-brand-blue sm:text-4xl">
-              One Platform. Every Skill You Need.
+              Choose Your Learning World
             </h2>
             <p className="mx-auto mt-4 max-w-2xl text-slate-500">
-              From JAMB prep to tech skills, business and personal development — Shiney Brain Academy covers your full journey.
+              Start where you are. Each world is built around a different student goal, while the same SBA learning engine powers everything behind the scenes.
             </p>
           </div>
           <div className="mt-12 grid gap-6 sm:grid-cols-2 lg:grid-cols-3">
             {categories.map((cat) => (
               <a
                 key={cat.title}
-                href="/courses"
+                href={cat.href}
                 className={`group rounded-2xl border p-6 transition hover:shadow-md hover:-translate-y-1 ${cat.color}`}
               >
                 <span className="text-4xl">{cat.emoji}</span>

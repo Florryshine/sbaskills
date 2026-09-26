@@ -4,6 +4,7 @@ import { useEffect, useState } from 'react';
 import { createBrowserClient } from '@/lib/supabase';
 import { useRouter } from 'next/navigation';
 import Link from 'next/link';
+import { getUniverseLabel } from '@/lib/universes';
 
 export default function AdminCoursesPage() {
   const [courses, setCourses] = useState([]);
@@ -98,11 +99,16 @@ export default function AdminCoursesPage() {
                   <p className="mt-0.5 text-sm font-semibold text-brand-blue">
                     {course.price === 0 ? 'Free' : `₦${course.price?.toLocaleString()}`}
                   </p>
-                  <p className="text-xs text-slate-400 mt-0.5">
-                    {new Date(course.created_at).toLocaleDateString('en-NG', {
-                      day: 'numeric', month: 'short', year: 'numeric'
-                    })}
-                  </p>
+                  <div className="mt-1 flex flex-wrap items-center gap-2">
+                    <span className="rounded-full bg-blue-50 px-2.5 py-1 text-[11px] font-bold text-blue-700">
+                      {getUniverseLabel(course.universe)}
+                    </span>
+                    <span className="text-xs text-slate-400">
+                      {new Date(course.created_at).toLocaleDateString('en-NG', {
+                        day: 'numeric', month: 'short', year: 'numeric'
+                      })}
+                    </span>
+                  </div>
                 </div>
 
                 <span className={`hidden shrink-0 rounded-full px-3 py-1 

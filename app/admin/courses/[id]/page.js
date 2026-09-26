@@ -5,6 +5,7 @@ import { createBrowserClient } from '@/lib/supabase';
 import { useRouter, useParams } from 'next/navigation';
 import Link from 'next/link';
 import BiteSizedLessonEditor from '@/components/BiteSizedLessonEditor';
+import { COURSE_UNIVERSES } from '@/lib/universes';
 
 export default function AdminCourseEditorPage() {
   const [course, setCourse] = useState(null);
@@ -24,6 +25,7 @@ export default function AdminCourseEditorPage() {
     thumbnail_url: '',
     color: '#1a73e8',
     is_published: false,
+    universe: 'GENERAL',
   });
   const router = useRouter();
   const params = useParams();
@@ -58,6 +60,7 @@ export default function AdminCourseEditorPage() {
             thumbnail_url: courseData.thumbnail_url || '',
             color: courseData.color || '#1a73e8',
             is_published: courseData.is_published || false,
+            universe: courseData.universe || 'GENERAL',
           });
         }
 
@@ -84,6 +87,7 @@ export default function AdminCourseEditorPage() {
           thumbnail_url: '',
           color: '#1a73e8',
           is_published: false,
+          universe: 'GENERAL',
         });
         setLessons([]);
       }
@@ -220,6 +224,7 @@ export default function AdminCourseEditorPage() {
         thumbnail_url: formData.thumbnail_url,
         color: formData.color,
         is_published: formData.is_published,
+        universe: formData.universe,
       };
       console.log(isNew ? 'Inserting with:' : 'Updating with:', courseData);
 
@@ -262,6 +267,7 @@ export default function AdminCourseEditorPage() {
         thumbnail_url: updatedCourse.thumbnail_url || '',
         color: updatedCourse.color || '#1a73e8',
         is_published: updatedCourse.is_published || false,
+        universe: updatedCourse.universe || 'GENERAL',
       });
 
       alert(isNew ? '✅ Course created successfully!' : '✅ Course updated successfully!');
@@ -386,6 +392,19 @@ export default function AdminCourseEditorPage() {
               onChange={e => setFormData({ ...formData, price: e.target.value })}
               className="w-full rounded-xl border border-slate-200 px-4 py-2"
             />
+          </div>
+          <div>
+            <label className="block text-sm font-semibold text-slate-700 mb-1">Learning World</label>
+            <select
+              value={formData.universe}
+              onChange={e => setFormData({ ...formData, universe: e.target.value })}
+              className="w-full rounded-xl border border-slate-200 px-4 py-2"
+            >
+              {COURSE_UNIVERSES.map((universe) => (
+                <option key={universe.key} value={universe.key}>{universe.label}</option>
+              ))}
+            </select>
+            <p className="mt-1 text-xs text-slate-400">Controls which student world this course appears in.</p>
           </div>
           <div className="sm:col-span-2">
             <label className="block text-sm font-semibold text-slate-700 mb-1">Description</label>
