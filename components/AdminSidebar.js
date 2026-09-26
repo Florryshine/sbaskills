@@ -99,20 +99,17 @@ export default function AdminSidebar() {
         <div className="flex items-center justify-between">
           <div className="min-w-0">
             <img
-              src="https://user24606.cn.imgto.link/public/20260926/1003107782.avif"
+              src="https://user24606.cn.imgto.link/public/20260926/1003107782.avif?v=2"
               alt="Shiney Brain Academy"
+              width="190"
+              height="48"
+              loading="eager"
+              decoding="async"
+              referrerPolicy="no-referrer"
               className="h-12 w-auto max-w-[190px] object-contain"
             />
             <p className="mt-3 text-xs font-semibold uppercase tracking-[0.3em] text-blue-100">Admin Panel</p>
           </div>
-          {/* Close button, mobile only */}
-          <button
-            onClick={() => setOpen(false)}
-            aria-label="Close admin menu"
-            className="rounded-lg p-2 text-white/80 hover:bg-white/10 lg:hidden"
-          >
-            \u2715
-          </button>
         </div>
         <nav className="mt-10 space-y-2 overflow-y-auto">
           {navItems.map((link) => {
