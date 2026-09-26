@@ -56,8 +56,13 @@ export default function Navbar() {
         {/* SBA Logo */}
         <Link href="/" className="flex items-center gap-3" aria-label="Shiney Brain Academy home">
           <img
-            src="https://user24606.cn.imgto.link/public/20260926/1003107782.avif"
+            src="https://user24606.cn.imgto.link/public/20260926/1003107782.avif?v=2"
             alt="Shiney Brain Academy"
+            width="190"
+            height="44"
+            loading="eager"
+            decoding="async"
+            referrerPolicy="no-referrer"
             className="h-11 w-auto max-w-[190px] object-contain"
           />
           <span className="sr-only">Shiney Brain Academy</span>
