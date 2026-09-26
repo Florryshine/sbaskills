@@ -16,6 +16,7 @@ export async function GET(request) {
 async function writeContext(slug) {
   const result = await requireSchoolStaff(slug);
   if (result.error) return { response: NextResponse.json({ error: result.error.message }, { status: result.error.status }) };
+  if (!['principal', 'admin'].includes(result.profile.role)) return { response: NextResponse.json({ error: 'Only the principal or platform admin can edit the timetable.' }, { status: 403 }) };
   return result;
 }
 function validSlot(body) {
