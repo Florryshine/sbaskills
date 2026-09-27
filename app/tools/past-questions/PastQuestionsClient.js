@@ -58,6 +58,8 @@ export default function PastQuestionsClient() {
     if (selectedSubject) query = query.eq('subject', selectedSubject);
     if (selectedYear) query = query.eq('year', parseInt(selectedYear));
     if (selectedExamType) query = query.eq('exam_type', selectedExamType);
+    const topicParam = searchParams.get('topic');
+    if (topicParam) query = query.eq('topic', topicParam);
 
     const { data, error } = await query
       .order('year', { ascending: false })
