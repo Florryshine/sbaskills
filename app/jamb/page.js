@@ -1,9 +1,10 @@
-import UniversePage from '@/components/UniversePage';
+import JAMBUniverse from '@/components/JAMBUniverse';
 
 export const metadata = {
-  title: 'JAMB | Shiney Brain Academy',
+  title: 'JAMB 2027 | Shiney Brain Academy',
+  description: 'Your JAMB preparation command centre: study, practise, test yourself and track your preparation with Shiney Brain Academy.',
 };
 
 export default function Page() {
-  return <UniversePage slug="JAMB" />;
+  return <JAMBUniverse />;
 }
