@@ -109,7 +109,7 @@ export default async function WAECNECOTopicPage({ params }) {
             <p className="mt-2 text-sm text-slate-500">Practise available WAEC and NECO questions for this topic.</p>
             <span className="mt-4 inline-block text-sm font-extrabold text-brand-blue">Practise →</span>
           </Link>
-          <div className="rounded-2xl border border-dashed border-slate-300 bg-white p-5"><span className="text-3xl">✍️</span><h3 className="mt-3 font-extrabold">Theory</h3><p className="mt-2 text-sm text-slate-500">Coming in Build 8D.</p></div>
+          <Link href={`/waec-neco/study/${encodeURIComponent(subject)}/${encodeURIComponent(topic)}/theory`} className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm hover:border-brand-blue"><span className="text-3xl">✍️</span><h3 className="mt-3 font-extrabold">Theory</h3><p className="mt-2 text-sm text-slate-500">Write your answer, then reveal the marking guide.</p><span className="mt-4 inline-block text-sm font-extrabold text-brand-blue">Practise →</span></Link>
           <div className="rounded-2xl border border-dashed border-slate-300 bg-white p-5"><span className="text-3xl">🧪</span><h3 className="mt-3 font-extrabold">Practical</h3><p className="mt-2 text-sm text-slate-500">Coming in Build 8E.</p></div>
         </section>
       </div>
