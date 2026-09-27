@@ -21,7 +21,8 @@ const sections = [
     title: 'Build your JAMB knowledge',
     description: 'Use the learning resources already inside SBA to understand, revise and remember.',
     items: [
-      { icon: '📚', title: 'Courses', text: 'Learn through structured JAMB lessons and courses.', href: '/courses', action: 'Browse courses' },
+      { icon: '📚', title: 'Subjects & Topics', text: 'Study JAMB subjects and practise by topic.', href: '/jamb/study', action: 'Choose a subject' },
+      { icon: '🎓', title: 'Courses', text: 'Learn through structured JAMB lessons and courses.', href: '/courses', action: 'Browse courses' },
       { icon: '🧠', title: 'Flashcards', text: 'Use quick-recall cards when you need fast revision.', href: '/flashcards', action: 'Study cards' },
       { icon: '📖', title: 'Library', text: 'Explore the SBA learning library and study resources.', href: '/library', action: 'Open library' },
       { icon: '🤖', title: 'JAMB AI Playbook', text: 'Use the JAMB-focused AI study system built by SBA.', href: '/jamb-playbook', action: 'Explore playbook' },
