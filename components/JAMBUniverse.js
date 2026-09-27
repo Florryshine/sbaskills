@@ -36,7 +36,7 @@ const sections = [
       { icon: '🧮', title: 'JAMB Aggregate', text: 'Work out your aggregate using your UTME and O’Level results.', href: '/tools/jamb-aggregate', action: 'Calculate' },
       { icon: '🎯', title: 'Subject Combination', text: 'Check the subjects required for your intended course.', href: '/tools/subject-combination', action: 'Check subjects' },
       { icon: '🏆', title: 'Leaderboard', text: 'See how you are doing alongside other SBA learners.', href: '/leaderboard', action: 'View leaderboard' },
-      { icon: '📊', title: 'My Dashboard', text: 'Track your learning, points, streak and progress.', href: '/dashboard', action: 'Open dashboard' },
+      { icon: '📊', title: 'JAMB Progress', text: 'See your practice accuracy, weak topics and what to work on next.', href: '/jamb/progress', action: 'View progress' },
     ],
   },
 ];
@@ -83,7 +83,7 @@ export default async function JAMBUniverse() {
               <Link href="/jamb/practice" className="rounded-xl bg-brand-yellow px-5 py-3 text-sm font-extrabold text-brand-dark shadow-sm hover:opacity-90">
                 📝 Start practising
               </Link>
-              <Link href="/dashboard" className="rounded-xl border border-white/25 bg-white/10 px-5 py-3 text-sm font-extrabold text-white hover:bg-white/15">
+              <Link href="/jamb/progress" className="rounded-xl border border-white/25 bg-white/10 px-5 py-3 text-sm font-extrabold text-white hover:bg-white/15">
                 📊 My progress
               </Link>
             </div>
