@@ -1,6 +1,7 @@
 'use client';
 
 import { useState, useEffect } from 'react';
+import { useSearchParams } from 'next/navigation';
 import { createBrowserClient } from '@/lib/supabase';
 
 export default function PastQuestionsClient() {
@@ -15,9 +16,17 @@ export default function PastQuestionsClient() {
   const [examTypes, setExamTypes] = useState([]);
   const [showAnswer, setShowAnswer] = useState({});
   const [totalCount, setTotalCount] = useState(0);
+  const searchParams = useSearchParams();
   const supabase = createBrowserClient();
 
   useEffect(() => {
+    const exam = searchParams.get('exam_type') || searchParams.get('exam');
+    const subject = searchParams.get('subject');
+    const topic = searchParams.get('topic');
+    if (exam) setSelectedExamType(exam);
+    if (subject) setSelectedSubject(subject);
+    if (topic) setSearchTerm(topic);
+
     async function fetchFilters() {
       const { data: subjectData } = await supabase
         .from('past_questions')
@@ -36,7 +45,7 @@ export default function PastQuestionsClient() {
       if (examData) setExamTypes([...new Set(examData.map(e => e.exam_type).filter(Boolean))]);
     }
     fetchFilters();
-  }, []);
+  }, [searchParams]);
 
   const searchQuestions = async () => {
     setLoading(true);
@@ -65,6 +74,12 @@ export default function PastQuestionsClient() {
     setShowAnswer({});
     setLoading(false);
   };
+
+  useEffect(() => {
+    if (searchParams.get('exam_type') || searchParams.get('exam') || searchParams.get('subject') || searchParams.get('topic')) {
+      searchQuestions();
+    }
+  }, [subjects.length, years.length, examTypes.length]);
 
   const toggleAnswer = (id) => {
     setShowAnswer(prev => ({ ...prev, [id]: !prev[id] }));
