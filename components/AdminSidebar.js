@@ -22,6 +22,7 @@ const sections = [
       { href: '/admin/quiz-drafts', label: 'Quiz Drafts' },
       { href: '/admin/flashcard-drafts', label: 'Flashcards' },
       { href: '/admin/study-note-drafts', label: 'Study Notes' },
+      { href: '/admin/theory-questions', label: 'Theory Questions' },
       { href: '/admin/past-questions/upload', label: 'Past Questions' },
       { href: '/admin/submissions', label: 'Assignment Submissions' },
     ],
