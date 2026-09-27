@@ -32,7 +32,7 @@ const sections = [
     title: 'Prepare for more than objective questions',
     description: 'WAEC and NECO preparation needs objective practice, theory and practical readiness.',
     items: [
-      { icon: '✍️', title: 'Theory', text: 'Theory practice is coming in Build 8D.', href: '#coming-next', action: 'Coming next' },
+      { icon: '✍️', title: 'Theory', text: 'Practise WAEC and NECO theory questions with marking guides.', href: '/waec-neco/theory', action: 'Practise theory' },
       { icon: '🧪', title: 'Practical', text: 'Practical preparation is coming in Build 8E.', href: '#coming-next', action: 'Coming next' },
       { icon: '📊', title: 'My Progress', text: 'Track your preparation as the WAEC & NECO system grows.', href: '/dashboard', action: 'View dashboard' },
       { icon: '🎯', title: 'Next Move', text: 'Your personalised weak-topic recommendations arrive in Build 8F.', href: '#coming-next', action: 'Coming next' },
