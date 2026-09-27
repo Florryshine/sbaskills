@@ -39,7 +39,7 @@ export default async function JAMBSubjectPage({ params }) {
       <div className="mx-auto max-w-7xl px-4 py-12 sm:px-6 lg:px-8">
         <div className="mb-8 flex flex-wrap gap-3">
           <Link
-            href={`/tools/past-questions?exam=JAMB&subject=${encodeURIComponent(subject)}`}
+            href={`/jamb/practice?subject=${encodeURIComponent(subject)}`}
             className="rounded-xl bg-brand-yellow px-5 py-3 text-sm font-extrabold text-brand-dark"
           >
             📝 Practise all {subject} questions
@@ -65,7 +65,7 @@ export default async function JAMBSubjectPage({ params }) {
               {topics.map((topic) => (
                 <Link
                   key={topic}
-                  href={`/tools/past-questions?exam=JAMB&subject=${encodeURIComponent(subject)}&topic=${encodeURIComponent(topic)}`}
+                  href={`/jamb/practice?subject=${encodeURIComponent(subject)}&topic=${encodeURIComponent(topic)}`}
                   className="group rounded-2xl border border-slate-200 bg-white p-5 shadow-sm transition hover:-translate-y-0.5 hover:border-brand-blue hover:shadow-md"
                 >
                   <p className="font-extrabold text-slate-900">{topic}</p>
