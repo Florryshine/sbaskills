@@ -10,7 +10,7 @@ const sections = [
     title: 'Turn study into questions',
     description: 'Train with the question bank, quizzes and daily challenges instead of only reading.',
     items: [
-      { icon: '📝', title: 'Past Questions', text: 'Search JAMB questions by subject, topic and year.', href: '/tools/past-questions', action: 'Practice now' },
+      { icon: '📝', title: 'Past Questions', text: 'Search JAMB questions by subject, topic and year.', href: '/jamb/practice', action: 'Practice now' },
       { icon: '⚡', title: 'Daily Challenge', text: 'Take the daily timed challenge and keep your streak alive.', href: '/challenge', action: 'Take challenge' },
       { icon: '🎮', title: 'Revision Games', text: 'Revise topics through quick interactive games.', href: '/games', action: 'Play games' },
       { icon: '🧠', title: 'Quizzes', text: 'Test what you know with published SBA quizzes.', href: '/quizzes', action: 'View quizzes' },
@@ -80,7 +80,7 @@ export default async function JAMBUniverse() {
             </p>
 
             <div className="mt-8 flex flex-wrap gap-3">
-              <Link href="/tools/past-questions" className="rounded-xl bg-brand-yellow px-5 py-3 text-sm font-extrabold text-brand-dark shadow-sm hover:opacity-90">
+              <Link href="/jamb/practice" className="rounded-xl bg-brand-yellow px-5 py-3 text-sm font-extrabold text-brand-dark shadow-sm hover:opacity-90">
                 📝 Start practising
               </Link>
               <Link href="/dashboard" className="rounded-xl border border-white/25 bg-white/10 px-5 py-3 text-sm font-extrabold text-white hover:bg-white/15">
@@ -172,7 +172,7 @@ export default async function JAMBUniverse() {
               Your score matters. Your subject combination matters. Your admission target matters. SBA is bringing those pieces into one preparation journey.
             </p>
             <div className="mt-7 flex flex-wrap gap-3">
-              <Link href="/tools/past-questions" className="rounded-xl bg-brand-yellow px-5 py-3 text-sm font-extrabold text-brand-dark">
+              <Link href="/jamb/practice" className="rounded-xl bg-brand-yellow px-5 py-3 text-sm font-extrabold text-brand-dark">
                 Start with Past Questions
               </Link>
               <Link href="/dashboard" className="rounded-xl border border-white/20 bg-white/10 px-5 py-3 text-sm font-extrabold text-white">
