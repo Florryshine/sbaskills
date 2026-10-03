@@ -9,6 +9,9 @@ const nextConfig = withPWA({
   reactStrictMode: true,
   swcMinify: true,
   images: {
+    // Images are already hosted on Cloudinary/Supabase. Disable Vercel's
+    // Image Optimization to prevent Image Optimization Transformations usage.
+    unoptimized: true,
     remotePatterns: [
       { protocol: 'https', hostname: 'res.cloudinary.com' },
       { protocol: 'https', hostname: '*.supabase.co' },
