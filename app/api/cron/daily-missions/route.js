@@ -36,7 +36,7 @@ export async function GET(request) {
         curriculumId: curriculum.id,
         subjects: student.interests || ['English', 'Mathematics', 'Biology'],
       });
-      if (mission?.id) {
+      if (mission?.created) {
         await createDailyMissionNotification(student.id, mission.id);
         generated++;
       } else skipped++;
@@ -46,5 +46,10 @@ export async function GET(request) {
     }
   }
 
-  return NextResponse.json({ success: true, date: today, generated, skipped });
+  return NextResponse.json({
+    success: true,
+    date: new Date().toISOString().slice(0, 10),
+    generated,
+    skipped,
+  });
 }
