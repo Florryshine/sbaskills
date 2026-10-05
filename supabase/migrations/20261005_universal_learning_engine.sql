@@ -190,3 +190,27 @@ for each row execute function public.set_universal_learning_updated_at();
 drop trigger if exists trg_curriculum_topics_updated_at on public.curriculum_topics;
 create trigger trg_curriculum_topics_updated_at before update on public.curriculum_topics
 for each row execute function public.set_universal_learning_updated_at();
+
+
+-- Admin upload staging: syllabus files can be uploaded as TXT/CSV/XLSX/DOCX/PDF
+-- and parsed later. No syllabus content is required now.
+create table if not exists public.curriculum_source_documents (
+  id uuid primary key default gen_random_uuid(),
+  curriculum_id uuid not null references public.curricula(id) on delete cascade,
+  file_name text not null,
+  file_type text not null,
+  storage_path text,
+  extracted_text text,
+  status text not null default 'uploaded',
+  notes text,
+  uploaded_by uuid references auth.users(id) on delete set null,
+  created_at timestamptz not null default now(),
+  updated_at timestamptz not null default now(),
+  constraint curriculum_source_documents_status_check check (status in ('uploaded','processing','parsed','failed','archived'))
+);
+create index if not exists idx_curriculum_source_documents_curriculum on public.curriculum_source_documents(curriculum_id);
+alter table public.curriculum_source_documents enable row level security;
+drop policy if exists "Admins manage curriculum source documents" on public.curriculum_source_documents;
+create policy "Admins manage curriculum source documents" on public.curriculum_source_documents for all to authenticated
+using (exists (select 1 from public.profiles p where p.id = auth.uid() and p.role = 'admin'))
+with check (exists (select 1 from public.profiles p where p.id = auth.uid() and p.role = 'admin'));
