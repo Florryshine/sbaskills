@@ -28,6 +28,7 @@ export default function StudentCommandCenter() {
   const [points, setPoints] = useState(0);
   const [streak, setStreak] = useState(0);
   const [loading, setLoading] = useState(true);
+  const [mastery, setMastery] = useState(null);
 
   useEffect(() => {
     let active = true;
@@ -51,12 +52,14 @@ export default function StudentCommandCenter() {
         curriculumResult,
         attemptsResult,
         notificationsResult,
+        masteryResult,
       ] = await Promise.all([
         supabase.from('profiles').select('full_name, target_score, target_course, interests').eq('id', userId).maybeSingle(),
         getUserPoints(userId),
         supabase.from('curricula').select('id, code, name, exam_start_date, date_status').eq('code', 'JAMB_UTME_2027').maybeSingle(),
         supabase.from('jamb_practice_attempts').select('id, subject, topic, score, total_questions, weak_topics, completed_at').eq('user_id', userId).order('completed_at', { ascending: false }).limit(20),
         supabase.from('student_notifications').select('id, type, title, body, action_url, created_at, read_at').eq('user_id', userId).order('created_at', { ascending: false }).limit(5),
+        supabase.from('student_progress_summary').select('mastery_percent, topics_total, topics_started, topics_mastered').eq('user_id', userId).eq('curriculum_id', curriculumResult.data?.id || '').maybeSingle(),
       ]);
 
       const curriculum = curriculumResult.data;
@@ -78,6 +81,7 @@ export default function StudentCommandCenter() {
       setStreak(pointsResult.streak_days || 0);
       setAttempts(attemptsResult.data || []);
       setNotifications(notificationsResult.data || []);
+      setMastery(masteryResult.data || null);
       setMission(missionResult.data || null);
       setLoading(false);
     }
@@ -220,7 +224,7 @@ export default function StudentCommandCenter() {
                   <p><span className="font-bold text-green-700">Strongest:</span> {stats.strongest ? `${stats.strongest.subject} (${stats.strongest.accuracy}%)` : 'Not enough data'}</p>
                   <p className="mt-1"><span className="font-bold text-red-700">Weakest:</span> {stats.weakest ? `${stats.weakest.subject} (${stats.weakest.accuracy}%)` : 'Not enough data'}</p>
                 </div>
-                <Link href="/jamb/progress" className="mt-4 inline-block text-sm font-extrabold text-brand-blue">View full progress →</Link>
+                <div className="mt-4 flex flex-wrap gap-3"><Link href="/jamb/progress" className="text-sm font-extrabold text-brand-blue">View full progress →</Link><Link href="/jamb/syllabus-mastery" className="text-sm font-extrabold text-brand-blue">Syllabus mastery →</Link></div>
               </div>
             </div>
           </section>
