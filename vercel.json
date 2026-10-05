@@ -7,10 +7,6 @@
     {
       "path": "/api/content-factory/auto-loop",
       "schedule": "0 5 * * *"
-    },
-    {
-      "path": "/api/cron/daily-missions",
-      "schedule": "30 6 * * *"
     }
   ]
 }
