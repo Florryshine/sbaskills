@@ -207,7 +207,7 @@ export default function StudentCommandCenter() {
                   <div className="rounded-2xl bg-slate-50 p-3"><p className="text-xl font-black">{points}</p><p className="text-xs text-slate-500">XP</p></div>
                   <div className="rounded-2xl bg-slate-50 p-3"><p className="text-xl font-black">{streak}</p><p className="text-xs text-slate-500">day streak</p></div>
                 </div>
-                <div className="mt-4 h-2 rounded-full bg-slate-100"><div className="h-full rounded-full bg-brand-blue" style={{width:`${Math.min(100, level.progressPercent || 0)}%`}} /></div>
+                <div className="mt-4 h-2 rounded-full bg-slate-100"><div className="h-full rounded-full bg-brand-blue" style={{width:`${Math.min(100, level.progressPct || 0)}%`}} /></div>
               </div>
 
               <div className="rounded-3xl border bg-white p-6 shadow-sm">
