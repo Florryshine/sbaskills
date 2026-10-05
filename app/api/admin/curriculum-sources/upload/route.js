@@ -1,12 +1,12 @@
 import { NextResponse } from 'next/server';
-import { createBrowserClient } from '@/lib/supabase';
+import { createServerClient } from '@/lib/supabase-server';
 import { createAdminClient } from '@/lib/supabase-admin';
 
 const BUCKET = 'curriculum-sources';
 const ALLOWED = new Set(['text/plain','text/csv','application/pdf','application/vnd.openxmlformats-officedocument.spreadsheetml.sheet','application/vnd.ms-excel','application/vnd.openxmlformats-officedocument.wordprocessingml.document','application/msword']);
 
 export async function POST(request) {
-  const supabase = createBrowserClient();
+  const supabase = createServerClient();
   const { data: { user } } = await supabase.auth.getUser();
   if (!user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
 
