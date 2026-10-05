@@ -1,7 +1,7 @@
 'use client';
 
-import DashboardWithUnlocks from './DashboardWithUnlocks';
+import StudentCommandCenter from '@/components/StudentCommandCenter';
 
 export default function StudentDashboard() {
-  return <DashboardWithUnlocks />;
+  return <StudentCommandCenter />;
 }
