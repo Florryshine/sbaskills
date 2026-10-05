@@ -10,8 +10,6 @@ export async function GET(request) {
   }
 
   const supabase = createAdminClient();
-  const today = new Date().toISOString().slice(0, 10);
-
   const { data: curriculum } = await supabase
     .from('curricula')
     .select('id, code, exam_type')
@@ -23,7 +21,7 @@ export async function GET(request) {
 
   const { data: students, error } = await supabase
     .from('profiles')
-    .select('id, target_exams, jamb_subjects')
+    .select('id, target_exams, interests')
     .contains('target_exams', ['JAMB'])
     .limit(500);
 
@@ -36,7 +34,7 @@ export async function GET(request) {
       const mission = await generateDailyMissionForStudent({
         userId: student.id,
         curriculumId: curriculum.id,
-        subjects: student.jamb_subjects || ['English', 'Mathematics', 'Biology'],
+        subjects: student.interests || ['English', 'Mathematics', 'Biology'],
       });
       if (mission?.id) {
         await createDailyMissionNotification(student.id, mission.id);
