@@ -142,8 +142,8 @@ export default function StudentCommandCenter() {
   const completedItems = missionItems.filter((item) => item.completed).length;
   const missionProgress = missionItems.length ? Math.round((completedItems / missionItems.length) * 100) : 0;
   const firstItem = missionItems.find((item) => !item.completed) || missionItems[0];
-  const firstHref = firstItem?.subject
-    ? `/jamb/practice?subject=${encodeURIComponent(firstItem.subject)}${firstItem.topic ? `&topic=${encodeURIComponent(firstItem.topic)}` : ''}`
+  const firstHref = firstItem?.id
+    ? `/jamb/practice?item=${encodeURIComponent(firstItem.id)}`
     : '/jamb/practice';
 
   if (loading) {
