@@ -4,6 +4,8 @@ import { createServerClient } from '@/lib/supabase-server';
 import { createAdminClient } from '@/lib/supabase-admin';
 
 export const runtime = 'nodejs';
+export const dynamic = 'force-dynamic';
+export const revalidate = 0;
 
 const IBASS_HOST = 'ibass.jamb.gov.ng';
 const MAX_BYTES = 15 * 1024 * 1024;
@@ -25,6 +27,7 @@ function subjectFromUrl(url) {
 }
 
 export async function POST(request) {
+  try {
   const supabase = createServerClient();
   const { data: { user } } = await supabase.auth.getUser();
   if (!user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
@@ -90,4 +93,8 @@ export async function POST(request) {
     success: true,
     document: { id: result.data.id, subject, source_url: url.toString(), extracted_chars: extractedText.length, status: result.data.status }
   });
+  } catch (error) {
+    console.error('Curriculum source API error:', error);
+    return NextResponse.json({ error: error?.message || 'Internal server error.' }, { status: 500 });
+  }
 }
