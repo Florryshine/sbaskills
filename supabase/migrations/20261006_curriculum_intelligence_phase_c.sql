@@ -54,3 +54,5 @@ create policy "Admins manage curriculum objectives"
     select 1 from public.profiles p
     where p.id = auth.uid() and p.role = 'admin'
   ));
+
+-- IBASS source metadata is intentionally staged; publishing/parsing comes next.
