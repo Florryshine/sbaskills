@@ -55,7 +55,10 @@ export default function NotificationsPage() {
       .update({ read_at: now })
       .eq('id', id)
       .eq('user_id', userId);
-    if (!error) setItems((current) => current.map((item) => item.id === id ? { ...item, read_at: now } : item));
+    if (!error) {
+      setItems((current) => current.map((item) => item.id === id ? { ...item, read_at: now } : item));
+      window.dispatchEvent(new Event('sba-notifications-changed'));
+    }
   }
 
   async function markAllRead() {
@@ -67,7 +70,10 @@ export default function NotificationsPage() {
       .update({ read_at: now })
       .eq('user_id', userId)
       .is('read_at', null);
-    if (!error) setItems((current) => current.map((item) => ({ ...item, read_at: item.read_at || now })));
+    if (!error) {
+      setItems((current) => current.map((item) => ({ ...item, read_at: item.read_at || now })));
+      window.dispatchEvent(new Event('sba-notifications-changed'));
+    }
     setBusy(false);
   }
 
