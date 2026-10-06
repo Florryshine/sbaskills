@@ -281,7 +281,7 @@ export default function StudentCommandCenter() {
             </div>
 
             <div className="rounded-3xl border bg-white p-6 shadow-sm">
-              <div className="flex items-center justify-between"><h2 className="text-xl font-black">Notifications</h2><span>🔔</span></div>
+              <div className="flex items-center justify-between"><h2 className="text-xl font-black">Notifications</h2><Link href="/notifications" className="text-sm font-extrabold text-brand-blue">View all →</Link></div>
               {notifications.length ? (
                 <div className="mt-4 space-y-3">
                   {notifications.slice(0, 3).map((n) => (
