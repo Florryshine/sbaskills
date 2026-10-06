@@ -20,8 +20,8 @@ function validateIbassPdfUrl(value) {
 }
 
 function subjectFromUrl(url) {
-  const name = decodeURIComponent(url.pathname.split('/').pop() || '').replace(/\.pdf$/i, '');
-  return name.replace(/[-_]+/g, ' ').trim();
+  return decodeURIComponent(url.pathname.split('/').pop() || '')
+    .replace(/\.pdf$/i, '').replace(/[-_]+/g, ' ').trim();
 }
 
 export async function POST(request) {
@@ -35,35 +35,21 @@ export async function POST(request) {
   const body = await request.json().catch(() => ({}));
   const curriculumId = String(body.curriculum_id || '');
   const sourceUrl = String(body.source_url || '').trim();
-
-  if (!curriculumId || !sourceUrl) {
-    return NextResponse.json({ error: 'curriculum_id and source_url are required.' }, { status: 400 });
-  }
+  if (!curriculumId || !sourceUrl) return NextResponse.json({ error: 'curriculum_id and source_url are required.' }, { status: 400 });
 
   let url;
-  try {
-    url = validateIbassPdfUrl(sourceUrl);
-  } catch (error) {
-    return NextResponse.json({ error: error.message }, { status: 400 });
-  }
+  try { url = validateIbassPdfUrl(sourceUrl); }
+  catch (error) { return NextResponse.json({ error: error.message }, { status: 400 }); }
 
   const admin = createAdminClient();
-  const { data: curriculum } = await admin.from('curricula').select('id, name, code').eq('id', curriculumId).maybeSingle();
+  const { data: curriculum } = await admin.from('curricula').select('id').eq('id', curriculumId).maybeSingle();
   if (!curriculum) return NextResponse.json({ error: 'Curriculum not found.' }, { status: 404 });
 
-  const response = await fetch(url.toString(), {
-    headers: { Accept: 'application/pdf' },
-    cache: 'no-store',
-  });
-
-  if (!response.ok) {
-    return NextResponse.json({ error: `IBASS returned HTTP ${response.status}.` }, { status: 502 });
-  }
+  const response = await fetch(url.toString(), { headers: { Accept: 'application/pdf' }, cache: 'no-store' });
+  if (!response.ok) return NextResponse.json({ error: `IBASS returned HTTP ${response.status}.` }, { status: 502 });
 
   const buffer = Buffer.from(await response.arrayBuffer());
-  if (!buffer.length || buffer.length > MAX_BYTES) {
-    return NextResponse.json({ error: 'IBASS PDF is empty or larger than 15MB.' }, { status: 400 });
-  }
+  if (!buffer.length || buffer.length > MAX_BYTES) return NextResponse.json({ error: 'IBASS PDF is empty or larger than 15MB.' }, { status: 400 });
 
   let extractedText = '';
   try {
@@ -74,18 +60,11 @@ export async function POST(request) {
   } catch (error) {
     return NextResponse.json({ error: `PDF parsing failed: ${error.message}` }, { status: 422 });
   }
-
-  if (!extractedText) {
-    return NextResponse.json({ error: 'The PDF contained no extractable text.' }, { status: 422 });
-  }
+  if (!extractedText) return NextResponse.json({ error: 'The PDF contained no extractable text.' }, { status: 422 });
 
   const subject = subjectFromUrl(url);
-
   const { data: existing } = await admin.from('curriculum_source_documents')
-    .select('id')
-    .eq('curriculum_id', curriculumId)
-    .eq('source_url', url.toString())
-    .maybeSingle();
+    .select('id').eq('curriculum_id', curriculumId).eq('source_url', url.toString()).maybeSingle();
 
   const payload = {
     curriculum_id: curriculumId,
@@ -96,30 +75,19 @@ export async function POST(request) {
     extracted_text: extractedText,
     extracted_chars: extractedText.length,
     status: 'parsed',
-    notes: 'Imported directly from official JAMB IBASS. Content is staged and not published as curriculum nodes automatically.',
+    notes: 'Imported directly from official JAMB IBASS. Staged only; not automatically published as curriculum nodes.',
     uploaded_by: user.id,
     updated_at: new Date().toISOString(),
   };
 
-  let result;
-  if (existing?.id) {
-    result = await admin.from('curriculum_source_documents').update(payload).eq('id', existing.id).select().single();
-  } else {
-    result = await admin.from('curriculum_source_documents').insert(payload).select().single();
-  }
+  const result = existing?.id
+    ? await admin.from('curriculum_source_documents').update(payload).eq('id', existing.id).select().single()
+    : await admin.from('curriculum_source_documents').insert(payload).select().single();
 
-  if (result.error) {
-    return NextResponse.json({ error: result.error.message }, { status: 500 });
-  }
+  if (result.error) return NextResponse.json({ error: result.error.message }, { status: 500 });
 
   return NextResponse.json({
     success: true,
-    document: {
-      id: result.data.id,
-      subject,
-      source_url: url.toString(),
-      extracted_chars: extractedText.length,
-      status: result.data.status,
-    },
+    document: { id: result.data.id, subject, source_url: url.toString(), extracted_chars: extractedText.length, status: result.data.status }
   });
 }
