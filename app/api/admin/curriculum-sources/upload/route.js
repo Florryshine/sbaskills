@@ -6,6 +6,7 @@ const BUCKET = 'curriculum-sources';
 const ALLOWED = new Set(['text/plain','text/csv','application/pdf','application/vnd.openxmlformats-officedocument.spreadsheetml.sheet','application/vnd.ms-excel','application/vnd.openxmlformats-officedocument.wordprocessingml.document','application/msword']);
 
 export async function POST(request) {
+  try {
   const supabase = createServerClient();
   const { data: { user } } = await supabase.auth.getUser();
   if (!user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
@@ -56,4 +57,8 @@ export async function POST(request) {
   }
 
   return NextResponse.json({ success: true, document: data });
+  } catch (error) {
+    console.error('Curriculum source API error:', error);
+    return NextResponse.json({ error: error?.message || 'Internal server error.' }, { status: 500 });
+  }
 }
