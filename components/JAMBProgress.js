@@ -6,7 +6,7 @@ import Navbar from '@/components/Navbar';
 import Footer from '@/components/Footer';
 import { createBrowserClient } from '@/lib/supabase';
 
-const accuracy = (score, total) => total ? Math.round((score / total) * 100) : 0;
+const pct = (score, total) => total ? Math.round((score / total) * 100) : 0;
 const practiceHref = (subject, topic) => {
   const p = new URLSearchParams();
   if (subject) p.set('subject', subject);
@@ -17,97 +17,225 @@ const practiceHref = (subject, topic) => {
 export default function JAMBProgress() {
   const supabase = createBrowserClient();
   const [user, setUser] = useState(null);
+  const [curriculum, setCurriculum] = useState(null);
+  const [mastery, setMastery] = useState([]);
+  const [summary, setSummary] = useState(null);
   const [attempts, setAttempts] = useState([]);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
     async function load() {
       const { data: auth } = await supabase.auth.getUser();
-      if (!auth.user) return setLoading(false);
+      if (!auth.user) {
+        setLoading(false);
+        return;
+      }
+
       setUser(auth.user);
-      const { data, error } = await supabase
-        .from('jamb_practice_attempts')
-        .select('id, mode, subject, topic, score, total_questions, weak_topics, completed_at')
+
+      const { data: target } = await supabase
+        .from('student_exam_targets')
+        .select('exam_type, exam_year, curriculum_id')
         .eq('user_id', auth.user.id)
-        .order('completed_at', { ascending: false })
-        .limit(100);
-      if (error) console.error('JAMB progress load error:', error);
-      setAttempts(data || []);
+        .eq('status', 'active')
+        .eq('exam_type', 'JAMB')
+        .order('exam_year', { ascending: false })
+        .limit(1)
+        .maybeSingle();
+
+      let curriculumId = target?.curriculum_id || null;
+      let curriculumData = null;
+
+      if (curriculumId) {
+        const { data } = await supabase
+          .from('curricula')
+          .select('id, name, code, version, exam_start_date, exam_end_date, date_status')
+          .eq('id', curriculumId)
+          .maybeSingle();
+        curriculumData = data;
+      }
+
+      if (!curriculumData) {
+        const { data } = await supabase
+          .from('curricula')
+          .select('id, name, code, version, exam_start_date, exam_end_date, date_status')
+          .eq('exam_type', 'JAMB')
+          .eq('status', 'active')
+          .order('effective_from_year', { ascending: false })
+          .limit(1)
+          .maybeSingle();
+        curriculumData = data;
+        curriculumId = data?.id || null;
+      }
+
+      const [masteryResult, summaryResult, attemptsResult] = await Promise.all([
+        curriculumId
+          ? supabase
+              .from('student_topic_mastery')
+              .select('id, curriculum_topic_id, questions_attempted, questions_correct, accuracy, mastery_score, status, last_practiced_at, curriculum_topics(id, subject, title, order_index, game_topic_id)')
+              .eq('user_id', auth.user.id)
+              .eq('curriculum_topics.curriculum_id', curriculumId)
+              .order('mastery_score', { ascending: true })
+          : Promise.resolve({ data: [] }),
+        curriculumId
+          ? supabase.from('student_progress_summary')
+              .select('topics_total, topics_started, topics_mastered, mastery_percent')
+              .eq('user_id', auth.user.id)
+              .eq('curriculum_id', curriculumId)
+              .maybeSingle()
+          : Promise.resolve({ data: null }),
+        supabase
+          .from('jamb_practice_attempts')
+          .select('id, mode, subject, topic, score, total_questions, completed_at')
+          .eq('user_id', auth.user.id)
+          .order('completed_at', { ascending: false })
+          .limit(20),
+      ]);
+
+      if (masteryResult.error) console.error('JAMB mastery load error:', masteryResult.error);
+      if (summaryResult.error) console.error('JAMB summary load error:', summaryResult.error);
+      if (attemptsResult.error) console.error('JAMB progress history error:', attemptsResult.error);
+
+      setCurriculum(curriculumData);
+      setMastery((masteryResult.data || []).filter(row => row.curriculum_topics));
+      setSummary(summaryResult.data || null);
+      setAttempts(attemptsResult.data || []);
       setLoading(false);
     }
-    load();
+
+    load().catch((error) => {
+      console.error('JAMB progress load error:', error);
+      setLoading(false);
+    });
   }, []);
 
   const stats = useMemo(() => {
-    let total = 0, correct = 0;
-    const subjects = new Map();
-    const topics = new Map();
+    const topics = mastery.map(row => {
+      const topic = row.curriculum_topics;
+      return {
+        ...row,
+        subject: topic.subject,
+        title: topic.title,
+        practiceHref: practiceHref(topic.subject, topic.title),
+      };
+    });
 
-    for (const a of attempts) {
-      total += a.total_questions || 0;
-      correct += a.score || 0;
+    const started = topics.filter(t => t.questions_attempted > 0);
+    const weak = topics
+      .filter(t => t.status === 'weak' || (t.questions_attempted > 0 && t.mastery_score < 60))
+      .sort((a, b) => (a.mastery_score - b.mastery_score) || (b.questions_attempted - a.questions_attempted));
 
-      if (a.subject) {
-        const s = subjects.get(a.subject) || { subject: a.subject, score: 0, total: 0, sessions: 0 };
-        s.score += a.score || 0; s.total += a.total_questions || 0; s.sessions += 1;
-        subjects.set(a.subject, s);
-      }
+    const learning = topics
+      .filter(t => t.status === 'learning')
+      .sort((a, b) => a.mastery_score - b.mastery_score);
 
-      if (a.topic) {
-        const t = topics.get(a.topic) || { topic: a.topic, subject: a.subject || '', score: 0, total: 0, hits: 0 };
-        t.score += a.score || 0; t.total += a.total_questions || 0; t.hits += 1;
-        topics.set(a.topic, t);
-      }
+    const subjects = [...new Set(topics.map(t => t.subject))].map(subject => {
+      const rows = topics.filter(t => t.subject === subject);
+      const mastered = rows.filter(t => t.status === 'mastered').length;
+      const startedCount = rows.filter(t => t.questions_attempted > 0).length;
+      const average = rows.length ? Math.round(rows.reduce((sum, t) => sum + (t.mastery_score || 0), 0) / rows.length) : 0;
+      return { subject, total: rows.length, mastered, started: startedCount, mastery: average };
+    }).sort((a, b) => a.mastery - b.mastery);
 
-      for (const weak of a.weak_topics || []) {
-        const t = topics.get(weak) || { topic: weak, subject: a.subject || '', score: 0, total: 0, hits: 0 };
-        t.hits += 1;
-        topics.set(weak, t);
-      }
-    }
-
-    const subjectList = [...subjects.values()]
-      .map(s => ({ ...s, accuracy: accuracy(s.score, s.total) }))
-      .sort((a, b) => a.accuracy - b.accuracy);
-
-    const weakList = [...topics.values()]
-      .map(t => ({ ...t, accuracy: t.total ? accuracy(t.score, t.total) : 0 }))
-      .filter(t => t.hits > 0 && (!t.total || t.accuracy < 70))
-      .sort((a, b) => (b.hits - a.hits) || (a.accuracy - b.accuracy))
-      .slice(0, 8);
+    const totalQuestions = attempts.reduce((sum, a) => sum + (a.total_questions || 0), 0);
+    const correct = attempts.reduce((sum, a) => sum + (a.score || 0), 0);
 
     return {
-      total, overall: accuracy(correct, total), sessions: attempts.length,
-      subjects: subjectList, weakTopics: weakList,
-      weakestSubject: subjectList[0] || null,
-      nextTopic: weakList[0] || null,
+      topics,
+      started,
+      weak,
+      learning,
+      subjects,
+      totalQuestions,
+      overallAccuracy: pct(correct, totalQuestions),
+      nextTopic: weak[0] || learning[0] || topics.find(t => t.status === 'not_started') || null,
     };
-  }, [attempts]);
+  }, [mastery, attempts]);
 
-  if (loading) return <><Navbar /><main className="min-h-screen flex items-center justify-center bg-slate-50"><p className="font-bold text-brand-blue">Loading your JAMB progress...</p></main><Footer /></>;
+  if (loading) return <><Navbar /><main className="min-h-screen flex items-center justify-center bg-slate-50"><p className="font-bold text-brand-blue">Loading your mastery...</p></main><Footer /></>;
 
-  if (!user) return <><Navbar /><main className="min-h-screen bg-slate-50 py-16"><div className="mx-auto max-w-2xl px-4 text-center"><p className="text-5xl">🔐</p><h1 className="mt-4 text-3xl font-black text-brand-blue">Log in to see your progress</h1><p className="mt-3 text-slate-500">Your JAMB practice history is private to your account.</p><Link href="/login" className="mt-6 inline-block rounded-xl bg-brand-yellow px-5 py-3 font-extrabold text-brand-dark">Log in</Link></div></main><Footer /></>;
+  if (!user) return <><Navbar /><main className="min-h-screen bg-slate-50 py-16"><div className="mx-auto max-w-2xl px-4 text-center"><p className="text-5xl">🔐</p><h1 className="mt-4 text-3xl font-black text-brand-blue">Log in to see your progress</h1><p className="mt-3 text-slate-500">Your learning progress is private to your account.</p><Link href="/login" className="mt-6 inline-block rounded-xl bg-brand-yellow px-5 py-3 font-extrabold text-brand-dark">Log in</Link></div></main><Footer /></>;
+
+  const hasCurriculum = Boolean(curriculum?.id);
+  const hasMappedTopics = stats.topics.length > 0;
 
   return <><Navbar /><main className="min-h-screen bg-slate-50 py-10"><div className="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8">
     <Link href="/jamb" className="text-sm font-bold text-brand-blue hover:underline">← Back to JAMB</Link>
-    <div className="mt-7 max-w-3xl"><p className="text-xs font-extrabold uppercase tracking-[0.2em] text-brand-yellow">JAMB 2027 • PROGRESS</p><h1 className="mt-2 text-4xl font-black text-brand-blue">Know where you stand.</h1><p className="mt-3 text-slate-500">Your practice history shows what you have done, where you are strong and what to practise next.</p></div>
+    <div className="mt-7 max-w-3xl">
+      <p className="text-xs font-extrabold uppercase tracking-[0.2em] text-brand-yellow">JAMB • MASTERY</p>
+      <h1 className="mt-2 text-4xl font-black text-brand-blue">Know what you actually know.</h1>
+      <p className="mt-3 text-slate-500">Your practice answers now update topic mastery. The system uses your weakest mapped topics to decide what you should practise next.</p>
+      {curriculum?.version && <p className="mt-2 text-xs font-bold text-slate-400">{curriculum.name} • {curriculum.date_status !== 'official' ? 'working curriculum data' : 'official curriculum data'}</p>}
+    </div>
 
-    {!attempts.length ? <div className="mt-10 rounded-3xl border border-dashed border-slate-300 bg-white p-10 text-center"><p className="text-5xl">📊</p><h2 className="mt-4 text-2xl font-black text-brand-blue">Your progress starts with your first practice.</h2><p className="mt-2 text-slate-500">Complete a JAMB practice session and your results will appear here.</p><Link href="/jamb/practice" className="mt-6 inline-block rounded-xl bg-brand-yellow px-5 py-3 font-extrabold text-brand-dark">Start practising</Link></div> : <>
-      <div className="mt-8 grid grid-cols-2 gap-4 lg:grid-cols-4">{[['📝','Questions attempted',stats.total],['🎯','Overall accuracy',`${stats.overall}%`],['⚡','Practice sessions',stats.sessions],['📚','Subjects practised',stats.subjects.length]].map(([icon,label,value]) => <div key={label} className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm"><p className="text-2xl">{icon}</p><p className="mt-3 text-2xl font-black text-brand-blue">{value}</p><p className="mt-1 text-xs text-slate-500">{label}</p></div>)}</div>
+    {!hasCurriculum ? (
+      <div className="mt-10 rounded-3xl border border-dashed border-slate-300 bg-white p-10 text-center">
+        <p className="text-5xl">📚</p><h2 className="mt-4 text-2xl font-black text-brand-blue">Your JAMB target is not configured yet.</h2>
+        <p className="mt-2 text-slate-500">Choose JAMB in your exam target so the mastery engine can personalise your preparation.</p>
+        <Link href="/profile" className="mt-6 inline-block rounded-xl bg-brand-yellow px-5 py-3 font-extrabold text-brand-dark">Open profile</Link>
+      </div>
+    ) : !hasMappedTopics ? (
+      <div className="mt-10 rounded-3xl border border-dashed border-slate-300 bg-white p-10 text-center">
+        <p className="text-5xl">🧭</p><h2 className="mt-4 text-2xl font-black text-brand-blue">Mastery mapping is ready, but topics are not mapped yet.</h2>
+        <p className="mt-2 text-slate-500">You can still practise normally. Once the question bank is mapped to the curriculum, every answer will feed this dashboard.</p>
+        <Link href="/jamb/practice" className="mt-6 inline-block rounded-xl bg-brand-yellow px-5 py-3 font-extrabold text-brand-dark">Start practising</Link>
+      </div>
+    ) : <>
+      <div className="mt-8 grid grid-cols-2 gap-4 lg:grid-cols-4">
+        {[
+          ['🎯', 'Curriculum mastery', `${summary?.mastery_percent || 0}%`],
+          ['📚', 'Topics mastered', `${summary?.topics_mastered || 0}/${summary?.topics_total || stats.topics.length}`],
+          ['🧠', 'Topics started', `${summary?.topics_started || stats.started.length}/${summary?.topics_total || stats.topics.length}`],
+          ['📝', 'Recent questions', stats.totalQuestions],
+        ].map(([icon, label, value]) => <div key={label} className="rounded-2xl border bg-white p-5 shadow-sm"><p className="text-2xl">{icon}</p><p className="mt-3 text-2xl font-black text-brand-blue">{value}</p><p className="mt-1 text-xs text-slate-500">{label}</p></div>)}
+      </div>
 
       <div className="mt-8 grid gap-8 lg:grid-cols-3">
-        <section className="lg:col-span-2 rounded-3xl border border-slate-200 bg-white p-6 shadow-sm"><p className="text-xs font-extrabold uppercase tracking-[0.2em] text-brand-yellow">SUBJECT BREAKDOWN</p><h2 className="mt-2 text-2xl font-black text-brand-blue">How your subjects are going</h2><div className="mt-6 space-y-5">{stats.subjects.map(s => <div key={s.subject}><div className="flex justify-between"><p className="font-extrabold text-slate-800">{s.subject}</p><p className="text-sm font-black text-brand-blue">{s.accuracy}%</p></div><div className="mt-2 h-2 overflow-hidden rounded-full bg-slate-100"><div className="h-full bg-brand-blue" style={{width:`${s.accuracy}%`}} /></div><p className="mt-1 text-xs text-slate-500">{s.total} questions across {s.sessions} session{s.sessions === 1 ? '' : 's'}</p></div>)}</div></section>
+        <section className="lg:col-span-2 rounded-3xl border bg-white p-6 shadow-sm">
+          <p className="text-xs font-extrabold uppercase tracking-[0.2em] text-brand-yellow">SUBJECT MASTERY</p>
+          <h2 className="mt-2 text-2xl font-black text-brand-blue">Where you stand by subject</h2>
+          <div className="mt-6 space-y-5">
+            {stats.subjects.map(s => <div key={s.subject}>
+              <div className="flex justify-between"><p className="font-extrabold text-slate-800">{s.subject}</p><p className="text-sm font-black text-brand-blue">{s.mastery}%</p></div>
+              <div className="mt-2 h-2 overflow-hidden rounded-full bg-slate-100"><div className="h-full bg-brand-blue" style={{width:`${s.mastery}%`}} /></div>
+              <p className="mt-1 text-xs text-slate-500">{s.mastered}/{s.total} mastered • {s.started} started</p>
+            </div>)}
+          </div>
+        </section>
 
-        <section className="rounded-3xl bg-brand-blue p-6 text-white"><p className="text-xs font-extrabold uppercase tracking-[0.2em] text-brand-yellow">YOUR NEXT MOVE • 7F</p><h2 className="mt-2 text-2xl font-black">Practise the gap.</h2>{stats.nextTopic ? <><p className="mt-3 text-sm leading-6 text-blue-100">Your history has flagged <strong className="text-white">{stats.nextTopic.topic}</strong> for another round.</p><Link href={practiceHref(stats.nextTopic.subject,stats.nextTopic.topic)} className="mt-5 inline-block rounded-xl bg-brand-yellow px-5 py-3 text-sm font-extrabold text-brand-dark">Practise this topic →</Link></> : stats.weakestSubject ? <><p className="mt-3 text-sm leading-6 text-blue-100">Your lowest practised subject is <strong className="text-white">{stats.weakestSubject.subject}</strong> at {stats.weakestSubject.accuracy}%.</p><Link href={practiceHref(stats.weakestSubject.subject)} className="mt-5 inline-block rounded-xl bg-brand-yellow px-5 py-3 text-sm font-extrabold text-brand-dark">Practise {stats.weakestSubject.subject} →</Link></> : <p className="mt-3 text-sm text-blue-100">Keep practising. More sessions will make this recommendation more specific.</p>}</section>
+        <section className="rounded-3xl bg-brand-blue p-6 text-white">
+          <p className="text-xs font-extrabold uppercase tracking-[0.2em] text-brand-yellow">NEXT BEST MOVE</p>
+          <h2 className="mt-2 text-2xl font-black">Close the biggest gap.</h2>
+          {stats.nextTopic ? <><p className="mt-3 text-sm leading-6 text-blue-100">Your next focus is <strong className="text-white">{stats.nextTopic.title}</strong> in {stats.nextTopic.subject}. Current mastery: {stats.nextTopic.mastery_score}%.</p><Link href={stats.nextTopic.practiceHref} className="mt-5 inline-block rounded-xl bg-brand-yellow px-5 py-3 text-sm font-extrabold text-brand-dark">Practise this topic →</Link></> : <p className="mt-3 text-sm text-blue-100">Complete mapped practice and the engine will recommend your next topic.</p>}
+        </section>
       </div>
 
       <div className="mt-8 grid gap-8 lg:grid-cols-2">
-        <section className="rounded-3xl border border-slate-200 bg-white p-6 shadow-sm"><p className="text-xs font-extrabold uppercase tracking-[0.2em] text-brand-yellow">WEAK TOPICS</p><h2 className="mt-2 text-2xl font-black text-brand-blue">Topics to revisit</h2>{stats.weakTopics.length ? <div className="mt-5 space-y-3">{stats.weakTopics.map(t => <Link key={t.topic} href={practiceHref(t.subject,t.topic)} className="flex items-center justify-between gap-3 rounded-2xl border border-slate-100 p-4 hover:border-brand-blue"><div><p className="font-extrabold text-slate-800">{t.topic}</p><p className="text-xs text-slate-500">{t.subject || 'JAMB'}{t.total ? ` • ${t.accuracy}%` : ''}</p></div><span className="text-sm font-extrabold text-brand-blue">Practise →</span></Link>)}</div> : <p className="mt-5 text-sm text-slate-500">No clear weak topics yet. Keep practising and repeated gaps will surface.</p>}</section>
+        <section className="rounded-3xl border bg-white p-6 shadow-sm">
+          <p className="text-xs font-extrabold uppercase tracking-[0.2em] text-brand-yellow">WEAK AREAS</p>
+          <h2 className="mt-2 text-2xl font-black text-brand-blue">Topics that need work</h2>
+          <div className="mt-5 space-y-3">
+            {(stats.weak.length ? stats.weak : stats.learning).slice(0, 8).map(t => <Link key={t.id} href={t.practiceHref} className="flex items-center justify-between gap-3 rounded-2xl border p-4 hover:border-brand-blue"><div><p className="font-extrabold text-slate-800">{t.title}</p><p className="text-xs text-slate-500">{t.subject} • {t.questions_attempted} questions • {t.mastery_score}% mastery</p></div><span className="text-sm font-extrabold text-brand-blue">Practise →</span></Link>)}
+            {!stats.weak.length && !stats.learning.length && <p className="text-sm text-slate-500">No weak topics yet. Keep practising to build your mastery profile.</p>}
+          </div>
+        </section>
 
-        <section className="rounded-3xl border border-slate-200 bg-white p-6 shadow-sm"><p className="text-xs font-extrabold uppercase tracking-[0.2em] text-brand-yellow">PERSONALISED PREPARATION • 7F</p><h2 className="mt-2 text-2xl font-black text-brand-blue">Your next study cycle</h2><div className="mt-5 space-y-3"><Link href="/jamb/practice" className="block rounded-2xl border border-slate-100 p-4 hover:border-brand-blue"><p className="font-extrabold text-slate-800">1. Practise</p><p className="mt-1 text-sm text-slate-500">Complete another 10-question session.</p></Link>{stats.nextTopic && <Link href={practiceHref(stats.nextTopic.subject,stats.nextTopic.topic)} className="block rounded-2xl border border-slate-100 p-4 hover:border-brand-blue"><p className="font-extrabold text-slate-800">2. Revisit {stats.nextTopic.topic}</p><p className="mt-1 text-sm text-slate-500">Turn the flagged weakness into focused practice.</p></Link>}{stats.weakestSubject && <Link href={practiceHref(stats.weakestSubject.subject)} className="block rounded-2xl border border-slate-100 p-4 hover:border-brand-blue"><p className="font-extrabold text-slate-800">3. Strengthen {stats.weakestSubject.subject}</p><p className="mt-1 text-sm text-slate-500">Run a subject-focused session and watch the accuracy move.</p></Link>}</div></section>
+        <section className="rounded-3xl border bg-white p-6 shadow-sm">
+          <p className="text-xs font-extrabold uppercase tracking-[0.2em] text-brand-yellow">RECENT PRACTICE</p>
+          <h2 className="mt-2 text-2xl font-black text-brand-blue">Your latest sessions</h2>
+          <div className="mt-5 space-y-3">
+            {attempts.slice(0, 8).map(a => <div key={a.id} className="flex items-center justify-between gap-3 rounded-2xl bg-slate-50 p-4"><div><p className="font-extrabold text-slate-800">{a.topic || a.subject || 'Mixed JAMB Practice'}</p><p className="text-xs text-slate-500">{new Date(a.completed_at).toLocaleDateString('en-NG',{day:'numeric',month:'short',year:'numeric'})}</p></div><p className="font-black text-brand-blue">{a.score}/{a.total_questions} • {pct(a.score,a.total_questions)}%</p></div>)}
+            {!attempts.length && <p className="text-sm text-slate-500">No practice sessions yet.</p>}
+          </div>
+        </section>
       </div>
 
-      <section className="mt-8 rounded-3xl border border-slate-200 bg-white p-6 shadow-sm"><div className="flex items-end justify-between gap-4"><div><p className="text-xs font-extrabold uppercase tracking-[0.2em] text-brand-yellow">RECENT PRACTICE</p><h2 className="mt-2 text-2xl font-black text-brand-blue">Latest sessions</h2></div><Link href="/jamb/practice" className="text-sm font-extrabold text-brand-blue hover:underline">Practise again →</Link></div><div className="mt-5 overflow-x-auto"><table className="w-full min-w-[600px] text-left text-sm"><thead><tr className="border-b text-xs uppercase tracking-wide text-slate-400"><th className="px-3 py-3">Session</th><th className="px-3 py-3">Score</th><th className="px-3 py-3">Accuracy</th><th className="px-3 py-3">Date</th></tr></thead><tbody>{attempts.slice(0,10).map(a => <tr key={a.id} className="border-b last:border-0"><td className="px-3 py-3 font-bold text-slate-800">{a.topic || a.subject || 'Mixed JAMB Practice'}</td><td className="px-3 py-3">{a.score}/{a.total_questions}</td><td className="px-3 py-3 font-bold text-brand-blue">{accuracy(a.score,a.total_questions)}%</td><td className="px-3 py-3 text-slate-500">{new Date(a.completed_at).toLocaleDateString('en-NG',{day:'numeric',month:'short',year:'numeric'})}</td></tr>)}</tbody></table></div></section>
+      <section className="mt-8 rounded-3xl border bg-white p-6 shadow-sm">
+        <div className="flex items-end justify-between gap-4"><div><p className="text-xs font-extrabold uppercase tracking-[0.2em] text-brand-yellow">ALL TOPICS</p><h2 className="mt-2 text-2xl font-black text-brand-blue">Your curriculum map</h2></div><Link href="/jamb/syllabus-mastery" className="text-sm font-extrabold text-brand-blue">Open full map →</Link></div>
+        <div className="mt-5 grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
+          {stats.topics.map(t => <Link key={t.id} href={t.practiceHref} className="rounded-2xl border p-4 hover:border-brand-blue"><div className="flex items-center justify-between gap-3"><p className="font-bold text-slate-800">{t.title}</p><span className="text-xs font-black text-brand-blue">{t.mastery_score}%</span></div><p className="mt-1 text-xs text-slate-500">{t.subject} • {t.status.replace('_',' ')}</p></Link>)}
+        </div>
+      </section>
     </>}
   </div></main><Footer /></>;
 }
