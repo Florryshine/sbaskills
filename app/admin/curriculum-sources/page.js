@@ -35,6 +35,17 @@ export default function CurriculumSourcesPage() {
 
   useEffect(() => { load(); }, []);
 
+  async function readApiResponse(response) {
+    const contentType = response.headers.get('content-type') || '';
+    const raw = await response.text();
+    if (contentType.includes('application/json')) {
+      try { return raw ? JSON.parse(raw) : {}; }
+      catch { throw new Error(`Server returned invalid JSON (HTTP ${response.status}).`); }
+    }
+    const preview = raw.replace(/<[^>]*>/g, ' ').replace(/\s+/g, ' ').trim().slice(0, 240);
+    throw new Error(`Server returned HTML instead of JSON (HTTP ${response.status})${preview ? `: ${preview}` : '.'}`);
+  }
+
   async function upload(selectedFile) {
     if (!selectedFile || !curriculum?.id) return;
     setBusy(true);
@@ -45,17 +56,14 @@ export default function CurriculumSourcesPage() {
       form.append('curriculum_id', curriculum.id);
       form.append('notes', notes);
       const response = await fetch('/api/admin/curriculum-sources/upload', { method: 'POST', body: form });
-      const result = await response.json();
+      const result = await readApiResponse(response);
       if (!response.ok) throw new Error(result.error || 'Upload failed');
       setFile(null);
       setNotes('');
       setMessage('Syllabus source uploaded. It is staged for parsing later.');
       await load();
-    } catch (error) {
-      setMessage(error.message);
-    } finally {
-      setBusy(false);
-    }
+    } catch (error) { setMessage(error.message); }
+    finally { setBusy(false); }
   }
 
   async function importIbass(source) {
@@ -68,15 +76,12 @@ export default function CurriculumSourcesPage() {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ curriculum_id: curriculum.id, source_url: source.url }),
       });
-      const result = await response.json();
+      const result = await readApiResponse(response);
       if (!response.ok) throw new Error(result.error || 'IBASS import failed');
       setMessage(`${source.subject} imported from official IBASS: ${result.document.extracted_chars.toLocaleString()} characters extracted. It is staged, not published as syllabus nodes.`);
       await load();
-    } catch (error) {
-      setMessage(error.message);
-    } finally {
-      setImportingUrl('');
-    }
+    } catch (error) { setMessage(error.message); }
+    finally { setImportingUrl(''); }
   }
 
   async function saveText() {
