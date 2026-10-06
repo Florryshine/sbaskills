@@ -147,7 +147,7 @@ export default function CurriculumSourcesPage() {
                       headers: { 'Content-Type': 'application/json' },
                       body: JSON.stringify({ curriculum_id: curriculum.id, source_url }),
                     });
-                    const result = await response.json();
+                    const result = await readApiResponse(response);
                     if (!response.ok) throw new Error(result.error || 'IBASS import failed');
                   }
                   setMessage('IBASS test import completed for the two PDF URLs.');
