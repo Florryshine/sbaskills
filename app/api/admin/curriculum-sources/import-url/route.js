@@ -1,5 +1,4 @@
 import { NextResponse } from 'next/server';
-import { PDFParse } from 'pdf-parse';
 import { createServerClient } from '@/lib/supabase-server';
 import { createAdminClient } from '@/lib/supabase-admin';
 
@@ -56,6 +55,9 @@ export async function POST(request) {
 
   let extractedText = '';
   try {
+    // Load pdf-parse only inside the Node.js handler. This prevents its
+    // native PDF/canvas dependencies from crashing the route at module load.
+    const { PDFParse } = await import('pdf-parse');
     const parser = new PDFParse({ data: buffer });
     const parsed = await parser.getText();
     extractedText = String(parsed?.text || '').trim();
