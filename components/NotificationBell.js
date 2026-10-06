@@ -37,9 +37,13 @@ export default function NotificationBell() {
       loadUnread();
     });
 
+    const handleNotificationChange = () => loadUnread();
+    window.addEventListener('sba-notifications-changed', handleNotificationChange);
+
     return () => {
       active = false;
       listener?.subscription.unsubscribe();
+      window.removeEventListener('sba-notifications-changed', handleNotificationChange);
     };
   }, [pathname]);
 
