@@ -11,7 +11,15 @@ export async function GET(request) {
 
   const supabase = createAdminClient();
   const { data: curriculum } = await supabase
-    .from('curricula').select('id, code').eq('code', 'JAMB_UTME_2027').eq('status', 'active').single();
+    .from('curricula')
+    .select('id, code, effective_from_year, effective_to_year')
+    .eq('exam_type', 'JAMB')
+    .eq('status', 'active')
+    .lte('effective_from_year', 2027)
+    .gte('effective_to_year', 2027)
+    .order('effective_from_year', { ascending: false })
+    .limit(1)
+    .maybeSingle();
 
   if (!curriculum) return NextResponse.json({ error: 'JAMB curriculum not configured' }, { status: 500 });
 
