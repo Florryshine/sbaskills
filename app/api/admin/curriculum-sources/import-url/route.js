@@ -5,8 +5,6 @@ import { createAdminClient } from '@/lib/supabase-admin';
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
 export const revalidate = 0;
-// Keep enough execution time for downloading and parsing a syllabus PDF.
-// Vercel Hobby still enforces its plan limit if it is lower than this value.
 export const maxDuration = 10;
 
 const IBASS_HOST = 'ibass.jamb.gov.ng';
@@ -28,6 +26,23 @@ function subjectFromUrl(url) {
     .replace(/\.pdf$/i, '').replace(/[-_]+/g, ' ').trim();
 }
 
+async function extractPdfText(buffer) {
+  // IMPORTANT: do not rely on pdf.worker.mjs existing as a separate file in
+  // /var/task. pdf-parse provides getData() which embeds/provides the worker
+  // through its package API and is the serverless-safe configuration.
+  const { getData } = await import('pdf-parse/worker');
+  const { PDFParse } = await import('pdf-parse');
+  PDFParse.setWorker(getData());
+
+  const parser = new PDFParse({ data: buffer });
+  try {
+    const parsed = await parser.getText();
+    return String(parsed?.text || '').trim();
+  } finally {
+    await parser.destroy();
+  }
+}
+
 export async function POST(request) {
   try {
     const supabase = createServerClient();
@@ -40,7 +55,9 @@ export async function POST(request) {
     const body = await request.json().catch(() => ({}));
     const curriculumId = String(body.curriculum_id || '');
     const sourceUrl = String(body.source_url || '').trim();
-    if (!curriculumId || !sourceUrl) return NextResponse.json({ error: 'curriculum_id and source_url are required.' }, { status: 400 });
+    if (!curriculumId || !sourceUrl) {
+      return NextResponse.json({ error: 'curriculum_id and source_url are required.' }, { status: 400 });
+    }
 
     let url;
     try { url = validateIbassPdfUrl(sourceUrl); }
@@ -54,7 +71,9 @@ export async function POST(request) {
       headers: { Accept: 'application/pdf' },
       cache: 'no-store',
     });
-    if (!response.ok) return NextResponse.json({ error: `IBASS returned HTTP ${response.status}.` }, { status: 502 });
+    if (!response.ok) {
+      return NextResponse.json({ error: `IBASS returned HTTP ${response.status}.` }, { status: 502 });
+    }
 
     const buffer = Buffer.from(await response.arrayBuffer());
     if (!buffer.length || buffer.length > MAX_BYTES) {
@@ -63,17 +82,15 @@ export async function POST(request) {
 
     let extractedText = '';
     try {
-      // pdf-parse uses PDF.js. The PDF.js legacy build and worker are explicitly
-      // traced in next.config.js so Vercel includes them in the serverless function.
-      const { PDFParse } = await import('pdf-parse');
-      const parser = new PDFParse({ data: buffer });
-      const parsed = await parser.getText();
-      extractedText = String(parsed?.text || '').trim();
-      await parser.destroy();
+      extractedText = await extractPdfText(buffer);
     } catch (error) {
-      return NextResponse.json({ error: `PDF parsing failed: ${error.message}` }, { status: 422 });
+      console.error('IBASS PDF parsing failed:', error);
+      return NextResponse.json({ error: `PDF parsing failed: ${error?.message || 'Unknown parser error.'}` }, { status: 422 });
     }
-    if (!extractedText) return NextResponse.json({ error: 'The PDF contained no extractable text.' }, { status: 422 });
+
+    if (!extractedText) {
+      return NextResponse.json({ error: 'The PDF contained no extractable text.' }, { status: 422 });
+    }
 
     const subject = subjectFromUrl(url);
     const { data: existing } = await admin.from('curriculum_source_documents')
