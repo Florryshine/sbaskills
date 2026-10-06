@@ -19,7 +19,7 @@ const nextConfig = withPWA({
     ],
   },
   experimental: {
-    serverComponentsExternalPackages: ['@napi-rs/canvas'],
+    serverComponentsExternalPackages: ['@napi-rs/canvas', 'pdf-parse'],
     // public/ is deployed to Vercel's static asset network, not necessarily
     // bundled into the serverless functions that read it via fs at runtime
     // (lib/image-engine.js, lib/carousel-engine/render-canvas.js both read
