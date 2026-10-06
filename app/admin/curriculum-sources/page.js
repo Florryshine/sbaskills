@@ -7,6 +7,12 @@ import { createBrowserClient } from '@/lib/supabase';
 
 const ACCEPT = '.txt,.csv,.pdf,.xlsx,.xls,.docx,.doc';
 
+const IBASS_TEST_SOURCES = [
+  { subject: 'Chemistry', url: 'https://ibass.jamb.gov.ng/assets/uploads/Chemistry.pdf' },
+  { subject: 'Biology', url: 'https://ibass.jamb.gov.ng/assets/uploads/Biology.pdf' },
+];
+
+
 export default function CurriculumSourcesPage() {
   const supabase = createBrowserClient();
   const [curriculum, setCurriculum] = useState(null);
@@ -16,6 +22,7 @@ export default function CurriculumSourcesPage() {
   const [notes, setNotes] = useState('');
   const [busy, setBusy] = useState(false);
   const [message, setMessage] = useState('');
+  const [importingUrl, setImportingUrl] = useState('');
 
   async function load() {
     const { data: c } = await supabase.from('curricula').select('id, name, code, date_status').eq('code', 'JAMB_UTME_2026_2029').maybeSingle();
@@ -51,6 +58,27 @@ export default function CurriculumSourcesPage() {
     }
   }
 
+  async function importIbass(source) {
+    if (!curriculum?.id) return;
+    setImportingUrl(source.url);
+    setMessage('');
+    try {
+      const response = await fetch('/api/admin/curriculum-sources/import-url', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ curriculum_id: curriculum.id, source_url: source.url }),
+      });
+      const result = await response.json();
+      if (!response.ok) throw new Error(result.error || 'IBASS import failed');
+      setMessage(`${source.subject} imported from official IBASS: ${result.document.extracted_chars.toLocaleString()} characters extracted. It is staged, not published as syllabus nodes.`);
+      await load();
+    } catch (error) {
+      setMessage(error.message);
+    } finally {
+      setImportingUrl('');
+    }
+  }
+
   async function saveText() {
     const value = text.trim();
     if (!value || !curriculum?.id) return;
@@ -70,6 +98,26 @@ export default function CurriculumSourcesPage() {
             <p className="mt-2 max-w-2xl text-sm text-blue-100">Upload the official syllabus when you have it. Nothing here is treated as the official syllabus until you approve/populate it.</p>
             {curriculum && <p className="mt-4 inline-block rounded-full bg-white/10 px-3 py-1 text-xs font-bold">{curriculum.name} • {curriculum.date_status}</p>}
           </div>
+
+          <section className="mt-5 rounded-3xl border bg-white p-6 shadow-sm">
+            <h2 className="text-xl font-black">Test official IBASS import</h2>
+            <p className="mt-1 text-sm text-slate-500">These are two official JAMB IBASS PDF sources. Importing only stages the source and extracted text; it does not publish syllabus content.</p>
+            <div className="mt-4 grid gap-3 sm:grid-cols-2">
+              {IBASS_TEST_SOURCES.map((source) => (
+                <div key={source.url} className="rounded-2xl border p-4">
+                  <p className="font-black">{source.subject}</p>
+                  <p className="mt-1 break-all text-xs text-slate-500">{source.url}</p>
+                  <button
+                    disabled={!!importingUrl}
+                    onClick={() => importIbass(source)}
+                    className="mt-4 w-full rounded-xl bg-brand-blue px-4 py-3 text-sm font-black text-white disabled:opacity-50"
+                  >
+                    {importingUrl === source.url ? 'Importing...' : `Import ${source.subject}`}
+                  </button>
+                </div>
+              ))}
+            </div>
+          </section>
 
           <div className="mt-5 grid gap-5 lg:grid-cols-2">
             <section className="rounded-3xl border bg-white p-6 shadow-sm">
