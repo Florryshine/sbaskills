@@ -46,23 +46,38 @@ export default function StudentCommandCenter() {
       // Keep the existing streak system, but do not award a new login bonus here.
       await updateStreak(userId);
 
-      const [
-        profileResult,
-        pointsResult,
-        curriculumResult,
-        attemptsResult,
-        notificationsResult,
-        masteryResult,
-      ] = await Promise.all([
+      const [profileResult, pointsResult, targetResult, attemptsResult, notificationsResult] = await Promise.all([
         supabase.from('profiles').select('full_name, target_score, target_course, interests').eq('id', userId).maybeSingle(),
         getUserPoints(userId),
-        supabase.from('curricula').select('id, code, name, exam_start_date, date_status').eq('code', 'JAMB_UTME_2027').maybeSingle(),
+        supabase.from('student_exam_targets').select('exam_type, exam_year, curriculum_id').eq('user_id', userId).eq('status', 'active').eq('exam_type', 'JAMB').order('exam_year', { ascending: false }).limit(1).maybeSingle(),
         supabase.from('jamb_practice_attempts').select('id, subject, topic, score, total_questions, weak_topics, completed_at').eq('user_id', userId).order('completed_at', { ascending: false }).limit(20),
         supabase.from('student_notifications').select('id, type, title, body, action_url, created_at, read_at').eq('user_id', userId).order('created_at', { ascending: false }).limit(5),
-        supabase.from('student_progress_summary').select('mastery_percent, topics_total, topics_started, topics_mastered').eq('user_id', userId).eq('curriculum_id', curriculumResult.data?.id || '').maybeSingle(),
       ]);
 
-      const curriculum = curriculumResult.data;
+      let curriculum = null;
+      if (targetResult.data?.curriculum_id) {
+        const { data } = await supabase.from('curricula').select('id, code, name, exam_start_date, exam_end_date, date_status, effective_from_year, effective_to_year').eq('id', targetResult.data.curriculum_id).maybeSingle();
+        curriculum = data;
+      }
+      if (!curriculum) {
+        const { data } = await supabase.from('curricula')
+          .select('id, code, name, exam_start_date, exam_end_date, date_status, effective_from_year, effective_to_year')
+          .eq('exam_type', 'JAMB')
+          .eq('status', 'active')
+          .order('effective_from_year', { ascending: false })
+          .limit(1)
+          .maybeSingle();
+        curriculum = data;
+      }
+
+      let masteryResult = { data: null };
+      if (curriculum?.id) {
+        masteryResult = await supabase.from('student_progress_summary')
+          .select('mastery_percent, topics_total, topics_started, topics_mastered')
+          .eq('user_id', userId)
+          .eq('curriculum_id', curriculum.id)
+          .maybeSingle();
+      }
 
       let missionResult = { data: null };
       if (curriculum?.id) {
@@ -145,7 +160,7 @@ export default function StudentCommandCenter() {
           <section className="rounded-3xl bg-brand-blue p-6 text-white shadow-sm sm:p-8">
             <div className="flex flex-col gap-6 lg:flex-row lg:items-end lg:justify-between">
               <div>
-                <p className="text-xs font-extrabold uppercase tracking-[0.2em] text-blue-100">JAMB 2027 • STUDENT COMMAND CENTRE</p>
+                <p className="text-xs font-extrabold uppercase tracking-[0.2em] text-blue-100">JAMB • STUDENT COMMAND CENTRE</p>
                 <h1 className="mt-2 text-3xl font-black sm:text-4xl">
                   What are we doing today, {profile?.full_name?.split(' ')[0] || user?.email?.split('@')[0]}?
                 </h1>
