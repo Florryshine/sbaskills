@@ -6,7 +6,7 @@ import Link from 'next/link';
 import Navbar from '@/components/Navbar';
 import Footer from '@/components/Footer';
 import { createBrowserClient } from '@/lib/supabase';
-import { addPoints } from '@/lib/gamification';
+import { addPoints, updateStreak } from '@/lib/gamification';
 
 const PRACTICE_SIZE = 10;
 function shuffle(items) { return [...items].sort(() => Math.random() - 0.5); }
@@ -26,19 +26,51 @@ export default function JAMBPracticePage() {
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [user, setUser] = useState(null);
+  const [missionItemId, setMissionItemId] = useState(() => getInitialParam('item'));
 
-  useEffect(() => { setSubject(getInitialParam('subject')); setTopic(getInitialParam('topic')); }, []);
+  useEffect(() => {
+    setSubject(getInitialParam('subject'));
+    setTopic(getInitialParam('topic'));
+    setMissionItemId(getInitialParam('item'));
+  }, []);
   useEffect(() => {
     async function load() {
       const { data: auth } = await supabase.auth.getUser();
       if (!auth.user) return router.push('/login');
       setUser(auth.user);
-      let query = supabase.from('past_questions').select('id, subject, topic, year, question, option_a, option_b, option_c, option_d, correct_answer, explanation').eq('exam_type', 'JAMB');
-      if (subject) query = query.eq('subject', subject);
-      if (topic) query = query.eq('topic', topic);
-      const { data, error } = await query.limit(500);
+      let data = [];
+      let error = null;
+
+      if (missionItemId) {
+        const { data: item, error: itemError } = await supabase
+          .from('student_daily_mission_items')
+          .select('id, subject, topic, question_ids')
+          .eq('id', missionItemId)
+          .maybeSingle();
+
+        if (itemError) {
+          error = itemError;
+        } else if (item?.question_ids?.length) {
+          const { data: missionQuestions, error: questionError } = await supabase
+            .from('past_questions')
+            .select('id, subject, topic, year, question, option_a, option_b, option_c, option_d, correct_answer, explanation')
+            .in('id', item.question_ids);
+
+          error = questionError;
+          const byId = new Map((missionQuestions || []).map((q) => [q.id, q]));
+          data = item.question_ids.map((id) => byId.get(id)).filter(Boolean);
+        }
+      } else {
+        let query = supabase.from('past_questions').select('id, subject, topic, year, question, option_a, option_b, option_c, option_d, correct_answer, explanation').eq('exam_type', 'JAMB');
+        if (subject) query = query.eq('subject', subject);
+        if (topic) query = query.eq('topic', topic);
+        const result = await query.limit(500);
+        data = result.data || [];
+        error = result.error;
+      }
+
       if (error) console.error('JAMB practice load error:', error);
-      setQuestions(shuffle(data || []).slice(0, PRACTICE_SIZE));
+      setQuestions(missionItemId ? data : shuffle(data).slice(0, PRACTICE_SIZE));
       setLoading(false);
     }
     load();
@@ -64,6 +96,15 @@ export default function JAMBPracticePage() {
       if (masteryError) console.error('JAMB mastery update error:', masteryError);
       else console.log('JAMB mastery updated:', masteryResult);
       await addPoints(user.id, 10, 'Completed JAMB practice', 'jamb_practice');
+      await updateStreak(user.id);
+
+      if (missionItemId) {
+        const { data: missionResult, error: missionError } = await supabase.rpc('complete_daily_mission_item', {
+          p_item_id: missionItemId,
+        });
+        if (missionError) console.error('Daily mission completion error:', missionError);
+        else console.log('Daily mission item completed:', missionResult);
+      }
     } else {
       console.error('JAMB practice save error:', error);
     }
