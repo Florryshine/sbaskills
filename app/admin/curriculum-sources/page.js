@@ -55,7 +55,7 @@ export default function CurriculumSourcesPage() {
       form.append('file', selectedFile);
       form.append('curriculum_id', curriculum.id);
       form.append('notes', notes);
-      const response = await fetch('/api/admin/curriculum-sources/upload', { method: 'POST', body: form });
+      const response = await fetch(`/api/admin/curriculum-sources/upload?t=${Date.now()}`, { method: 'POST', body: form, cache: 'no-store' });
       const result = await readApiResponse(response);
       if (!response.ok) throw new Error(result.error || 'Upload failed');
       setFile(null);
@@ -71,7 +71,7 @@ export default function CurriculumSourcesPage() {
     setImportingUrl(source.url);
     setMessage('');
     try {
-      const response = await fetch('/api/admin/curriculum-sources/import-url', {
+      const response = await fetch(`/api/admin/curriculum-sources/import-url?t=${Date.now()}`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ curriculum_id: curriculum.id, source_url: source.url }),
