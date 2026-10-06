@@ -24,6 +24,7 @@ const sections = [
       { href: '/admin/study-note-drafts', label: 'Study Notes' },
       { href: '/admin/theory-questions', label: 'Theory Questions' },
       { href: '/admin/past-questions/upload', label: 'Past Questions' },
+      { href: '/admin/curriculum-sources', label: 'Curriculum' },
       { href: '/admin/submissions', label: 'Assignment Submissions' },
     ],
   },
