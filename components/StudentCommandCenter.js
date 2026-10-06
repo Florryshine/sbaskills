@@ -8,8 +8,6 @@ import { createBrowserClient } from '@/lib/supabase';
 import { getUserPoints, updateStreak } from '@/lib/gamification';
 import { getLevelInfo } from '@/lib/levels';
 
-const EXAM_DATE = new Date('2027-03-15T00:00:00+01:00');
-
 function daysUntil(date) {
   return Math.max(0, Math.ceil((date.getTime() - Date.now()) / 86400000));
 }
@@ -29,6 +27,8 @@ export default function StudentCommandCenter() {
   const [streak, setStreak] = useState(0);
   const [loading, setLoading] = useState(true);
   const [mastery, setMastery] = useState(null);
+  const [curriculum, setCurriculum] = useState(null);
+  const [target, setTarget] = useState(null);
 
   useEffect(() => {
     let active = true;
@@ -98,6 +98,8 @@ export default function StudentCommandCenter() {
       setNotifications(notificationsResult.data || []);
       setMastery(masteryResult.data || null);
       setMission(missionResult.data || null);
+      setCurriculum(curriculum);
+      setTarget(targetResult.data || null);
       setLoading(false);
     }
 
@@ -132,6 +134,10 @@ export default function StudentCommandCenter() {
   }, [attempts]);
 
   const level = getLevelInfo(points);
+  const examDate = curriculum?.exam_start_date ? new Date(`${curriculum.exam_start_date}T00:00:00+01:00`) : null;
+  const examDays = examDate ? daysUntil(examDate) : null;
+  const targetLabel = target?.exam_year ? `${target.exam_type} ${target.exam_year}` : 'JAMB';
+  const masteryPercent = mastery?.mastery_percent || 0;
   const missionItems = [...(mission?.student_daily_mission_items || [])].sort((a, b) => (a.item_order || 0) - (b.item_order || 0));
   const completedItems = missionItems.filter((item) => item.completed).length;
   const missionProgress = missionItems.length ? Math.round((completedItems / missionItems.length) * 100) : 0;
@@ -160,16 +166,16 @@ export default function StudentCommandCenter() {
           <section className="rounded-3xl bg-brand-blue p-6 text-white shadow-sm sm:p-8">
             <div className="flex flex-col gap-6 lg:flex-row lg:items-end lg:justify-between">
               <div>
-                <p className="text-xs font-extrabold uppercase tracking-[0.2em] text-blue-100">JAMB • STUDENT COMMAND CENTRE</p>
+                <p className="text-xs font-extrabold uppercase tracking-[0.2em] text-blue-100">{targetLabel} • STUDENT COMMAND CENTRE</p>
                 <h1 className="mt-2 text-3xl font-black sm:text-4xl">
                   What are we doing today, {profile?.full_name?.split(' ')[0] || user?.email?.split('@')[0]}?
                 </h1>
                 <p className="mt-2 max-w-2xl text-sm text-blue-100">One clear mission. Then your next best action. No feature hunting.</p>
               </div>
               <div className="rounded-2xl bg-white/10 px-5 py-4 text-left lg:min-w-52">
-                <p className="text-xs font-bold text-blue-100">JAMB working countdown</p>
-                <p className="mt-1 text-3xl font-black">{daysUntil(EXAM_DATE)} days</p>
-                <p className="text-xs text-blue-100">Working date: 15 Mar 2027</p>
+                <p className="text-xs font-bold text-blue-100">Exam countdown</p>
+                <p className="mt-1 text-3xl font-black">{examDays === null ? '—' : `${examDays} days`}</p>
+                <p className="text-xs text-blue-100">{curriculum?.exam_start_date ? `${new Date(`${curriculum.exam_start_date}T00:00:00+01:00`).toLocaleDateString('en-NG', { day: 'numeric', month: 'short', year: 'numeric' })}${curriculum.date_status !== 'official' ? ' • working date' : ''}` : 'Exam date not set'}</p>
               </div>
             </div>
           </section>
@@ -244,6 +250,26 @@ export default function StudentCommandCenter() {
             </div>
           </section>
 
+          <section className="mt-5 grid gap-5 md:grid-cols-3">
+            <div className="rounded-3xl border bg-white p-6 shadow-sm">
+              <p className="text-xs font-extrabold uppercase tracking-[0.18em] text-slate-400">EXAM TARGET</p>
+              <h2 className="mt-2 text-xl font-black text-brand-blue">{targetLabel}</h2>
+              <p className="mt-1 text-sm text-slate-500">{profile?.target_course ? `Target course: ${profile.target_course}` : "Set your target course in your profile."}</p>
+              {profile?.target_score ? <p className="mt-3 rounded-xl bg-slate-50 px-3 py-2 text-sm font-extrabold">Target score: {profile.target_score}</p> : null}
+            </div>
+            <div className="rounded-3xl border bg-white p-6 shadow-sm">
+              <p className="text-xs font-extrabold uppercase tracking-[0.18em] text-slate-400">SYLLABUS MASTERY</p>
+              <div className="mt-2 flex items-end justify-between gap-3"><h2 className="text-3xl font-black text-brand-blue">{masteryPercent}%</h2><span className="text-xs font-bold text-slate-500">{mastery?.topics_mastered || 0}/{mastery?.topics_total || 0} mastered</span></div>
+              <div className="mt-3 h-2 rounded-full bg-slate-100"><div className="h-full rounded-full bg-brand-blue" style={{ width: `${masteryPercent}%` }} /></div>
+              <Link href="/jamb/syllabus-mastery" className="mt-3 inline-block text-sm font-extrabold text-brand-blue">Open mastery →</Link>
+            </div>
+            <div className="rounded-3xl border bg-white p-6 shadow-sm">
+              <p className="text-xs font-extrabold uppercase tracking-[0.18em] text-slate-400">KEEP THE STREAK</p>
+              <h2 className="mt-2 text-xl font-black">{streak} day{streak === 1 ? "" : "s"}</h2>
+              <p className="mt-1 text-sm text-slate-500">Practice today to keep building momentum.</p>
+              <Link href="/jamb/practice" className="mt-3 inline-block rounded-xl bg-brand-yellow px-4 py-2 text-sm font-black text-brand-dark">Practice now →</Link>
+            </div>
+          </section>
           <section className="mt-5 grid gap-5 md:grid-cols-2">
             <div className="rounded-3xl border bg-white p-6 shadow-sm">
               <div className="flex items-center justify-between"><h2 className="text-xl font-black">Next best actions</h2><span>⚡</span></div>
