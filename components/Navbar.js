@@ -4,6 +4,7 @@ import Link from 'next/link';
 import { useState, useEffect } from 'react';
 import { createBrowserClient } from '@/lib/supabase';
 import { useRouter } from 'next/navigation';
+import NotificationBell from '@/components/NotificationBell';
 
 export default function Navbar() {
   const [menuOpen, setMenuOpen] = useState(false);
@@ -74,7 +75,7 @@ export default function Navbar() {
           <Link href="/courses" className="text-sm font-medium text-slate-600 transition hover:text-brand-blue">Courses</Link>
           <Link href="/blog" className="text-sm font-medium text-slate-600 transition hover:text-brand-blue">Blog</Link>
           <Link href="/audio" className="text-sm font-medium text-slate-600 transition hover:text-brand-blue">Audio</Link>
-          <Link href="/podcasts" className="text-sm font-medium text-slate-600 transition hover:text-brand-blue">🎙️ Podcasts</Link> {/* NEW */}
+          <Link href="/podcasts" className="text-sm font-medium text-slate-600 transition hover:text-brand-blue">🎙️ Podcasts</Link>
           <Link href="/flashcards" className="text-sm font-medium text-slate-600 transition hover:text-brand-blue">📚 Flashcards</Link>
           <Link href="/leaderboard" className="text-sm font-medium text-slate-600 transition hover:text-brand-blue">🏅 Board</Link>
           <Link href="/store" className="text-sm font-medium text-slate-600 transition hover:text-brand-blue">🏪 Store</Link>
@@ -88,6 +89,7 @@ export default function Navbar() {
 
           {user ? (
             <>
+              <NotificationBell />
               {role === 'tutor' && (
                 <Link href="/tutor" className="text-sm font-bold text-green-600 hover:text-green-700">
                   🎓 Tutor
@@ -121,15 +123,18 @@ export default function Navbar() {
         </nav>
 
         {/* Mobile hamburger */}
-        <button
-          className="flex flex-col gap-1.5 md:hidden p-2"
-          onClick={() => setMenuOpen(!menuOpen)}
-          aria-label="Toggle menu"
-        >
-          <span className={`block h-0.5 w-6 bg-brand-blue transition-all ${menuOpen ? 'rotate-45 translate-y-2' : ''}`} />
-          <span className={`block h-0.5 w-6 bg-brand-blue transition-all ${menuOpen ? 'opacity-0' : ''}`} />
-          <span className={`block h-0.5 w-6 bg-brand-blue transition-all ${menuOpen ? '-rotate-45 -translate-y-2' : ''}`} />
-        </button>
+        <div className="flex items-center gap-2 md:hidden">
+          {user && <NotificationBell />}
+          <button
+            className="flex flex-col gap-1.5 p-2"
+            onClick={() => setMenuOpen(!menuOpen)}
+            aria-label="Toggle menu"
+          >
+            <span className={`block h-0.5 w-6 bg-brand-blue transition-all ${menuOpen ? 'rotate-45 translate-y-2' : ''}`} />
+            <span className={`block h-0.5 w-6 bg-brand-blue transition-all ${menuOpen ? 'opacity-0' : ''}`} />
+            <span className={`block h-0.5 w-6 bg-brand-blue transition-all ${menuOpen ? '-rotate-45 -translate-y-2' : ''}`} />
+          </button>
+        </div>
       </div>
 
       {/* Mobile Menu */}
@@ -140,7 +145,7 @@ export default function Navbar() {
             <Link href="/courses" onClick={() => setMenuOpen(false)} className="text-sm font-semibold text-slate-700 hover:text-brand-blue">📚 Courses</Link>
             <Link href="/blog" onClick={() => setMenuOpen(false)} className="text-sm font-semibold text-slate-700 hover:text-brand-blue">📝 Blog</Link>
             <Link href="/audio" onClick={() => setMenuOpen(false)} className="text-sm font-semibold text-slate-700 hover:text-brand-blue">🎵 Audio</Link>
-            <Link href="/podcasts" onClick={() => setMenuOpen(false)} className="text-sm font-semibold text-slate-700 hover:text-brand-blue">🎙️ Podcasts</Link> {/* NEW */}
+            <Link href="/podcasts" onClick={() => setMenuOpen(false)} className="text-sm font-semibold text-slate-700 hover:text-brand-blue">🎙️ Podcasts</Link>
             <Link href="/flashcards" onClick={() => setMenuOpen(false)} className="text-sm font-semibold text-slate-700 hover:text-brand-blue">📚 Flashcards</Link>
             <Link href="/leaderboard" onClick={() => setMenuOpen(false)} className="text-sm font-semibold text-slate-700 hover:text-brand-blue">🏅 Leaderboard</Link>
             <Link href="/store" onClick={() => setMenuOpen(false)} className="text-sm font-semibold text-slate-700 hover:text-brand-blue">🏪 Store</Link>
@@ -154,6 +159,7 @@ export default function Navbar() {
 
             {user ? (
               <>
+                <Link href="/notifications" onClick={() => setMenuOpen(false)} className="text-sm font-semibold text-brand-blue hover:text-brand-blue">🔔 Notifications</Link>
                 {role === 'tutor' && (
                   <Link href="/tutor" onClick={() => setMenuOpen(false)} className="text-sm font-bold text-green-600">
                     🎓 Tutor Dashboard
