@@ -6,8 +6,38 @@ export const dynamic = 'force-dynamic';
 export default async function JambSyllabusMasteryPage() {
   const supabase = createServerClient();
   const { data: { user } } = await supabase.auth.getUser();
-  const { data: curriculum } = await supabase.from('curricula').select('id,name,exam_start_date,date_status').eq('code','JAMB_UTME_2027').maybeSingle();
-  if (!curriculum) return <main className="mx-auto max-w-3xl p-6"><p>JAMB 2027 curriculum is not configured.</p></main>;
+  let curriculum = null;
+  if (user) {
+    const { data: target } = await supabase
+      .from('student_exam_targets')
+      .select('curriculum_id,exam_year')
+      .eq('user_id', user.id)
+      .eq('exam_type', 'JAMB')
+      .eq('status', 'active')
+      .order('exam_year', { ascending: false })
+      .limit(1)
+      .maybeSingle();
+    if (target?.curriculum_id) {
+      const { data } = await supabase
+        .from('curricula')
+        .select('id,name,exam_start_date,exam_end_date,date_status,version,effective_from_year,effective_to_year')
+        .eq('id', target.curriculum_id)
+        .maybeSingle();
+      curriculum = data;
+    }
+  }
+  if (!curriculum) {
+    const { data } = await supabase
+      .from('curricula')
+      .select('id,name,exam_start_date,exam_end_date,date_status,version,effective_from_year,effective_to_year')
+      .eq('exam_type', 'JAMB')
+      .eq('status', 'active')
+      .order('effective_from_year', { ascending: false })
+      .limit(1)
+      .maybeSingle();
+    curriculum = data;
+  }
+  if (!curriculum) return <main className="mx-auto max-w-3xl p-6"><p>JAMB curriculum is not configured.</p></main>;
 
   const { data: topics } = await supabase.from('curriculum_topics').select('id,subject,title,order_index,game_topic_id').eq('curriculum_id',curriculum.id).order('subject').order('order_index');
   const { data: mastery } = user ? await supabase.from('student_topic_mastery').select('curriculum_topic_id,mastery_score,status,questions_attempted,questions_correct,last_practiced_at').eq('user_id',user.id) : {data:[]};
@@ -23,7 +53,7 @@ export default async function JambSyllabusMasteryPage() {
 
   return <main className="min-h-screen bg-slate-50 py-8"><div className="mx-auto max-w-5xl px-4">
     <div className="rounded-3xl bg-brand-blue p-6 text-white sm:p-8">
-      <p className="text-xs font-black uppercase tracking-[.2em] text-blue-100">JAMB 2027 • SYLLABUS MASTERY</p>
+      <p className="text-xs font-black uppercase tracking-[.2em] text-blue-100">JAMB • SYLLABUS MASTERY</p>
       <h1 className="mt-2 text-3xl font-black">Know exactly where you stand.</h1>
       <p className="mt-2 max-w-2xl text-sm text-blue-100">Every syllabus topic gets a mastery state based on your practice.</p>
       {!user && <p className="mt-4 rounded-xl bg-white/10 p-3 text-sm">Log in to save your mastery.</p>}
