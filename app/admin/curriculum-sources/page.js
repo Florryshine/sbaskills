@@ -18,7 +18,7 @@ export default function CurriculumSourcesPage() {
   const [message, setMessage] = useState('');
 
   async function load() {
-    const { data: c } = await supabase.from('curricula').select('id, name, code, date_status').eq('code', 'JAMB_UTME_2027').maybeSingle();
+    const { data: c } = await supabase.from('curricula').select('id, name, code, date_status').eq('code', 'JAMB_UTME_2026_2029').maybeSingle();
     setCurriculum(c || null);
     if (c) {
       const { data } = await supabase.from('curriculum_source_documents').select('id, file_name, file_type, status, notes, created_at').eq('curriculum_id', c.id).order('created_at', { ascending: false });
