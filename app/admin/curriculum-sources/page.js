@@ -119,6 +119,46 @@ export default function CurriculumSourcesPage() {
             </div>
           </section>
 
+          <section className="mt-5 rounded-3xl border bg-white p-6 shadow-sm">
+            <h2 className="text-xl font-black">Import directly from JAMB IBASS</h2>
+            <p className="mt-1 text-sm text-slate-500">Test with official IBASS syllabus PDFs. The PDF is fetched server-side, text is extracted, and the source is staged. It does not publish curriculum topics automatically.</p>
+            <div className="mt-5 grid gap-4 md:grid-cols-2">
+              <input id="ibass-chemistry-url" defaultValue="https://ibass.jamb.gov.ng/assets/uploads/Chemistry.pdf" className="w-full rounded-xl border p-3 text-sm" />
+              <input id="ibass-biology-url" defaultValue="https://ibass.jamb.gov.ng/assets/uploads/Biology.pdf" className="w-full rounded-xl border p-3 text-sm" />
+            </div>
+            <button
+              disabled={!curriculum?.id || busy}
+              onClick={async () => {
+                setBusy(true);
+                setMessage('');
+                try {
+                  const urls = [
+                    document.getElementById('ibass-chemistry-url')?.value?.trim(),
+                    document.getElementById('ibass-biology-url')?.value?.trim(),
+                  ].filter(Boolean);
+                  for (const source_url of urls) {
+                    const response = await fetch('/api/admin/curriculum-sources/import-url', {
+                      method: 'POST',
+                      headers: { 'Content-Type': 'application/json' },
+                      body: JSON.stringify({ curriculum_id: curriculum.id, source_url }),
+                    });
+                    const result = await response.json();
+                    if (!response.ok) throw new Error(result.error || 'IBASS import failed');
+                  }
+                  setMessage('IBASS test import completed for the two PDF URLs.');
+                  await load();
+                } catch (error) {
+                  setMessage(error.message);
+                } finally {
+                  setBusy(false);
+                }
+              }}
+              className="mt-4 w-full rounded-xl bg-brand-blue px-5 py-3 font-black text-white disabled:opacity-50"
+            >
+              {busy ? 'Importing from IBASS...' : 'Test import 2 IBASS PDFs'}
+            </button>
+          </section>
+
           <div className="mt-5 grid gap-5 lg:grid-cols-2">
             <section className="rounded-3xl border bg-white p-6 shadow-sm">
               <h2 className="text-xl font-black">Upload a file</h2>
