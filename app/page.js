@@ -4,8 +4,7 @@ import CourseCard from '@/components/CourseCard';
 import { createServerClient } from '@/lib/supabase-server';
 
 const stats = [
-  { number: '1,000+', label: 'Students' },
-  { number: '20+', label: 'Courses' },
+  { number: '6,000+', label: 'Community Members' },
   { number: '5', label: 'Learning Worlds' },
   { number: '100%', label: 'Flexible Learning' },
 ];
@@ -53,33 +52,6 @@ const categories = [
   },
 ];
 
-const fallbackTestimonials = [
-  {
-    id: 'static-1',
-    name: 'Amaka O.',
-    course: 'JAMB Student',
-    testimonial: 'The lesson flow kept me disciplined. I finally studied with clarity and confidence.',
-    rating: 5,
-    is_verified: false,
-  },
-  {
-    id: 'static-2',
-    name: 'David E.',
-    course: 'Tech Skills Student',
-    testimonial: 'I loved the structure. Seeing my progress motivated me to finish each topic.',
-    rating: 5,
-    is_verified: false,
-  },
-  {
-    id: 'static-3',
-    name: 'Ruth A.',
-    course: 'Digital Marketing Student',
-    testimonial: 'The platform felt premium and easy to use on my phone, which mattered a lot.',
-    rating: 5,
-    is_verified: false,
-  },
-];
-
 const howItWorks = [
   {
     step: '01',
@@ -108,18 +80,7 @@ export default async function HomePage() {
     .order('created_at', { ascending: false })
     .limit(3);
 
-  const { data: dbTestimonials } = await supabase
-    .from('testimonials')
-    .select('*')
-    .eq('status', 'approved')
-    .order('created_at', { ascending: false })
-    .limit(3);
-
-  const testimonials = dbTestimonials && dbTestimonials.length > 0
-    ? dbTestimonials
-    : fallbackTestimonials;
-
-  return (
+    return (
     <main className="overflow-x-hidden">
       <Navbar />
 
@@ -299,9 +260,9 @@ export default async function HomePage() {
               </div>
             </div>
             <div className="rounded-3xl bg-brand-blue p-10 text-white text-center">
-              <p className="text-6xl font-extrabold text-brand-yellow">5,000+</p>
-              <p className="mt-2 text-xl font-semibold">Students Already Learning</p>
-              <p className="mt-4 text-blue-200 text-sm">Join thousands of Nigerian students building skills and achieving their goals on Shiney Brain Academy.</p>
+              <p className="text-6xl font-extrabold text-brand-yellow">6,000+</p>
+              <p className="mt-2 text-xl font-semibold">Community Members</p>
+              <p className="mt-4 text-blue-200 text-sm">Join our growing community of Nigerian students learning, preparing and building skills with Shiney Brain Academy.</p>
               <a
                 href="/register"
                 className="mt-8 inline-block rounded-full bg-brand-yellow px-8 py-4 text-sm font-bold text-brand-dark hover:opacity-90 transition"
@@ -313,44 +274,6 @@ export default async function HomePage() {
         </div>
       </section>
 
-      {/* TESTIMONIALS */}
-      <section className="bg-slate-50 py-20">
-        <div className="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8">
-          <div className="text-center">
-            <p className="text-sm font-bold uppercase tracking-widest text-brand-yellow">
-              Student Reviews
-            </p>
-            <h2 className="mt-3 text-3xl font-extrabold text-brand-blue">
-              Students love Shiney Brain Academy
-            </h2>
-          </div>
-          <div className="mt-12 grid gap-8 lg:grid-cols-3">
-            {testimonials.map((item) => (
-              <blockquote
-                key={item.id}
-                className="rounded-2xl bg-white border border-slate-100 p-8 shadow-sm"
-              >
-                <p className="text-sm">{'⭐'.repeat(item.rating || 5)}</p>
-                <p className="mt-4 text-lg font-semibold leading-8 text-slate-700">
-                  "{item.testimonial}"
-                </p>
-                <footer className="mt-6">
-                  <p className="font-bold text-brand-blue">{item.name}</p>
-                  {item.course && (
-                    <p className="text-xs text-slate-400">{item.course}</p>
-                  )}
-                  {item.is_verified && (
-                    <span className="inline-block mt-1 text-xs bg-green-100 text-green-700 px-2 py-0.5 rounded-full font-bold">
-                      ✅ Verified
-                    </span>
-                  )}
-                </footer>
-              </blockquote>
-            ))}
-          </div>
-        </div>
-      </section>
-
       {/* CTA BANNER */}
       <section className="bg-brand-yellow py-16">
         <div className="mx-auto max-w-4xl px-4 text-center sm:px-6 lg:px-8">
@@ -358,7 +281,7 @@ export default async function HomePage() {
             Ready to start your learning journey?
           </h2>
           <p className="mt-4 text-brand-dark/70">
-            Join 5,000+ students already building skills and achieving success on Shiney Brain Academy.
+            Join 6,000+ community members connected to Shiney Brain Academy.
           </p>
           <div className="mt-8 flex flex-wrap justify-center gap-4">
             <a
