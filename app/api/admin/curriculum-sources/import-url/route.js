@@ -47,9 +47,9 @@ function extractHtmlText(html) {
       .replace(/<(br|\/p|\/div|\/li|\/tr|\/h[1-6]|\/section|\/article|\/td|\/th)\b[^>]*>/gi, '\\n')
       .replace(/<[^>]+>/g, ' ')
   )
-    .replace(/[\\t\\r ]+/g, ' ')
-    .replace(/\\n\\s*/g, '\\n')
-    .replace(/\\n{3,}/g, '\\n\\n')
+    .replace(/[\t\r ]+/g, ' ')
+    .replace(/\n\s*/g, '\\n')
+    .replace(/\n{3,}/g, '\\n\\n')
     .trim();
 
   // A SPA shell with only "enable JavaScript" is not syllabus content.
@@ -124,8 +124,8 @@ export async function POST(request) {
 
     const signature = buffer.subarray(0, 5).toString('ascii');
     const isPdf = signature === '%PDF-';
-    const looksLikeHtml = /text\\/html|application\\/xhtml\\+xml/i.test(contentType)
-      || /^\\s*<(?:!doctype\\s+html|html|head|body)\\b/i.test(buffer.subarray(0, 1000).toString('utf8'));
+    const looksLikeHtml = /text\/html|application\/xhtml\+xml/i.test(contentType)
+      || /^\s*<(?:!doctype\s+html|html|head|body)\b/i.test(buffer.subarray(0, 1000).toString('utf8'));
 
     let extractedText = '';
     let sourceType = 'application/pdf';
@@ -145,7 +145,7 @@ export async function POST(request) {
           error: 'IBASS returned an HTML page, but it contains no readable syllabus text (likely the JavaScript app shell). The importer can extract syllabus text from HTML when it is present; this response requires finding the page data/API endpoint or using the file upload fallback.',
           source_type: sourceType,
           content_type: contentType || 'text/html',
-          response_preview: buffer.subarray(0, 180).toString('utf8').replace(/\\s+/g, ' ').slice(0, 160),
+          response_preview: buffer.subarray(0, 180).toString('utf8').replace(/\s+/g, ' ').slice(0, 160),
         }, { status: 422 });
       }
     } else {
