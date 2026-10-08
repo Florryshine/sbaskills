@@ -39,27 +39,23 @@ function decodeHtmlEntities(value) {
 }
 
 function extractHtmlText(html) {
-  // Extract only readable page content, not scripts/styles or app metadata.
+  // Extract readable page content while excluding executable and hidden markup.
   const text = decodeHtmlEntities(
     html
       .replace(/<!--[\s\S]*?-->/g, ' ')
-      .replace(/<(script|style|noscript|svg|template)\b[^>]*>[\s\S]*?<\/\1>/gi, ' ')
-      .replace(/<(br|\/p|\/div|\/li|\/tr|\/h[1-6]|\/section|\/article|\/td|\/th)\b[^>]*>/gi, '\n')
+      .replace(/<(script|style|noscript|svg|template)\\b[^>]*>[\\s\\S]*?<\\/\\1>/gi, ' ')
+      .replace(/<(br|\\/p|\\/div|\\/li|\\/tr|\\/h[1-6]|\\/section|\\/article|\\/td|\\/th)\\b[^>]*>/gi, () => '\n')
       .replace(/<[^>]+>/g, ' ')
   )
-    .replace(/[\t\r ]+/g, ' ')
-    .replace(/\n\s*/g, '\n')
-    .replace(/\n{3,}/g, '\n\n')
+    .replace(/[\\t\\r ]+/g, ' ')
+    .replace(/\\n\\s*/g, '\n')
+    .replace(/\\n{3,}/g, '\n\n')
     .trim();
 
-  // A SPA shell with only "enable JavaScript" is not syllabus content.
   const normalized = text.toLowerCase();
-  if (text.length < 300 || (normalized.includes('enable javascript') && text.length < 1200)) {
-    return '';
-  }
+  if (text.length < 300 || (normalized.includes('enable javascript') && text.length < 1200)) return '';
   return text;
 }
-
 async function extractPdfText(buffer) {
   // IMPORTANT: do not rely on pdf.worker.mjs existing as a separate file in
   // /var/task. pdf-parse provides getData() which embeds/provides the worker
