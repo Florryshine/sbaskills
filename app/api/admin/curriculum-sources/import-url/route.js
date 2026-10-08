@@ -44,12 +44,12 @@ function extractHtmlText(html) {
     html
       .replace(/<!--[\s\S]*?-->/g, ' ')
       .replace(/<(script|style|noscript|svg|template)\b[^>]*>[\s\S]*?<\/\1>/gi, ' ')
-      .replace(/<(br|\/p|\/div|\/li|\/tr|\/h[1-6]|\/section|\/article|\/td|\/th)\b[^>]*>/gi, '\\n')
+      .replace(/<(br|\/p|\/div|\/li|\/tr|\/h[1-6]|\/section|\/article|\/td|\/th)\b[^>]*>/gi, '\n')
       .replace(/<[^>]+>/g, ' ')
   )
     .replace(/[\t\r ]+/g, ' ')
-    .replace(/\n\s*/g, '\\n')
-    .replace(/\n{3,}/g, '\\n\\n')
+    .replace(/\n\s*/g, '\n')
+    .replace(/\n{3,}/g, '\n\n')
     .trim();
 
   // A SPA shell with only "enable JavaScript" is not syllabus content.
