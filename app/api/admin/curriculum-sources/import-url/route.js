@@ -68,16 +68,40 @@ export async function POST(request) {
     if (!curriculum) return NextResponse.json({ error: 'Curriculum not found.' }, { status: 404 });
 
     const response = await fetch(url.toString(), {
-      headers: { Accept: 'application/pdf' },
+      headers: {
+        Accept: 'application/pdf',
+        'User-Agent': 'Mozilla/5.0 (compatible; ShineyBrainAcademy/1.0)',
+      },
       cache: 'no-store',
+      redirect: 'follow',
     });
+
+    const contentType = response.headers.get('content-type') || '';
+    const buffer = Buffer.from(await response.arrayBuffer());
+
     if (!response.ok) {
-      return NextResponse.json({ error: `IBASS returned HTTP ${response.status}.` }, { status: 502 });
+      return NextResponse.json({
+        error: `IBASS returned HTTP ${response.status} (${contentType || 'unknown content type'}).`,
+      }, { status: 502 });
     }
 
-    const buffer = Buffer.from(await response.arrayBuffer());
     if (!buffer.length || buffer.length > MAX_BYTES) {
-      return NextResponse.json({ error: 'IBASS PDF is empty or larger than 15MB.' }, { status: 400 });
+      return NextResponse.json({ error: 'IBASS response is empty or larger than 15MB.' }, { status: 400 });
+    }
+
+    // Reject the IBASS single-page app shell or any other non-PDF response
+    // before passing bytes to pdf-parse. A valid PDF starts with "%PDF-".
+    const signature = buffer.subarray(0, 5).toString('ascii');
+    if (signature !== '%PDF-') {
+      const preview = buffer.subarray(0, 240).toString('utf8')
+        .replace(/<[^>]*>/g, ' ')
+        .replace(/\\s+/g, ' ')
+        .trim()
+        .slice(0, 160);
+
+      return NextResponse.json({
+        error: `IBASS did not return a PDF. HTTP ${response.status}; content-type: ${contentType || 'unknown'}; signature: ${JSON.stringify(signature)}.${preview ? ` Response preview: ${preview}` : ''}`,
+      }, { status: 422 });
     }
 
     let extractedText = '';
