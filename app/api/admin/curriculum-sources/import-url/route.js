@@ -43,13 +43,13 @@ function extractHtmlText(html) {
   const text = decodeHtmlEntities(
     html
       .replace(/<!--[\s\S]*?-->/g, ' ')
-      .replace(/<(script|style|noscript|svg|template)\\b[^>]*>[\\s\\S]*?<\\/\\1>/gi, ' ')
-      .replace(/<(br|\\/p|\\/div|\\/li|\\/tr|\\/h[1-6]|\\/section|\\/article|\\/td|\\/th)\\b[^>]*>/gi, () => '\n')
+      .replace(/<(script|style|noscript|svg|template)\b[^>]*>[\s\S]*?<\/\1>/gi, ' ')
+      .replace(/<(br|\/p|\/div|\/li|\/tr|\/h[1-6]|\/section|\/article|\/td|\/th)\b[^>]*>/gi, () => '\n')
       .replace(/<[^>]+>/g, ' ')
   )
-    .replace(/[\\t\\r ]+/g, ' ')
-    .replace(/\\n\\s*/g, '\n')
-    .replace(/\\n{3,}/g, '\n\n')
+    .replace(/[\t\r ]+/g, ' ')
+    .replace(/\n\s*/g, '\n')
+    .replace(/\n{3,}/g, '\n\n')
     .trim();
 
   const normalized = text.toLowerCase();
