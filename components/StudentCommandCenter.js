@@ -47,7 +47,7 @@ export default function StudentCommandCenter() {
       await updateStreak(userId);
 
       const [profileResult, pointsResult, targetResult, attemptsResult, notificationsResult] = await Promise.all([
-        supabase.from('profiles').select('full_name, target_score, target_course, interests').eq('id', userId).maybeSingle(),
+        supabase.from('profiles').select('full_name, target_score, target_course, interests, target_exams, student_level, goal_title, goal_target, state').eq('id', userId).maybeSingle(),
         getUserPoints(userId),
         supabase.from('student_exam_targets').select('exam_type, exam_year, curriculum_id').eq('user_id', userId).eq('status', 'active').eq('exam_type', 'JAMB').order('exam_year', { ascending: false }).limit(1).maybeSingle(),
         supabase.from('jamb_practice_attempts').select('id, subject, topic, score, total_questions, weak_topics, completed_at').eq('user_id', userId).order('completed_at', { ascending: false }).limit(20),
@@ -137,6 +137,7 @@ export default function StudentCommandCenter() {
   const examDate = curriculum?.exam_start_date ? new Date(`${curriculum.exam_start_date}T00:00:00+01:00`) : null;
   const examDays = examDate ? daysUntil(examDate) : null;
   const targetLabel = target?.exam_year ? `${target.exam_type} ${target.exam_year}` : 'JAMB';
+  const focusSubjects = Array.isArray(profile?.interests) ? profile.interests.filter(Boolean).slice(0, 4) : [];
   const masteryPercent = mastery?.mastery_percent || 0;
   const missionItems = [...(mission?.student_daily_mission_items || [])].sort((a, b) => (a.item_order || 0) - (b.item_order || 0));
   const completedItems = missionItems.filter((item) => item.completed).length;
@@ -177,6 +178,28 @@ export default function StudentCommandCenter() {
                 <p className="mt-1 text-3xl font-black">{examDays === null ? '—' : `${examDays} days`}</p>
                 <p className="text-xs text-blue-100">{curriculum?.exam_start_date ? `${new Date(`${curriculum.exam_start_date}T00:00:00+01:00`).toLocaleDateString('en-NG', { day: 'numeric', month: 'short', year: 'numeric' })}${curriculum.date_status !== 'official' ? ' • working date' : ''}` : 'Exam date not set'}</p>
               </div>
+            </div>
+          </section>
+
+<          <section className="mt-5 grid gap-4 md:grid-cols-2">
+            <div className="rounded-3xl border bg-white p-5 shadow-sm sm:p-6">
+              <p className="text-xs font-extrabold uppercase tracking-[0.18em] text-slate-400">YOUR PERSONAL TARGET</p>
+              <h2 className="mt-2 text-xl font-black text-brand-blue">{profile?.goal_title || 'Your next milestone starts here'}</h2>
+              <p className="mt-2 text-sm leading-6 text-slate-500">{profile?.goal_target ? 'Your target: ' + profile.goal_target : 'Set a clear score or grade target and use your progress to measure how close you are.'}</p>
+              {profile?.target_course ? <p className="mt-3 text-sm font-bold text-slate-700">Intended course: {profile.target_course}</p> : null}
+              <Link href="/jamb/progress" className="mt-4 inline-flex rounded-xl bg-blue-50 px-4 py-2 text-sm font-extrabold text-brand-blue">Track my progress →</Link>
+            </div>
+            <div className="rounded-3xl border bg-white p-5 shadow-sm sm:p-6">
+              <p className="text-xs font-extrabold uppercase tracking-[0.18em] text-slate-400">PICK UP A SUBJECT</p>
+              <h2 className="mt-2 text-xl font-black text-brand-blue">Practise what you selected</h2>
+              {focusSubjects.length ? (
+                <div className="mt-4 flex flex-wrap gap-2">
+                  {focusSubjects.map((subject) => <Link key={subject} href={'/jamb/practice?subject=' + encodeURIComponent(subject)} className="rounded-full border border-blue-100 bg-blue-50 px-3 py-2 text-sm font-bold text-brand-blue hover:border-brand-blue">{subject} →</Link>)}
+                </div>
+              ) : (
+                <p className="mt-2 text-sm leading-6 text-slate-500">Choose a subject to begin. You can practise a subject directly or start a mixed set.</p>
+              )}
+              <Link href="/jamb/practice" className="mt-4 inline-flex text-sm font-extrabold text-brand-blue">Start mixed practice →</Link>
             </div>
           </section>
 
