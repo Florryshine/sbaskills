@@ -158,6 +158,7 @@ export default function JAMBProgress() {
 
   const hasCurriculum = Boolean(curriculum?.id);
   const hasMappedTopics = stats.topics.length > 0;
+  const latestAttempt = attempts[0] || null;
 
   return <><Navbar /><main className="min-h-screen bg-slate-50 py-10"><div className="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8">
     <Link href="/jamb" className="text-sm font-bold text-brand-blue hover:underline">← Back to JAMB</Link>
@@ -167,6 +168,26 @@ export default function JAMBProgress() {
       <p className="mt-3 text-slate-500">Your practice answers now update topic mastery. The system uses your weakest mapped topics to decide what you should practise next.</p>
       {curriculum?.version && <p className="mt-2 text-xs font-bold text-slate-400">{curriculum.name} • {curriculum.date_status !== 'official' ? 'working curriculum data' : 'official curriculum data'}</p>}
     </div>
+
+    <section className="mt-8">
+      <div className="grid grid-cols-2 gap-4 lg:grid-cols-4">
+        {[
+          ['📝', 'Practice sessions saved', attempts.length + (attempts.length === 20 ? '+' : '')],
+          ['📚', 'Questions in recent sessions', stats.totalQuestions],
+          ['🎯', 'Accuracy in recent sessions', attempts.length ? stats.overallAccuracy + '%' : '—'],
+          ['🏁', 'Latest session', latestAttempt ? pct(latestAttempt.score, latestAttempt.total_questions) + '%' : '—'],
+        ].map(([icon, label, value]) => <div key={label} className="rounded-2xl border bg-white p-5 shadow-sm"><p className="text-2xl">{icon}</p><p className="mt-3 text-2xl font-black text-brand-blue">{value}</p><p className="mt-1 text-xs text-slate-500">{label}</p></div>)}
+      </div>
+      <div className="mt-5 rounded-3xl border bg-white p-6 shadow-sm">
+        <p className="text-xs font-extrabold uppercase tracking-[0.2em] text-brand-yellow">PRACTICE HISTORY</p>
+        <h2 className="mt-2 text-2xl font-black text-brand-blue">Your latest saved sessions</h2>
+        <p className="mt-1 text-xs text-slate-500">Showing up to the 20 most recent sessions. Accuracy above is calculated from these sessions, not your lifetime total.</p>
+        <div className="mt-5 space-y-3">
+          {attempts.map(a => <div key={a.id} className="flex flex-col gap-2 rounded-2xl bg-slate-50 p-4 sm:flex-row sm:items-center sm:justify-between"><div><p className="font-extrabold text-slate-800">{a.topic || a.subject || 'Mixed JAMB Practice'}</p><p className="text-xs text-slate-500">{a.mode || 'Practice'} • {a.completed_at ? new Date(a.completed_at).toLocaleDateString('en-NG',{day:'numeric',month:'short',year:'numeric'}) : 'Date unavailable'}</p></div><p className="font-black text-brand-blue">{a.score}/{a.total_questions} • {pct(a.score,a.total_questions)}%</p></div>)}
+          {!attempts.length && <div className="rounded-2xl border border-dashed p-6 text-center"><p className="font-bold text-slate-700">No saved practice sessions yet.</p><p className="mt-1 text-sm text-slate-500">Complete a practice set and your saved result will appear here.</p><Link href="/jamb/practice" className="mt-4 inline-block rounded-xl bg-brand-yellow px-4 py-2 font-extrabold text-brand-dark">Start practising →</Link></div>}
+        </div>
+      </div>
+    </section>
 
     {!hasCurriculum ? (
       <div className="mt-10 rounded-3xl border border-dashed border-slate-300 bg-white p-10 text-center">
@@ -220,14 +241,6 @@ export default function JAMBProgress() {
           </div>
         </section>
 
-        <section className="rounded-3xl border bg-white p-6 shadow-sm">
-          <p className="text-xs font-extrabold uppercase tracking-[0.2em] text-brand-yellow">RECENT PRACTICE</p>
-          <h2 className="mt-2 text-2xl font-black text-brand-blue">Your latest sessions</h2>
-          <div className="mt-5 space-y-3">
-            {attempts.slice(0, 8).map(a => <div key={a.id} className="flex items-center justify-between gap-3 rounded-2xl bg-slate-50 p-4"><div><p className="font-extrabold text-slate-800">{a.topic || a.subject || 'Mixed JAMB Practice'}</p><p className="text-xs text-slate-500">{new Date(a.completed_at).toLocaleDateString('en-NG',{day:'numeric',month:'short',year:'numeric'})}</p></div><p className="font-black text-brand-blue">{a.score}/{a.total_questions} • {pct(a.score,a.total_questions)}%</p></div>)}
-            {!attempts.length && <p className="text-sm text-slate-500">No practice sessions yet.</p>}
-          </div>
-        </section>
       </div>
 
       <section className="mt-8 rounded-3xl border bg-white p-6 shadow-sm">
