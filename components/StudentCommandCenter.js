@@ -21,6 +21,8 @@ export default function StudentCommandCenter() {
   const [user, setUser] = useState(null);
   const [profile, setProfile] = useState(null);
   const [mission, setMission] = useState(null);
+  const [missionNotice, setMissionNotice] = useState('');
+  const [missionRetrying, setMissionRetrying] = useState(false);
   const [attempts, setAttempts] = useState([]);
   const [notifications, setNotifications] = useState([]);
   const [points, setPoints] = useState(0);
@@ -103,9 +105,12 @@ export default function StudentCommandCenter() {
                 .maybeSingle();
             } else {
               const payload = await response.json().catch(() => ({}));
-              console.warn('Daily mission could not be prepared:', payload.error || response.status);
+              const message = payload.error || 'Today’s mission could not be prepared right now.';
+              setMissionNotice(message);
+              console.warn('Daily mission could not be prepared:', message);
             }
           } catch (missionError) {
+            setMissionNotice('We could not connect to prepare your mission. Check your connection and try again.');
             console.warn('Daily mission generation request failed:', missionError);
           }
         }
@@ -259,9 +264,12 @@ export default function StudentCommandCenter() {
                 </div>
               ) : (
                 <div className="mt-5 rounded-2xl bg-slate-50 p-5">
-                  <p className="font-bold text-slate-800">No mission has been generated yet.</p>
-                  <p className="mt-1 text-sm text-slate-500">The external Daily Mission worker will prepare it automatically.</p>
-                  <Link href="/jamb/practice" className="mt-4 inline-block rounded-xl bg-brand-blue px-4 py-2 text-sm font-extrabold text-white">Quick practice →</Link>
+                  <p className="font-bold text-slate-800">{missionNotice ? 'Today’s mission is not ready yet.' : 'Preparing today’s study mission…'}</p>
+                  <p className="mt-1 text-sm text-slate-500">{missionNotice || 'Your mission will be built from available JAMB questions and your study focus.'}</p>
+                  <div className="mt-4 flex flex-wrap gap-3">
+                    <button type="button" disabled={missionRetrying} onClick={async () => { setMissionRetrying(true); setMissionNotice(''); try { const response = await fetch('/api/daily-mission/generate', { method: 'POST' }); if (!response.ok) { const payload = await response.json().catch(() => ({})); setMissionNotice(payload.error || 'Could not prepare your mission. Please try again.'); } else { window.location.reload(); } } catch (error) { setMissionNotice('Connection problem. Please try again.'); } finally { setMissionRetrying(false); } }} className="rounded-xl bg-brand-blue px-4 py-2 text-sm font-extrabold text-white disabled:opacity-60">{missionRetrying ? 'Preparing…' : 'Try again'}</button>
+                    <Link href="/jamb/practice" className="inline-block rounded-xl bg-brand-yellow px-4 py-2 text-sm font-extrabold text-brand-dark">Quick practice →</Link>
+                  </div>
                 </div>
               )}
             </div>
