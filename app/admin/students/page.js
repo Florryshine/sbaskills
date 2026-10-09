@@ -67,14 +67,14 @@ export default function AdminStudentsPage() {
     const headers = ['Name', 'Email', 'Phone', 'Joined', 'Onboarding complete', 'Exam targets', 'Subjects', 'Student level', 'Goal'];
     const quote = value => '"' + String(value ?? '').replace(/"/g, '""') + '"';
     const rows = filtered.map(s => [s.full_name, s.email, s.phone, s.created_at, s.onboarding_completed ? 'Yes' : 'No', (s.target_exams || []).join('; '), (s.interests || []).join('; '), s.student_level, s.goal_title]);
-    const csv = [headers, ...rows].map(row => row.map(quote).join(',')).join('\\r\\n');
-    const blob = new Blob(['\\uFEFF', csv], { type: 'text/csv;charset=utf-8;' });
+    const csv = [headers, ...rows].map(row => row.map(quote).join(',')).join('\r\n');
+    const blob = new Blob(['\uFEFF', csv], { type: 'text/csv;charset=utf-8;' });
     const url = URL.createObjectURL(blob);
     const link = document.createElement('a');
     link.href = url;
     link.download = 'sba-students-' + new Date().toISOString().slice(0, 10) + '.csv';
     link.click();
-    URL.revokeObjectURL(url);
+    window.setTimeout(() => URL.revokeObjectURL(url), 1000);
   };
 
   if (loading) return (
