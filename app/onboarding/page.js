@@ -17,6 +17,8 @@ export default function OnboardingPage() {
   const [user, setUser] = useState(null);
   const [step, setStep] = useState(0);
   const [loading, setLoading] = useState(false);
+  const [pageLoading, setPageLoading] = useState(true);
+  const [errorMessage, setErrorMessage] = useState('');
   const [answers, setAnswers] = useState({
     target_exams: [],
     interests: [],
@@ -59,14 +61,39 @@ export default function OnboardingPage() {
   ];
 
   useEffect(() => {
-    supabase.auth.getUser().then(({ data }) => {
-      if (!data?.user) {
-        router.push('/auth/login');
-      } else {
-        setUser(data.user);
+    let active = true;
+    const loadUserAndDraft = async () => {
+      const { data, error } = await supabase.auth.getUser();
+      if (!active) return;
+      if (error || !data?.user) {
+        router.replace('/auth/login');
+        return;
       }
-    });
-  }, []);
+      setUser(data.user);
+      try {
+        const saved = window.localStorage.getItem('sba_onboarding_' + data.user.id);
+        if (saved) {
+          const draft = JSON.parse(saved);
+          if (draft.answers) setAnswers(prev => ({ ...prev, ...draft.answers }));
+          if (Number.isInteger(draft.step) && draft.step >= 0 && draft.step < steps.length) setStep(draft.step);
+        }
+      } catch (e) {
+        console.warn('Could not restore onboarding draft.', e);
+      }
+      setPageLoading(false);
+    };
+    loadUserAndDraft();
+    return () => { active = false; };
+  }, [router]);
+
+  useEffect(() => {
+    if (!user?.id) return;
+    try {
+      window.localStorage.setItem('sba_onboarding_' + user.id, JSON.stringify({ answers, step }));
+    } catch (e) {
+      console.warn('Could not save onboarding draft.', e);
+    }
+  }, [answers, step, user]);
 
   const handleMultiSelect = (field, value) => {
     setAnswers(prev => ({
@@ -82,8 +109,25 @@ export default function OnboardingPage() {
   };
 
   const handleSubmit = async () => {
+    if (!user?.id) {
+      setErrorMessage('Your session has expired. Please sign in again.');
+      return;
+    }
+    if (answers.target_exams.length === 0) {
+      setErrorMessage('Please select at least one exam or study path before continuing.');
+      setStep(0);
+      return;
+    }
     setLoading(true);
-    const { error } = await supabase
+    setErrorMessage('');
+    try {
+      if (answers.target_exams.includes('JAMB')) {
+        const { error: targetError } = await supabase
+          .from('student_exam_targets')
+          .upsert({ user_id: user.id, exam_type: 'JAMB', exam_year: 2027, status: 'active' }, { onConflict: 'user_id,exam_type,exam_year' });
+        if (targetError) throw new Error('Your JAMB 2027 target could not be saved. Please try again. Details: ' + targetError.message);
+      }
+      const { error } = await supabase
       .from('profiles')
       .update({
         target_exams: answers.target_exams,
@@ -99,12 +143,14 @@ export default function OnboardingPage() {
       })
       .eq('id', user?.id);
 
-    if (error) {
-      alert('Error: ' + error.message);
-    } else {
+      if (error) throw error;
+      try { window.localStorage.removeItem('sba_onboarding_' + user.id); } catch (e) {}
       router.push('/dashboard');
+    } catch (e) {
+      setErrorMessage(e?.message || 'We could not save your details. Please try again.');
+    } finally {
+      setLoading(false);
     }
-    setLoading(false);
   };
 
   const renderStep = () => {
@@ -229,7 +275,7 @@ export default function OnboardingPage() {
     );
   };
 
-  if (!user) return <div>Loading...</div>;
+  if (pageLoading || !user) return <div className="min-h-screen flex items-center justify-center text-gray-600">Loading your onboarding...</div>;
 
   return (
     <div className="min-h-screen bg-gray-50 flex items-center justify-center p-4">
@@ -247,18 +293,19 @@ export default function OnboardingPage() {
           <p className="text-gray-500 text-sm">{steps[step].description}</p>
         </div>
 
+        {errorMessage && <div role="alert" className="mt-4 rounded-xl border border-red-200 bg-red-50 p-3 text-sm text-red-700">{errorMessage}</div>}
         {renderStep()}
 
-        <div className="flex justify-between mt-6">
+        <div className="flex justify-between mt-6 gap-3">
           <button
-            onClick={() => setStep(step - 1)}
+            onClick={() => { setErrorMessage(''); setStep(Math.max(0, step - 1)); }}
             disabled={step === 0}
             className="px-4 py-2 text-sm text-gray-500 hover:text-gray-700 disabled:opacity-50"
           >
             Back
           </button>
           <button
-            onClick={step === steps.length - 1 ? handleSubmit : () => setStep(step + 1)}
+            onClick={() => { setErrorMessage(''); if (step === steps.length - 1) handleSubmit(); else setStep(Math.min(steps.length - 1, step + 1)); }}
             disabled={loading}
             className="bg-blue-600 text-white px-6 py-2 rounded-xl font-bold hover:bg-blue-700 disabled:opacity-50"
           >
