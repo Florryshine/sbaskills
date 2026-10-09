@@ -181,7 +181,7 @@ export default function StudentCommandCenter() {
             </div>
           </section>
 
-<          <section className="mt-5 grid gap-4 md:grid-cols-2">
+          <section className="mt-5 grid gap-4 md:grid-cols-2">
             <div className="rounded-3xl border bg-white p-5 shadow-sm sm:p-6">
               <p className="text-xs font-extrabold uppercase tracking-[0.18em] text-slate-400">YOUR PERSONAL TARGET</p>
               <h2 className="mt-2 text-xl font-black text-brand-blue">{profile?.goal_title || 'Your next milestone starts here'}</h2>
