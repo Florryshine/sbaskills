@@ -15,6 +15,7 @@ export default function AdminCourseEditorPage() {
   const [saving, setSaving] = useState(false);
   const [uploading, setUploading] = useState(false);
   const [uploadProgress, setUploadProgress] = useState(0);
+  const [settingUpWeek, setSettingUpWeek] = useState(false);
   const fileInputRef = useRef(null);
   const videoInputRefs = useRef({});
   const pdfInputRefs = useRef({});
@@ -317,6 +318,59 @@ export default function AdminCourseEditorPage() {
     setLessons(lessons.filter(l => l.id !== id));
   }
 
+  async function setupFirstWeek() {
+    if (!courseId || courseId === 'new') {
+      alert('Save the course first, then create the Week 1 plan.');
+      return;
+    }
+    if (!confirm('Create the Week 1 starter structure for this course? Existing lessons and modules will be kept. Missing starter items will be added as unpublished drafts.')) return;
+
+    setSettingUpWeek(true);
+    try {
+      const weekPlan = [
+        { title: 'Week 1 · Day 1 — Welcome & Baseline', lessonTitle: 'Day 1: Welcome and Baseline Check', description: 'Introduce the class, explain how to use the course, and complete a short baseline diagnostic.', content: '<h2>Welcome to Week 1</h2><p>Start by reviewing the course goals and how lessons, practice and progress tracking work.</p><h3>Class tasks</h3><ol><li>Read the course description and learning expectations.</li><li>Write down your target score or grade.</li><li>Complete a short baseline practice set with no pressure to score perfectly.</li><li>Record the topics you found difficult.</li></ol><p><strong>Teacher:</strong> Add your class instructions and diagnostic link before publishing this lesson.</p>' },
+        { title: 'Week 1 · Day 2 — English Language', lessonTitle: 'Day 2: English Language Focus', description: 'Start the English Language routine with a focused topic, practice questions and review.', content: '<h2>English Language Focus</h2><p>Choose the first English topic for this class and add your teaching notes or resource below.</p><h3>Class tasks</h3><ol><li>Review the selected topic or lesson material.</li><li>Answer a short set of English practice questions.</li><li>Read every explanation, including explanations for correct answers.</li><li>List unfamiliar words or question patterns for review.</li></ol><p><strong>Teacher:</strong> Replace this starter text with the actual Week 1 topic and class material.</p>' },
+        { title: 'Week 1 · Day 3 — Subject Focus A', lessonTitle: 'Day 3: Subject Focus A', description: 'Teach one of the student’s other exam subjects and practise the topic taught.', content: '<h2>Subject Focus A</h2><p>Set the first non-English subject focus for the class.</p><h3>Class tasks</h3><ol><li>Read or attend the lesson for the selected topic.</li><li>Make concise notes on key facts, formulas or concepts.</li><li>Answer topic-based practice questions.</li><li>Write down mistakes to discuss in class.</li></ol><p><strong>Teacher:</strong> Change the subject and topic, then attach the relevant resource before publishing.</p>' },
+        { title: 'Week 1 · Day 4 — Subject Focus B', lessonTitle: 'Day 4: Subject Focus B', description: 'Cover another selected exam subject and check understanding with practice.', content: '<h2>Subject Focus B</h2><p>Use this session for another subject in the class subject combination.</p><h3>Class tasks</h3><ol><li>Review the selected lesson material.</li><li>Attempt practice questions without checking answers first.</li><li>Review explanations and correct errors in your notes.</li><li>Bring difficult questions to the next class discussion.</li></ol><p><strong>Teacher:</strong> Replace this starter text with the actual subject, topic and resource before publishing.</p>' },
+        { title: 'Week 1 · Day 5 — Mixed Practice & Review', lessonTitle: 'Day 5: Mixed Practice and Weekly Review', description: 'Review the week, practise across covered topics and identify next steps.', content: '<h2>Week 1 Review</h2><p>Use only topics already covered this week for this review.</p><h3>Class tasks</h3><ol><li>Complete a mixed practice set from the week’s topics.</li><li>Review your score and identify the three most difficult topics.</li><li>Revisit the explanations for every missed question.</li><li>Set one specific target for Week 2.</li></ol><p><strong>Teacher:</strong> Add the weekly quiz or practice link and the instructions for submitting questions.</p>' },
+      ];
+      const { data: existingModules, error: modulesError } = await supabase.from('course_modules').select('*').eq('course_id', courseId).order('order_index', { ascending: true });
+      if (modulesError) throw modulesError;
+      const { data: existingLessons, error: lessonsError } = await supabase.from('lessons').select('*').eq('course_id', courseId).order('order_index', { ascending: true });
+      if (lessonsError) throw lessonsError;
+      let moduleRows = existingModules || [];
+      let lessonRows = existingLessons || [];
+      for (let index = 0; index < weekPlan.length; index++) {
+        const item = weekPlan[index];
+        let module = moduleRows.find(row => row.title === item.title);
+        if (!module) {
+          const { data, error } = await supabase.from('course_modules').insert({ course_id: courseId, title: item.title, description: item.description, order_index: moduleRows.length ? Math.max(...moduleRows.map(row => Number(row.order_index) || 0)) + 1 : index, is_published: true }).select('*').single();
+          if (error) throw error;
+          module = data;
+          moduleRows = [...moduleRows, data];
+        }
+        const existingLesson = lessonRows.find(row => row.title === item.lessonTitle);
+        if (!existingLesson) {
+          const nextOrder = lessonRows.length ? Math.max(...lessonRows.map(row => Number(row.order_index) || 0)) + 1 : 1;
+          const { data, error } = await supabase.from('lessons').insert({ course_id: courseId, module_id: module.id, title: item.lessonTitle, description: item.description, text_content: item.content, content_type: 'text', order_index: nextOrder, is_published: false }).select('*').single();
+          if (error) throw error;
+          lessonRows = [...lessonRows, data];
+        } else if (!existingLesson.module_id) {
+          const { error } = await supabase.from('lessons').update({ module_id: module.id }).eq('id', existingLesson.id);
+          if (error) throw error;
+          lessonRows = lessonRows.map(row => row.id === existingLesson.id ? { ...row, module_id: module.id } : row);
+        }
+      }
+      setModules(moduleRows.sort((a, b) => a.order_index - b.order_index));
+      setLessons(lessonRows.sort((a, b) => a.order_index - b.order_index));
+      alert('Week 1 starter structure is ready. The five lessons are unpublished drafts. Edit the subjects, add real class materials and publish each lesson when ready.');
+    } catch (error) {
+      console.error('Week 1 setup failed:', error);
+      alert('We could not finish the Week 1 setup: ' + (error?.message || 'Unknown error') + '. You can run setup again; existing starter items will be kept.');
+    } finally {
+      setSettingUpWeek(false);
+    }
+  }
   async function addModule() {
     const title = prompt('Module/topic title:');
     if (!title) return;
@@ -477,7 +531,10 @@ export default function AdminCourseEditorPage() {
             <h2 className="text-base font-extrabold text-brand-blue">Modules / Topics</h2>
             <p className="mt-1 text-xs text-slate-500">Optional grouping for mixed video and bite-sized courses. Lessons may remain ungrouped.</p>
           </div>
-          <button onClick={addModule} className="rounded-full bg-brand-yellow px-4 py-2 text-xs font-bold text-brand-dark">+ Add Module</button>
+          <div className="flex flex-wrap gap-2">
+            <button onClick={setupFirstWeek} disabled={settingUpWeek || !courseId || courseId === 'new'} className="rounded-full bg-blue-50 px-4 py-2 text-xs font-bold text-brand-blue disabled:opacity-50">{settingUpWeek ? 'Preparing Week 1...' : '🗓️ Set up Week 1'}</button>
+            <button onClick={addModule} className="rounded-full bg-brand-yellow px-4 py-2 text-xs font-bold text-brand-dark">+ Add Module</button>
+          </div>
         </div>
         {modules.length ? (
           <div className="grid gap-2 sm:grid-cols-2">
