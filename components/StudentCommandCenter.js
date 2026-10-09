@@ -79,7 +79,7 @@ export default function StudentCommandCenter() {
           .maybeSingle();
       }
 
-      let missionResult = { data: null };
+      let missionResult = { data: null, error: null };
       if (curriculum?.id) {
         missionResult = await supabase
           .from('student_daily_missions')
@@ -88,6 +88,27 @@ export default function StudentCommandCenter() {
           .eq('curriculum_id', curriculum.id)
           .eq('mission_date', new Date().toISOString().slice(0, 10))
           .maybeSingle();
+
+        // Do not leave the student waiting for a scheduled worker if today's mission is missing.
+        if (!missionResult.data && targetResult.data?.exam_type === 'JAMB') {
+          try {
+            const response = await fetch('/api/daily-mission/generate', { method: 'POST' });
+            if (response.ok) {
+              missionResult = await supabase
+                .from('student_daily_missions')
+                .select('id, title, mission_date, status, target_minutes, completed_at, student_daily_mission_items(id, item_order, activity_type, subject, topic, target_count, completed, question_ids, knowledge_asset_id, game_topic_id)')
+                .eq('user_id', userId)
+                .eq('curriculum_id', curriculum.id)
+                .eq('mission_date', new Date().toISOString().slice(0, 10))
+                .maybeSingle();
+            } else {
+              const payload = await response.json().catch(() => ({}));
+              console.warn('Daily mission could not be prepared:', payload.error || response.status);
+            }
+          } catch (missionError) {
+            console.warn('Daily mission generation request failed:', missionError);
+          }
+        }
       }
 
       if (!active) return;
