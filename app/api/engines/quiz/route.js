@@ -1,5 +1,6 @@
 import { NextResponse } from 'next/server';
 import { createAdminClient } from '@/lib/supabase-admin';
+import { createRouteHandlerClient } from '@/lib/supabase-server';
 import { GoogleGenerativeAI } from '@google/generative-ai';
 import Groq from 'groq-sdk';
 import { parseJsonFromText } from '@/lib/robustJsonParse';
@@ -146,6 +147,18 @@ function extractValidQuestions(parsed) {
 
 export async function POST(request) {
   try {
+    // This endpoint spends external AI quota and writes generated questions; admin only.
+    const sessionClient = createRouteHandlerClient();
+    const { data: { user }, error: authError } = await sessionClient.auth.getUser();
+    if (authError || !user) {
+      return NextResponse.json({ error: 'Sign in as an admin to generate quiz questions.' }, { status: 401 });
+    }
+    const { data: profile, error: profileError } = await sessionClient
+      .from('profiles').select('role').eq('id', user.id).single();
+    if (profileError || profile?.role !== 'admin') {
+      return NextResponse.json({ error: 'Admin access is required to generate quiz questions.' }, { status: 403 });
+    }
+
     const { knowledgeAssetId } = await request.json();
     if (!knowledgeAssetId) {
       return NextResponse.json({ error: 'knowledgeAssetId is required' }, { status: 400 });
