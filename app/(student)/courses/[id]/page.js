@@ -75,32 +75,19 @@ export default function CoursePage() {
     setProcessing(true);
 
     try {
-      // Free course
-      if (course.price === 0 || course.price === '0') {
-        const { error } = await supabase
-          .from('enrollments')
-          .insert({
-            student_id: user.id,
-            course_id: course.id,
-            amount_paid: 0,
-            status: 'active',
-            payment_type: 'free',
-            payment_reference: 'free-' + Date.now(),
-          });
-
-        if (error) {
-          alert('Error enrolling: ' + error.message);
-        } else {
-          alert('✅ You are now enrolled in this course!');
-          const { data: newEnrollment } = await supabase
-            .from('enrollments')
-            .select('*')
-            .eq('student_id', user.id)
-            .eq('course_id', id)
-            .single();
-          setEnrollment(newEnrollment);
-          router.refresh();
-        }
+      // Free enrollment is also verified server-side; do not write enrollment rows from the browser.
+      if (Number(course.price) === 0) {
+        const response = await fetch('/api/verify-payment', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ courseId: course.id }),
+        });
+        const result = await response.json();
+        if (!response.ok || !result.success) throw new Error(result.message || 'Could not enroll in this course.');
+        const { data: newEnrollment } = await supabase
+          .from('enrollments').select('*').eq('student_id', user.id).eq('course_id', id).single();
+        setEnrollment(newEnrollment);
+        router.refresh();
         setProcessing(false);
         return;
       }
@@ -124,9 +111,7 @@ export default function CoursePage() {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           reference: transaction.reference,
-          course_id: course.id,
-          student_id: user.id,
-          amount: amount,
+          courseId: course.id,
         }),
       });
 
