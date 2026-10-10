@@ -1,5 +1,6 @@
 import { NextResponse } from 'next/server';
 import { createAdminClient } from '@/lib/supabase-admin';
+import { createRouteHandlerClient } from '@/lib/supabase-server';
 import { processBookGeneration } from '@/lib/pdf/processBookGeneration';
 import { runInBackground } from '@/lib/backgroundTask';
 
@@ -46,7 +47,36 @@ export async function POST(request) {
       return NextResponse.json({ error: 'Markdown content is required' }, { status: 400 });
     }
 
+    // This endpoint uses the service-role client, so require an authenticated admin.
+    const sessionClient = createRouteHandlerClient();
+    const { data: { user }, error: authError } = await sessionClient.auth.getUser();
+    if (authError || !user) {
+      return NextResponse.json({ error: 'Sign in as an admin to generate library books.' }, { status: 401 });
+    }
+    const { data: profile, error: profileError } = await sessionClient
+      .from('profiles').select('role').eq('id', user.id).single();
+    if (profileError || profile?.role !== 'admin') {
+      return NextResponse.json({ error: 'Admin access is required to generate library books.' }, { status: 403 });
+    }
+
     const supabase = createAdminClient();
+
+    // Avoid duplicate book rows when a generation request is retried or a title is already present.
+    // Passing bookId explicitly is the intentional regenerate/update path.
+    if (!bookId) {
+      const { data: titleMatches, error: titleLookupError } = await supabase
+        .from('books').select('id, title').ilike('title', title.trim());
+      if (titleLookupError) {
+        return NextResponse.json({ error: 'Could not check for an existing book title.' }, { status: 500 });
+      }
+      const exactMatch = (titleMatches || []).find((book) => String(book.title || '').trim().toLowerCase() === title.trim().toLowerCase());
+      if (exactMatch) {
+        return NextResponse.json({
+          error: 'A book with this title already exists. Open the existing book to update it instead of creating a duplicate.',
+          existingBookId: exactMatch.id,
+        }, { status: 409 });
+      }
+    }
 
     // 1. Create/update the book row up front, marked "queued", so the
     // frontend has a bookId to poll immediately. pdf_url is left as-is
@@ -57,7 +87,7 @@ export async function POST(request) {
       author,
       description,
       price: parseInt(price, 10) || 0,
-      is_published: true,
+      is_published: false,
       source_markdown: markdown,
       template: themeKey,
       generation_status: 'queued',
