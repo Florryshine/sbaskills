@@ -22,8 +22,29 @@ export default function NewBookPage() {
     e.preventDefault();
     setSaving(true);
     const supabase = createBrowserClient();
+    const normalizedTitle = formData.title.trim();
+    if (!normalizedTitle) {
+      alert('Please enter a book title.');
+      setSaving(false);
+      return;
+    }
+    const { data: matches, error: lookupError } = await supabase
+      .from('books')
+      .select('id, title')
+      .ilike('title', normalizedTitle);
+    if (lookupError) {
+      alert('Could not check for duplicate titles. Please try again.');
+      setSaving(false);
+      return;
+    }
+    const duplicate = (matches || []).find(book => String(book.title || '').trim().toLowerCase() === normalizedTitle.toLowerCase());
+    if (duplicate) {
+      alert('A book with this title already exists. Open the existing book to review or update it instead of creating a duplicate.');
+      setSaving(false);
+      return;
+    }
     const { error } = await supabase.from('books').insert({
-      title: formData.title,
+      title: normalizedTitle,
       description: formData.description,
       author: formData.author,
       price: parseInt(formData.price) || 0,
