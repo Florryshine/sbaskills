@@ -21,7 +21,7 @@ export default function BookPage() {
     async function loadBook() {
       const { data } = await supabase
         .from('books')
-        .select('*')
+        .select('id, title, author, description, price, cover_url, is_published, generation_status')
         .eq('id', id)
         .single();
       setBook(data);
@@ -113,7 +113,9 @@ export default function BookPage() {
 
   const isFree = book.price === 0 || book.price === '0';
   const isUnlocked = isFree || !!purchase;
-  const downloadUrl = book.pdf_url || book.file_url;
+  const handleDownload = () => {
+    window.location.assign(`/api/library/${id}/download`);
+  };
 
   return (
     <>
@@ -135,14 +137,14 @@ export default function BookPage() {
                   {isFree ? 'FREE' : `₦${Number(book.price).toLocaleString()}`}
                 </span>
 
-                {downloadUrl && isUnlocked && (
-                  <a href={downloadUrl} target="_blank" rel="noopener noreferrer"
+                {isUnlocked && (
+                  <button onClick={handleDownload}
                     className="ml-4 inline-block bg-brand-blue text-white px-6 py-3 rounded-full font-bold hover:opacity-90 transition">
                     📥 Download PDF
-                  </a>
+                  </button>
                 )}
 
-                {downloadUrl && !isUnlocked && (
+                {!isUnlocked && (
                   <button
                     onClick={handleBuy}
                     disabled={processing}
