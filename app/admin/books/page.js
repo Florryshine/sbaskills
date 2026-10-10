@@ -69,7 +69,7 @@ export default function AdminBooksPage() {
             <div key={book.id} className="rounded-2xl bg-white p-4 shadow-sm border border-slate-100">
               {book.cover_url && (
                 <img
-                  src={book.cover_url}
+                  src={`/api/library/${book.id}/cover`}
                   alt={book.title}
                   className="w-full h-40 object-cover rounded-xl mb-3"
                 />
