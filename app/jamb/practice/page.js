@@ -7,6 +7,7 @@ import Navbar from '@/components/Navbar';
 import Footer from '@/components/Footer';
 import { createBrowserClient } from '@/lib/supabase';
 import { addPoints, updateStreak } from '@/lib/gamification';
+import { awardEligibleBadges } from '@/lib/badges';
 
 const PRACTICE_SIZE = 10;
 function shuffle(items) { return [...items].sort(() => Math.random() - 0.5); }
@@ -176,6 +177,7 @@ export default function JAMBPracticePage() {
       else console.log('JAMB mastery updated:', masteryResult);
 
       await addPoints(user.id, 10, 'Completed JAMB practice', 'jamb_practice');
+      await awardEligibleBadges(supabase, user.id);
       await updateStreak(user.id);
 
       if (missionItemId) {
