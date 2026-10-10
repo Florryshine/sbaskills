@@ -4,6 +4,25 @@ import { createRouteHandlerClient } from '@/lib/supabase-server';
 
 const MAX_MESSAGES = 20;
 const MAX_MESSAGE_CHARS = 12000;
+const MAX_REQUESTS_PER_MINUTE = 10;
+const RATE_WINDOW_MS = 60 * 1000;
+// Best-effort per-instance protection. For a strict cross-instance limit, use a shared store.
+const requestWindows = globalThis.__sbaChatRequestWindows || new Map();
+globalThis.__sbaChatRequestWindows = requestWindows;
+
+function checkRateLimit(userId) {
+  const now = Date.now();
+  const current = requestWindows.get(userId);
+  if (!current || now - current.windowStartedAt >= RATE_WINDOW_MS) {
+    requestWindows.set(userId, { windowStartedAt: now, count: 1 });
+    return { allowed: true, retryAfter: 0 };
+  }
+  if (current.count >= MAX_REQUESTS_PER_MINUTE) {
+    return { allowed: false, retryAfter: Math.max(1, Math.ceil((RATE_WINDOW_MS - (now - current.windowStartedAt)) / 1000)) };
+  }
+  current.count += 1;
+  return { allowed: true, retryAfter: 0 };
+}
 
 export async function POST(request) {
   try {
@@ -13,6 +32,14 @@ export async function POST(request) {
     // This is a paid-provider proxy: never allow anonymous visitors to spend our API quota.
     if (authError || !user) {
       return NextResponse.json({ error: 'Please sign in to use the AI tutor.' }, { status: 401 });
+    }
+
+    const limit = checkRateLimit(user.id);
+    if (!limit.allowed) {
+      return NextResponse.json(
+        { error: 'You have sent too many AI tutor requests. Please wait a moment and try again.' },
+        { status: 429, headers: { 'Retry-After': String(limit.retryAfter) } }
+      );
     }
 
     const apiKey = process.env.GROQ_API_KEY || process.env.GROQ_API_KEY_1;
