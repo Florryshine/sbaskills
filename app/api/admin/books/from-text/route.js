@@ -69,7 +69,7 @@ export async function POST(request) {
       if (titleLookupError) {
         return NextResponse.json({ error: 'Could not check for an existing book title.' }, { status: 500 });
       }
-      const normalizeTitle = (value) => String(value || '').toLowerCase().normalize('NFKD').replace(/[^a-z0-9]+/g, ' ').trim().replace(/\\s+/g, ' ');
+      const normalizeTitle = (value) => String(value || '').toLowerCase().normalize('NFKD').replace(/[^a-z0-9]+/g, ' ').trim().replace(/\s+/g, ' ');
       const requestedTitle = normalizeTitle(title);
       const exactMatch = (titleMatches || []).find((book) => normalizeTitle(book.title) === requestedTitle);
       if (exactMatch) {
