@@ -23,11 +23,16 @@ export default function BookPage() {
         .from('books')
         .select('id, title, author, description, price, cover_url, is_published, generation_status')
         .eq('id', id)
-        .single();
-      setBook(data);
+        .eq('is_published', true)
+        .maybeSingle();
+      const title = String(data?.title || '').trim().toLowerCase();
+      const description = String(data?.description || '').trim().toLowerCase();
+      const isPlaceholder = title === 'test book by sba' || description === 'a sample book for testing' || title === 'animal physiology by florry' || description === 'abcd';
+      const publicBook = data && !isPlaceholder ? data : null;
+      setBook(publicBook);
 
       const { data: { user } } = await supabase.auth.getUser();
-      if (user && data && data.price > 0) {
+      if (user && publicBook && publicBook.price > 0) {
         const { data: purchaseData } = await supabase
           .from('book_purchases')
           .select('*')
