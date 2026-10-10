@@ -65,11 +65,13 @@ export async function POST(request) {
     // Passing bookId explicitly is the intentional regenerate/update path.
     if (!bookId) {
       const { data: titleMatches, error: titleLookupError } = await supabase
-        .from('books').select('id, title').ilike('title', title.trim());
+        .from('books').select('id, title').limit(2000);
       if (titleLookupError) {
         return NextResponse.json({ error: 'Could not check for an existing book title.' }, { status: 500 });
       }
-      const exactMatch = (titleMatches || []).find((book) => String(book.title || '').trim().toLowerCase() === title.trim().toLowerCase());
+      const normalizeTitle = (value) => String(value || '').toLowerCase().normalize('NFKD').replace(/[^a-z0-9]+/g, ' ').trim().replace(/\\s+/g, ' ');
+      const requestedTitle = normalizeTitle(title);
+      const exactMatch = (titleMatches || []).find((book) => normalizeTitle(book.title) === requestedTitle);
       if (exactMatch) {
         return NextResponse.json({
           error: 'A book with this title already exists. Open the existing book to update it instead of creating a duplicate.',
