@@ -1,9 +1,11 @@
 import { NextResponse } from 'next/server';
 import Groq from 'groq-sdk';
 import { createRouteHandlerClient } from '@/lib/supabase-server';
+import { createAdminClient } from '@/lib/supabase-admin';
 
 const MAX_MESSAGES = 20;
 const MAX_MESSAGE_CHARS = 12000;
+const MAX_REQUESTS_PER_HOUR = 30;
 const MAX_REQUESTS_PER_MINUTE = 10;
 const RATE_WINDOW_MS = 60 * 1000;
 // Best-effort per-instance protection. For a strict cross-instance limit, use a shared store.
@@ -42,6 +44,28 @@ export async function POST(request) {
       );
     }
 
+    // Persistent per-account rate limit works across serverless instances.
+    // Fail closed if the limiter table is missing or unavailable.
+    const admin = createAdminClient();
+    const since = new Date(Date.now() - 60 * 60 * 1000).toISOString();
+    const { count, error: usageError } = await admin
+      .from('ai_usage_events')
+      .select('id', { count: 'exact', head: true })
+      .eq('user_id', user.id)
+      .gte('created_at', since);
+    if (usageError) {
+      console.error('AI usage limit check failed:', usageError);
+      return NextResponse.json({ error: 'AI tutor is temporarily unavailable. Please try again later.' }, { status: 503 });
+    }
+    if ((count || 0) >= MAX_REQUESTS_PER_HOUR) {
+      return NextResponse.json({ error: 'You have reached the AI tutor limit for this hour. Please try again later.' }, { status: 429 });
+    }
+    const { error: usageInsertError } = await admin.from('ai_usage_events').insert({ user_id: user.id });
+    if (usageInsertError) {
+      console.error('AI usage event could not be recorded:', usageInsertError);
+      return NextResponse.json({ error: 'AI tutor is temporarily unavailable. Please try again later.' }, { status: 503 });
+    }
+
     const apiKey = process.env.GROQ_API_KEY || process.env.GROQ_API_KEY_1;
     if (!apiKey) {
       return NextResponse.json({ error: 'AI tutor is temporarily unavailable.' }, { status: 503 });
@@ -56,7 +80,7 @@ export async function POST(request) {
     const safeMessages = messages
       .filter((message) =>
         message &&
-        ['system', 'user', 'assistant'].includes(message.role) &&
+        ['user', 'assistant'].includes(message.role) &&
         typeof message.content === 'string' &&
         message.content.trim().length > 0
       )
