@@ -1,5 +1,6 @@
 import { NextResponse } from 'next/server';
 import { createAdminClient } from '@/lib/supabase-admin';
+import { createRouteHandlerClient } from '@/lib/supabase-server';
 import { renderToBuffer } from '@react-pdf/renderer';
 import React from 'react';
 import StudyNoteDocument from '@/lib/pdf/StudyNoteDocument';
@@ -20,6 +21,19 @@ export async function POST(request, { params }) {
   }
 
   try {
+    // This route uses the service-role client to publish content, so the caller
+    // must be an authenticated admin. Never trust the draft UUID as authorization.
+    const sessionClient = createRouteHandlerClient();
+    const { data: { user }, error: authError } = await sessionClient.auth.getUser();
+    if (authError || !user) {
+      return NextResponse.json({ error: 'Sign in as an admin to publish study notes.' }, { status: 401 });
+    }
+    const { data: profile, error: profileError } = await sessionClient
+      .from('profiles').select('role').eq('id', user.id).single();
+    if (profileError || profile?.role !== 'admin') {
+      return NextResponse.json({ error: 'Admin access is required to publish study notes.' }, { status: 403 });
+    }
+
     const supabase = createAdminClient();
 
     // 1. Fetch the draft
@@ -35,6 +49,25 @@ export async function POST(request, { params }) {
 
     const title = draft.title || draft.knowledge_assets?.keyword || 'Study Notes';
     const keyword = draft.knowledge_assets?.keyword || '';
+
+    // Prevent repeat publish runs from creating another public book with the same title.
+    // Existing draft-linked books are the intentional update path.
+    if (!draft.book_id) {
+      const { data: titleMatches, error: titleLookupError } = await supabase
+        .from('books').select('id, title').ilike('title', title.trim());
+      if (titleLookupError) {
+        return NextResponse.json({ error: 'Could not check for an existing library title.' }, { status: 500 });
+      }
+      const existingTitle = (titleMatches || []).find((book) =>
+        String(book.title || '').trim().toLowerCase() === title.trim().toLowerCase()
+      );
+      if (existingTitle) {
+        return NextResponse.json({
+          error: 'A library item with this title already exists. Review the existing item before publishing another copy.',
+          existingBookId: existingTitle.id,
+        }, { status: 409 });
+      }
+    }
 
     // 2. Render PDF with metadata and SEO-friendly file name
     let pdfBuffer;
