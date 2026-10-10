@@ -7,6 +7,7 @@ import Navbar from '@/components/Navbar';
 import Footer from '@/components/Footer';
 import Link from 'next/link';
 import { addPoints, updateStreak } from '@/lib/gamification';
+import { awardEligibleBadges } from '@/lib/badges';
 
 export default function DailyChallengePage() {
   const [challenge, setChallenge] = useState(null);
@@ -161,6 +162,7 @@ export default function DailyChallengePage() {
       // Award XP
       const xp = score >= 8 ? 50 : score >= 5 ? 25 : 10;
       await addPoints(user.id, xp, 'Daily Challenge completed', 'daily_challenge', challenge.id);
+      await awardEligibleBadges(supabase, user.id);
 
       // Update streak — routed through the same update_streak() RPC every
       // other page uses now, instead of a naive +1 that never resets a
