@@ -21,6 +21,10 @@ export async function POST(request) {
       return NextResponse.json({ success: false, message: 'Payment verification is not configured.' }, { status: 503 });
     }
 
+    if (!process.env.PAYSTACK_SECRET_KEY) {
+      return NextResponse.json({ success: false, message: 'Payment verification is not configured.' }, { status: 503 });
+    }
+
     const response = await fetch(`https://api.paystack.co/transaction/verify/${encodeURIComponent(reference)}`, {
       headers: { Authorization: `Bearer ${process.env.PAYSTACK_SECRET_KEY}` }, cache: 'no-store',
     });
