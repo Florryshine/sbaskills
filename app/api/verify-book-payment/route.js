@@ -17,6 +17,10 @@ export async function POST(request) {
     const { data: existing } = await supabase.from('book_purchases').select('id').eq('student_id', user.id).eq('book_id', book_id).eq('status', 'active').maybeSingle();
     if (existing) return NextResponse.json({ success: true, alreadyPurchased: true });
 
+    if (!process.env.PAYSTACK_SECRET_KEY) {
+      return NextResponse.json({ success: false, message: 'Payment verification is not configured.' }, { status: 503 });
+    }
+
     const response = await fetch(`https://api.paystack.co/transaction/verify/${encodeURIComponent(reference)}`, {
       headers: { Authorization: `Bearer ${process.env.PAYSTACK_SECRET_KEY}` }, cache: 'no-store',
     });
@@ -24,6 +28,7 @@ export async function POST(request) {
     const result = await response.json();
     const transaction = result?.data;
     if (!result?.status || !transaction || transaction.status !== 'success') return NextResponse.json({ success: false, message: 'Payment verification failed.' }, { status: 400 });
+    if (String(transaction.currency || '').toUpperCase() !== 'NGN') return NextResponse.json({ success: false, message: 'Payment currency does not match.' }, { status: 400 });
     if (Number(transaction.amount) < Math.round(price * 100)) return NextResponse.json({ success: false, message: 'The verified payment is below the book price.' }, { status: 400 });
     if (String(transaction.customer?.email || '').toLowerCase() !== String(user.email || '').toLowerCase()) return NextResponse.json({ success: false, message: 'This payment does not match your signed-in account.' }, { status: 403 });
 
