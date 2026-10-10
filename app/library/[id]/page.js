@@ -130,7 +130,7 @@ export default function BookPage() {
           <div className="bg-white rounded-2xl shadow-sm border border-gray-100 overflow-hidden">
             {book.cover_url && (
               <div className="relative w-full h-64 sm:h-96">
-                <Image src={book.cover_url} alt={book.title} fill className="object-cover" sizes="(max-width: 768px) 100vw, 800px" priority />
+                <Image src={`/api/library/${id}/cover`} alt={book.title} fill className="object-cover" sizes="(max-width: 768px) 100vw, 800px" priority />
               </div>
             )}
             <div className="p-8">
