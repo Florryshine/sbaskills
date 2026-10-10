@@ -4,6 +4,7 @@ import Link from 'next/link';
 import { useUnlockSystem } from '@/context/UnlockSystemContext';
 import { getLockedFeatures, getFeatureById } from '@/lib/featureUnlocks';
 import LockedFeature from './LockedFeature';
+import { LEVELS } from '@/lib/levels';
 
 export default function FeatureUnlockSection() {
   const unlockSystem = useUnlockSystem();
@@ -57,6 +58,8 @@ export default function FeatureUnlockSection() {
           <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-3">
             {lockedFeatures.map((feature) => {
               const requiredLevel = unlockSystem.getRequiredLevel(feature.featureId);
+              const targetLevel = LEVELS.find((item) => item.level === requiredLevel);
+              const xpNeeded = targetLevel ? Math.max(0, targetLevel.minXP - Number(userPoints || 0)) : null;
               return (
                 <LockedFeature
                   key={feature.featureId}
@@ -68,6 +71,9 @@ export default function FeatureUnlockSection() {
                     <span className="text-2xl opacity-50">{feature.emoji}</span>
                     <span className="text-sm font-bold text-gray-400">{feature.label}</span>
                     <span className="text-xs text-gray-500">Level {requiredLevel}</span>
+                    {xpNeeded !== null && xpNeeded > 0 && (
+                      <span className="text-xs font-semibold text-brand-blue">{xpNeeded.toLocaleString()} XP to go</span>
+                    )}
                   </div>
                 </LockedFeature>
               );
@@ -80,7 +86,7 @@ export default function FeatureUnlockSection() {
       {lockedFeatures.length > 0 && (
         <div className="mt-4 pt-4 border-t border-gray-100">
           <p className="text-sm text-gray-500 text-center">
-            Keep earning XP to unlock more features! 
+            Keep earning XP to unlock more features. Your next level is visible below.
             {userLevel && lockedFeatures.length > 0 && (
               <span className="font-bold text-brand-blue">
                 Next: {lockedFeatures[0].label} at Level {unlockSystem.getRequiredLevel(lockedFeatures[0].featureId)}
