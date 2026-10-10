@@ -1,5 +1,6 @@
 import { NextResponse } from 'next/server';
 import { createAdminClient } from '@/lib/supabase-admin';
+import { createRouteHandlerClient } from '@/lib/supabase-server';
 
 function getStoragePath(rawUrl, supabaseUrl) {
   if (!rawUrl) return null;
@@ -20,8 +21,15 @@ export async function GET(_request, { params }) {
   try {
     const admin = createAdminClient();
     const { data: book, error } = await admin
-      .from('books').select('cover_url, is_published').eq('id', params.id).eq('is_published', true).maybeSingle();
+      .from('books').select('cover_url, is_published').eq('id', params.id).maybeSingle();
     if (error || !book?.cover_url) return NextResponse.json({ error: 'Cover not found.' }, { status: 404 });
+    if (!book.is_published) {
+      const sessionClient = createRouteHandlerClient();
+      const { data: { user }, error: authError } = await sessionClient.auth.getUser();
+      if (authError || !user) return NextResponse.json({ error: 'Cover not found.' }, { status: 404 });
+      const { data: profile } = await sessionClient.from('profiles').select('role').eq('id', user.id).maybeSingle();
+      if (profile?.role !== 'admin') return NextResponse.json({ error: 'Cover not found.' }, { status: 404 });
+    }
 
     const storagePath = getStoragePath(book.cover_url, process.env.NEXT_PUBLIC_SUPABASE_URL);
     if (!storagePath) {
