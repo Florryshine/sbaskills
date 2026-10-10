@@ -33,7 +33,7 @@ export default async function LibraryPage() {
   // Collapse title variants to one public card. If duplicates have different
   // prices, prefer the highest-priced record to avoid exposing a free copy
   // beside a paid copy of the same title.
-  const normalizeTitle = (title) => String(title || '').toLowerCase().normalize('NFKD').replace(/[^a-z0-9]+/g, ' ').trim().replace(/\\s+/g, ' ');
+  const normalizeTitle = (title) => String(title || '').toLowerCase().normalize('NFKD').replace(/[^a-z0-9]+/g, ' ').trim().replace(/\s+/g, ' ');
   const uniqueBooks = new Map();
   for (const book of publicBooks) {
     const key = normalizeTitle(book.title);
