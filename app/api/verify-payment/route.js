@@ -1,100 +1,55 @@
 import { NextResponse } from 'next/server';
 import { createRouteHandlerClient } from '@/lib/supabase-server';
 
-// Previously broken end-to-end: EnrollButton.js sent { courseId, reference }
-// but this route read { course_id, student_id, amount } — course_id never
-// matched (camelCase vs snake_case) and student_id was never sent at all,
-// so every paid enrollment silently failed to record after a real charge.
-// Fixed by: accepting courseId as sent, deriving the student from the
-// authenticated session instead of trusting a client-supplied id (also
-// closes a spoofing hole), and looking up price server-side instead of
-// trusting a client-supplied amount.
 export async function POST(request) {
   try {
-    const { courseId, reference, free } = await request.json();
+    const { courseId, reference } = await request.json();
     const supabase = createRouteHandlerClient();
+    const { data: { user }, error: authError } = await supabase.auth.getUser();
+    if (authError || !user) return NextResponse.json({ success: false, message: 'You must be logged in to enroll.' }, { status: 401 });
+    if (!courseId) return NextResponse.json({ success: false, message: 'Missing course.' }, { status: 400 });
 
-    const {
-      data: { user },
-    } = await supabase.auth.getUser();
+    const { data: course, error: courseError } = await supabase.from('courses').select('id, price').eq('id', courseId).single();
+    if (courseError || !course) return NextResponse.json({ success: false, message: 'Course not found.' }, { status: 404 });
+    const price = Number(course.price);
+    if (!Number.isFinite(price) || price < 0) return NextResponse.json({ success: false, message: 'Invalid course price.' }, { status: 400 });
 
-    if (!user) {
-      return NextResponse.json({ success: false, message: 'You must be logged in to enroll.' }, { status: 401 });
-    }
+    const { data: existing } = await supabase.from('enrollments').select('id').eq('student_id', user.id).eq('course_id', courseId).eq('status', 'active').maybeSingle();
+    if (existing) return NextResponse.json({ success: true, alreadyEnrolled: true });
 
-    if (!courseId) {
-      return NextResponse.json({ success: false, message: 'Missing course.' }, { status: 400 });
-    }
-
-    // Don't double-enroll on a retry / page refresh.
-    const { data: existing } = await supabase
-      .from('enrollments')
-      .select('id')
-      .eq('student_id', user.id)
-      .eq('course_id', courseId)
-      .maybeSingle();
-
-    if (existing) {
-      return NextResponse.json({ success: true, alreadyEnrolled: true });
-    }
-
-    const { data: course } = await supabase
-      .from('courses')
-      .select('id, price')
-      .eq('id', courseId)
-      .single();
-
-    if (!course) {
-      return NextResponse.json({ success: false, message: 'Course not found.' }, { status: 404 });
-    }
-
-    if (free || Number(course.price) === 0) {
-      await supabase.from('enrollments').insert({
-        student_id: user.id,
-        course_id: courseId,
-        amount_paid: 0,
-        status: 'active',
-        payment_type: 'free',
-      });
+    // Only the server-side course price determines whether the course is free.
+    if (price === 0) {
+      const { error: insertError } = await supabase.from('enrollments').insert({ student_id: user.id, course_id: courseId, amount_paid: 0, status: 'active', payment_type: 'free' });
+      if (insertError) {
+        console.error('Free enrollment insert failed:', insertError);
+        return NextResponse.json({ success: false, message: 'Could not complete enrollment. Please try again.' }, { status: 500 });
+      }
       return NextResponse.json({ success: true });
     }
+    if (typeof reference !== 'string' || !reference.trim()) return NextResponse.json({ success: false, message: 'Missing payment reference.' }, { status: 400 });
+    if (!process.env.PAYSTACK_SECRET_KEY) return NextResponse.json({ success: false, message: 'Payment verification is not configured.' }, { status: 503 });
 
-    if (!reference) {
-      return NextResponse.json({ success: false, message: 'Missing payment reference.' }, { status: 400 });
-    }
-
-    // Verify with Paystack
-    const response = await fetch(`https://api.paystack.co/transaction/verify/${reference}`, {
-      headers: {
-        Authorization: `Bearer ${process.env.PAYSTACK_SECRET_KEY}`,
-      },
+    const response = await fetch(`https://api.paystack.co/transaction/verify/${encodeURIComponent(reference)}`, {
+      headers: { Authorization: `Bearer ${process.env.PAYSTACK_SECRET_KEY}` }, cache: 'no-store',
     });
+    if (!response.ok) return NextResponse.json({ success: false, message: 'Could not verify payment with Paystack.' }, { status: 502 });
+    const result = await response.json();
+    const transaction = result?.data;
+    if (!result?.status || !transaction || transaction.status !== 'success') return NextResponse.json({ success: false, message: 'Payment verification failed.' }, { status: 400 });
+    if (String(transaction.currency || '').toUpperCase() !== 'NGN') return NextResponse.json({ success: false, message: 'Payment currency does not match.' }, { status: 400 });
+    if (Number(transaction.amount) < Math.round(price * 100)) return NextResponse.json({ success: false, message: 'The verified payment is below the course price.' }, { status: 400 });
+    if (String(transaction.customer?.email || '').toLowerCase() !== String(user.email || '').toLowerCase()) return NextResponse.json({ success: false, message: 'This payment does not match your signed-in account.' }, { status: 403 });
 
-    const data = await response.json();
-
-    if (!data?.data) {
-      return NextResponse.json({ success: false, message: 'Could not verify payment with Paystack.' }, { status: 502 });
+    const { data: duplicateReference } = await supabase.from('enrollments').select('id').eq('payment_reference', reference).maybeSingle();
+    if (duplicateReference) return NextResponse.json({ success: false, message: 'This payment reference has already been used.' }, { status: 409 });
+    const { error: insertError } = await supabase.from('enrollments').insert({ student_id: user.id, course_id: courseId, payment_reference: reference, amount_paid: Number(transaction.amount) / 100, status: 'active', payment_type: 'paystack' });
+    if (insertError) {
+      console.error('Paid enrollment insert failed:', insertError);
+      return NextResponse.json({ success: false, message: 'Payment was verified but enrollment could not be recorded. Contact support with your payment reference.' }, { status: 500 });
     }
-
-    // Amount actually charged (kobo -> naira) must cover the course price —
-    // never trust a client-supplied amount for what gets recorded.
-    const amountPaid = data.data.amount / 100;
-    if (data.data.status === 'success' && amountPaid >= Number(course.price)) {
-      await supabase.from('enrollments').insert({
-        student_id: user.id,
-        course_id: courseId,
-        payment_reference: reference,
-        amount_paid: amountPaid,
-        status: 'active',
-        payment_type: 'paystack',
-      });
-
-      return NextResponse.json({ success: true });
-    }
-
-    return NextResponse.json({ success: false, message: 'Payment verification failed' });
+    return NextResponse.json({ success: true });
   } catch (error) {
     console.error('Payment verification error:', error);
-    return NextResponse.json({ success: false, message: error.message }, { status: 500 });
+    return NextResponse.json({ success: false, message: 'Unable to verify payment right now.' }, { status: 500 });
   }
 }
