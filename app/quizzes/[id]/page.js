@@ -4,6 +4,7 @@ import { useState, useEffect } from 'react';
 import { useParams, useSearchParams } from 'next/navigation';
 import { createBrowserClient } from '@/lib/supabase';
 import { addPoints } from '@/lib/gamification';
+import { awardEligibleBadges } from '@/lib/badges';
 
 // XP awarded for a content-engine (draft) quiz. Unlike the manual `quizzes`
 // table, quiz_drafts has no points_reward-style column of its own, so this
@@ -126,6 +127,7 @@ export default function QuizAttempt() {
 
       if (scorePct >= (quiz.passing_score || 70)) {
         await addPoints(user.id, DRAFT_QUIZ_XP, `Completed quiz: ${quiz.keyword || quiz.title}`, 'quiz_complete', id);
+        await awardEligibleBadges(supabase, user.id);
       }
     }
   };
