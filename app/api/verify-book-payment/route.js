@@ -35,9 +35,16 @@ export async function POST(request) {
     if (String(transaction.currency || '').toUpperCase() !== 'NGN') return NextResponse.json({ success: false, message: 'Payment currency does not match.' }, { status: 400 });
     if (Number(transaction.amount) < Math.round(price * 100)) return NextResponse.json({ success: false, message: 'The verified payment is below the book price.' }, { status: 400 });
     if (String(transaction.customer?.email || '').toLowerCase() !== String(user.email || '').toLowerCase()) return NextResponse.json({ success: false, message: 'This payment does not match your signed-in account.' }, { status: 403 });
+    const metadataBookId = transaction.metadata?.book_id ?? transaction.metadata?.custom_fields?.find((field) => field.variable_name === 'book_id')?.value;
+    if (metadataBookId !== undefined && String(metadataBookId) !== String(book_id)) {
+      return NextResponse.json({ success: false, message: 'This payment was initiated for a different item.' }, { status: 403 });
+    }
 
-    const { data: duplicateReference } = await supabase.from('book_purchases').select('id').eq('payment_reference', reference).maybeSingle();
-    if (duplicateReference) return NextResponse.json({ success: false, message: 'This payment reference has already been used.' }, { status: 409 });
+    const [{ data: duplicateReference }, { data: courseReference }] = await Promise.all([
+      supabase.from('book_purchases').select('id').eq('payment_reference', reference).maybeSingle(),
+      supabase.from('enrollments').select('id').eq('payment_reference', reference).maybeSingle(),
+    ]);
+    if (duplicateReference || courseReference) return NextResponse.json({ success: false, message: 'This payment reference has already been used.' }, { status: 409 });
     const { error: insertError } = await supabase.from('book_purchases').insert({
       student_id: user.id, book_id, payment_reference: reference, amount_paid: Number(transaction.amount) / 100, status: 'active', payment_type: 'paystack',
     });
