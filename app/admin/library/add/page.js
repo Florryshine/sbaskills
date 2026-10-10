@@ -36,6 +36,14 @@ export default function AddBook() {
     e.preventDefault();
     setUploading(true);
     try {
+      const normalizedTitle = form.title.trim();
+      if (!normalizedTitle) throw new Error('Please enter a book title.');
+      const { data: matches, error: lookupError } = await supabase
+        .from('books').select('id, title').ilike('title', normalizedTitle);
+      if (lookupError) throw new Error('Could not check for duplicate titles. Please try again.');
+      const duplicate = (matches || []).find(book => String(book.title || '').trim().toLowerCase() === normalizedTitle.toLowerCase());
+      if (duplicate) throw new Error('A book with this title already exists. Open the existing item to review it instead of creating a duplicate.');
+
       let coverUrl = null;
       let fileUrl = null;
       if (coverFile) coverUrl = await handleUpload(coverFile, 'covers');
@@ -44,6 +52,7 @@ export default function AddBook() {
       const { error } = await supabase.from('books').insert([
         {
           ...form,
+          title: normalizedTitle,
           cover_url: coverUrl,       // changed from cover_image_url
           pdf_url: fileUrl,          // changed from file_url
           is_published: true,        // auto‑publish
