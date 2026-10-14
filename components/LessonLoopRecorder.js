@@ -85,6 +85,9 @@ export default function LessonLoopRecorder({ contentAsset, onSaved }) {
   const segments = contentAsset.metadata?.segments || [];
   const totalDuration =
     contentAsset.metadata?.totalDurationSeconds || segments.reduce((sum, s) => sum + (s.durationSeconds || 0), 0);
+  const missingNarrationCount = segments.filter((segment) => !segment.audioUrl).length;
+  const missingTextCount = segments.filter((segment) => !String(segment.text || '').trim()).length;
+  const canRecord = segments.length > 0 && missingNarrationCount === 0 && missingTextCount === 0;
 
   const [index, setIndex] = useState(-1); // -1 = idle
   const [status, setStatus] = useState('idle');
@@ -321,6 +324,12 @@ export default function LessonLoopRecorder({ contentAsset, onSaved }) {
       setErrorMsg('This lesson has no segments yet — still generating, or generation failed.');
       return;
     }
+    if (missingTextCount > 0 || missingNarrationCount > 0) {
+      setErrorMsg(
+        `This lesson is not ready to record: ${missingTextCount} segment(s) have no text and ${missingNarrationCount} have no narration audio. Regenerate the lesson after checking the TTS service.`
+      );
+      return;
+    }
 
     try {
       const AudioContextCls = window.AudioContext || window.webkitAudioContext;
@@ -437,7 +446,7 @@ export default function LessonLoopRecorder({ contentAsset, onSaved }) {
 
       {segments.some((segment) => !segment.audioUrl) && (
         <p className="text-sm text-amber-700 text-center">
-          ⚠️ Narration is missing for {segments.filter((segment) => !segment.audioUrl).length} of {segments.length} segments.
+          ⚠️ Narration is missing for {missingNarrationCount} of {segments.length} segments. Recording is disabled until this is fixed.
           {segments.find((segment) => !segment.audioUrl)?.audioError
             ? ` First error: ${segments.find((segment) => !segment.audioUrl).audioError}`
             : ' Regenerate this lesson after fixing the narration service.'}
@@ -452,7 +461,7 @@ export default function LessonLoopRecorder({ contentAsset, onSaved }) {
         {status === 'idle' && (
           <button
             onClick={startRecording}
-            disabled={!assetsReady || segments.length === 0}
+            disabled={!assetsReady || !canRecord}
             className="bg-brand-blue text-white px-5 py-2.5 rounded-xl text-sm font-bold hover:opacity-90 disabled:opacity-50"
           >
             🔴 Start Recording
