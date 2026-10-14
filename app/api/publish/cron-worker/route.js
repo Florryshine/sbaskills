@@ -9,17 +9,11 @@
 import { NextResponse } from 'next/server';
 import { createAdminClient } from '@/lib/supabase-admin';
 import { executePublishJob } from '@/lib/publish-engine';
+import { authorizeCronRequest } from '@/lib/cronAuth';
 
 export async function GET(req) {
-  // Vercel sets CRON_SECRET automatically and sends it as this header on
-  // its own invocations. Checking it stops this route being a public,
-  // unauthenticated way for anyone to force every due/queued job to fire.
-  if (process.env.CRON_SECRET) {
-    const auth = req.headers.get('authorization');
-    if (auth !== `Bearer ${process.env.CRON_SECRET}`) {
-      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
-    }
-  }
+  const authError = authorizeCronRequest(req, 'authorization');
+  if (authError) return authError;
 
   const supabase = createAdminClient();
   const now = new Date().toISOString();

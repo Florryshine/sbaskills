@@ -1,16 +1,12 @@
 import { NextResponse } from 'next/server';
 import { createRouteHandlerClient } from '@/lib/supabase-server';
 import { groq } from '@/lib/groqAPI';
+import { authorizeCronRequest } from '@/lib/cronAuth';
 
 // Optional: protect with a secret key (set CRON_SECRET in Vercel)
-const CRON_SECRET = process.env.CRON_SECRET;
-
 export async function GET(request) {
-  // Verify secret if set
-  const authHeader = request.headers.get('x-cron-secret');
-  if (CRON_SECRET && authHeader !== CRON_SECRET) {
-    return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
-  }
+  const authError = authorizeCronRequest(request, 'authorization');
+  if (authError) return authError;
 
   try {
     const supabase = createRouteHandlerClient();

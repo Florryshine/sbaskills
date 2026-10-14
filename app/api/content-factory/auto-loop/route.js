@@ -26,6 +26,7 @@
 import { NextResponse } from 'next/server';
 import { createAdminClient } from '@/lib/supabase-admin';
 import { runContentFactory } from '@/lib/content-factory';
+import { authorizeCronRequest } from '@/lib/cronAuth';
 
 // The four platforms this month's growth push is about. LinkedIn is
 // intentionally excluded from weekend runs further down - its audience
@@ -143,12 +144,8 @@ async function autoApproveAndSchedule(supabase, contentAssetId, platform) {
 }
 
 export async function GET(req) {
-  if (process.env.CRON_SECRET) {
-    const auth = req.headers.get('authorization');
-    if (auth !== `Bearer ${process.env.CRON_SECRET}`) {
-      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
-    }
-  }
+  const authError = authorizeCronRequest(req, 'authorization');
+  if (authError) return authError;
 
   const mode = process.env.LOOP_MODE === 'auto' ? 'auto' : 'review';
   const supabase = createAdminClient();
