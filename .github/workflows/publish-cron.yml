@@ -16,9 +16,9 @@ name: Publish scheduled social posts
 # and CRON_SECRET (same value as the CRON_SECRET env var on Vercel).
 
 on:
-  schedule:
-    - cron: "*/15 * * * *"
-  workflow_dispatch: {} # lets you trigger it manually from the Actions tab too
+  # Scheduled publishing is intentionally paused while the media pipeline is being completed.
+  # Keep manual dispatch available for later controlled testing.
+  workflow_dispatch: {}
 
 jobs:
   trigger-publish:
