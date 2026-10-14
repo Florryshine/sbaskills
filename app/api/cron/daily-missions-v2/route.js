@@ -4,7 +4,7 @@ import { generateDailyMissionForStudent, createDailyMissionNotification } from '
 import { authorizeCronRequest } from '@/lib/cronAuth';
 
 export async function GET(request) {
-  const authError = authorizeCronRequest(request, 'x-cron-secret');
+  const authError = authorizeCronRequest(request, 'authorization');
   if (authError) return authError;
 
   const supabase = createAdminClient();
