@@ -1,12 +1,1 @@
-{
-  "crons": [
-    {
-      "path": "/api/daily-mentor",
-      "schedule": "0 6 * * *"
-    },
-    {
-      "path": "/api/content-factory/auto-loop",
-      "schedule": "0 5 * * *"
-    }
-  ]
-}
+{}
