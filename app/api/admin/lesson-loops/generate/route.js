@@ -227,7 +227,7 @@ async function runLessonLoopPipeline(contentAssetId, asset) {
       onScreenText:
         (typeof seg.onScreenText === 'string' && seg.onScreenText.trim())
           ? seg.onScreenText.trim()
-          : seg.text.trim().split(/\\s+/).slice(0, 7).join(' '),
+          : seg.text.trim().split(/\s+/).slice(0, 7).join(' '),
       visualHint: seg.visualHint,
       audioUrl: audioResult.audioUrl,
       audioError: audioResult.audioError || null,
@@ -243,17 +243,16 @@ async function runLessonLoopPipeline(contentAssetId, asset) {
     .filter((s) => !s.audioUrl)
     .map((s) => ({ type: s.type, error: s.audioError || 'No audio URL returned' }));
 
-  // Do not present a fully silent lesson as a successful draft. Previously
-  // every TTS failure was swallowed and the recorder silently timed through
-  // the segments, making a broken narration pipeline look successful.
-  if (narratedSegments.length === 0) {
+  // Every segment must have narration. Partial success would still produce
+  // a lesson with silent gaps, which is not acceptable for this format.
+  if (narratedSegments.length !== segmentsWithMedia.length) {
     const firstError = narrationFailures[0]?.error || 'Unknown TTS/storage error';
     await supabase
       .from('content_assets')
       .update({
         status: 'failed',
         metadata: {
-          error_message: `Narration failed for all ${segmentsWithMedia.length} segments. First error: ${firstError}`,
+          error_message: `Narration failed for ${narrationFailures.length} of ${segmentsWithMedia.length} segments. First error: ${firstError}`,
           segments: segmentsWithMedia,
           youtube: script.youtube,
           facebook: script.facebook,
