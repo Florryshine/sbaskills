@@ -1,13 +1,13 @@
 import { NextResponse } from 'next/server';
 import { createAdminClient } from '@/lib/supabase-admin';
 import { generateDailyMissionForStudent, createDailyMissionNotification } from '@/lib/dailyMissionEngine';
+import { authorizeCronRequest } from '@/lib/cronAuth';
 
 const CRON_SECRET = process.env.CRON_SECRET;
 
 export async function GET(request) {
-  if (CRON_SECRET && request.headers.get('x-cron-secret') !== CRON_SECRET) {
-    return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
-  }
+  const authError = authorizeCronRequest(request, 'x-cron-secret');
+  if (authError) return authError;
 
   const supabase = createAdminClient();
   const { data: curriculum } = await supabase
