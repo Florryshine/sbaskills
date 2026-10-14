@@ -196,7 +196,9 @@ export default function LessonLoopRecorder({ contentAsset, onSaved }) {
 
     // ── Big on-screen keyword/caption, lower-third. ──
     ctx.font = '800 64px Arial';
-    const keywordLines = wrapText(ctx, current.onScreenText || '', W - 200).slice(0, 2);
+    // Older drafts may not have onScreenText. Fall back to the spoken line
+    // so the video never shows stock footage alone because a caption is blank.
+    const keywordLines = wrapText(ctx, current.onScreenText || current.text || '', W - 200).slice(0, 2);
     const keywordLineH = 76;
     const keywordTop = H * 0.68;
 
@@ -433,6 +435,14 @@ export default function LessonLoopRecorder({ contentAsset, onSaved }) {
         {totalDuration >= 90 ? 's' : ''}).
       </p>
 
+      {segments.some((segment) => !segment.audioUrl) && (
+        <p className="text-sm text-amber-700 text-center">
+          ⚠️ Narration is missing for {segments.filter((segment) => !segment.audioUrl).length} of {segments.length} segments.
+          {segments.find((segment) => !segment.audioUrl)?.audioError
+            ? ` First error: ${segments.find((segment) => !segment.audioUrl).audioError}`
+            : ' Regenerate this lesson after fixing the narration service.'}
+        </p>
+      )}
       {errorMsg && <p className="text-sm text-red-600 text-center">⚠️ {errorMsg}</p>}
       {!assetsReady && status === 'idle' && (
         <p className="text-xs text-gray-400 text-center">Loading backgrounds…</p>
