@@ -3,8 +3,6 @@ import { createAdminClient } from '@/lib/supabase-admin';
 import { generateDailyMissionForStudent, createDailyMissionNotification } from '@/lib/dailyMissionEngine';
 import { authorizeCronRequest } from '@/lib/cronAuth';
 
-const CRON_SECRET = process.env.CRON_SECRET;
-
 export async function GET(request) {
   const authError = authorizeCronRequest(request, 'x-cron-secret');
   if (authError) return authError;
