@@ -120,7 +120,7 @@ Return ONLY JSON:
       parsed &&
       Array.isArray(parsed.segments) &&
       parsed.segments.length >= 5 &&
-      parsed.segments.every((s) => s && s.type && s.text) &&
+      parsed.segments.every((s) => s && s.type && typeof s.text === 'string' && s.text.trim()) &&
       parsed.youtube?.title &&
       parsed.youtube?.description &&
       parsed.facebook?.caption &&
@@ -214,7 +214,7 @@ async function runLessonLoopPipeline(contentAssetId, asset) {
           return { audioUrl };
         } catch (err) {
           console.warn(`Segment ${i} (${seg.type}) narration failed:`, err.message);
-          return { audioUrl: null };
+          return { audioUrl: null, audioError: String(err?.message || err).slice(0, 500) };
         }
       })(),
     ]);
@@ -223,9 +223,14 @@ async function runLessonLoopPipeline(contentAssetId, asset) {
       type: seg.type,
       label: SEGMENT_TYPE_LABEL[seg.type] || seg.type.toUpperCase(),
       text: seg.text,
-      onScreenText: seg.onScreenText,
+      // Keep captions visible even if the model omitted onScreenText.
+      onScreenText:
+        (typeof seg.onScreenText === 'string' && seg.onScreenText.trim())
+          ? seg.onScreenText.trim()
+          : seg.text.trim().split(/\\s+/).slice(0, 7).join(' '),
       visualHint: seg.visualHint,
       audioUrl: audioResult.audioUrl,
+      audioError: audioResult.audioError || null,
       durationSeconds: estimateDurationSeconds(seg.text),
       background,
     };
@@ -233,6 +238,31 @@ async function runLessonLoopPipeline(contentAssetId, asset) {
 
   const totalDuration = segmentsWithMedia.reduce((sum, s) => sum + (s.durationSeconds || 0), 0);
   const hookSegment = segmentsWithMedia.find((s) => s.type === 'hook');
+  const narratedSegments = segmentsWithMedia.filter((s) => s.audioUrl);
+  const narrationFailures = segmentsWithMedia
+    .filter((s) => !s.audioUrl)
+    .map((s) => ({ type: s.type, error: s.audioError || 'No audio URL returned' }));
+
+  // Do not present a fully silent lesson as a successful draft. Previously
+  // every TTS failure was swallowed and the recorder silently timed through
+  // the segments, making a broken narration pipeline look successful.
+  if (narratedSegments.length === 0) {
+    const firstError = narrationFailures[0]?.error || 'Unknown TTS/storage error';
+    await supabase
+      .from('content_assets')
+      .update({
+        status: 'failed',
+        metadata: {
+          error_message: `Narration failed for all ${segmentsWithMedia.length} segments. First error: ${firstError}`,
+          segments: segmentsWithMedia,
+          youtube: script.youtube,
+          facebook: script.facebook,
+          tiktok: script.tiktok,
+        },
+      })
+      .eq('id', contentAssetId);
+    return;
+  }
 
   await supabase
     .from('content_assets')
@@ -246,6 +276,7 @@ async function runLessonLoopPipeline(contentAssetId, asset) {
         tiktok: script.tiktok,
         segments: segmentsWithMedia,
         totalDurationSeconds: totalDuration,
+        narrationWarnings: narrationFailures,
       },
     })
     .eq('id', contentAssetId);
