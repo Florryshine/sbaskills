@@ -4,8 +4,6 @@ import { groq } from '@/lib/groqAPI';
 import { authorizeCronRequest } from '@/lib/cronAuth';
 
 // Optional: protect with a secret key (set CRON_SECRET in Vercel)
-const CRON_SECRET = process.env.CRON_SECRET;
-
 export async function GET(request) {
   const authError = authorizeCronRequest(request, 'x-cron-secret');
   if (authError) return authError;
