@@ -15,6 +15,7 @@ export default function TakeQuiz() {
   const [currentQuestion, setCurrentQuestion] = useState(0);
   const [submitted, setSubmitted] = useState(false);
   const [score, setScore] = useState(null);
+  const [attemptSaveMessage, setAttemptSaveMessage] = useState('');
   const [loading, setLoading] = useState(true);
   const [timeLeft, setTimeLeft] = useState(null);
   const { id } = useParams();
@@ -85,27 +86,34 @@ export default function TakeQuiz() {
       }
     });
 
-    const scorePercent = Math.round((correct / total) * 100);
+    const scorePercent = total ? Math.round((correct / total) * 100) : 0;
     setScore(scorePercent);
 
-    const { data: { user } } = await supabase.auth.getUser();
+    const { data: authData } = await supabase.auth.getUser();
+    const user = authData?.user || null;
 
-    // Save attempt
-    await supabase
-      .from('quiz_attempts')
-      .insert({
+    if (user) {
+      const { error: attemptError } = await supabase.from('quiz_attempts').insert({
         student_id: user.id,
         quiz_id: id,
         score: scorePercent,
         total_questions: total,
-        answers: answers,
-        completed_at: new Date(),
+        answers,
+        completed_at: new Date().toISOString(),
       });
+      if (attemptError) {
+        console.error('Quiz attempt could not be saved:', attemptError);
+        setAttemptSaveMessage('Your score is shown, but we could not save this attempt to your account. Please try again later.');
+      } else {
+        setAttemptSaveMessage('Your attempt has been saved to your student record.');
+      }
 
-    // Award points if passing
-    if (scorePercent >= 50) {
-      await addPoints(user.id, quiz.points_reward || 10, `Completed quiz: ${quiz.title}`, 'quiz_complete', id);
-      awardEligibleBadges(supabase, user.id).catch((e) => console.error('Badge check failed:', e));
+      if (scorePercent >= 50) {
+        await addPoints(user.id, quiz.points_reward || 10, `Completed quiz: ${quiz.title}`, 'quiz_complete', id);
+        awardEligibleBadges(supabase, user.id).catch((e) => console.error('Badge check failed:', e));
+      }
+    } else {
+      setAttemptSaveMessage('You completed this quiz as a guest. Your score is not linked to a student account. Sign in before taking it again to track your attempt.');
     }
   };
 
@@ -119,6 +127,7 @@ export default function TakeQuiz() {
 
   if (submitted) {
     const passed = score >= 50;
+    const correctCount = questions.filter(q => answers[q.id] === String(q.correct_answer || '').toLowerCase()).length;
     return (
       <>
         <Navbar />
@@ -128,18 +137,42 @@ export default function TakeQuiz() {
               <p className="text-6xl mb-4">{passed ? '🎉' : '💪'}</p>
               <h1 className="text-3xl font-extrabold">{passed ? 'Quiz Completed!' : 'Keep Practicing!'}</h1>
               <p className="text-2xl font-bold text-brand-blue mt-4">{score}%</p>
+              <p className="text-gray-700 mt-1">You answered {correctCount} out of {questions.length} questions correctly.</p>
+              {attemptSaveMessage && <p className="text-sm text-gray-600 mt-3">{attemptSaveMessage}</p>
               <p className="text-gray-600 mt-2">
                 {passed
                   ? `You earned ${quiz.points_reward || 10} points!`
                   : 'Review the material and try again.'}
               </p>
-              <div className="mt-6 flex gap-4 justify-center">
-                <button onClick={() => router.push('/courses')} className="bg-brand-blue text-white px-6 py-3 rounded-full font-bold hover:opacity-90">
-                  Browse Courses
+              <div className="mt-6 flex flex-wrap gap-3 justify-center">
+                <button onClick={() => { setAnswers({}); setCurrentQuestion(0); setScore(null); setSubmitted(false); setAttemptSaveMessage(''); setTimeLeft(quiz.time_limit_minutes * 60); }} className="bg-brand-blue text-white px-6 py-3 rounded-full font-bold hover:opacity-90">
+                  Retake Quiz
                 </button>
-                <button onClick={() => router.push('/dashboard')} className="bg-brand-yellow text-brand-dark px-6 py-3 rounded-full font-bold hover:opacity-90">
+                <a href="#quiz-corrections" className="bg-brand-yellow text-brand-dark px-6 py-3 rounded-full font-bold hover:opacity-90">
+                  View Corrections
+                </a>
+                <button onClick={() => router.push('/dashboard')} className="border px-6 py-3 rounded-full font-bold hover:bg-gray-50">
                   Dashboard
                 </button>
+              </div>
+            </div>
+            <section id="quiz-corrections" className="mt-6 bg-white rounded-2xl shadow-sm border p-6">
+              <h2 className="text-2xl font-extrabold mb-5">Corrections & Explanations</h2>
+              <div className="space-y-4">
+                {questions.map((q, index) => {
+                  const selected = String(answers[q.id] || '').toLowerCase();
+                  const correctAnswer = String(q.correct_answer || '').toLowerCase();
+                  const isCorrect = selected === correctAnswer;
+                  const optionText = (letter) => q[`option_${letter}`] || '';
+                  return (
+                    <article key={q.id} className={`rounded-xl border p-4 ${isCorrect ? 'border-green-200 bg-green-50' : 'border-red-200 bg-red-50'}`}>
+                      <p className="font-bold">{index + 1}. {q.question}</p>
+                      <p className="mt-2 text-sm">Your answer: <strong>{selected ? `${selected.toUpperCase()}. ${optionText(selected)}` : 'Not answered'}</strong></p>
+                      <p className="text-sm">Correct answer: <strong>{correctAnswer ? `${correctAnswer.toUpperCase()}. ${optionText(correctAnswer)}` : 'Not available'}</strong></p>
+                      {q.explanation && <div className="mt-3 pt-3 border-t border-black/10"><p className="text-sm font-bold">Explanation</p><p className="text-sm mt-1 whitespace-pre-wrap">{q.explanation}</p></div>}
+                    </article>
+                  );
+                })}
               </div>
             </div>
           </div>
