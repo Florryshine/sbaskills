@@ -174,7 +174,7 @@ export default function TakeQuiz() {
                   );
                 })}
               </div>
-            </div>
+            </section>
           </div>
         </main>
         <Footer />
