@@ -51,6 +51,7 @@ export default function TutorDashboard() {
 
   const actions = [
     { href: '/tutor/quizzes/new', label: '📝 Create Quiz', color: 'bg-brand-blue', desc: 'Create a quiz with questions' },
+    { href: '/tutor/quiz-attempts', label: '📈 Quiz Attempts', color: 'bg-indigo-600', desc: 'Track scores and submitted quiz attempts' },
     { href: '/tutor/assignments/new', label: '📄 Create Assignment', color: 'bg-purple-600', desc: 'Create an assignment' },
     { href: '/tutor/materials/new', label: '📁 Upload Material', color: 'bg-green-600', desc: 'Upload notes or recordings' },
     { href: '/tutor/submissions', label: '📊 View Submissions', color: 'bg-orange-500', desc: 'Grade student submissions' },

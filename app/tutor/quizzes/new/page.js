@@ -21,6 +21,7 @@ export default function NewQuiz() {
     option_c: '',
     option_d: '',
     correct_answer: 'a',
+    explanation: '',
     points: 1,
   });
   const [saving, setSaving] = useState(false);
@@ -46,6 +47,7 @@ export default function NewQuiz() {
       option_c: '',
       option_d: '',
       correct_answer: 'a',
+      explanation: '',
       points: 1,
     });
   };
@@ -89,6 +91,7 @@ export default function NewQuiz() {
           option_c: '',
           option_d: '',
           correct_answer: 'a',
+          explanation: '',
           points: 1,
         };
         const qText = line.replace(/^Question:\s*/i, '').replace(/^Q\d+[:.]\s*/, '');
@@ -114,9 +117,9 @@ export default function NewQuiz() {
           continue;
         }
 
-        const explMatch = line.match(/^Explanation:\s*(.+)/i);
+        const explMatch = line.match(/^Explanation:\s*(.*)/i);
         if (explMatch) {
-          // Explanation not stored in this version, but can be added later
+          current.explanation = explMatch[1].trim();
           continue;
         }
 
@@ -128,27 +131,54 @@ export default function NewQuiz() {
     return parsed;
   };
 
-  const handleFileUpload = (e) => {
+  const rowsToQuestions = (rows) => rows.map((row) => ({
+    question: String(row.question ?? row.Question ?? row.Q ?? '').trim(),
+    option_a: String(row.option_a ?? row.A ?? row.OptionA ?? row['Option A'] ?? '').trim(),
+    option_b: String(row.option_b ?? row.B ?? row.OptionB ?? row['Option B'] ?? '').trim(),
+    option_c: String(row.option_c ?? row.C ?? row.OptionC ?? row['Option C'] ?? '').trim(),
+    option_d: String(row.option_d ?? row.D ?? row.OptionD ?? row['Option D'] ?? '').trim(),
+    correct_answer: String(row.correct_answer ?? row.Answer ?? row.answer ?? 'a').trim().toLowerCase().replace(/[^a-d]/g, '').slice(0, 1) || 'a',
+    explanation: String(row.explanation ?? row.Explanation ?? '').trim(),
+    points: Number(row.points ?? 1) || 1,
+  })).filter(q => q.question && q.option_a && q.option_b && q.option_c && q.option_d);
+
+  const handleFileUpload = async (e) => {
     const file = e.target.files?.[0];
     if (!file) return;
-    const reader = new FileReader();
-    reader.onload = (event) => {
-      const text = event.target.result;
-      const parsed = parseBulkText(text);
-      if (parsed.length === 0) {
-        alert('No valid questions found in the file. Please check the format.');
+    try {
+      let parsed = [];
+      const ext = file.name.split('.').pop().toLowerCase();
+      if (['xlsx', 'xls', 'csv'].includes(ext)) {
+        const XLSX = await import('xlsx');
+        const buffer = await file.arrayBuffer();
+        const workbook = XLSX.read(buffer, { type: 'array' });
+        const sheet = workbook.Sheets[workbook.SheetNames[0]];
+        parsed = rowsToQuestions(XLSX.utils.sheet_to_json(sheet, { defval: '' }));
+      } else if (ext === 'docx') {
+        const mammoth = await import('mammoth/mammoth.browser');
+        const buffer = await file.arrayBuffer();
+        const result = await mammoth.extractRawText({ arrayBuffer: buffer });
+        parsed = parseBulkText(result.value);
+      } else if (ext === 'txt') {
+        parsed = parseBulkText(await file.text());
+      } else {
+        alert('Supported formats: TXT, CSV, Excel (.xlsx/.xls), and Word (.docx).');
         return;
       }
-      const newQuestions = parsed.map((q, idx) => ({
-        ...q,
-        order_index: questions.length + idx,
-      }));
-      setQuestions([...questions, ...newQuestions]);
+      if (parsed.length === 0) {
+        alert('No valid questions found. For CSV/Excel use headers: question, option_a, option_b, option_c, option_d, correct_answer, explanation. For TXT/Word use the displayed Question/Options/Answer/Explanation format.');
+        return;
+      }
+      const newQuestions = parsed.map((q, idx) => ({ ...q, order_index: questions.length + idx }));
+      setQuestions(prev => [...prev, ...newQuestions]);
       setShowBulk(false);
       alert(`✅ Added ${parsed.length} questions successfully!`);
-    };
-    reader.readAsText(file);
-    e.target.value = '';
+    } catch (error) {
+      console.error('Quiz file import failed:', error);
+      alert('Could not read this file. Please check that it is a valid supported file.');
+    } finally {
+      e.target.value = '';
+    }
   };
 
   // ---------- Save quiz ----------
@@ -270,15 +300,15 @@ export default function NewQuiz() {
           {/* Bulk upload area */}
           {showBulk && (
             <div className="bg-purple-50 border border-purple-200 rounded-xl p-4 mb-4">
-              <p className="text-sm font-semibold mb-2">Upload a .txt file with questions</p>
+              <p className="text-sm font-semibold mb-2">Upload quiz questions</p>
               <p className="text-xs text-gray-500 mb-3">
-                Format: Each question starts with "Question:" or "Q1:", options as A) B) C) D), Answer: X, Explanation: (optional).
+                Supported: TXT, CSV, Excel (.xlsx/.xls), Word (.docx). TXT/Word: Question:, A), B), C), D), Answer:, Explanation:. CSV/Excel headers: question, option_a, option_b, option_c, option_d, correct_answer, explanation.
               </p>
               <div className="flex items-center gap-3">
                 <input
                   type="file"
                   ref={fileInputRef}
-                  accept=".txt"
+                  accept=".txt,.csv,.xlsx,.xls,.docx"
                   onChange={handleFileUpload}
                   className="text-sm"
                 />
@@ -359,6 +389,13 @@ Answer: B`
                   className="rounded-xl border border-slate-200 px-4 py-2"
                 />
               </div>
+              <textarea
+                placeholder="Explanation (optional; shown after submission)"
+                value={currentQuestion.explanation}
+                onChange={e => setCurrentQuestion({ ...currentQuestion, explanation: e.target.value })}
+                rows={2}
+                className="w-full rounded-xl border border-slate-200 px-4 py-2"
+              />
               <div className="flex gap-4 items-center">
                 <label className="text-sm font-semibold">Correct Answer:</label>
                 <select
@@ -398,6 +435,7 @@ Answer: B`
                     <p className="font-semibold text-sm">{i + 1}. {q.question}</p>
                     <p className="text-xs text-gray-500">A: {q.option_a} | B: {q.option_b} | C: {q.option_c} | D: {q.option_d}</p>
                     <p className="text-xs text-green-600">Correct: {q.correct_answer.toUpperCase()} | Points: {q.points}</p>
+                    {q.explanation && <p className="text-xs text-gray-600 mt-1">Explanation: {q.explanation}</p>}
                   </div>
                   <button
                     type="button"
