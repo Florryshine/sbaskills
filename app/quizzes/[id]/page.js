@@ -99,34 +99,49 @@ export default function QuizAttempt() {
   };
 
   const handleSubmit = async () => {
-    // Calculate score
-    const questions = quiz.questions || [];
-    let correct = 0;
-    questions.forEach((q, idx) => {
-      if (answers[idx] === q.correct_answer) correct++;
-    });
+    if (submitted) return;
+    const currentQuestions = quiz.questions || [];
+    const correct = currentQuestions.reduce(
+      (count, q, idx) => count + (answers[idx] === q.correct_answer ? 1 : 0),
+      0
+    );
     setScore(correct);
     setSubmitted(true);
 
-    // Previously this page only scored client-side and never wrote
-    // anything to the database for draft (content-engine) quizzes — added
-    // so the Journey Engine (lib/journeyEngine.js) has something to detect
-    // and so students actually earn XP for these quizzes, matching what
-    // the manual-quiz path (/quiz/[id]) already does.
-    if (isDraft && user && questions.length > 0) {
-      const scorePct = Math.round((correct / questions.length) * 100);
+    const scorePct = currentQuestions.length
+      ? Math.round((correct / currentQuestions.length) * 100)
+      : 0;
 
-      await supabase.from('quiz_attempts').insert({
-        student_id: user.id,
-        quiz_id: id, // this is the quiz_drafts id, not a quizzes id
-        score: scorePct,
-        total_questions: questions.length,
-        answers,
-        completed_at: new Date(),
-      });
+    if (user && currentQuestions.length > 0) {
+      // Save attempts for regular manual quizzes. Draft quizzes use their
+      // existing attempt flow; both are shown feedback immediately below.
+      if (!isDraft) {
+        const { error: attemptError } = await supabase.from('quiz_attempts').insert({
+          student_id: user.id,
+          quiz_id: id,
+          score: scorePct,
+          total_questions: currentQuestions.length,
+          answers,
+          completed_at: new Date().toISOString(),
+        });
+        if (attemptError) console.error('Could not save quiz attempt:', attemptError);
+      } else {
+        const { error: attemptError } = await supabase.from('quiz_attempts').insert({
+          student_id: user.id,
+          quiz_id: id,
+          score: scorePct,
+          total_questions: currentQuestions.length,
+          answers,
+          completed_at: new Date().toISOString(),
+        });
+        if (attemptError) console.error('Could not save draft quiz attempt:', attemptError);
+      }
 
-      if (scorePct >= (quiz.passing_score || 70)) {
+      if (isDraft && scorePct >= (quiz.passing_score || 70)) {
         await addPoints(user.id, DRAFT_QUIZ_XP, `Completed quiz: ${quiz.keyword || quiz.title}`, 'quiz_complete', id);
+        await awardEligibleBadges(supabase, user.id);
+      } else if (!isDraft && scorePct >= 50) {
+        await addPoints(user.id, quiz.points_reward || 10, `Completed quiz: ${quiz.title}`, 'quiz_complete', id);
         await awardEligibleBadges(supabase, user.id);
       }
     }
@@ -172,10 +187,51 @@ export default function QuizAttempt() {
           </button>
         </>
       ) : (
-        <div className="p-6 bg-green-50 border border-green-200 rounded-xl text-center">
-          <h2 className="text-2xl font-bold text-green-700">🎉 Quiz Complete!</h2>
-          <p className="text-lg mt-2">You got {score} out of {total} correct.</p>
-          <p className="text-sm text-gray-500 mt-1">Score: {Math.round((score/total)*100)}%</p>
+        <div className="space-y-6">
+          <div className="p-6 bg-green-50 border border-green-200 rounded-xl text-center">
+            <h2 className="text-2xl font-bold text-green-700">Quiz Complete!</h2>
+            <p className="text-lg mt-2">You got {score} out of {total} correct.</p>
+            <p className="text-sm text-gray-500 mt-1">Score: {total ? Math.round((score / total) * 100) : 0}%</p>
+            <div className="flex flex-wrap gap-3 justify-center mt-5">
+              <button
+                onClick={() => { setAnswers({}); setScore(null); setSubmitted(false); }}
+                className="bg-brand-blue text-white px-5 py-2 rounded-full font-bold"
+              >
+                Retake Quiz
+              </button>
+              <a href="#quiz-corrections" className="bg-brand-yellow px-5 py-2 rounded-full font-bold">
+                View Corrections
+              </a>
+            </div>
+          </div>
+          <section id="quiz-corrections" className="bg-white border rounded-xl p-5 text-left">
+            <h2 className="text-xl font-extrabold mb-4">Corrections & Explanations</h2>
+            <div className="space-y-4">
+              {questions.map((q, idx) => {
+                const chosen = answers[idx];
+                const correctAnswer = q.correct_answer;
+                const isCorrect = chosen === correctAnswer;
+                const options = q.options || [];
+                const correctOption = options.find((option) => option === correctAnswer);
+                const explanation = q.explanation || q.explanation_text || q.rationale || '';
+                return (
+                  <article key={q.id || idx} className={`border rounded-xl p-4 ${isCorrect ? 'bg-green-50 border-green-200' : 'bg-red-50 border-red-200'}`}>
+                    <p className="font-bold">{idx + 1}. {q.question}</p>
+                    <p className="text-sm mt-2">Your answer: <strong>{chosen || 'Not answered'}</strong></p>
+                    <p className="text-sm">Correct answer: <strong>{correctOption || correctAnswer || 'Not available'}</strong></p>
+                    {explanation ? (
+                      <div className="border-t border-black/10 mt-3 pt-3">
+                        <p className="text-sm font-bold">Explanation</p>
+                        <p className="text-sm whitespace-pre-wrap mt-1">{explanation}</p>
+                      </div>
+                    ) : (
+                      <p className="text-xs text-gray-500 mt-2">No explanation was saved for this question.</p>
+                    )}
+                  </article>
+                );
+              })}
+            </div>
+          </section>
         </div>
       )}
     </div>
