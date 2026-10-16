@@ -138,7 +138,7 @@ export default function TakeQuiz() {
               <h1 className="text-3xl font-extrabold">{passed ? 'Quiz Completed!' : 'Keep Practicing!'}</h1>
               <p className="text-2xl font-bold text-brand-blue mt-4">{score}%</p>
               <p className="text-gray-700 mt-1">You answered {correctCount} out of {questions.length} questions correctly.</p>
-              {attemptSaveMessage && <p className="text-sm text-gray-600 mt-3">{attemptSaveMessage}</p>
+              {attemptSaveMessage && <p className="text-sm text-gray-600 mt-3">{attemptSaveMessage}</p>}
               <p className="text-gray-600 mt-2">
                 {passed
                   ? `You earned ${quiz.points_reward || 10} points!`
