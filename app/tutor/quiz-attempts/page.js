@@ -9,6 +9,7 @@ export default function QuizAttemptsPage() {
   const [attempts, setAttempts] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
+  const [leaderboard, setLeaderboard] = useState([]);
   const supabase = createBrowserClient();
   const router = useRouter();
 
@@ -37,12 +38,43 @@ export default function QuizAttemptsPage() {
       const quizMap = Object.fromEntries(quizzes.map(q => [q.id, q.title]));
       const { data, error: attemptsError } = await supabase
         .from('quiz_attempts')
-        .select('id,student_id,quiz_id,score,total_questions,completed_at,answers')
+        .select('id,student_id,quiz_id,score,total_questions,completed_at,answers,status,started_at,updated_at')
         .in('quiz_id', quizzes.map(q => q.id))
-        .order('completed_at', { ascending: false });
+        .order('updated_at', { ascending: false });
 
-      if (attemptsError) setError(attemptsError.message);
-      else setAttempts((data || []).map(a => ({ ...a, quiz_title: quizMap[a.quiz_id] || 'Quiz' })));
+      if (attemptsError) {
+        setError(attemptsError.message);
+      } else {
+        const rows = data || [];
+        const studentIds = [...new Set(rows.map(a => a.student_id).filter(Boolean))];
+        let profiles = [];
+        if (studentIds.length) {
+          const { data: profileRows } = await supabase.from('profiles')
+            .select('id,full_name,email').in('id', studentIds);
+          profiles = profileRows || [];
+        }
+        const profileMap = Object.fromEntries(profiles.map(p => [p.id, p]));
+        const now = Date.now();
+        const hydrated = rows.map(a => {
+          const profile = profileMap[a.student_id] || {};
+          const stale = a.status !== 'completed' && a.updated_at &&
+            now - new Date(a.updated_at).getTime() > 30 * 60 * 1000;
+          return {
+            ...a,
+            quiz_title: quizMap[a.quiz_id] || 'Quiz',
+            student_name: profile.full_name || profile.email || 'Student profile unavailable',
+            display_status: a.status === 'completed' || a.completed_at ? 'Completed' :
+              stale ? 'Abandoned / inactive (inferred)' : 'In progress',
+          };
+        });
+        setAttempts(hydrated);
+        const bestByStudentQuiz = new Map();
+        hydrated.filter(a => a.display_status === 'Completed').forEach(a => {
+          const key = `${a.quiz_id}:${a.student_id}`;
+          if (!bestByStudentQuiz.has(key) || Number(a.score || 0) > Number(bestByStudentQuiz.get(key).score || 0)) bestByStudentQuiz.set(key, a);
+        });
+        setLeaderboard([...bestByStudentQuiz.values()].sort((a,b) => Number(b.score || 0) - Number(a.score || 0)).slice(0, 20));
+      }
       setLoading(false);
     }
     loadAttempts();
@@ -56,18 +88,23 @@ export default function QuizAttemptsPage() {
         <div className="bg-white rounded-2xl border p-6">
           <Link href="/tutor" className="text-sm text-blue-700 underline">← Tutor Dashboard</Link>
           <h1 className="text-2xl font-extrabold mt-3">Quiz Attempts</h1>
-          <p className="text-sm text-gray-600 mt-1">Attempts recorded for quizzes you created. Students who take a quiz as guests are not included because their attempts are not linked to an account.</p>
+          <p className="text-sm text-gray-600 mt-1">Includes completed and saved in-progress attempts. Inactivity is only an estimate of abandonment, not proof.</p>
         </div>
         {error && <div role="alert" className="bg-red-50 text-red-700 border border-red-200 rounded-xl p-4">Could not load attempts: {error}. Check the quiz_attempts table permissions in Supabase.</div>}
         {!attempts.length && !error && <div className="bg-white rounded-2xl border p-6 text-gray-600">No saved quiz attempts yet.</div>}
+        {leaderboard.length > 0 && <section className="bg-white rounded-2xl border overflow-x-auto">
+          <div className="p-5 border-b"><h2 className="text-xl font-extrabold">Leaderboard — best score per student and quiz</h2><p className="text-sm text-gray-500 mt-1">Ties are displayed equally; use the recorded submission times and your published competition rules for prize decisions.</p></div>
+          <table className="w-full text-sm"><thead className="bg-gray-100 text-left"><tr><th className="p-3">Rank</th><th className="p-3">Quiz</th><th className="p-3">Student</th><th className="p-3">Best score</th><th className="p-3">Submitted</th></tr></thead>
+          <tbody>{leaderboard.map((a, i) => <tr key={a.id} className="border-t"><td className="p-3">{i + 1}</td><td className="p-3">{a.quiz_title}</td><td className="p-3">{a.student_name}</td><td className="p-3 font-bold">{a.score}%</td><td className="p-3">{a.completed_at ? new Date(a.completed_at).toLocaleString() : '—'}</td></tr>)}</tbody></table>
+        </section>}
         {attempts.length > 0 && <div className="bg-white rounded-2xl border overflow-x-auto">
           <table className="w-full text-sm">
-            <thead className="bg-gray-100 text-left"><tr><th className="p-3">Quiz</th><th className="p-3">Student ID</th><th className="p-3">Score</th><th className="p-3">Submitted</th><th className="p-3">Answers</th></tr></thead>
+            <thead className="bg-gray-100 text-left"><tr><th className="p-3">Quiz</th><th className="p-3">Student</th><th className="p-3">Score</th><th className="p-3">Status</th><th className="p-3">Started / Updated</th><th className="p-3">Answers</th></tr></thead>
             <tbody>{attempts.map(a => <tr key={a.id} className="border-t align-top">
               <td className="p-3 font-semibold">{a.quiz_title}</td>
-              <td className="p-3 break-all">{a.student_id || 'Guest / unknown'}</td>
+              <td className="p-3"><div className="font-semibold">{a.student_name}</div><div className="text-xs text-gray-500 break-all">{a.student_id || 'Unknown ID'}</div></td>
               <td className="p-3 whitespace-nowrap">{a.score}% ({Math.round((Number(a.score) || 0) * (Number(a.total_questions) || 0) / 100)} / {a.total_questions})</td>
-              <td className="p-3 whitespace-nowrap">{a.completed_at ? new Date(a.completed_at).toLocaleString() : '—'}</td>
+              <td className="p-3 whitespace-nowrap">{a.display_status}</td><td className="p-3 whitespace-nowrap">Started: {a.started_at ? new Date(a.started_at).toLocaleString() : '—'}<br/>Updated: {a.updated_at ? new Date(a.updated_at).toLocaleString() : '—'}<br/>Submitted: {a.completed_at ? new Date(a.completed_at).toLocaleString() : '—'}</td>
               <td className="p-3">{a.answers ? Object.keys(a.answers).length : 0} responses</td>
             </tr>)}</tbody>
           </table>
