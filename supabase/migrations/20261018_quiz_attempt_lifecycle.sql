@@ -7,7 +7,7 @@ alter table public.quiz_attempts
 
 update public.quiz_attempts
 set status = case when completed_at is null then 'in_progress' else 'completed' end
-where status is null or status = '';
+where status is null or status = '' or (completed_at is null and status = 'completed');
 
 update public.quiz_attempts
 set started_at = coalesce(started_at, completed_at),
