@@ -49,3 +49,25 @@ create policy "Tutors read attempts for their quizzes"
   );
 
 grant select, insert, update on public.quiz_attempts to authenticated;
+
+-- Published manual quizzes and their questions are readable before sign-in.
+-- This grants read-only access only; all attempt writes remain authenticated.
+alter table public.quizzes enable row level security;
+alter table public.quiz_questions enable row level security;
+
+drop policy if exists "Anyone can read published quizzes" on public.quizzes;
+create policy "Anyone can read published quizzes"
+  on public.quizzes for select to anon, authenticated
+  using (is_published = true);
+
+drop policy if exists "Anyone can read questions in published quizzes" on public.quiz_questions;
+create policy "Anyone can read questions in published quizzes"
+  on public.quiz_questions for select to anon, authenticated
+  using (
+    exists (
+      select 1 from public.quizzes q
+      where q.id = quiz_questions.quiz_id and q.is_published = true
+    )
+  );
+
+grant select on public.quizzes, public.quiz_questions to anon, authenticated;
