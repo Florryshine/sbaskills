@@ -16,11 +16,24 @@ export default function TakeQuiz() {
   const [submitted, setSubmitted] = useState(false);
   const [score, setScore] = useState(null);
   const [attemptSaveMessage, setAttemptSaveMessage] = useState('');
+  const [user, setUser] = useState(null);
+  const [attemptId, setAttemptId] = useState(null);
   const [loading, setLoading] = useState(true);
   const [timeLeft, setTimeLeft] = useState(null);
   const { id } = useParams();
   const router = useRouter();
   const supabase = createBrowserClient();
+
+  const draftKey = `sba-quiz-${id}-draft`;
+
+  useEffect(() => {
+    supabase.auth.getUser().then(({ data }) => setUser(data?.user || null));
+    try {
+      const saved = JSON.parse(localStorage.getItem(draftKey) || '{}');
+      if (saved.answers) setAnswers(saved.answers);
+      if (saved.attemptId) setAttemptId(saved.attemptId);
+    } catch (e) { console.warn('Could not restore quiz draft:', e); }
+  }, [id]);
 
   useEffect(() => {
     async function loadQuiz() {
@@ -69,51 +82,89 @@ export default function TakeQuiz() {
     return `${mins}:${secs.toString().padStart(2, '0')}`;
   };
 
+  const saveLocalDraft = (nextAnswers, nextAttemptId = attemptId) => {
+    try { localStorage.setItem(draftKey, JSON.stringify({ answers: nextAnswers, attemptId: nextAttemptId })); }
+    catch (e) { console.warn('Could not save quiz draft locally:', e); }
+  };
+
+  const saveProgress = async (nextAnswers) => {
+    if (!user || !quiz) return;
+    const now = new Date().toISOString();
+    if (!attemptId) {
+      const { data, error } = await supabase.from('quiz_attempts').insert({
+        student_id: user.id, quiz_id: id, score: 0, total_questions: questions.length,
+        answers: nextAnswers, status: 'in_progress', started_at: now, updated_at: now, completed_at: null,
+      }).select('id').single();
+      if (error) {
+        console.error('Could not start quiz attempt:', error);
+        setAttemptSaveMessage('Your progress is saved on this device, but account tracking is temporarily unavailable.');
+        return;
+      }
+      setAttemptId(data.id);
+      saveLocalDraft(nextAnswers, data.id);
+    } else {
+      const { error } = await supabase.from('quiz_attempts').update({
+        answers: nextAnswers, status: 'in_progress', updated_at: now,
+      }).eq('id', attemptId).eq('student_id', user.id);
+      if (error) console.error('Could not update quiz progress:', error);
+    }
+  };
+
   const handleAnswer = (questionId, answer) => {
-    setAnswers({ ...answers, [questionId]: answer });
+    const nextAnswers = { ...answers, [questionId]: answer };
+    setAnswers(nextAnswers);
+    saveLocalDraft(nextAnswers);
+    saveProgress(nextAnswers);
   };
 
   const handleSubmit = async () => {
     if (submitted) return;
+    const { data: authData } = await supabase.auth.getUser();
+    const activeUser = authData?.user || null;
+    setUser(activeUser);
+    if (!activeUser) {
+      saveLocalDraft(answers);
+      router.push(`/login?next=${encodeURIComponent(`/quiz/${id}`)}`);
+      return;
+    }
+
     setSubmitted(true);
-
     let correct = 0;
-    let total = questions.length;
-
+    const total = questions.length;
     questions.forEach(q => {
-      if (answers[q.id] === q.correct_answer) {
-        correct++;
-      }
+      const selected = String(answers[q.id] || '').trim().toLowerCase();
+      const correctAnswer = String(q.correct_answer || '').trim().toLowerCase();
+      if (selected && selected === correctAnswer) correct++;
     });
-
     const scorePercent = total ? Math.round((correct / total) * 100) : 0;
     setScore(scorePercent);
 
-    const { data: authData } = await supabase.auth.getUser();
-    const user = authData?.user || null;
-
-    if (user) {
-      const { error: attemptError } = await supabase.from('quiz_attempts').insert({
-        student_id: user.id,
-        quiz_id: id,
-        score: scorePercent,
-        total_questions: total,
-        answers,
-        completed_at: new Date().toISOString(),
-      });
-      if (attemptError) {
-        console.error('Quiz attempt could not be saved:', attemptError);
-        setAttemptSaveMessage('Your score is shown, but we could not save this attempt to your account. Please try again later.');
-      } else {
-        setAttemptSaveMessage('Your attempt has been saved to your student record.');
-      }
-
-      if (scorePercent >= 50) {
-        await addPoints(user.id, quiz.points_reward || 10, `Completed quiz: ${quiz.title}`, 'quiz_complete', id);
-        awardEligibleBadges(supabase, user.id).catch((e) => console.error('Badge check failed:', e));
-      }
+    const now = new Date().toISOString();
+    let saveError = null;
+    if (attemptId) {
+      const result = await supabase.from('quiz_attempts').update({
+        score: scorePercent, total_questions: total, answers, status: 'completed',
+        updated_at: now, completed_at: now,
+      }).eq('id', attemptId).eq('student_id', activeUser.id);
+      saveError = result.error;
     } else {
-      setAttemptSaveMessage('You completed this quiz as a guest. Your score is not linked to a student account. Sign in before taking it again to track your attempt.');
+      const result = await supabase.from('quiz_attempts').insert({
+        student_id: activeUser.id, quiz_id: id, score: scorePercent,
+        total_questions: total, answers, status: 'completed', started_at: now,
+        updated_at: now, completed_at: now,
+      });
+      saveError = result.error;
+    }
+    if (saveError) {
+      console.error('Quiz attempt could not be saved:', saveError);
+      setAttemptSaveMessage('Your score is shown, but we could not save this attempt to your account. Please try again later.');
+    } else {
+      setAttemptSaveMessage('Your attempt has been saved to your student record.');
+    }
+    try { localStorage.removeItem(draftKey); } catch {}
+    if (scorePercent >= 50) {
+      await addPoints(activeUser.id, quiz.points_reward || 10, `Completed quiz: ${quiz.title}`, 'quiz_complete', id);
+      awardEligibleBadges(supabase, activeUser.id).catch((e) => console.error('Badge check failed:', e));
     }
   };
 
@@ -127,7 +178,7 @@ export default function TakeQuiz() {
 
   if (submitted) {
     const passed = score >= 50;
-    const correctCount = questions.filter(q => answers[q.id] === String(q.correct_answer || '').toLowerCase()).length;
+    const correctCount = questions.filter(q => String(answers[q.id] || '').trim().toLowerCase() === String(q.correct_answer || '').trim().toLowerCase()).length;
     return (
       <>
         <Navbar />
@@ -145,7 +196,7 @@ export default function TakeQuiz() {
                   : 'Review the material and try again.'}
               </p>
               <div className="mt-6 flex flex-wrap gap-3 justify-center">
-                <button onClick={() => { setAnswers({}); setCurrentQuestion(0); setScore(null); setSubmitted(false); setAttemptSaveMessage(''); setTimeLeft(quiz.time_limit_minutes * 60); }} className="bg-brand-blue text-white px-6 py-3 rounded-full font-bold hover:opacity-90">
+                <button onClick={() => { setAnswers({}); setCurrentQuestion(0); setScore(null); setSubmitted(false); setAttemptSaveMessage(''); setAttemptId(null); setTimeLeft(quiz.time_limit_minutes * 60); try { localStorage.removeItem(draftKey); } catch {} }} className="bg-brand-blue text-white px-6 py-3 rounded-full font-bold hover:opacity-90">
                   Retake Quiz
                 </button>
                 <a href="#quiz-corrections" className="bg-brand-yellow text-brand-dark px-6 py-3 rounded-full font-bold hover:opacity-90">
