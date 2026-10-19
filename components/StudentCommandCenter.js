@@ -165,6 +165,7 @@ export default function StudentCommandCenter() {
   const examDays = examDate ? daysUntil(examDate) : null;
   const targetLabel = target?.exam_year ? `${target.exam_type} ${target.exam_year}` : 'JAMB';
   const focusSubjects = Array.isArray(profile?.interests) ? profile.interests.filter(Boolean).slice(0, 4) : [];
+  const profileNeedsUpdate = !profile?.onboarding_completed || !profile?.target_course || !profile?.target_score || !profile?.guardian_phone;
   const masteryPercent = mastery?.mastery_percent || 0;
   const missionItems = [...(mission?.student_daily_mission_items || [])].sort((a, b) => (a.item_order || 0) - (b.item_order || 0));
   const completedItems = missionItems.filter((item) => item.completed).length;
@@ -308,12 +309,21 @@ export default function StudentCommandCenter() {
             </div>
           </section>
 
+          <section className="mt-4 rounded-2xl border border-blue-100 bg-white p-4 shadow-sm sm:flex sm:items-center sm:justify-between sm:gap-4">
+            <div>
+              <p className="font-extrabold text-slate-900">{profileNeedsUpdate ? 'Complete or update your student profile' : 'Your student profile'}</p>
+              <p className="mt-1 text-sm leading-5 text-slate-600">{profileNeedsUpdate ? 'Add missing details such as your target score, intended course and parent/guardian contact. You can return and edit these details anytime.' : 'Your student details are saved. Update your course, target score or contact information whenever they change.'}</p>
+            </div>
+            <Link href="/student-profile" className="mt-3 inline-flex shrink-0 items-center justify-center rounded-xl bg-brand-blue px-4 py-3 text-sm font-extrabold text-white hover:opacity-90 sm:mt-0">{profileNeedsUpdate ? 'Complete / update profile →' : 'Edit student profile →'}</Link>
+          </section>
+
           <section className="mt-5 grid gap-5 md:grid-cols-3">
             <div className="rounded-3xl border bg-white p-6 shadow-sm">
               <p className="text-xs font-extrabold uppercase tracking-[0.18em] text-slate-400">EXAM TARGET</p>
               <h2 className="mt-2 text-xl font-black text-brand-blue">{targetLabel}</h2>
-              <p className="mt-1 text-sm text-slate-500">{profile?.target_course ? `Target course: ${profile.target_course}` : "Set your target course in your profile."}</p>
-              {profile?.target_score ? <p className="mt-3 rounded-xl bg-slate-50 px-3 py-2 text-sm font-extrabold">Target score: {profile.target_score}</p> : null}
+              <p className="mt-1 text-sm text-slate-500">{profile?.target_course ? `Target course: ${profile.target_course}` : "You have not set your target course yet."}</p>
+              {profile?.target_score ? <p className="mt-3 rounded-xl bg-slate-50 px-3 py-2 text-sm font-extrabold">Target score: {profile.target_score}/400</p> : null}
+              <Link href="/student-profile" className="mt-3 inline-flex rounded-xl bg-blue-50 px-4 py-2 text-sm font-extrabold text-brand-blue hover:bg-blue-100">{profile?.target_course ? 'Update course' : 'Add target course'} →</Link>
             </div>
             <div className="rounded-3xl border bg-white p-6 shadow-sm">
               <p className="text-xs font-extrabold uppercase tracking-[0.18em] text-slate-400">SYLLABUS MASTERY</p>
