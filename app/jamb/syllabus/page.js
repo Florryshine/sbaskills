@@ -1,16 +1,15 @@
-import { createServerClient } from '@/lib/supabase-server';
+import { createAdminClient } from '@/lib/supabase-admin';
 import Link from 'next/link';
 
 export const dynamic = 'force-dynamic';
 
 export default async function JambSyllabusPage() {
-  const supabase = createServerClient();
+  const supabase = createAdminClient();
   const { data: curriculum } = await supabase
     .from('curricula')
-    .select('id,name,version,effective_from_year,effective_to_year')
+    .select('id,name,version,exam_type,status')
     .eq('exam_type', 'JAMB')
     .eq('status', 'active')
-    .order('effective_from_year', { ascending: false })
     .limit(1)
     .maybeSingle();
 
@@ -21,6 +20,7 @@ export default async function JambSyllabusPage() {
     .select('id,subject,title,order_index,code,syllabus_text')
     .eq('curriculum_id', curriculum.id)
     .eq('subject', 'Physics')
+    .not('code', 'is', null)
     .like('code', 'PHYSICS_%')
     .order('order_index', { ascending: true });
 
