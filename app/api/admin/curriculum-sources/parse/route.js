@@ -2,6 +2,7 @@ import { NextResponse } from 'next/server';
 import { createServerClient } from '@/lib/supabase-server';
 import { createAdminClient } from '@/lib/supabase-admin';
 export const runtime='nodejs';export const dynamic='force-dynamic';export const maxDuration=30;
+function withTimeout(promise,ms,message){let timer;return Promise.race([promise,new Promise((_,reject)=>{timer=setTimeout(()=>reject(new Error(message)),ms);})]).finally(()=>clearTimeout(timer));}
 async function extractPdfText(buffer){const {getData}=await import('pdf-parse/worker');const {PDFParse}=await import('pdf-parse');PDFParse.setWorker(getData());const parser=new PDFParse({data:buffer});try{const r=await parser.getText();return String(r?.text||'').trim();}finally{await parser.destroy();}}
 function rejectHtml(text){const s=String(text||'').trimStart().slice(0,2000).toLowerCase();return /^<!doctype\s+html|^<html\b|^<head\b|^<body\b/.test(s)||(/<html\b/.test(s)&&/<\/html\s*>/.test(s)&&/(enable javascript|cloudflare|access denied|captcha|challenge platform)/.test(s));}
 export async function POST(request){
@@ -21,7 +22,7 @@ export async function POST(request){
   }else if(doc.extracted_text){text=String(doc.extracted_text).trim();}
   else throw new Error('This source has no stored file or extracted text to parse.');
   if(buffer){
-   if(type==='application/pdf'||name.endsWith('.pdf')){text=await extractPdfText(buffer);if(text.length<50)throw new Error('scanned PDF, needs OCR or pasted text');}
+   if(type==='application/pdf'||name.endsWith('.pdf')){text=await withTimeout(extractPdfText(buffer),20000,'Parsing exceeded the 20-second extraction guard.');if(text.length<50)throw new Error('scanned PDF, needs OCR or pasted text');}
    else if(name.endsWith('.txt')||name.endsWith('.csv')||type.startsWith('text/'))text=buffer.toString('utf8').trim();
    else if(name.endsWith('.docx')||type.includes('wordprocessingml')){const mammoth=await import('mammoth');text=String((await mammoth.extractRawText({buffer})).value||'').trim();}
    else if(/\.(xlsx|xls)$/.test(name)||type.includes('spreadsheet')||type.includes('excel')){const XLSX=await import('xlsx');const wb=XLSX.read(buffer,{type:'buffer'});text=wb.SheetNames.map(s=>XLSX.utils.sheet_to_csv(wb.Sheets[s])).join('\n\n').trim();}
