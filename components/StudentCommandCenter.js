@@ -50,7 +50,7 @@ export default function StudentCommandCenter() {
       await updateStreak(userId);
 
       const [profileResult, pointsResult, targetResult, attemptsResult, notificationsResult] = await Promise.all([
-        supabase.from('profiles').select('full_name, target_score, target_course, interests, target_exams, student_level, goal_title, goal_target, state').eq('id', userId).maybeSingle(),
+        supabase.from('profiles').select('full_name, target_score, target_course, preferred_institution, utme_subjects, interests, target_exams, student_level, goal_title, goal_target, state, guardian_name, guardian_phone, guardian_email, avatar_url').eq('id', userId).maybeSingle(),
         getUserPoints(userId),
         supabase.from('student_exam_targets').select('exam_type, exam_year, curriculum_id').eq('user_id', userId).eq('status', 'active').eq('exam_type', 'JAMB').order('exam_year', { ascending: false }).limit(1).maybeSingle(),
         supabase.from('jamb_practice_attempts').select('id, subject, topic, score, total_questions, weak_topics, completed_at').eq('user_id', userId).order('completed_at', { ascending: false }).limit(20),
@@ -212,9 +212,14 @@ export default function StudentCommandCenter() {
             <div className="rounded-3xl border bg-white p-5 shadow-sm sm:p-6">
               <p className="text-xs font-extrabold uppercase tracking-[0.18em] text-slate-400">YOUR PERSONAL TARGET</p>
               <h2 className="mt-2 text-xl font-black text-brand-blue">{profile?.goal_title || 'Your next milestone starts here'}</h2>
-              <p className="mt-2 text-sm leading-6 text-slate-500">{profile?.goal_target ? 'Your target: ' + profile.goal_target : 'Set a clear score or grade target and use your progress to measure how close you are.'}</p>
+              <p className="mt-2 text-sm leading-6 text-slate-500">{profile?.target_score ? 'Target JAMB score: ' + profile.target_score + '/400' : (profile?.goal_target ? 'Your target: ' + profile.goal_target : 'Set a clear score or grade target and use your progress to measure how close you are.')}</p>
               {profile?.target_course ? <p className="mt-3 text-sm font-bold text-slate-700">Intended course: {profile.target_course}</p> : null}
-              <Link href="/jamb/progress" className="mt-4 inline-flex rounded-xl bg-blue-50 px-4 py-2 text-sm font-extrabold text-brand-blue">Track my progress →</Link>
+              {profile?.preferred_institution ? <p className="mt-1 text-sm text-slate-600">Preferred institution: {profile.preferred_institution}</p> : null}
+              {profile?.utme_subjects?.length ? <p className="mt-1 text-sm text-slate-600">UTME subjects: {profile.utme_subjects.join(', ')}</p> : null}
+              <div className="mt-4 flex flex-wrap gap-2">
+                <Link href="/jamb/progress" className="inline-flex rounded-xl bg-blue-50 px-4 py-2 text-sm font-extrabold text-brand-blue">Track my progress →</Link>
+                <Link href="/student-profile" className="inline-flex rounded-xl border border-blue-100 px-4 py-2 text-sm font-extrabold text-brand-blue hover:bg-blue-50">Edit student profile</Link>
+              </div>
             </div>
             <div className="rounded-3xl border bg-white p-5 shadow-sm sm:p-6">
               <p className="text-xs font-extrabold uppercase tracking-[0.18em] text-slate-400">PICK UP A SUBJECT</p>

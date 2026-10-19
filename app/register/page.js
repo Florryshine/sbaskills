@@ -145,14 +145,10 @@ function RegisterForm() {
             />
           </div>
 
-          {/* Birthday - Optional with gift message */}
-          <div className="bg-blue-50 rounded-xl p-4 border border-blue-100">
+          <div>
             <label className="block text-sm font-medium mb-1">
-              🎂 Date of Birth <span className="text-gray-400">(optional)</span>
+              Date of Birth <span className="text-gray-400">(optional)</span>
             </label>
-            <p className="text-xs text-blue-600 mb-2">
-              🎉 Add your birthday so we can celebrate you with gifts and surprises!
-            </p>
             <input
               type="date"
               className="w-full border rounded-xl px-4 py-2 focus:ring-2 focus:ring-blue-400"
