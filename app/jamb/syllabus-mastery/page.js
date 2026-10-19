@@ -56,6 +56,7 @@ export default async function JambSyllabusMasteryPage() {
       <p className="text-xs font-black uppercase tracking-[.2em] text-blue-100">JAMB • SYLLABUS MASTERY</p>
       <h1 className="mt-2 text-3xl font-black">Know exactly where you stand.</h1>
       <p className="mt-2 max-w-2xl text-sm text-blue-100">Every syllabus topic gets a mastery state based on your practice.</p>
+      <Link href="/jamb/syllabus" className="mt-4 inline-flex rounded-xl bg-brand-yellow px-4 py-2 text-sm font-black text-brand-dark">View detailed JAMB syllabus →</Link>
       {!user && <p className="mt-4 rounded-xl bg-white/10 p-3 text-sm">Log in to save your mastery.</p>}
     </div>
     <div className="mt-5 grid grid-cols-3 gap-3">
