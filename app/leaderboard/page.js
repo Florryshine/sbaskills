@@ -88,13 +88,13 @@ export default async function LeaderboardPage() {
           {/* Navigation tabs scroll to their actual sections; these were inert buttons before. */}
           <nav aria-label="Leaderboard sections" className="mb-8 flex flex-wrap gap-3">
             {[
-              { id: 'leaderboard', label: '🏆 Top Students' },
-              { id: 'challenges', label: '⚡ Challenges' },
+              { id: 'daily', label: '⚡ Daily Challenge', href: '/challenge' },
+              { id: 'leaderboard', label: '🏆 All-Time' },
               { id: 'badges', label: '🎖️ Badges' },
             ].map((tab) => (
               <a
                 key={tab.id}
-                href={`#${tab.id}`}
+                href={tab.href || `#${tab.id}`}
                 className="rounded-full border border-gray-200 bg-white px-5 py-2 text-sm font-bold text-gray-600 transition hover:border-brand-blue hover:bg-blue-50 focus:outline-none focus:ring-2 focus:ring-brand-blue"
               >
                 {tab.label}
@@ -151,41 +151,6 @@ export default async function LeaderboardPage() {
             </div>
           )}
           </section>
-
-          {/* Challenges Section */}
-          <section id="challenges" className="mt-8 scroll-mt-24">
-            <h2 className="text-xl font-bold mb-4">⚡ Weekly Challenges</h2>
-            {challenges?.length > 0 ? (
-              <div className="flex flex-col gap-4">
-                {challenges.map((ch) => (
-                  <div key={ch.id} className="bg-white rounded-2xl border border-gray-100 shadow-sm p-6">
-                    <div className="flex items-start justify-between mb-2">
-                      <h3 className="font-bold text-gray-800 text-lg">{ch.title}</h3>
-                      <span className="bg-brand-yellow text-brand-dark text-xs font-bold px-3 py-1 rounded-full">
-                        +{ch.points_reward || 50} pts
-                      </span>
-                    </div>
-                    <p className="text-gray-500 text-sm mb-4">{ch.description}</p>
-                    <div className="flex items-center justify-between">
-                      <span className="text-xs text-gray-400">
-                        Ends: {ch.week_end ? new Date(`${ch.week_end}T00:00:00`).toLocaleDateString('en-NG') : 'Ongoing'}
-                      </span>
-                      <span className={`text-xs font-bold px-3 py-1 rounded-full ${
-                        ch.is_active ? 'bg-green-100 text-green-700' : 'bg-gray-100 text-gray-500'
-                      }`}>
-                        {ch.is_active ? '🟢 Active' : '⏹ Not active'}
-                      </span>
-                    </div>
-                  </div>
-                ))}
-              </div>
-            ) : (
-              <div className="text-center py-12 bg-white rounded-2xl border border-gray-100">
-                <p className="text-4xl mb-4">⚡</p>
-                <p className="text-gray-500">No challenges yet – check back soon!</p>
-              </div>
-            )}
-          </div>
 
           {/* Badges Section (static) */}
           <section id="badges" className="mt-8 scroll-mt-24">
