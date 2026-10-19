@@ -5,7 +5,7 @@ import Navbar from '@/components/Navbar';
 import Footer from '@/components/Footer';
 import { createBrowserClient } from '@/lib/supabase';
 
-const ACCEPT = '.txt,.csv,.pdf,.xlsx,.xls,.docx,.doc';
+const ACCEPT = '.txt,.csv,.pdf,.xlsx,.xls,.docx';
 
 const IBASS_TEST_SOURCES = [
   { subject: 'Chemistry', url: 'https://ibass.jamb.gov.ng/assets/uploads/Chemistry.pdf' },
