@@ -23,12 +23,13 @@ export default function CurriculumSourcesPage() {
   const [busy, setBusy] = useState(false);
   const [message, setMessage] = useState('');
   const [importingUrl, setImportingUrl] = useState('');
+  const [parsingId, setParsingId] = useState('');
 
   async function load() {
     const { data: c } = await supabase.from('curricula').select('id, name, code, date_status').eq('code', 'JAMB_UTME_2026_2029').maybeSingle();
     setCurriculum(c || null);
     if (c) {
-      const { data } = await supabase.from('curriculum_source_documents').select('id, file_name, file_type, status, notes, created_at').eq('curriculum_id', c.id).order('created_at', { ascending: false });
+      const { data } = await supabase.from('curriculum_source_documents').select('id, file_name, file_type, status, notes, created_at, extracted_chars, source_subject').eq('curriculum_id', c.id).order('created_at', { ascending: false });
       setDocuments(data || []);
     }
   }
@@ -64,6 +65,23 @@ export default function CurriculumSourcesPage() {
       await load();
     } catch (error) { setMessage(error.message); }
     finally { setBusy(false); }
+  }
+
+  async function parseSource(doc) {
+    setParsingId(doc.id);
+    setMessage('');
+    try {
+      const response = await fetch('/api/admin/curriculum-sources/parse', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ document_id: doc.id }),
+      });
+      const result = await readApiResponse(response);
+      if (!response.ok) throw new Error(result.error || 'Could not parse source');
+      setMessage(result.document.file_name + ': extracted ' + result.document.extracted_chars.toLocaleString() + ' characters. Text is staged for review; it has not automatically replaced published syllabus topics.');
+      await load();
+    } catch (error) { setMessage(error.message); }
+    finally { setParsingId(''); }
   }
 
   async function importIbass(source) {
@@ -191,8 +209,8 @@ export default function CurriculumSourcesPage() {
               <div className="mt-4 space-y-3">
                 {documents.map((doc) => (
                   <div key={doc.id} className="flex flex-col gap-2 rounded-2xl border p-4 sm:flex-row sm:items-center sm:justify-between">
-                    <div><p className="font-bold">{doc.file_name}</p><p className="text-xs text-slate-500">{doc.file_type} • {new Date(doc.created_at).toLocaleString('en-NG')}</p>{doc.notes && <p className="mt-1 text-xs text-slate-500">{doc.notes}</p>}</div>
-                    <span className="rounded-full bg-amber-50 px-3 py-1 text-xs font-extrabold text-amber-700">{doc.status}</span>
+                    <div><p className="font-bold">{doc.file_name}</p><p className="text-xs text-slate-500">{doc.file_type} • {new Date(doc.created_at).toLocaleString('en-NG')}</p>{doc.extracted_chars > 0 && <p className="mt-1 text-xs font-bold text-green-700">{doc.extracted_chars.toLocaleString()} characters extracted</p>}{doc.notes && <p className="mt-1 text-xs text-slate-500">{doc.notes}</p>}</div>
+                    <div className="flex items-center gap-2"><span className="rounded-full bg-amber-50 px-3 py-1 text-xs font-extrabold text-amber-700">{doc.status}</span>{doc.status !== 'parsed' && <button disabled={!!parsingId || busy} onClick={() => parseSource(doc)} className="rounded-xl bg-brand-blue px-3 py-2 text-xs font-black text-white disabled:opacity-50">{parsingId === doc.id ? 'Parsing...' : 'Extract text'}</button>}</div>
                   </div>
                 ))}
               </div>
