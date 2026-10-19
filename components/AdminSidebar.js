@@ -19,6 +19,7 @@ const sections = [
     items: [
       { href: '/admin/courses', label: 'Courses' },
       { href: '/admin/quizzes', label: 'Quizzes' },
+      { href: '/admin/quiz-performance', label: 'Student Quiz Performance' },
       { href: '/admin/quiz-drafts', label: 'Quiz Drafts' },
       { href: '/admin/flashcard-drafts', label: 'Flashcards' },
       { href: '/admin/study-note-drafts', label: 'Study Notes' },
