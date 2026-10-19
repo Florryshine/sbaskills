@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import Link from 'next/link';
 import Navbar from '@/components/Navbar';
 import Footer from '@/components/Footer';
@@ -23,6 +23,7 @@ export default function StudentCommandCenter() {
   const [mission, setMission] = useState(null);
   const [missionNotice, setMissionNotice] = useState('');
   const [missionRetrying, setMissionRetrying] = useState(false);
+  const missionGenerateAttempted = useRef(false);
   const [attempts, setAttempts] = useState([]);
   const [notifications, setNotifications] = useState([]);
   const [points, setPoints] = useState(0);
@@ -92,7 +93,8 @@ export default function StudentCommandCenter() {
           .maybeSingle();
 
         // Do not leave the student waiting for a scheduled worker if today's mission is missing.
-        if (!missionResult.data && targetResult.data?.exam_type === 'JAMB') {
+        if (!missionResult.data && targetResult.data?.exam_type === 'JAMB' && !missionGenerateAttempted.current) {
+          missionGenerateAttempted.current = true;
           try {
             const response = await fetch('/api/daily-mission/generate', { method: 'POST' });
             if (response.ok) {
@@ -105,12 +107,11 @@ export default function StudentCommandCenter() {
                 .maybeSingle();
             } else {
               const payload = await response.json().catch(() => ({}));
-              const message = payload.error || 'Today’s mission could not be prepared right now.';
-              setMissionNotice(message);
-              console.warn('Daily mission could not be prepared:', message);
+              console.warn('Daily mission could not be prepared:', payload.error || response.statusText || response.status);
+              setMissionNotice('Your mission is not ready yet');
             }
           } catch (missionError) {
-            setMissionNotice('We could not connect to prepare your mission. Check your connection and try again.');
+            setMissionNotice('Your mission is not ready yet');
             console.warn('Daily mission generation request failed:', missionError);
           }
         }
@@ -264,10 +265,10 @@ export default function StudentCommandCenter() {
                 </div>
               ) : (
                 <div className="mt-5 rounded-2xl bg-slate-50 p-5">
-                  <p className="font-bold text-slate-800">{missionNotice ? 'Today’s mission is not ready yet.' : 'Preparing today’s study mission…'}</p>
-                  <p className="mt-1 text-sm text-slate-500">{missionNotice || 'Your mission will be built from available JAMB questions and your study focus.'}</p>
+                  <p className="font-bold text-slate-800">{missionNotice || 'Preparing today’s study mission…'}</p>
+                  {!missionNotice && <p className="mt-1 text-sm text-slate-500">Your mission will be built from available JAMB questions and your study focus.</p>}
                   <div className="mt-4 flex flex-wrap gap-3">
-                    <button type="button" disabled={missionRetrying} onClick={async () => { setMissionRetrying(true); setMissionNotice(''); try { const response = await fetch('/api/daily-mission/generate', { method: 'POST' }); if (!response.ok) { const payload = await response.json().catch(() => ({})); setMissionNotice(payload.error || 'Could not prepare your mission. Please try again.'); } else { window.location.reload(); } } catch (error) { setMissionNotice('Connection problem. Please try again.'); } finally { setMissionRetrying(false); } }} className="rounded-xl bg-brand-blue px-4 py-2 text-sm font-extrabold text-white disabled:opacity-60">{missionRetrying ? 'Preparing…' : 'Try again'}</button>
+                    <button type="button" disabled={missionRetrying} onClick={async () => { setMissionRetrying(true); setMissionNotice(''); try { const response = await fetch('/api/daily-mission/generate', { method: 'POST' }); if (!response.ok) { const payload = await response.json().catch(() => ({})); console.warn('Daily mission retry failed:', payload.error || response.statusText || response.status); setMissionNotice('Your mission is not ready yet'); } else { window.location.reload(); } } catch (error) { setMissionNotice('Your mission is not ready yet'); } finally { setMissionRetrying(false); } }} className="rounded-xl bg-brand-blue px-4 py-2 text-sm font-extrabold text-white disabled:opacity-60">{missionRetrying ? 'Preparing…' : 'Try again'}</button>
                     <Link href="/jamb/practice" className="inline-block rounded-xl bg-brand-yellow px-4 py-2 text-sm font-extrabold text-brand-dark">Quick practice →</Link>
                   </div>
                 </div>
