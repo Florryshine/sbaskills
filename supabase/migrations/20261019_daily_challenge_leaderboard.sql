@@ -48,6 +48,10 @@ create table if not exists public.daily_challenge_reward_claims (
 );
 alter table public.daily_challenge_reward_claims enable row level security;
 revoke all on public.daily_challenge_reward_claims from anon, authenticated;
+grant select on public.daily_challenge_reward_claims to authenticated;
+drop policy if exists "Students read own daily challenge reward claims" on public.daily_challenge_reward_claims;
+create policy "Students read own daily challenge reward claims"
+  on public.daily_challenge_reward_claims for select to authenticated using (auth.uid() = user_id);
 
 create or replace function public.claim_daily_challenge_reward(p_subject text)
 returns jsonb
