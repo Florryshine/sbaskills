@@ -35,7 +35,7 @@ function showAccuracy(value) {
 }
 
 export default function DailyChallengePage() {
-  const supabase = createBrowserClient();
+  const supabase = useMemo(() => createBrowserClient(), []);
   const [user, setUser] = useState(null);
   const [today, setToday] = useState('');
   const [subject, setSubject] = useState('Biology');
