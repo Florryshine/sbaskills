@@ -2,7 +2,7 @@ import { NextResponse } from 'next/server';
 import { createServerClient } from '@/lib/supabase-server';
 import { createAdminClient } from '@/lib/supabase-admin';
 import { generateWithFallback } from '@/lib/llmFallbackChain';
-export const runtime='nodejs'; export const dynamic='force-dynamic'; export const maxDuration=30;
+export const runtime='nodejs'; export const dynamic='force-dynamic'; export const maxDuration=60;
 const subjects=[['Biology',/bio(logy)?/i],['Chemistry',/chem(istry)?/i],['Physics',/phys(ics)?/i],['Mathematics',/math(ematic(s)?)?/i],['Use of English',/english/i],['CRS',/christian religious|\bcrs\b/i],['IRS',/islamic religious|\birs\b/i],['Government',/government/i],['Literature in English',/literature/i],['Economics',/economics?/i],['Commerce',/commerce/i],['Accounting',/accounting|principles of accounts/i],['Agricultural Science',/agricultural|agriculture/i],['Geography',/geography/i],['Computer Studies',/computer/i],['French',/french/i],['Arabic',/arabic/i],['Hausa',/hausa/i],['Igbo',/igbo/i],['Yoruba',/yoruba/i]];
 const clean=(v,n=600)=>typeof v==='string'?v.replace(/\s+/g,' ').trim().slice(0,n):'';
 function subjectName(value){const v=String(value||'').replace(/\.[^.]+$/,'').replace(/jamb|utme|syllabus|202[6-9]/ig,'').replace(/[_-]+/g,' ').trim();return subjects.find(([name,re])=>re.test(v))?.[0]||null;}
@@ -25,9 +25,17 @@ export async function POST(request){
   const subject=subjectName(doc.source_subject)||subjectName(doc.file_name);if(!subject)return NextResponse.json({error:'Could not identify a supported JAMB subject from the source filename/subject.'},{status:422});
   await admin.from('curriculum_source_documents').update({status:'processing',source_subject:subject,notes:'Building syllabus topics and objectives.',updated_at:new Date().toISOString()}).eq('id',id);
   const chunks=chunksOf(doc.extracted_text),failed=[],counts={topics_added:0,topics_already_existing:0,objectives_added:0};let order=0;const started=Date.now();
+  // Generate in bounded parallel batches; database writes below remain ordered and idempotent.
+  const generated=new Array(chunks.length);
+  for(let base=0;base<chunks.length;base+=4){
+   const batch=chunks.slice(base,base+4).map((chunk,offset)=>generate(chunk,subject,base+offset,chunks.length).then(topics=>({topics})).catch(e=>({error:String(e?.message||e).slice(0,300)})));
+   const results=await Promise.all(batch);
+   results.forEach((result,offset)=>{generated[base+offset]=result;});
+  }
   for(let ci=0;ci<chunks.length;ci++){
-   if(Date.now()-started>22000){failed.push({chunk:ci+1,error:'Stopped before the serverless time limit.'});break;}
-   let list;try{list=await generate(chunks[ci],subject,ci,chunks.length);}catch(e){failed.push({chunk:ci+1,error:String(e?.message||e).slice(0,300)});continue;}
+   const result=generated[ci];
+   if(result.error){failed.push({chunk:ci+1,error:result.error});continue;}
+   const list=result.topics||[];
    for(const item of list){
     const title=clean(item?.title,250);if(!title)continue;order++;
     let topicId;const {data:old,error:oe}=await admin.from('curriculum_topics').select('id').eq('curriculum_id',doc.curriculum_id).eq('subject',subject).eq('title',title).maybeSingle();if(oe)throw oe;
@@ -38,8 +46,13 @@ export async function POST(request){
     await saveObjectives(topicId,item.objectives);
     for(let si=0;si<(Array.isArray(item.subtopics)?item.subtopics.length:0);si++){
      const sub=item.subtopics[si],st=clean(sub?.title,250);if(!st)continue;
-     const {data:oldSub,error:ose}=await admin.from('curriculum_topics').select('id').eq('curriculum_id',doc.curriculum_id).eq('subject',subject).eq('title',st).maybeSingle();if(ose)throw ose;let subId;
-     if(oldSub){subId=oldSub.id;counts.topics_already_existing++;}else{const {data:sr,error:se}=await admin.from('curriculum_topics').insert({curriculum_id:doc.curriculum_id,subject,title:st,order_index:si+1,parent_id:topicId,node_type:'subtopic',code:clean(sub.code,80)||null,syllabus_text:st,source:id}).select('id').single();if(se)throw se;subId=sr.id;counts.topics_added++;}
+     const {data:oldSub,error:ose}=await admin.from('curriculum_topics').select('id,parent_id').eq('curriculum_id',doc.curriculum_id).eq('subject',subject).eq('title',st).eq('parent_id',topicId).maybeSingle();if(ose)throw ose;let subId;
+     if(oldSub){subId=oldSub.id;counts.topics_already_existing++;}else{
+      let subTitle=st;
+      const {data:collision,error:ce}=await admin.from('curriculum_topics').select('id,parent_id').eq('curriculum_id',doc.curriculum_id).eq('subject',subject).eq('title',st).limit(10);if(ce)throw ce;
+      if((collision||[]).some(row=>row.parent_id!==topicId))subTitle=clean(title+': '+st,250);
+      const {data:sr,error:se}=await admin.from('curriculum_topics').insert({curriculum_id:doc.curriculum_id,subject,title:subTitle,order_index:si+1,parent_id:topicId,node_type:'subtopic',code:clean(sub.code,80)||null,syllabus_text:st,source:id}).select('id').single();if(se)throw se;subId=sr.id;counts.topics_added++;
+     }
      await saveObjectives(subId,sub.objectives);
     }
    }
