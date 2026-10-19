@@ -8,7 +8,6 @@ const dateTime = (value) => value ? new Date(value).toLocaleString('en-NG', { da
 
 export default function AdminQuizPerformancePage() {
   const router = useRouter();
-  const supabase = createBrowserClient();
   const [rows, setRows] = useState([]);
   const [search, setSearch] = useState('');
   const [statusFilter, setStatusFilter] = useState('all');
@@ -20,27 +19,35 @@ export default function AdminQuizPerformancePage() {
   const load = useCallback(async () => {
     setLoading(true);
     setError('');
+    const supabase = createBrowserClient();
     try {
       const { data: { user }, error: authError } = await supabase.auth.getUser();
       if (authError || !user) { router.push('/admin/login'); return; }
       const { data: profile, error: profileError } = await supabase.from('profiles').select('role').eq('id', user.id).single();
       if (profileError || profile?.role !== 'admin') { router.push('/login'); return; }
 
-      const [attemptResult, profilesResult, quizzesResult, draftsResult] = await Promise.all([
-        supabase.from('quiz_attempts').select('id,student_id,quiz_id,score,total_questions,answers,created_at,completed_at,status,started_at,updated_at').order('created_at', { ascending: false }).limit(2000),
+      const [profilesResult, quizzesResult, draftsResult] = await Promise.all([
         supabase.from('profiles').select('id,full_name,email').eq('role', 'student').limit(5000),
         supabase.from('quizzes').select('id,title,tutor_id'),
         supabase.from('quiz_drafts').select('id,keyword,status'),
       ]);
-      if (attemptResult.error) throw attemptResult.error;
       if (profilesResult.error) throw profilesResult.error;
       if (quizzesResult.error) throw quizzesResult.error;
+      const source = [];
+      const pageSize = 1000;
+      for (let from = 0; ; from += pageSize) {
+        const { data: batch, error: batchError } = await supabase.from('quiz_attempts')
+          .select('id,student_id,quiz_id,score,total_questions,answers,created_at,completed_at,status,started_at,updated_at')
+          .order('created_at', { ascending: false }).range(from, from + pageSize - 1);
+        if (batchError) throw batchError;
+        source.push(...(batch || []));
+        if (!batch || batch.length < pageSize) break;
+      }
       // Draft reads may be restricted by RLS; manual quiz attempts still remain visible.
       const students = Object.fromEntries((profilesResult.data || []).map(p => [p.id, p]));
       const quizzes = Object.fromEntries((quizzesResult.data || []).map(q => [q.id, { title: q.title || 'Untitled quiz', type: 'Manual quiz' }]));
       (draftsResult.data || []).forEach(q => { quizzes[q.id] = { title: q.keyword || 'Generated quiz', type: 'Generated quiz' }; });
 
-      const source = attemptResult.data || [];
       const attemptCounts = {};
       source.forEach(a => {
         const key = String(a.student_id || 'unknown') + ':' + String(a.quiz_id || 'unknown');
@@ -63,7 +70,7 @@ export default function AdminQuizPerformancePage() {
     } finally {
       setLoading(false);
     }
-  }, [router, supabase]);
+  }, [router]);
 
   useEffect(() => { load(); }, [load]);
 
@@ -107,7 +114,7 @@ export default function AdminQuizPerformancePage() {
         <select value={quizFilter} onChange={e => setQuizFilter(e.target.value)} className="rounded-xl border border-slate-200 px-3 py-3 text-sm"><option value="all">All quizzes</option>{quizOptions.map(q => <option key={q.id} value={q.id}>{q.title}</option>)}</select>
         <select value={statusFilter} onChange={e => setStatusFilter(e.target.value)} className="rounded-xl border border-slate-200 px-3 py-3 text-sm"><option value="all">All statuses</option><option value="completed">Completed</option><option value="in_progress">In progress</option><option value="inactive">Inactive (30m+)</option></select>
       </div>
-      <p className="mt-3 text-xs text-slate-500">Showing {filtered.length} of {rows.length} records (latest 2,000). Inactivity is an estimate, not proof a student abandoned the quiz.</p>
+      <p className="mt-3 text-xs text-slate-500">Showing {filtered.length} of {rows.length} recorded attempts (all available pages). Inactivity is an estimate, not proof a student abandoned the quiz.</p>
     </section>
 
     <section className="overflow-hidden rounded-2xl border border-slate-100 bg-white shadow-sm">
