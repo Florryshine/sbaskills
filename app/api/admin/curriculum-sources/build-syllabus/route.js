@@ -8,9 +8,10 @@ const clean=(v,n=600)=>typeof v==='string'?v.replace(/\s+/g,' ').trim().slice(0,
 function subjectName(value){const v=String(value||'').replace(/\.[^.]+$/,'').replace(/jamb|utme|syllabus|202[6-9]/ig,'').replace(/[_-]+/g,' ').trim();return subjects.find(([name,re])=>re.test(v))?.[0]||null;}
 function parseJson(s){return JSON.parse(String(s||'').replace(/^\s*```(?:json)?/i,'').replace(/```\s*$/,'').trim());}
 function chunksOf(s){const a=[];while(s.length>6000){let i=s.lastIndexOf('\n',6000);if(i<3000)i=6000;a.push(s.slice(0,i));s=s.slice(i).trimStart();}if(s.trim())a.push(s);return a;}
+function withTimeout(promise,ms,message){let timer;return Promise.race([promise,new Promise((_,reject)=>{timer=setTimeout(()=>reject(new Error(message)),ms);})]).finally(()=>clearTimeout(timer));}
 async function generate(chunk,subject,index,total){
  const prompt=`Extract ONLY syllabus information explicitly present below. Do not invent topics or objectives. Subject: ${subject}; chunk ${index+1}/${total}. Return JSON only: {"topics":[{"title":"main topic","code":"","description":"source-faithful brief description","objectives":["explicit learning objective"],"subtopics":[{"title":"subtopic","code":"","objectives":["explicit objective"]}]}]}. Preserve source numbering where available. Ignore headers/footers. If there are no clear topics, return {"topics":[]}. SOURCE:\n${chunk}`;
- const r=await generateWithFallback(prompt,parseJson,x=>x&&Array.isArray(x.topics),3500);
+ const r=await withTimeout(generateWithFallback(prompt,parseJson,x=>x&&Array.isArray(x.topics),3500),18000,'AI syllabus extraction exceeded the 18-second chunk timeout.');
  if(!r?.result)throw new Error('AI response did not contain a valid topics array');return r.result.topics;
 }
 export async function POST(request){
