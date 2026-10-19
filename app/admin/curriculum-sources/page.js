@@ -5,7 +5,7 @@ import Navbar from '@/components/Navbar';
 import Footer from '@/components/Footer';
 import { createBrowserClient } from '@/lib/supabase';
 
-const ACCEPT = '.txt,.csv,.pdf,.xlsx,.xls,.docx,.doc';
+const ACCEPT = '.txt,.csv,.pdf,.xlsx,.xls,.docx';
 
 const IBASS_TEST_SOURCES = [
   { subject: 'Chemistry', url: 'https://ibass.jamb.gov.ng/assets/uploads/Chemistry.pdf' },
@@ -24,17 +24,24 @@ export default function CurriculumSourcesPage() {
   const [message, setMessage] = useState('');
   const [importingUrl, setImportingUrl] = useState('');
   const [parsingId, setParsingId] = useState('');
+  const [buildingId, setBuildingId] = useState('');
+  const [now, setNow] = useState(Date.now());
 
   async function load() {
     const { data: c } = await supabase.from('curricula').select('id, name, code, date_status').eq('code', 'JAMB_UTME_2026_2029').maybeSingle();
     setCurriculum(c || null);
     if (c) {
-      const { data } = await supabase.from('curriculum_source_documents').select('id, file_name, file_type, status, notes, created_at, extracted_chars, source_subject').eq('curriculum_id', c.id).order('created_at', { ascending: false });
+      const { data } = await supabase.from('curriculum_source_documents').select('id, file_name, file_type, status, notes, created_at, updated_at, extracted_chars, source_subject').eq('curriculum_id', c.id).order('created_at', { ascending: false });
       setDocuments(data || []);
     }
   }
 
-  useEffect(() => { load(); }, []);
+  useEffect(() => { load(); const timer = setInterval(() => setNow(Date.now()), 30000); return () => clearInterval(timer); }, []);
+
+  function processingIsStale(doc) {
+    const stamp = new Date(doc.updated_at || doc.created_at).getTime();
+    return doc.status === 'processing' && Number.isFinite(stamp) && now - stamp > 2 * 60 * 1000;
+  }
 
   async function readApiResponse(response) {
     const contentType = response.headers.get('content-type') || '';
@@ -49,22 +56,18 @@ export default function CurriculumSourcesPage() {
 
   async function upload(selectedFile) {
     if (!selectedFile || !curriculum?.id) return;
-    setBusy(true);
-    setMessage('');
+    setBusy(true); setMessage('');
     try {
-      const form = new FormData();
-      form.append('file', selectedFile);
-      form.append('curriculum_id', curriculum.id);
-      form.append('notes', notes);
-      const response = await fetch(`/api/admin/curriculum-sources/upload?t=${Date.now()}`, { method: 'POST', body: form, cache: 'no-store' });
+      const response = await fetch('/api/admin/curriculum-sources/upload', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ curriculum_id: curriculum.id, file_name: selectedFile.name, file_size: selectedFile.size, file_type: selectedFile.type || '', notes }) });
       const result = await readApiResponse(response);
-      if (!response.ok) throw new Error(result.error || 'Upload failed');
-      setFile(null);
-      setNotes('');
-      setMessage('Syllabus source uploaded. It is staged for parsing later.');
-      await load();
-    } catch (error) { setMessage(error.message); }
-    finally { setBusy(false); }
+      if (!response.ok) throw new Error(result.error || 'Could not prepare upload.');
+      const { error: storageError } = await supabase.storage.from(result.bucket).uploadToSignedUrl(result.path, result.token, selectedFile, { contentType: selectedFile.type || undefined, upsert: false });
+      if (storageError) throw storageError;
+      const completed = await fetch('/api/admin/curriculum-sources/complete-upload', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ curriculum_id: curriculum.id, path: result.path, file_name: selectedFile.name, file_type: selectedFile.type || '', notes }) });
+      const saved = await readApiResponse(completed);
+      if (!completed.ok) throw new Error(saved.error || 'File uploaded but could not register the source.');
+      setFile(null); setNotes(''); setMessage('Syllabus source uploaded directly to Supabase Storage. Extract text, then build the syllabus.'); await load();
+    } catch (error) { setMessage(error.message || 'Upload failed.'); } finally { setBusy(false); }
   }
 
   async function parseSource(doc) {
@@ -80,8 +83,17 @@ export default function CurriculumSourcesPage() {
       if (!response.ok) throw new Error(result.error || 'Could not parse source');
       setMessage(result.document.file_name + ': extracted ' + result.document.extracted_chars.toLocaleString() + ' characters. Text is staged for review; it has not automatically replaced published syllabus topics.');
       await load();
-    } catch (error) { setMessage(error.message); }
+    } catch (error) { setMessage(error.message); await load(); }
     finally { setParsingId(''); }
+  }
+  async function buildSyllabus(doc) {
+    setBuildingId(doc.id); setMessage('');
+    try {
+      const response = await fetch('/api/admin/curriculum-sources/build-syllabus', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ document_id: doc.id }) });
+      const result = await readApiResponse(response);
+      if (!response.ok) throw new Error(result.error || 'Could not build syllabus.');
+      setMessage(result.subject + ': ' + result.topics_added + ' topics/subtopics added, ' + result.topics_already_existing + ' already existed, ' + result.objectives_added + ' objectives added; ' + (result.chunks_failed?.length || 0) + ' chunks failed. Status: ' + result.status + '.'); await load();
+    } catch (error) { setMessage(error.message || 'Could not build syllabus.'); await load(); } finally { setBuildingId(''); }
   }
 
   async function importIbass(source) {
@@ -124,7 +136,7 @@ export default function CurriculumSourcesPage() {
 
           <section className="mt-5 rounded-3xl border bg-white p-6 shadow-sm">
             <h2 className="text-xl font-black">Test official IBASS import</h2>
-            <p className="mt-1 text-sm text-slate-500">These are two official JAMB IBASS PDF sources. Importing only stages the source and extracted text; it does not publish syllabus content.</p>
+            <p className="mt-1 text-sm text-slate-500">These are official JAMB IBASS PDF sources. If IBASS blocks automatic download, download the PDF in your browser and upload it here.</p>
             <div className="mt-4 grid gap-3 sm:grid-cols-2">
               {IBASS_TEST_SOURCES.map((source) => (
                 <div key={source.url} className="rounded-2xl border p-4">
@@ -210,7 +222,7 @@ export default function CurriculumSourcesPage() {
                 {documents.map((doc) => (
                   <div key={doc.id} className="flex flex-col gap-2 rounded-2xl border p-4 sm:flex-row sm:items-center sm:justify-between">
                     <div><p className="font-bold">{doc.file_name}</p><p className="text-xs text-slate-500">{doc.file_type} • {new Date(doc.created_at).toLocaleString('en-NG')}</p>{doc.extracted_chars > 0 && <p className="mt-1 text-xs font-bold text-green-700">{doc.extracted_chars.toLocaleString()} characters extracted</p>}{doc.notes && <p className="mt-1 text-xs text-slate-500">{doc.notes}</p>}</div>
-                    <div className="flex items-center gap-2"><span className="rounded-full bg-amber-50 px-3 py-1 text-xs font-extrabold text-amber-700">{doc.status}</span>{doc.status !== 'parsed' && <button disabled={!!parsingId || busy} onClick={() => parseSource(doc)} className="rounded-xl bg-brand-blue px-3 py-2 text-xs font-black text-white disabled:opacity-50">{parsingId === doc.id ? 'Parsing...' : 'Extract text'}</button>}</div>
+                    <div className="flex items-center gap-2"><span className="rounded-full bg-amber-50 px-3 py-1 text-xs font-extrabold text-amber-700">{doc.status}</span>{(doc.status !== 'parsed' && doc.status !== 'published' || processingIsStale(doc)) && <button disabled={!!parsingId || busy || !!buildingId} onClick={() => parseSource(doc)} className="rounded-xl bg-brand-blue px-3 py-2 text-xs font-black text-white disabled:opacity-50">{parsingId === doc.id ? 'Parsing...' : doc.status === 'failed' || processingIsStale(doc) ? 'Retry extraction' : 'Extract text'}</button>}{(doc.status === 'parsed' || doc.status === 'failed' || doc.status === 'published') && doc.extracted_chars > 0 && <button disabled={!!buildingId || busy || !!parsingId} onClick={() => buildSyllabus(doc)} className="rounded-xl bg-brand-yellow px-3 py-2 text-xs font-black text-brand-dark disabled:opacity-50">{buildingId === doc.id ? 'Building...' : 'Build syllabus'}</button>}</div>
                   </div>
                 ))}
               </div>
