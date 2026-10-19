@@ -30,6 +30,8 @@ export default function JAMBPracticePage() {
   const [saveError, setSaveError] = useState('');
   const [user, setUser] = useState(null);
   const [missionItemId, setMissionItemId] = useState(() => getInitialParam('item'));
+  const challengeMode = getInitialParam('challenge') === '1';
+  const challengeQuestionIds = getInitialParam('ids').split(',').filter(Boolean);
 
   useEffect(() => {
     setSubject(getInitialParam('subject'));
@@ -49,7 +51,15 @@ export default function JAMBPracticePage() {
       let data = [];
       let error = null;
 
-      if (missionItemId) {
+      if (challengeMode && challengeQuestionIds.length) {
+        const { data: challengeQuestions, error: challengeError } = await supabase
+          .from('past_questions')
+          .select('id, subject, topic, year, question, option_a, option_b, option_c, option_d, correct_answer, explanation')
+          .in('id', challengeQuestionIds);
+        error = challengeError;
+        const byId = new Map((challengeQuestions || []).map(q => [q.id, q]));
+        data = challengeQuestionIds.map(id => byId.get(id)).filter(Boolean);
+      } else if (missionItemId) {
         const { data: item, error: itemError } = await supabase
           .from('student_daily_mission_items')
           .select('id, subject, topic, question_ids')
@@ -190,6 +200,10 @@ export default function JAMBPracticePage() {
       setSaveError('Your score was calculated, but we could not save this session to your progress. Please check your connection and try again later.');
     }
 
+    if (!error && challengeMode) {
+      window.location.href = '/challenge';
+      return;
+    }
     setResult({ correct, total, accuracy, weakTopics });
     setSubmitted(true);
     setSaving(false);
