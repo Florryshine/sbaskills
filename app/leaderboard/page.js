@@ -43,12 +43,20 @@ export default async function LeaderboardPage() {
     usersMap = Object.fromEntries((profiles || []).map(p => [p.id, p]));
   }
 
-  // Fetch challenges
-  const { data: challenges } = await supabase
+  // weekly_challenges uses week_start/week_end (there is no created_at,
+  // end_date or is_active column in the live schema).
+  const { data: challengeRows } = await supabase
     .from('weekly_challenges')
-    .select('*')
-    .order('created_at', { ascending: false })
+    .select('id, title, description, points_reward, week_start, week_end')
+    .order('week_start', { ascending: false })
     .limit(5);
+
+  const today = new Date().toISOString().slice(0, 10);
+  const challenges = (challengeRows || []).map((challenge) => ({
+    ...challenge,
+    is_active: (!challenge.week_start || challenge.week_start <= today) &&
+      (!challenge.week_end || challenge.week_end >= today),
+  }));
 
   // Combine data
   const leaderData = (leaders || []).map((entry, index) => {
@@ -77,27 +85,25 @@ export default async function LeaderboardPage() {
         </section>
 
         <div className="max-w-4xl mx-auto px-4 py-8">
-          {/* Tabs */}
-          <div className="flex gap-3 mb-8">
+          {/* Navigation tabs scroll to their actual sections; these were inert buttons before. */}
+          <nav aria-label="Leaderboard sections" className="mb-8 flex flex-wrap gap-3">
             {[
               { id: 'leaderboard', label: '🏆 Top Students' },
               { id: 'challenges', label: '⚡ Challenges' },
               { id: 'badges', label: '🎖️ Badges' },
             ].map((tab) => (
-              <button
+              <a
                 key={tab.id}
-                className={`px-5 py-2 rounded-full text-sm font-bold capitalize transition ${
-                  tab.id === 'leaderboard'
-                    ? 'bg-brand-blue text-white shadow'
-                    : 'bg-white text-gray-600 border border-gray-200 hover:border-brand-blue'
-                }`}
+                href={`#${tab.id}`}
+                className="rounded-full border border-gray-200 bg-white px-5 py-2 text-sm font-bold text-gray-600 transition hover:border-brand-blue hover:bg-blue-50 focus:outline-none focus:ring-2 focus:ring-brand-blue"
               >
                 {tab.label}
-              </button>
+              </a>
             ))}
-          </div>
+          </nav>
 
           {/* Leaderboard List */}
+          <section id="leaderboard" className="scroll-mt-24">
           {leaderData.length === 0 ? (
             <div className="text-center py-20">
               <p className="text-5xl mb-4">🏁</p>
@@ -144,9 +150,10 @@ export default async function LeaderboardPage() {
               ))}
             </div>
           )}
+          </section>
 
-          {/* Challenges Section (simplified) */}
-          <div className="mt-8">
+          {/* Challenges Section */}
+          <section id="challenges" className="mt-8 scroll-mt-24">
             <h2 className="text-xl font-bold mb-4">⚡ Weekly Challenges</h2>
             {challenges?.length > 0 ? (
               <div className="flex flex-col gap-4">
@@ -161,12 +168,12 @@ export default async function LeaderboardPage() {
                     <p className="text-gray-500 text-sm mb-4">{ch.description}</p>
                     <div className="flex items-center justify-between">
                       <span className="text-xs text-gray-400">
-                        Ends: {ch.end_date ? new Date(ch.end_date).toLocaleDateString('en-NG') : 'Ongoing'}
+                        Ends: {ch.week_end ? new Date(`${ch.week_end}T00:00:00`).toLocaleDateString('en-NG') : 'Ongoing'}
                       </span>
                       <span className={`text-xs font-bold px-3 py-1 rounded-full ${
                         ch.is_active ? 'bg-green-100 text-green-700' : 'bg-gray-100 text-gray-500'
                       }`}>
-                        {ch.is_active ? '🟢 Active' : '⏹ Ended'}
+                        {ch.is_active ? '🟢 Active' : '⏹ Not active'}
                       </span>
                     </div>
                   </div>
@@ -181,7 +188,7 @@ export default async function LeaderboardPage() {
           </div>
 
           {/* Badges Section (static) */}
-          <div className="mt-8">
+          <section id="badges" className="mt-8 scroll-mt-24">
             <h2 className="text-xl font-bold mb-4">🎖️ Badges</h2>
             <div className="grid grid-cols-2 sm:grid-cols-3 gap-4">
               {[
@@ -202,7 +209,7 @@ export default async function LeaderboardPage() {
                 </div>
               ))}
             </div>
-          </div>
+          </section>
         </div>
       </main>
       <Footer />
