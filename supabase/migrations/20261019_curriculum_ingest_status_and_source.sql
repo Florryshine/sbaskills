@@ -1,0 +1,2 @@
+ALTER TABLE public.curriculum_source_documents DROP CONSTRAINT IF EXISTS curriculum_source_documents_status_check;
+ALTER TABLE public.curriculum_source_documents ADD CONSTRAINT curriculum_source_documents_status_check CHECK (status = ANY (ARRAY['uploaded','processing','parsed','published','failed','archived']::text[]));
