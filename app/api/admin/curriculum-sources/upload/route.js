@@ -1,64 +1,24 @@
 import { NextResponse } from 'next/server';
 import { createServerClient } from '@/lib/supabase-server';
 import { createAdminClient } from '@/lib/supabase-admin';
-
-const BUCKET = 'curriculum-sources';
-const ALLOWED = new Set(['text/plain','text/csv','application/pdf','application/vnd.openxmlformats-officedocument.spreadsheetml.sheet','application/vnd.ms-excel','application/vnd.openxmlformats-officedocument.wordprocessingml.document','application/msword']);
-
-export async function POST(request) {
-  try {
-  const supabase = createServerClient();
-  const { data: { user } } = await supabase.auth.getUser();
-  if (!user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
-
-  const { data: profile } = await supabase.from('profiles').select('role').eq('id', user.id).maybeSingle();
-  if (profile?.role !== 'admin') return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
-
-  const form = await request.formData();
-  const file = form.get('file');
-  const curriculumId = form.get('curriculum_id');
-  const notes = String(form.get('notes') || '');
-
-  if (!(file instanceof File) || !curriculumId) return NextResponse.json({ error: 'File and curriculum are required.' }, { status: 400 });
-  if (!ALLOWED.has(file.type)) return NextResponse.json({ error: 'Supported files: TXT, CSV, Excel, Word and PDF.' }, { status: 400 });
-  if (file.size > 15 * 1024 * 1024) return NextResponse.json({ error: 'Maximum file size is 15MB.' }, { status: 400 });
-
-  const admin = createAdminClient();
-  const { data: bucket } = await admin.storage.getBucket(BUCKET);
-  if (!bucket) {
-    const { error: bucketError } = await admin.storage.createBucket(BUCKET, { public: false, fileSizeLimit: '15MB' });
-    if (bucketError && !String(bucketError.message).toLowerCase().includes('already exists')) {
-      return NextResponse.json({ error: bucketError.message }, { status: 500 });
-    }
-  }
-
-  const safeName = file.name.replace(/[^a-zA-Z0-9._-]/g, '-');
-  const storagePath = `${curriculumId}/${Date.now()}-${safeName}`;
-  const buffer = Buffer.from(await file.arrayBuffer());
-  const { error: uploadError } = await admin.storage.from(BUCKET).upload(storagePath, buffer, {
-    contentType: file.type,
-    upsert: false,
-  });
-  if (uploadError) return NextResponse.json({ error: uploadError.message }, { status: 500 });
-
-  const { data, error } = await admin.from('curriculum_source_documents').insert({
-    curriculum_id: curriculumId,
-    file_name: file.name,
-    file_type: file.type || 'application/octet-stream',
-    storage_path: storagePath,
-    status: 'uploaded',
-    notes,
-    uploaded_by: user.id,
-  }).select().single();
-
-  if (error) {
-    await admin.storage.from(BUCKET).remove([storagePath]);
-    return NextResponse.json({ error: error.message }, { status: 500 });
-  }
-
-  return NextResponse.json({ success: true, document: data });
-  } catch (error) {
-    console.error('Curriculum source API error:', error);
-    return NextResponse.json({ error: error?.message || 'Internal server error.' }, { status: 500 });
-  }
+export const runtime='nodejs';
+const BUCKET='curriculum-sources', EXTENSIONS=new Set(['pdf','txt','docx','csv','xlsx','xls','doc']), MAX=15*1024*1024;
+export async function POST(request){
+ try{
+  const auth=createServerClient(),{data:{user}}=await auth.auth.getUser();
+  if(!user)return NextResponse.json({error:'Unauthorized'},{status:401});
+  const {data:profile}=await auth.from('profiles').select('role').eq('id',user.id).maybeSingle();
+  if(profile?.role!=='admin')return NextResponse.json({error:'Forbidden'},{status:403});
+  const b=await request.json(),{curriculum_id,file_name,file_size,file_type,notes=''}=b||{};
+  if(!curriculum_id||!file_name||!Number.isFinite(Number(file_size)))return NextResponse.json({error:'curriculum_id, file_name and file_size are required.'},{status:400});
+  if(Number(file_size)<=0||Number(file_size)>MAX)return NextResponse.json({error:'File must be between 1 byte and 15MB.'},{status:400});
+  if(!EXTENSIONS.has(String(file_name).split('.').pop().toLowerCase()))return NextResponse.json({error:'Supported files: PDF, TXT, DOCX, CSV, XLSX, XLS and DOC.'},{status:415});
+  const admin=createAdminClient(),{data:curriculum,error:ce}=await admin.from('curricula').select('id').eq('id',curriculum_id).maybeSingle();
+  if(ce)throw ce;if(!curriculum)return NextResponse.json({error:'Curriculum not found.'},{status:404});
+  const {data:bucket}=await admin.storage.getBucket(BUCKET);
+  if(!bucket){const {error}=await admin.storage.createBucket(BUCKET,{public:false,fileSizeLimit:'15MB'});if(error&&!/already exists/i.test(error.message||''))throw error;}
+  const safe=String(file_name).replace(/[^a-zA-Z0-9._-]/g,'-'),path=`${curriculum_id}/${crypto.randomUUID()}-${safe}`;
+  const {data,error}=await admin.storage.from(BUCKET).createSignedUploadUrl(path,{upsert:false});if(error)throw error;
+  return NextResponse.json({success:true,path,token:data.token,bucket:BUCKET,file_name:String(file_name),file_type:String(file_type||''),notes:String(notes||''),curriculum_id});
+ }catch(e){console.error('Curriculum upload URL error:',e);return NextResponse.json({error:e?.message||'Could not prepare upload.'},{status:500});}
 }
