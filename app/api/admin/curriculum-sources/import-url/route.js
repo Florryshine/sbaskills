@@ -134,16 +134,12 @@ export async function POST(request) {
         return NextResponse.json({ error: `IBASS returned a PDF, but text extraction failed: ${error?.message || 'Unknown parser error.'}` }, { status: 422 });
       }
     } else if (looksLikeHtml) {
-      sourceType = 'text/html';
-      extractedText = extractHtmlText(buffer.toString('utf8'));
-      if (!extractedText) {
-        return NextResponse.json({
-          error: 'IBASS returned an HTML page, but it contains no readable syllabus text (likely the JavaScript app shell). The importer can extract syllabus text from HTML when it is present; this response requires finding the page data/API endpoint or using the file upload fallback.',
-          source_type: sourceType,
-          content_type: contentType || 'text/html',
-          response_preview: buffer.subarray(0, 180).toString('utf8').replace(/\s+/g, ' ').slice(0, 160),
-        }, { status: 422 });
-      }
+      return NextResponse.json({
+        error: 'IBASS blocks automatic download. Download the PDF in your browser and upload it here.',
+        source_type: 'text/html',
+        content_type: contentType || 'text/html',
+        response_preview: buffer.subarray(0, 180).toString('utf8').replace(/\\s+/g, ' ').slice(0, 160),
+      }, { status: 422 });
     } else {
       return NextResponse.json({
         error: `IBASS returned neither a PDF nor readable HTML. Content-type: ${contentType || 'unknown'}; signature: ${JSON.stringify(signature)}.`,
