@@ -2,7 +2,7 @@ import { NextResponse } from 'next/server';
 import { createServerClient } from '@/lib/supabase-server';
 import { createAdminClient } from '@/lib/supabase-admin';
 export const runtime='nodejs';
-const BUCKET='curriculum-sources', EXTENSIONS=new Set(['pdf','txt','docx','csv','xlsx','xls','doc']), MAX=15*1024*1024;
+const BUCKET='curriculum-sources', EXTENSIONS=new Set(['pdf','txt','docx','csv','xlsx','xls']), MAX=15*1024*1024;
 export async function POST(request){
  try{
   const auth=createServerClient(),{data:{user}}=await auth.auth.getUser();
