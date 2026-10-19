@@ -46,11 +46,12 @@ export async function POST(request){
     await saveObjectives(topicId,item.objectives);
     for(let si=0;si<(Array.isArray(item.subtopics)?item.subtopics.length:0);si++){
      const sub=item.subtopics[si],st=clean(sub?.title,250);if(!st)continue;
-     const {data:oldSub,error:ose}=await admin.from('curriculum_topics').select('id,parent_id').eq('curriculum_id',doc.curriculum_id).eq('subject',subject).eq('title',st).eq('parent_id',topicId).maybeSingle();if(ose)throw ose;let subId;
+     const prefixedTitle=clean(title+': '+st,250);
+     const {data:oldSub,error:ose}=await admin.from('curriculum_topics').select('id,parent_id,title').eq('curriculum_id',doc.curriculum_id).eq('subject',subject).eq('parent_id',topicId).in('title',[st,prefixedTitle]).maybeSingle();if(ose)throw ose;let subId;
      if(oldSub){subId=oldSub.id;counts.topics_already_existing++;}else{
       let subTitle=st;
       const {data:collision,error:ce}=await admin.from('curriculum_topics').select('id,parent_id').eq('curriculum_id',doc.curriculum_id).eq('subject',subject).eq('title',st).limit(10);if(ce)throw ce;
-      if((collision||[]).some(row=>row.parent_id!==topicId))subTitle=clean(title+': '+st,250);
+      if((collision||[]).some(row=>row.parent_id!==topicId))subTitle=prefixedTitle;
       const {data:sr,error:se}=await admin.from('curriculum_topics').insert({curriculum_id:doc.curriculum_id,subject,title:subTitle,order_index:si+1,parent_id:topicId,node_type:'subtopic',code:clean(sub.code,80)||null,syllabus_text:st,source:id}).select('id').single();if(se)throw se;subId=sr.id;counts.topics_added++;
      }
      await saveObjectives(subId,sub.objectives);
