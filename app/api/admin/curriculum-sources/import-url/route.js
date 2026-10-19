@@ -138,7 +138,7 @@ export async function POST(request) {
         error: 'IBASS blocks automatic download. Download the PDF in your browser and upload it here.',
         source_type: 'text/html',
         content_type: contentType || 'text/html',
-        response_preview: buffer.subarray(0, 180).toString('utf8').replace(/\\s+/g, ' ').slice(0, 160),
+        response_preview: buffer.subarray(0, 180).toString('utf8').replace(/\s+/g, ' ').slice(0, 160),
       }, { status: 422 });
     } else {
       return NextResponse.json({
