@@ -79,6 +79,34 @@ export default function OnboardingPage() {
         return;
       }
       setUser(data.user);
+      const { data: profile } = await supabase
+        .from('profiles')
+        .select('guardian_phone, avatar_url, avatar_public_id, testimonial_consent, target_exams, interests, student_level, institution_name, institution_type, state, goal_title, goal_target, motivation, onboarding_completed')
+        .eq('id', data.user.id)
+        .maybeSingle();
+      if (profile?.onboarding_completed) {
+        router.replace('/dashboard');
+        return;
+      }
+      if (profile) {
+        setAnswers(prev => ({
+          ...prev,
+          guardian_phone: profile.guardian_phone || '',
+          avatar_url: profile.avatar_url || '',
+          avatar_public_id: profile.avatar_public_id || '',
+          testimonial_consent: profile.testimonial_consent === true,
+          target_exams: profile.target_exams || [],
+          interests: profile.interests || [],
+          student_level: profile.student_level || '',
+          institution_name: profile.institution_name || '',
+          institution_type: profile.institution_type || '',
+          state: profile.state || '',
+          goal_title: profile.goal_title || '',
+          goal_target: profile.goal_target || '',
+          motivation: profile.motivation || '',
+        }));
+        if (profile.avatar_url) setPhotoPreview(profile.avatar_url);
+      }
       try {
         const saved = window.localStorage.getItem('sba_onboarding_' + data.user.id);
         if (saved) {
