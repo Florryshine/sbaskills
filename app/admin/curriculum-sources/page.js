@@ -25,6 +25,8 @@ export default function CurriculumSourcesPage() {
   const [importingUrl, setImportingUrl] = useState('');
   const [parsingId, setParsingId] = useState('');
   const [buildingId, setBuildingId] = useState('');
+  const [selectedSubject, setSelectedSubject] = useState('');
+  const [linking, setLinking] = useState(false);
   const [now, setNow] = useState(Date.now());
 
   async function load() {
@@ -89,11 +91,29 @@ export default function CurriculumSourcesPage() {
   async function buildSyllabus(doc) {
     setBuildingId(doc.id); setMessage('');
     try {
-      const response = await fetch('/api/admin/curriculum-sources/build-syllabus', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ document_id: doc.id }) });
+      const response = await fetch('/api/admin/curriculum-sources/build-syllabus', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ document_id: doc.id, subject: selectedSubject || doc.source_subject || null }) });
       const result = await readApiResponse(response);
       if (!response.ok) throw new Error(result.error || 'Could not build syllabus.');
-      setMessage(result.subject + ': ' + result.topics_added + ' topics/subtopics added, ' + result.topics_already_existing + ' already existed, ' + result.objectives_added + ' objectives added; ' + (result.chunks_failed?.length || 0) + ' chunks failed. Status: ' + result.status + '.'); await load();
+      const links = result.links;
+      const linkSummary = links && !links.error ? ` Linking: ${links.assets_linked || 0} assets, ${links.game_topics_linked || 0} Study links, ${links.assets_given_objectives || 0} assets received objectives; ${links.topics_without_asset ?? '?'} main topics still need content.` : links?.error ? ` Linking warning: ${links.error}` : ' Linking result unavailable.';
+      setMessage(result.subject + ': ' + result.topics_added + ' topics/subtopics added, ' + result.topics_already_existing + ' already existed, ' + result.objectives_added + ' objectives added; ' + (result.chunks_failed?.length || 0) + ' chunks failed. Status: ' + result.status + '.' + linkSummary); await load();
     } catch (error) { setMessage(error.message || 'Could not build syllabus.'); await load(); } finally { setBuildingId(''); }
+  }
+
+  async function relinkAssets() {
+    if (!curriculum?.id) return;
+    setLinking(true); setMessage('');
+    try {
+      const response = await fetch('/api/admin/curriculum-sources/link-assets', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ curriculum_id: curriculum.id, subject: selectedSubject || null }),
+      });
+      const result = await readApiResponse(response);
+      if (!response.ok) throw new Error(result.error || 'Could not re-link assets.');
+      setMessage(`Re-link complete: ${result.assets_linked || 0} assets linked, ${result.game_topics_linked || 0} Study links added, ${result.assets_given_objectives || 0} assets given objectives; ${result.topics_without_asset ?? '?'} main topics still need content.`);
+    } catch (error) { setMessage(error.message || 'Could not re-link assets.'); }
+    finally { setLinking(false); }
   }
 
   async function importIbass(source) {
@@ -210,6 +230,18 @@ export default function CurriculumSourcesPage() {
               <button disabled={!text.trim() || busy} onClick={saveText} className="mt-4 w-full rounded-xl bg-brand-blue px-5 py-3 font-black text-white disabled:opacity-50">{busy ? 'Saving...' : 'Save pasted text'}</button>
             </section>
           </div>
+
+          <section className="mt-5 rounded-3xl border bg-white p-5 shadow-sm">
+            <h2 className="font-black">Asset linking tools</h2>
+            <p className="mt-1 text-sm text-slate-500">Choose a subject to build or re-link its topics. Leave as All subjects to re-link the full curriculum.</p>
+            <div className="mt-3 flex flex-col gap-3 sm:flex-row">
+              <select value={selectedSubject} onChange={(e) => setSelectedSubject(e.target.value)} className="min-w-0 flex-1 rounded-xl border p-3 text-sm">
+                <option value="">All subjects (auto-detect when building)</option>
+                {['Biology','Chemistry','Physics','Mathematics','Use of English','CRS','IRS','Government','Literature in English','Economics','Commerce','Accounting','Agricultural Science','Geography','Computer Studies','French','Arabic','Hausa','Igbo','Yoruba'].map((subject) => <option key={subject} value={subject}>{subject}</option>)}
+              </select>
+              <button disabled={!curriculum?.id || linking || !!buildingId || !!parsingId} onClick={relinkAssets} className="rounded-xl bg-brand-blue px-5 py-3 text-sm font-black text-white disabled:opacity-50">{linking ? 'Re-linking...' : 'Re-link assets'}</button>
+            </div>
+          </section>
 
           {message && <div className="mt-5 rounded-2xl bg-blue-50 p-4 text-sm font-bold text-brand-blue">{message}</div>}
 
