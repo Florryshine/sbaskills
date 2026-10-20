@@ -19,10 +19,10 @@ export async function POST(request){
  try{
   const auth=createServerClient(),{data:{user}}=await auth.auth.getUser();if(!user)return NextResponse.json({error:'Unauthorized'},{status:401});
   const {data:p}=await auth.from('profiles').select('role').eq('id',user.id).maybeSingle();if(p?.role!=='admin')return NextResponse.json({error:'Forbidden'},{status:403});
-  ({document_id:id}=await request.json());if(!id)return NextResponse.json({error:'document_id is required.'},{status:400});
+  const body=await request.json();id=body.document_id;if(!id)return NextResponse.json({error:'document_id is required.'},{status:400});
   admin=createAdminClient();const {data:doc,error:de}=await admin.from('curriculum_source_documents').select('id,curriculum_id,file_name,source_subject,extracted_text').eq('id',id).maybeSingle();if(de)throw de;if(!doc)return NextResponse.json({error:'Source document not found.'},{status:404});
   if(!doc.extracted_text||doc.extracted_text.trim().length<50)return NextResponse.json({error:'Extract text successfully before building the syllabus.'},{status:422});
-  const subject=subjectName(doc.source_subject)||subjectName(doc.file_name);if(!subject)return NextResponse.json({error:'Could not identify a supported JAMB subject from the source filename/subject.'},{status:422});
+  const subject=subjectName(body.subject)||subjectName(doc.source_subject)||subjectName(doc.file_name);if(!subject)return NextResponse.json({error:'Could not identify a supported JAMB subject from the source filename/subject.'},{status:422});
   await admin.from('curriculum_source_documents').update({status:'processing',source_subject:subject,notes:'Building syllabus topics and objectives.',updated_at:new Date().toISOString()}).eq('id',id);
   const chunks=chunksOf(doc.extracted_text),failed=[],counts={topics_added:0,topics_already_existing:0,objectives_added:0};let order=0;const started=Date.now();
   // Generate in bounded parallel batches; database writes below remain ordered and idempotent.
@@ -60,6 +60,8 @@ export async function POST(request){
   }
   const status=failed.length?'failed':'published',notes=`Syllabus build ${status}; subject ${subject}; topics/subtopics added ${counts.topics_added}; existing ${counts.topics_already_existing}; objectives added ${counts.objectives_added}; failed chunks ${failed.length}.${failed.length?' '+failed.map(x=>'chunk '+x.chunk+': '+x.error).join(' | '):''}`;
   const {error:ue}=await admin.from('curriculum_source_documents').update({status,notes,updated_at:new Date().toISOString()}).eq('id',id);if(ue)throw ue;
-  return NextResponse.json({success:!failed.length,document_id:id,subject,status,chunks_total:chunks.length,chunks_failed:failed,...counts,elapsed_ms:Date.now()-started});
+  let links=null;
+  try{const {data:linkData,error:linkError}=await admin.rpc('link_curriculum_topics_to_assets',{p_curriculum_id:doc.curriculum_id,p_subject:subject});if(linkError)throw linkError;links=linkData;}catch(linkErr){links={error:String(linkErr?.message||linkErr).slice(0,300)};}
+  return NextResponse.json({success:!failed.length,document_id:id,subject,status,chunks_total:chunks.length,chunks_failed:failed,...counts,links,elapsed_ms:Date.now()-started});
  }catch(e){console.error('Build syllabus failed:',e);if(admin&&id)try{await admin.from('curriculum_source_documents').update({status:'failed',notes:'Syllabus build failed: '+String(e?.message||e).slice(0,1000),updated_at:new Date().toISOString()}).eq('id',id);}catch{}return NextResponse.json({error:e?.message||'Could not build syllabus.'},{status:500});}
 }
