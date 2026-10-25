@@ -49,7 +49,7 @@ export default function UploadQuestions() {
         // Reset file input
         document.getElementById('fileInput').value = '';
       } else {
-        setError(data.error || 'Upload failed');
+        setError((data.error || 'Upload failed') + (data.skipped?.length ? ' — ' + data.skipped.map((s) => `Q${s.number}: ${s.reason}`).join('; ') : ''));
       }
     } catch (err) {
       setError(err.message || 'Network error');
@@ -106,11 +106,11 @@ export default function UploadQuestions() {
 
       {result && (
         <div className="mt-4 p-3 bg-green-100 border border-green-300 text-green-700 rounded">
-          ✅ Saved {result.saved} out of {result.total} questions.
-          {result.saved < result.total && (
-            <span className="block text-sm text-yellow-600">
-              (Some questions were skipped because they were incomplete.)
-            </span>
+          ✅ Saved {result.saved} out of {result.total} questions ({result.with_explanation || 0} with explanations).
+          {result.skipped?.length > 0 && (
+            <ul className="mt-2 text-sm text-yellow-700 list-disc pl-5">
+              {result.skipped.map((s) => <li key={s.number}>Question {s.number}: {s.reason}</li>)}
+            </ul>
           )}
         </div>
       )}
@@ -121,27 +121,20 @@ export default function UploadQuestions() {
           <div className="bg-gray-50 p-3 rounded border">
             <p className="font-medium">Text file (.txt)</p>
             <pre className="whitespace-pre-wrap text-xs">
-              {`1. What is 2+2?
+              {`Q1. What is 2+2?
 A. 3
 B. 4
 C. 5
 D. 6
 Answer: B
-
-2. What is the capital of Nigeria?
-A. Lagos
-B. Abuja
-C. Kano
-D. Ibadan
-Answer: B`}
+Explanation: 2 plus 2 equals 4.`}
             </pre>
           </div>
           <div className="bg-gray-50 p-3 rounded border">
             <p className="font-medium">Excel / CSV</p>
             <pre className="whitespace-pre-wrap text-xs">
-              {`Question,OptionA,OptionB,OptionC,OptionD,CorrectAnswer
-What is 2+2?,3,4,5,6,B
-What is the capital of Nigeria?,Lagos,Abuja,Kano,Ibadan,B`}
+              {`question, option_a, option_b, option_c, option_d, correct_answer, explanation, points
+What is 2+2?,3,4,5,6,B,2 plus 2 equals 4.,1`}
             </pre>
           </div>
         </div>
