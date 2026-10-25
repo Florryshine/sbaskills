@@ -1,22 +1,13 @@
 'use client';
 
 import { useState, useEffect } from 'react';
-import { useParams, useSearchParams, useRouter } from 'next/navigation';
+import { useParams, useRouter } from 'next/navigation';
 import { createBrowserClient } from '@/lib/supabase';
 import { addPoints } from '@/lib/gamification';
 import { awardEligibleBadges } from '@/lib/badges';
 
-// XP awarded for a content-engine (draft) quiz. Unlike the manual `quizzes`
-// table, quiz_drafts has no points_reward-style column of its own, so this
-// is a flat default matching STEP_XP.quiz in lib/journeyEngine.js — keep
-// the two in sync if you change one.
-const DRAFT_QUIZ_XP = 20;
-
 export default function QuizAttempt() {
-  const params = useParams();
-  const searchParams = useSearchParams();
-  const id = params.id;
-  const isDraft = searchParams.get('draft') === 'true';
+  const { id } = useParams();
   const router = useRouter();
   const supabase = createBrowserClient();
 
@@ -27,130 +18,133 @@ export default function QuizAttempt() {
   const [submitted, setSubmitted] = useState(false);
   const [score, setScore] = useState(null);
   const [user, setUser] = useState(null);
+  const [submitting, setSubmitting] = useState(false);
 
   useEffect(() => {
-    supabase.auth.getUser().then(({ data }) => setUser(data.user || null));
+    let cancelled = false;
+    supabase.auth.getUser().then(({ data }) => {
+      if (!cancelled) setUser(data?.user || null);
+    });
+    return () => { cancelled = true; };
   }, [supabase]);
 
   useEffect(() => {
-    if (!isDraft) { router.replace(`/quiz/${id}`); return; }
+    let cancelled = false;
     async function loadQuiz() {
       setLoading(true);
-      let data, error;
+      const { data: quizData, error: quizError } = await supabase
+        .from('quizzes')
+        .select('id, title, description, points_reward, time_limit_minutes')
+        .eq('id', id)
+        .eq('is_published', true)
+        .single();
 
-      if (isDraft) {
-        // Fetch from quiz_drafts
-        const result = await supabase
-          .from('quiz_drafts')
-          .select('*')
-          .eq('id', id)
-          .eq('status', 'published')
-          .single();
-        data = result.data;
-        error = result.error;
-      } else {
-        // Fetch from manual quizzes + questions
-        const { data: quizData, error: quizError } = await supabase
-          .from('quizzes')
-          .select('id, title, description, points_reward')
-          .eq('id', id)
-          .single();
-        if (quizError) {
-          setError(quizError.message);
+      if (quizError || !quizData) {
+        if (!cancelled) {
+          setError('Quiz not found or not published.');
           setLoading(false);
-          return;
         }
-        const { data: questions, error: qError } = await supabase
-          .from('quiz_questions')
-          .select('*')
-          .eq('quiz_id', id);
-        if (qError) {
-          setError(qError.message);
-          setLoading(false);
-          return;
-        }
-        // Manual quiz_questions rows use flat option_a-d columns and store
-        // correct_answer as a letter ('a'/'b'/'c'/'d'), not the option text.
-        // The render below only reads q.options (an array) and compares
-        // answers against option TEXT, so without this normalization every
-        // manually-uploaded quiz taken from this page showed no options at
-        // all, and even if it had, scoring would have compared a letter
-        // against full option text and always come out wrong.
-        const normalizedQuestions = (questions || []).map((q) => {
-          const options = [q.option_a, q.option_b, q.option_c, q.option_d].filter(Boolean);
-          const letter = (q.correct_answer || '').trim().toLowerCase();
-          const correctText = q[`option_${letter}`] || q.correct_answer;
-          return { ...q, options, correct_answer: correctText };
-        });
-        data = { ...quizData, questions: normalizedQuestions };
-        error = null;
+        return;
       }
 
-      if (error || !data) {
-        setError('Quiz not found or not published.');
-      } else {
-        setQuiz(data);
+      const { data: questionData, error: questionsError } = await supabase
+        .from('quiz_questions')
+        .select('*')
+        .eq('quiz_id', id)
+        .order('order_index', { ascending: true });
+
+      if (questionsError) {
+        if (!cancelled) {
+          setError('Could not load quiz questions. Please try again.');
+          setLoading(false);
+        }
+        return;
       }
-      setLoading(false);
+
+      const normalizedQuestions = (questionData || []).map((q) => {
+        const options = [q.option_a, q.option_b, q.option_c, q.option_d].filter(Boolean);
+        const rawAnswer = String(q.correct_answer || '').trim();
+        const answerLetter = rawAnswer.toLowerCase();
+        const correctAnswer = options.includes(rawAnswer)
+          ? rawAnswer
+          : (['a', 'b', 'c', 'd'].includes(answerLetter)
+            ? q[`option_${answerLetter}`]
+            : rawAnswer);
+        return { ...q, options, correct_answer: correctAnswer };
+      });
+
+      if (!cancelled) {
+        setQuiz({ ...quizData, questions: normalizedQuestions });
+        setLoading(false);
+      }
     }
+
     loadQuiz();
-  }, [id, isDraft, router]);
+    return () => { cancelled = true; };
+  }, [id, supabase]);
 
   const handleAnswer = (questionIndex, option) => {
-    setAnswers({ ...answers, [questionIndex]: option });
+    setAnswers((previous) => ({ ...previous, [questionIndex]: option }));
   };
 
   const handleSubmit = async () => {
-    if (submitted) return;
-    const currentQuestions = quiz.questions || [];
+    if (submitted || submitting) return;
+
+    // Quiz content is public to view, but submitting and recording a score
+    // always requires a real signed-in account.
+    const { data: authData } = await supabase.auth.getUser();
+    const activeUser = authData?.user || null;
+    setUser(activeUser);
+    if (!activeUser) {
+      router.push(`/login?next=${encodeURIComponent(`/quiz/${id}`)}`);
+      return;
+    }
+
+    const currentQuestions = quiz?.questions || [];
+    if (!currentQuestions.length) {
+      setError('This quiz has no questions yet.');
+      return;
+    }
+
+    setSubmitting(true);
     const correct = currentQuestions.reduce(
-      (count, q, idx) => count + (answers[idx] === q.correct_answer ? 1 : 0),
+      (count, question, index) => count + (answers[index] === question.correct_answer ? 1 : 0),
       0
     );
+    const scorePct = Math.round((correct / currentQuestions.length) * 100);
+    const now = new Date().toISOString();
+
+    const { error: attemptError } = await supabase.from('quiz_attempts').insert({
+      student_id: activeUser.id,
+      quiz_id: id,
+      score: scorePct,
+      total_questions: currentQuestions.length,
+      answers,
+      status: 'completed',
+      started_at: now,
+      updated_at: now,
+      completed_at: now,
+    });
+
+    if (attemptError) {
+      console.error('Could not save quiz attempt:', attemptError);
+      setError('We could not save your result. Please try submitting again.');
+      setSubmitting(false);
+      return;
+    }
+
     setScore(correct);
     setSubmitted(true);
+    setSubmitting(false);
 
-    const scorePct = currentQuestions.length
-      ? Math.round((correct / currentQuestions.length) * 100)
-      : 0;
-
-    if (user && currentQuestions.length > 0) {
-      // Save attempts for regular manual quizzes. Draft quizzes use their
-      // existing attempt flow; both are shown feedback immediately below.
-      if (!isDraft) {
-        const { error: attemptError } = await supabase.from('quiz_attempts').insert({
-          student_id: user.id,
-          quiz_id: id,
-          score: scorePct,
-          total_questions: currentQuestions.length,
-          answers,
-          completed_at: new Date().toISOString(),
-        });
-        if (attemptError) console.error('Could not save quiz attempt:', attemptError);
-      } else {
-        const { error: attemptError } = await supabase.from('quiz_attempts').insert({
-          student_id: user.id,
-          draft_quiz_id: id,
-          score: scorePct,
-          total_questions: currentQuestions.length,
-          answers,
-          completed_at: new Date().toISOString(),
-        });
-        if (attemptError) console.error('Could not save draft quiz attempt:', attemptError);
-      }
-
-      if (isDraft && scorePct >= (quiz.passing_score || 70)) {
-        await addPoints(user.id, DRAFT_QUIZ_XP, `Completed quiz: ${quiz.keyword || quiz.title}`, 'quiz_complete', id);
-        await awardEligibleBadges(supabase, user.id);
-      } else if (!isDraft && scorePct >= 50) {
-        await addPoints(user.id, quiz.points_reward || 10, `Completed quiz: ${quiz.title}`, 'quiz_complete', id);
-        await awardEligibleBadges(supabase, user.id);
-      }
+    if (scorePct >= 50) {
+      await addPoints(activeUser.id, quiz.points_reward || 10, `Completed quiz: ${quiz.title}`, 'quiz_complete', id);
+      awardEligibleBadges(supabase, activeUser.id).catch((e) => console.error('Badge check failed:', e));
     }
   };
 
   if (loading) return <div className="p-8 text-center">Loading quiz...</div>;
-  if (error) return <div className="p-8 text-center text-red-600">{error}</div>;
+  if (error && !quiz) return <div className="p-8 text-center text-red-600">{error}</div>;
   if (!quiz) return <div className="p-8 text-center">No quiz found.</div>;
 
   const questions = quiz.questions || [];
@@ -158,34 +152,41 @@ export default function QuizAttempt() {
 
   return (
     <div className="p-8 max-w-2xl mx-auto">
-      <h1 className="text-2xl font-bold text-brand-blue mb-2">{quiz.title || quiz.keyword}</h1>
+      <h1 className="text-2xl font-bold text-brand-blue mb-2">{quiz.title}</h1>
       <p className="text-sm text-gray-500 mb-4">{quiz.description}</p>
       {!submitted ? (
         <>
           {questions.map((q, idx) => (
-            <div key={idx} className="mb-6 p-4 border rounded-xl bg-white shadow-sm">
-              <p className="font-semibold mb-2">{idx+1}. {q.question}</p>
+            <div key={q.id || idx} className="mb-6 p-4 border rounded-xl bg-white shadow-sm">
+              <p className="font-semibold mb-2">{idx + 1}. {q.question}</p>
               <div className="space-y-2">
-                {(q.options || []).map((opt, oi) => (
-                  <label key={oi} className="flex items-center gap-2">
+                {q.options.map((option, optionIndex) => (
+                  <label key={optionIndex} className="flex items-center gap-2">
                     <input
                       type="radio"
                       name={`q${idx}`}
-                      value={opt}
-                      checked={answers[idx] === opt}
-                      onChange={() => handleAnswer(idx, opt)}
+                      value={option}
+                      checked={answers[idx] === option}
+                      onChange={() => handleAnswer(idx, option)}
                     />
-                    {opt}
+                    {option}
                   </label>
                 ))}
               </div>
             </div>
           ))}
+          {error && <p className="text-red-600 mb-3">{error}</p>}
+          {!user && (
+            <p className="text-sm text-gray-600 mb-3">
+              You can view the questions without an account. Log in or register to submit and save your result.
+            </p>
+          )}
           <button
             onClick={handleSubmit}
-            className="bg-brand-yellow px-6 py-2 rounded-full font-bold hover:opacity-90"
+            disabled={submitting}
+            className="bg-brand-yellow px-6 py-2 rounded-full font-bold hover:opacity-90 disabled:opacity-60"
           >
-            Submit Quiz
+            {submitting ? 'Submitting...' : user ? 'Submit Quiz' : 'Log in to Submit'}
           </button>
         </>
       ) : (
@@ -194,21 +195,17 @@ export default function QuizAttempt() {
             <h2 className="text-2xl font-bold text-green-700">Quiz Complete!</h2>
             <p className="text-lg mt-2">You got {score} out of {total} correct.</p>
             <p className="text-sm text-gray-500 mt-1">Score: {total ? Math.round((score / total) * 100) : 0}%</p>
+            <p className="text-sm text-gray-600 mt-2">Your result has been saved to your student account.</p>
             <div className="flex flex-wrap gap-3 justify-center mt-5">
-              <button
-                onClick={() => { setAnswers({}); setScore(null); setSubmitted(false); }}
-                className="bg-brand-blue text-white px-5 py-2 rounded-full font-bold"
-              >
+              <button onClick={() => { setAnswers({}); setScore(null); setSubmitted(false); setError(null); }} className="bg-brand-blue text-white px-5 py-2 rounded-full font-bold">
                 Retake Quiz
               </button>
               <a href="#quiz-corrections" className="bg-brand-yellow px-5 py-2 rounded-full font-bold">
                 View Corrections
               </a>
-              {user && (
-                <a href={`/quiz/${id}/review?draft=true`} className="border px-5 py-2 rounded-full font-bold">
-                  Review Saved Attempt
-                </a>
-              )}
+              <a href={`/quiz/${id}/review`} className="border px-5 py-2 rounded-full font-bold">
+                Review Saved Attempt
+              </a>
             </div>
           </div>
           <section id="quiz-corrections" className="bg-white border rounded-xl p-5 text-left">
@@ -218,8 +215,7 @@ export default function QuizAttempt() {
                 const chosen = answers[idx];
                 const correctAnswer = q.correct_answer;
                 const isCorrect = chosen === correctAnswer;
-                const options = q.options || [];
-                const correctOption = options.find((option) => option === correctAnswer);
+                const correctOption = q.options.find((option) => option === correctAnswer);
                 const explanation = q.explanation || q.explanation_text || q.rationale || '';
                 return (
                   <article key={q.id || idx} className={`border rounded-xl p-4 ${isCorrect ? 'bg-green-50 border-green-200' : 'bg-red-50 border-red-200'}`}>
