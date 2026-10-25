@@ -7,15 +7,36 @@ export async function POST(request) {
   try {
     const formData = await request.formData(), file = formData.get('file'), quizId = formData.get('quizId');
     if (!file || !quizId) return NextResponse.json({ error: 'file and quizId are required' }, { status: 400 });
-    const name = String(file.name || '').toLowerCase();
+    const name = String(file.name || '').toLowerCase().trim();
+    const mime = String(file.type || '').toLowerCase();
+    const isCsv = name.endsWith('.csv') || mime === 'text/csv' || mime === 'text/comma-separated-values';
+    const isExcel = name.endsWith('.xlsx') || name.endsWith('.xls') ||
+      mime === 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' ||
+      mime === 'application/vnd.ms-excel';
+    const isText = name.endsWith('.txt') || mime === 'text/plain';
     let result;
-    if (name.endsWith('.txt')) result = parseQuizTxt(await file.text());
-    else if (name.endsWith('.csv')) result = parseQuizCsv(await file.text());
-    else if (name.endsWith('.xlsx') || name.endsWith('.xls')) {
-      const workbook = XLSX.read(await file.arrayBuffer(), { type: 'array' }), sheet = workbook.Sheets[workbook.SheetNames[0]];
-      if (!sheet) return NextResponse.json({ error: 'The Excel workbook has no sheets.' }, { status: 400 });
-      result = parseQuizObjects(XLSX.utils.sheet_to_json(sheet, { defval: '', raw: false }));
-    } else return NextResponse.json({ error: 'Unsupported file type. Upload .txt, .csv, .xlsx or .xls.' }, { status: 400 });
+    if (name.endsWith('.csv') || (!name.endsWith('.xlsx') && !name.endsWith('.xls') && isCsv)) {
+      result = parseQuizCsv(await file.text());
+    } else if (name.endsWith('.xlsx') || name.endsWith('.xls') || isExcel) {
+      const bytes = await file.arrayBuffer();
+      // Some mobile file providers label CSV files as Excel. If the file name is unknown,
+      // attempt workbook parsing first, then fall back to CSV parsing when it is readable text.
+      try {
+        const workbook = XLSX.read(bytes, { type: 'array' }), sheet = workbook.Sheets[workbook.SheetNames[0]];
+        if (!sheet) throw new Error('The Excel workbook has no sheets.');
+        result = parseQuizObjects(XLSX.utils.sheet_to_json(sheet, { defval: '', raw: false }));
+        if (!result.questions.length && !name.endsWith('.xlsx') && !name.endsWith('.xls')) {
+          result = parseQuizCsv(new TextDecoder().decode(bytes));
+        }
+      } catch (err) {
+        if (name.endsWith('.xlsx') || name.endsWith('.xls')) throw err;
+        result = parseQuizCsv(new TextDecoder().decode(bytes));
+      }
+    } else if (isText) {
+      result = parseQuizTxt(await file.text());
+    } else {
+      return NextResponse.json({ error: 'Unsupported file type. Choose a .csv, .xlsx, .xls or .txt file. If using a phone, make sure the file has the correct extension.' }, { status: 400 });
+    }
     const { questions, skipped } = result, total = questions.length + skipped.length;
     if (!questions.length) return NextResponse.json({ error: 'No complete questions found in the file.', skipped }, { status: 400 });
     const supabase = createRouteHandlerClient();
