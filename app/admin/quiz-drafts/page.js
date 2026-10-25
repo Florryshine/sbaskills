@@ -96,7 +96,8 @@ export default function QuizDraftsPage() {
         option_b: options[1],
         option_c: options[2],
         option_d: options[3],
-        correct_answer: q.correct_answer,
+        // quiz_questions enforces the canonical answer key a/b/c/d.
+        correct_answer: ['a', 'b', 'c', 'd'][options.indexOf(q.correct_answer)],
         explanation: q.explanation || null,
         points: Number.isFinite(q.points) ? q.points : 1,
         order_index: index + 1,
