@@ -62,7 +62,7 @@ export default function UploadQuestions() {
     <div className="p-6 max-w-3xl mx-auto">
       <h1 className="text-2xl font-bold mb-4">Upload Questions</h1>
       <p className="mb-4 text-gray-600">
-        Upload a <strong>.csv</strong>, <strong>.xlsx</strong>, <strong>.xls</strong>, or <strong>.txt</strong> file with your questions.
+        Upload a <strong>.csv</strong>, <strong>.xlsx</strong>, <strong>.xls</strong>, or <strong>.txt</strong> file with your questions. If the file picker hides your file on a phone, choose Browse/Files and switch to All files.
       </p>
 
       <div className="border-2 border-dashed border-gray-300 rounded-lg p-6 mb-4">
@@ -70,7 +70,7 @@ export default function UploadQuestions() {
           <input
             id="fileInput"
             type="file"
-            accept=".txt,.csv,.xlsx,.xls,text/plain,text/csv,application/vnd.ms-excel,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+            accept="*/*"
             onChange={handleFileChange}
             className="block w-full text-sm text-gray-500 file:mr-4 file:py-2 file:px-4 file:rounded file:border-0 file:text-sm file:font-semibold file:bg-blue-50 file:text-blue-700 hover:file:bg-blue-100"
           />
