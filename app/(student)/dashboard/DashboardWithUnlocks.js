@@ -109,43 +109,25 @@ export default function DashboardWithUnlocks() {
         .eq('completed', true);
       setLessonsDone(progress?.length || 0);
 
-      // Fetch published quizzes
-      const { data: manualQuizzes } = await supabase
+      // Use the same published quizzes source as /quizzes. Generated quizzes
+      // are inserted into this table when an admin publishes them.
+      const { data: publishedQuizzes, error: quizzesError } = await supabase
         .from('quizzes')
         .select('id, title, description, points_reward, created_at')
         .eq('is_published', true)
         .order('created_at', { ascending: false })
         .limit(5);
 
-      const { data: draftQuizzes } = await supabase
-        .from('quiz_drafts')
-        .select('id, keyword, questions, created_at')
-        .eq('status', 'published')
-        .order('created_at', { ascending: false })
-        .limit(5);
+      if (quizzesError) console.error('Published quizzes fetch failed:', quizzesError);
 
-      const combinedQuizzes = [
-        ...(manualQuizzes || []).map((q) => ({
-          id: q.id,
-          title: q.title,
-          description: q.description,
-          points_reward: q.points_reward,
-          created_at: q.created_at,
-          href: `/quiz/${q.id}`,
-        })),
-        ...(draftQuizzes || []).map((q) => ({
-          id: q.id,
-          title: q.keyword,
-          description: `${q.questions?.length || 0} questions`,
-          points_reward: 10,
-          created_at: q.created_at,
-          href: `/quizzes/${q.id}?draft=true`,
-        })),
-      ]
-        .sort((a, b) => new Date(b.created_at) - new Date(a.created_at))
-        .slice(0, 5);
-
-      setQuizzes(combinedQuizzes);
+      setQuizzes((publishedQuizzes || []).map((q) => ({
+        id: q.id,
+        title: q.title,
+        description: q.description,
+        points_reward: q.points_reward,
+        created_at: q.created_at,
+        href: `/quiz/${q.id}`,
+      })));
 
       setLoading(false);
     }

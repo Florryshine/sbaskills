@@ -30,32 +30,143 @@ export default function QuizDraftsPage() {
 
   const deleteDraft = async (id) => {
     if (!confirm('Delete this quiz draft?')) return;
+    // Keep the corresponding main quiz and its questions hidden rather than
+    // deleting historical quiz attempts that may refer to it.
+    const { error: hideError } = await supabase
+      .from('quizzes')
+      .update({ is_published: false })
+      .eq('id', id);
+    if (hideError) {
+      alert('Could not hide the published quiz: ' + hideError.message);
+      return;
+    }
     const { error } = await supabase.from('quiz_drafts').delete().eq('id', id);
     if (error) alert(error.message);
     else loadDrafts();
   };
 
   const updateStatus = async (id, status) => {
-    const { error } = await supabase
+    const { data: draft, error: draftError } = await supabase
       .from('quiz_drafts')
-      .update({ status })
-      .eq('id', id);
-    if (error) {
-      alert(error.message);
+      .select('*')
+      .eq('id', id)
+      .single();
+
+    if (draftError || !draft) {
+      alert('Could not load quiz draft: ' + (draftError?.message || 'Quiz not found'));
       return;
     }
 
-    // If publishing, sync questions to past_questions (replace existing)
-    if (status === 'published') {
-      try {
-        await syncQuizDraftToPastQuestions(supabase, id);
-      } catch (syncError) {
-        console.error('Failed to sync to past_questions:', syncError);
-        alert('Quiz published, but failed to sync questions to past_questions: ' + syncError.message);
+    if (status === 'draft') {
+      // Unpublish from the single student-facing quizzes list as well.
+      const { error: hideError } = await supabase
+        .from('quizzes')
+        .update({ is_published: false })
+        .eq('id', id);
+      if (hideError) {
+        alert('Could not unpublish quiz: ' + hideError.message);
+        return;
       }
+      const { error } = await supabase.from('quiz_drafts').update({ status }).eq('id', id);
+      if (error) alert(error.message);
+      else loadDrafts();
+      return;
     }
-    // Do NOT remove on unpublish → questions stay in past_questions
 
+    // Validate and normalize generated questions before making the main quiz visible.
+    const questions = Array.isArray(draft.questions) ? draft.questions : [];
+    const questionRows = [];
+    for (let index = 0; index < questions.length; index++) {
+      const q = questions[index];
+      const options = Array.isArray(q.options) ? q.options : [];
+      if (
+        !q.question ||
+        options.length !== 4 ||
+        options.some((option) => typeof option !== 'string' || !option.trim()) ||
+        typeof q.correct_answer !== 'string' ||
+        !options.includes(q.correct_answer)
+      ) {
+        alert(`Cannot publish: question ${index + 1} is missing four valid options or an answer that matches one of them.`);
+        return;
+      }
+      questionRows.push({
+        quiz_id: id,
+        question: q.question,
+        option_a: options[0],
+        option_b: options[1],
+        option_c: options[2],
+        option_d: options[3],
+        // quiz_questions enforces the canonical answer key a/b/c/d.
+        correct_answer: ['a', 'b', 'c', 'd'][options.indexOf(q.correct_answer)],
+        explanation: q.explanation || null,
+        points: Number.isFinite(q.points) ? q.points : 1,
+        order_index: index + 1,
+      });
+    }
+
+    if (!questionRows.length) {
+      alert('Cannot publish a quiz with no questions.');
+      return;
+    }
+
+    // Create/update the quiz in the main quizzes table, initially hidden.
+    // The same UUID keeps the admin draft and student-facing quiz linked.
+    const { error: quizError } = await supabase.from('quizzes').upsert({
+      id,
+      title: draft.keyword,
+      description: `Practice quiz on ${draft.keyword}`,
+      points_reward: 10,
+      time_limit_minutes: draft.estimated_minutes || 20,
+      is_published: false,
+      knowledge_asset_id: draft.knowledge_asset_id || null,
+    }, { onConflict: 'id' });
+
+    if (quizError) {
+      alert('Could not create the quiz record: ' + quizError.message);
+      return;
+    }
+
+    const { error: deleteQuestionsError } = await supabase
+      .from('quiz_questions')
+      .delete()
+      .eq('quiz_id', id);
+    if (deleteQuestionsError) {
+      alert('Could not prepare quiz questions: ' + deleteQuestionsError.message);
+      return;
+    }
+
+    const { error: insertQuestionsError } = await supabase
+      .from('quiz_questions')
+      .insert(questionRows);
+    if (insertQuestionsError) {
+      alert('Could not publish quiz questions: ' + insertQuestionsError.message);
+      return;
+    }
+
+    const { error: draftStatusError } = await supabase
+      .from('quiz_drafts')
+      .update({ status: 'published' })
+      .eq('id', id);
+    if (draftStatusError) {
+      alert('Questions were prepared, but the draft status could not be updated: ' + draftStatusError.message);
+      return;
+    }
+
+    const { error: publishError } = await supabase
+      .from('quizzes')
+      .update({ is_published: true })
+      .eq('id', id);
+    if (publishError) {
+      alert('Quiz is saved but still hidden from students. Publishing failed: ' + publishError.message);
+      return;
+    }
+
+    try {
+      await syncQuizDraftToPastQuestions(supabase, id);
+    } catch (syncError) {
+      console.error('Failed to sync to past_questions:', syncError);
+      alert('Quiz is published, but syncing to past questions failed: ' + syncError.message);
+    }
     loadDrafts();
   };
 
