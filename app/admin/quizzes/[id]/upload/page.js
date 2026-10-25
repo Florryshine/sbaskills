@@ -131,7 +131,7 @@ Explanation: 2 plus 2 equals 4.`}
             </pre>
           </div>
           <div className="bg-gray-50 p-3 rounded border">
-            <p className="font-medium">Excel / CSV</p>
+            <p className="font-medium">CSV / Excel (.csv, .xlsx, .xls)</p>
             <pre className="whitespace-pre-wrap text-xs">
               {`question, option_a, option_b, option_c, option_d, correct_answer, explanation, points
 What is 2+2?,3,4,5,6,B,2 plus 2 equals 4.,1`}
