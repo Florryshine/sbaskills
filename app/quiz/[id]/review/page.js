@@ -8,7 +8,9 @@ import { createBrowserClient } from '@/lib/supabase';
 export default function QuizReviewPage() {
   const { id } = useParams();
   const router = useRouter();
-  const attemptId = useSearchParams().get('attempt');
+  const searchParams = useSearchParams();
+  const attemptId = searchParams.get('attempt');
+  const isDraft = searchParams.get('draft') === 'true';
   const supabase = createBrowserClient();
   const [view, setView] = useState({ loading: true, error: '', title: '', attempt: null, questions: [] });
 
@@ -19,28 +21,36 @@ export default function QuizReviewPage() {
 
       let attemptQuery = supabase.from('quiz_attempts')
         .select('id,score,total_questions,answers,completed_at')
-        .eq('quiz_id', id).eq('student_id', user.id).not('completed_at', 'is', null);
+        .eq('student_id', user.id).not('completed_at', 'is', null);
+      attemptQuery = isDraft ? attemptQuery.eq('draft_quiz_id', id) : attemptQuery.eq('quiz_id', id);
       attemptQuery = attemptId
         ? attemptQuery.eq('id', attemptId)
         : attemptQuery.order('completed_at', { ascending: false }).limit(1);
 
       const [attempts, quiz, questions] = await Promise.all([
         attemptQuery,
-        supabase.from('quizzes').select('title').eq('id', id).maybeSingle(),
-        supabase.from('quiz_questions').select('*').eq('quiz_id', id).order('order_index', { ascending: true }),
+        isDraft
+          ? supabase.from('quiz_drafts').select('keyword,questions').eq('id', id).maybeSingle()
+          : supabase.from('quizzes').select('title').eq('id', id).maybeSingle(),
+        isDraft
+          ? Promise.resolve({ data: null, error: null })
+          : supabase.from('quiz_questions').select('*').eq('quiz_id', id).order('order_index', { ascending: true }),
       ]);
       const attempt = attempts.data?.[0] || null;
       const failure = attempts.error || questions.error;
+      const normalizedQuestions = isDraft
+        ? (quiz.data?.questions || []).map((q, index) => ({ ...q, id: String(index), _draft: true }))
+        : (questions.data || []);
       setView({
         loading: false,
         error: failure ? failure.message : (!attempt ? 'No completed attempt found for this quiz yet.' : ''),
-        title: quiz.data?.title || 'Quiz',
+        title: quiz.data?.title || quiz.data?.keyword || 'Quiz',
         attempt,
-        questions: questions.data || [],
+        questions: normalizedQuestions,
       });
     }
     load();
-  }, [id, attemptId]);
+  }, [id, attemptId, isDraft]);
 
   if (view.loading) return <div className="p-8 text-center">Loading corrections...</div>;
   if (view.error) {
@@ -69,15 +79,18 @@ export default function QuizReviewPage() {
       )}
       <div className="space-y-4">
         {questions.map((q, index) => {
-          const selected = String(answers[q.id] || '').toLowerCase();
-          const correct = String(q.correct_answer || '').toLowerCase();
+          const selected = String(answers[q.id] ?? answers[String(index)] ?? '').trim();
+          const correct = String(q.correct_answer || '').trim();
           const text = (letter) => q[`option_${letter}`] || '';
-          const ok = selected && selected === correct;
+          const isLetter = /^[a-d]$/i.test(correct);
+          const ok = selected.toLowerCase() === correct.toLowerCase();
+          const selectedDisplay = q._draft ? (selected || 'Not answered') : (isLetter ? (selected ? `${selected.toUpperCase()}. ${text(selected.toLowerCase())}` : 'Not answered') : (selected || 'Not answered'));
+          const correctDisplay = q._draft ? (correct || 'Not available') : (isLetter ? `${correct.toUpperCase()}. ${text(correct.toLowerCase())}` : (correct || 'Not available'));
           return (
             <article key={q.id} className={`rounded-xl border p-4 ${ok ? 'border-green-200 bg-green-50' : 'border-red-200 bg-red-50'}`}>
               <p className="font-bold">{index + 1}. {q.question}</p>
-              <p className="mt-2 text-sm">Your answer: <strong>{selected ? `${selected.toUpperCase()}. ${text(selected)}` : 'Not answered'}</strong></p>
-              <p className="text-sm">Correct answer: <strong>{correct ? `${correct.toUpperCase()}. ${text(correct)}` : 'Not available'}</strong></p>
+              <p className="mt-2 text-sm">Your answer: <strong>{selectedDisplay}</strong></p>
+              <p className="text-sm">Correct answer: <strong>{correctDisplay}</strong></p>
               {q.explanation ? (
                 <div className="mt-3 pt-3 border-t border-black/10">
                   <p className="text-sm font-bold">Explanation</p>
