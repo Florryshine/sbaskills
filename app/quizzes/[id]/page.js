@@ -130,7 +130,7 @@ export default function QuizAttempt() {
       } else {
         const { error: attemptError } = await supabase.from('quiz_attempts').insert({
           student_id: user.id,
-          quiz_id: id,
+          draft_quiz_id: id,
           score: scorePct,
           total_questions: currentQuestions.length,
           answers,
@@ -204,6 +204,11 @@ export default function QuizAttempt() {
               <a href="#quiz-corrections" className="bg-brand-yellow px-5 py-2 rounded-full font-bold">
                 View Corrections
               </a>
+              {user && (
+                <a href={`/quiz/${id}/review?draft=true`} className="border px-5 py-2 rounded-full font-bold">
+                  Review Saved Attempt
+                </a>
+              )}
             </div>
           </div>
           <section id="quiz-corrections" className="bg-white border rounded-xl p-5 text-left">
