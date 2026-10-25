@@ -103,9 +103,14 @@ export async function POST(request) {
           if (STYLE_AWARE_ENGINES.has(engine) && styles[engine]) {
             body.style = styles[engine];
           }
+          // Forward the browser session: internal server-to-server fetches do not inherit cookies.
+          const cookieHeader = request.headers.get('cookie');
           const response = await fetch(url, {
             method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
+            headers: {
+              'Content-Type': 'application/json',
+              ...(cookieHeader ? { cookie: cookieHeader } : {}),
+            },
             body: JSON.stringify(body),
           });
 
