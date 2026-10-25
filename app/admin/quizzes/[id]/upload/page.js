@@ -106,10 +106,12 @@ export default function UploadQuestions() {
 
       {result && (
         <div className="mt-4 p-3 bg-green-100 border border-green-300 text-green-700 rounded">
-          ✅ Saved {result.saved} out of {result.total} questions ({result.with_explanation || 0} with explanations).
+          ✅ Saved {result.saved} out of {result.total} questions ({result.with_explanation} with explanations).
           {result.skipped?.length > 0 && (
             <ul className="mt-2 text-sm text-yellow-700 list-disc pl-5">
-              {result.skipped.map((s) => <li key={s.number}>Question {s.number}: {s.reason}</li>)}
+              {result.skipped.map((s) => (
+                <li key={s.number}>Question {s.number}: {s.reason}</li>
+              ))}
             </ul>
           )}
         </div>
@@ -133,7 +135,7 @@ Explanation: 2 plus 2 equals 4.`}
           <div className="bg-gray-50 p-3 rounded border">
             <p className="font-medium">CSV / Excel (.csv, .xlsx, .xls)</p>
             <pre className="whitespace-pre-wrap text-xs">
-              {`question, option_a, option_b, option_c, option_d, correct_answer, explanation, points
+              {`question,option_a,option_b,option_c,option_d,correct_answer,explanation,points
 What is 2+2?,3,4,5,6,B,2 plus 2 equals 4.,1`}
             </pre>
           </div>
