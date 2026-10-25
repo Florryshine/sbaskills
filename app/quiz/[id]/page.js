@@ -202,6 +202,9 @@ export default function TakeQuiz() {
                 <a href="#quiz-corrections" className="bg-brand-yellow text-brand-dark px-6 py-3 rounded-full font-bold hover:opacity-90">
                   View Corrections
                 </a>
+                <a href={`/quiz/${id}/review`} className="border px-6 py-3 rounded-full font-bold hover:bg-gray-50">
+                  Review Later
+                </a>
                 <button onClick={() => router.push('/dashboard')} className="border px-6 py-3 rounded-full font-bold hover:bg-gray-50">
                   Dashboard
                 </button>
