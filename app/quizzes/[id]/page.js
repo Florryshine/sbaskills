@@ -1,7 +1,7 @@
 'use client';
 
 import { useState, useEffect } from 'react';
-import { useParams, useSearchParams } from 'next/navigation';
+import { useParams, useSearchParams, useRouter } from 'next/navigation';
 import { createBrowserClient } from '@/lib/supabase';
 import { addPoints } from '@/lib/gamification';
 import { awardEligibleBadges } from '@/lib/badges';
@@ -17,6 +17,7 @@ export default function QuizAttempt() {
   const searchParams = useSearchParams();
   const id = params.id;
   const isDraft = searchParams.get('draft') === 'true';
+  const router = useRouter();
   const supabase = createBrowserClient();
 
   const [quiz, setQuiz] = useState(null);
@@ -32,6 +33,7 @@ export default function QuizAttempt() {
   }, [supabase]);
 
   useEffect(() => {
+    if (!isDraft) { router.replace(`/quiz/${id}`); return; }
     async function loadQuiz() {
       setLoading(true);
       let data, error;
@@ -92,7 +94,7 @@ export default function QuizAttempt() {
       setLoading(false);
     }
     loadQuiz();
-  }, [id, isDraft]);
+  }, [id, isDraft, router]);
 
   const handleAnswer = (questionIndex, option) => {
     setAnswers({ ...answers, [questionIndex]: option });

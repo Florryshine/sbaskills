@@ -59,7 +59,7 @@ export default async function QuizzesPage() {
                 <p className="text-sm text-brand-yellow font-semibold">+{quiz.points} points</p>
               </div>
               <a
-                href={`/quizzes/${quiz.id}${quiz.is_manual ? '' : '?draft=true'}`}
+                href={quiz.is_manual ? `/quiz/${quiz.id}` : `/quizzes/${quiz.id}?draft=true`}
                 className="bg-brand-yellow px-4 py-2 rounded-xl font-bold hover:opacity-90"
               >
                 Take Quiz →

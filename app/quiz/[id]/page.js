@@ -18,6 +18,7 @@ export default function TakeQuiz() {
   const [attemptSaveMessage, setAttemptSaveMessage] = useState('');
   const [user, setUser] = useState(null);
   const [attemptId, setAttemptId] = useState(null);
+  const [hasPreviousAttempt, setHasPreviousAttempt] = useState(false);
   const [loading, setLoading] = useState(true);
   const [timeLeft, setTimeLeft] = useState(null);
   const { id } = useParams();
@@ -33,6 +34,24 @@ export default function TakeQuiz() {
       if (saved.answers) setAnswers(saved.answers);
       if (saved.attemptId) setAttemptId(saved.attemptId);
     } catch (e) { console.warn('Could not restore quiz draft:', e); }
+  }, [id]);
+
+  useEffect(() => {
+    let cancelled = false;
+    async function checkPreviousAttempt() {
+      const { data: { user: currentUser } } = await supabase.auth.getUser();
+      if (!currentUser) return;
+      const { data, error } = await supabase.from('quiz_attempts')
+        .select('id')
+        .eq('quiz_id', id)
+        .eq('student_id', currentUser.id)
+        .not('completed_at', 'is', null)
+        .order('completed_at', { ascending: false })
+        .limit(1);
+      if (!cancelled && !error && data?.length) setHasPreviousAttempt(true);
+    }
+    checkPreviousAttempt();
+    return () => { cancelled = true; };
   }, [id]);
 
   useEffect(() => {
@@ -202,6 +221,9 @@ export default function TakeQuiz() {
                 <a href="#quiz-corrections" className="bg-brand-yellow text-brand-dark px-6 py-3 rounded-full font-bold hover:opacity-90">
                   View Corrections
                 </a>
+                <a href={`/quiz/${id}/review`} className="border px-6 py-3 rounded-full font-bold hover:bg-gray-50">
+                  Review Later
+                </a>
                 <button onClick={() => router.push('/dashboard')} className="border px-6 py-3 rounded-full font-bold hover:bg-gray-50">
                   Dashboard
                 </button>
@@ -267,6 +289,11 @@ export default function TakeQuiz() {
               <div className="flex justify-between items-center">
                 <div>
                   <h1 className="text-xl font-extrabold text-gray-900">{quiz.title}</h1>
+                  {hasPreviousAttempt && (
+                    <a href={`/quiz/${id}/review`} className="inline-block text-sm text-brand-blue underline mt-2">
+                      Review your last attempt
+                    </a>
+                  )}
                   <p className="text-xs text-gray-500 mt-1">Question {currentQuestion + 1} of {totalQuestions}</p>
                 </div>
                 <div className="text-right">
