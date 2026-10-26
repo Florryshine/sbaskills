@@ -53,7 +53,7 @@ async function upsertTopic(admin, job, title, parentId, type, item, order, sourc
   for (let i = 0; i < objectives.length; i++) {
     const objective = objectives[i];
     const { data: found, error: findError } = await admin.from('curriculum_objectives').select('id')
-      .eq('curriculum_topic_id', topic.id).eq('objective_text', objective).maybeSingle();
+      .eq('curriculum_topic_id', topic.id).eq('objective_text', objective).limit(1).maybeSingle();
     if (findError) throw findError;
     if (!found) {
       const { error } = await admin.from('curriculum_objectives').insert({
