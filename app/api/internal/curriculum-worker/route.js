@@ -128,7 +128,12 @@ export async function POST(request) {
     if (sourceError) throw sourceError;
     if (!sourceDoc) throw new Error('Curriculum source document no longer exists.');
 
-    if (!sourceDoc.extracted_text || sourceDoc.extracted_text.trim().length < 50) {
+    const sourceName = String(sourceDoc.file_name || '').toLowerCase();
+    const sourceType = String(sourceDoc.file_type || '').toLowerCase();
+    const isPdfSource = sourceType === 'application/pdf' || sourceName.endsWith('.pdf');
+    const pdfPageInProgress = isPdfSource && Number(job.attempts?.extract_page || 0) > 0;
+    const needsExtraction = (!sourceDoc.extracted_text || sourceDoc.extracted_text.trim().length < 50) || pdfPageInProgress;
+    if (needsExtraction) {
       try {
         if (!sourceDoc.storage_path) throw new Error('No stored file is available for extraction.');
         const { data: file, error: downloadError } = await admin.storage.from('curriculum-sources').download(sourceDoc.storage_path);
@@ -136,33 +141,63 @@ export async function POST(request) {
         if (!file) throw new Error('Source file could not be downloaded from Storage.');
         const buffer = Buffer.from(await file.arrayBuffer());
         if (!buffer.length || buffer.length > 15 * 1024 * 1024) throw new Error('File is empty or exceeds the 15MB upload limit.');
-        const name = String(sourceDoc.file_name || '').toLowerCase();
-        const type = String(sourceDoc.file_type || '').toLowerCase();
         let extracted = '';
-        if (type === 'application/pdf' || name.endsWith('.pdf')) {
+        const attempts = { ...(job.attempts || {}) };
+        if (isPdfSource) {
           const { getData } = await import('pdf-parse/worker');
           const { PDFParse } = await import('pdf-parse');
           PDFParse.setWorker(getData());
           const parser = new PDFParse({ data: buffer });
-          try { extracted = String((await withTimeout(parser.getText(), 52000, 'PDF text extraction exceeded the 52-second worker limit.'))?.text || '').trim(); }
-          finally { await parser.destroy(); }
-        } else if (name.endsWith('.txt') || name.endsWith('.csv') || type.startsWith('text/')) {
+          try {
+            let totalPages = Number(attempts.pdf_total_pages || 0);
+            if (!totalPages) {
+              const info = await withTimeout(parser.getInfo(), 18000, 'PDF metadata extraction exceeded the 18-second worker limit.');
+              totalPages = Number(info?.total || 0);
+              if (!Number.isFinite(totalPages) || totalPages < 1) throw new Error('Could not determine the PDF page count.');
+            }
+            const firstPage = Math.max(1, Number(attempts.extract_page || 1));
+            const lastPage = Math.min(totalPages, firstPage + 7);
+            const pageResult = await withTimeout(
+              parser.getText({ first: firstPage, last: lastPage }),
+              45000,
+              `PDF page extraction (${firstPage}-${lastPage}) exceeded the 45-second worker limit.`
+            );
+            const pageText = (pageResult?.pages || []).map(page => `[PDF page ${page.num}]\n${page.text || ''}`).join('\n\n').trim();
+            if (!pageText && firstPage === 1) throw new Error('No readable text was extracted. Scanned PDFs require OCR or pasted text.');
+            extracted = [sourceDoc.extracted_text || '', pageText].filter(Boolean).join('\n\n').trim();
+            attempts.pdf_total_pages = totalPages;
+            const nextPage = lastPage + 1;
+            if (nextPage <= totalPages) {
+              attempts.extract_page = nextPage;
+              attempts.extract = 0;
+              const { error: saveTextError } = await admin.from('curriculum_source_documents').update({
+                extracted_text: extracted, extracted_chars: extracted.length, status: 'processing',
+                notes: `Background PDF extraction: pages ${lastPage}/${totalPages} processed (${extracted.length.toLocaleString()} characters saved). Continuing automatically.`,
+                updated_at: new Date().toISOString(),
+              }).eq('id', job.document_id);
+              if (saveTextError) throw saveTextError;
+              const { error: saveJobError } = await admin.from('curriculum_processing_jobs').update({
+                attempts, status: 'queued', locked_until: null, last_error: null, updated_at: new Date().toISOString(),
+              }).eq('id', job.id);
+              if (saveJobError) throw saveJobError;
+              scheduleNext(request, expected);
+              return NextResponse.json({ success: true, worked: true, job_id: job.id, phase: 'pdf_extraction', pages_processed: lastPage, total_pages: totalPages });
+            }
+            delete attempts.extract_page;
+            attempts.pdf_extracted = true;
+          } finally { await parser.destroy(); }
+        } else if (sourceName.endsWith('.txt') || sourceName.endsWith('.csv') || sourceType.startsWith('text/')) {
           extracted = buffer.toString('utf8').trim();
-        } else if (name.endsWith('.docx') || type.includes('wordprocessingml')) {
+        } else if (sourceName.endsWith('.docx') || sourceType.includes('wordprocessingml')) {
           const mammoth = await import('mammoth');
           extracted = String((await mammoth.extractRawText({ buffer })).value || '').trim();
-        } else if (/\.(xlsx|xls)$/.test(name) || type.includes('spreadsheet') || type.includes('excel')) {
+        } else if (/\.(xlsx|xls)$/.test(sourceName) || sourceType.includes('spreadsheet') || sourceType.includes('excel')) {
           const XLSX = await import('xlsx');
           const workbook = XLSX.read(buffer, { type: 'buffer' });
           extracted = workbook.SheetNames.map(sheet => XLSX.utils.sheet_to_csv(workbook.Sheets[sheet])).join('\n\n').trim();
         } else throw new Error('Unsupported source file type.');
+
         if (extracted.length < 50) throw new Error('Too little readable text was extracted. Scanned PDFs require OCR or pasted text.');
-        const { error: saveTextError } = await admin.from('curriculum_source_documents').update({
-          extracted_text: extracted, extracted_chars: extracted.length, status: 'processing',
-          notes: `Background text extraction succeeded (${extracted.length.toLocaleString()} characters). Building syllabus chunks next.`,
-          updated_at: new Date().toISOString(),
-        }).eq('id', job.document_id);
-        if (saveTextError) throw saveTextError;
         const extractedChunks = [];
         let remaining = extracted;
         while (remaining.length > 6000) {
@@ -172,16 +207,23 @@ export async function POST(request) {
           remaining = remaining.slice(splitAt).trimStart();
         }
         if (remaining.trim()) extractedChunks.push(remaining);
+        const { error: saveTextError } = await admin.from('curriculum_source_documents').update({
+          extracted_text: extracted, extracted_chars: extracted.length, status: 'processing',
+          notes: `Background text extraction succeeded (${extracted.length.toLocaleString()} characters). Building syllabus chunks next.`,
+          updated_at: new Date().toISOString(),
+        }).eq('id', job.document_id);
+        if (saveTextError) throw saveTextError;
         const { error: prepareError } = await admin.from('curriculum_processing_jobs').update({
           chunks: extractedChunks, total_chunks: extractedChunks.length, next_chunk_index: 0,
           status: 'queued', locked_until: null, last_error: null,
-          attempts: { ...(job.attempts || {}), extract: 0 }, updated_at: new Date().toISOString(),
+          attempts: { ...attempts, extract: 0 }, updated_at: new Date().toISOString(),
         }).eq('id', job.id);
         if (prepareError) throw prepareError;
         scheduleNext(request, expected);
         return NextResponse.json({ success: true, worked: true, job_id: job.id, phase: 'extracted', extracted_chars: extracted.length, total_chunks: extractedChunks.length });
       } catch (extractError) {
-        const attempts = { ...(job.attempts || {}), extract: Number(job.attempts?.extract || 0) + 1 };
+        const attempts = { ...(job.attempts || {}) };
+        attempts.extract = Number(attempts.extract || 0) + 1;
         const retry = attempts.extract < 3;
         const message = String(extractError?.message || extractError).slice(0, 900);
         await admin.from('curriculum_processing_jobs').update({
@@ -197,7 +239,6 @@ export async function POST(request) {
         return NextResponse.json({ success: false, worked: true, phase: 'extract', retry, error: message });
       }
     }
-
     const index = job.next_chunk_index;
     const chunks = Array.isArray(job.chunks) ? job.chunks : [];
     if (index >= chunks.length) {
