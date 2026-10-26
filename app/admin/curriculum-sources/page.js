@@ -114,7 +114,7 @@ export default function CurriculumSourcesPage() {
       });
       const result = await readApiResponse(response);
       if (!response.ok) throw new Error(result.error || 'IBASS import failed');
-      setMessage(`${source.subject} imported from official IBASS: ${result.document.extracted_chars.toLocaleString()} characters extracted. It is staged, not published as syllabus nodes.`);
+      setMessage(result.message || `${source.subject} imported from official IBASS and queued for background extraction and Knowledge Asset linking.`);
       await load();
     } catch (error) { setMessage(error.message); }
     finally { setImportingUrl(''); }
@@ -186,7 +186,7 @@ export default function CurriculumSourcesPage() {
                     const result = await readApiResponse(response);
                     if (!response.ok) throw new Error(result.error || 'IBASS import failed');
                   }
-                  setMessage('IBASS test import completed for the two PDF URLs.');
+                  setMessage('IBASS PDFs submitted. Background extraction and Knowledge Asset linking will continue; progress appears in the staged sources list.');
                   await load();
                 } catch (error) {
                   setMessage(error.message);
