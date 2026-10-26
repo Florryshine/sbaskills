@@ -89,11 +89,17 @@ export default function CurriculumSourcesPage() {
   async function buildSyllabus(doc) {
     setBuildingId(doc.id); setMessage('');
     try {
-      const response = await fetch('/api/admin/curriculum-sources/build-syllabus', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ document_id: doc.id }) });
+      const response = await fetch('/api/admin/curriculum-sources/queue-syllabus', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ document_id: doc.id }),
+      });
       const result = await readApiResponse(response);
-      if (!response.ok) throw new Error(result.error || 'Could not build syllabus.');
-      setMessage(result.subject + ': ' + result.topics_added + ' topics/subtopics added, ' + result.topics_already_existing + ' already existed, ' + result.objectives_added + ' objectives added; ' + (result.chunks_failed?.length || 0) + ' chunks failed. Status: ' + result.status + '.'); await load();
-    } catch (error) { setMessage(error.message || 'Could not build syllabus.'); await load(); } finally { setBuildingId(''); }
+      if (!response.ok) throw new Error(result.error || 'Could not queue syllabus processing.');
+      setMessage((result.message || 'Syllabus processing queued.') + ' Job: ' + result.job_id + '. Progress is saved between chunks; you can leave this page.');
+      await load();
+    } catch (error) { setMessage(error.message || 'Could not queue syllabus processing.'); await load(); }
+    finally { setBuildingId(''); }
   }
 
   async function importIbass(source) {
