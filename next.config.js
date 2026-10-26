@@ -7,6 +7,15 @@ const withPWA = require('next-pwa')({
   runtimeCaching: [],
 })
 const nextConfig = withPWA({
+  async redirects() {
+    return [
+      {
+        source: '/past-question-search',
+        destination: '/tools/past-questions',
+        permanent: true,
+      },
+    ];
+  },
   reactStrictMode: true,
   swcMinify: true,
   images: {
