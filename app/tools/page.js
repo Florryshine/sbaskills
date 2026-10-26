@@ -30,7 +30,7 @@ const tools = [
   },
   {
     name: 'CGPA Calculator',
-    description: 'Calculate your university CGPA semester by semester.',
+    description: 'Calculate your cumulative grade point average using semester results, course grades and credit units. Track academic progress and plan your target CGPA.'
     icon: '🎓',
     href: '/tools/cgpa-calculator',
     category: 'Academic',
@@ -79,7 +79,7 @@ const tools = [
   },
   {
     name: 'Daily Mentor',
-    description: 'Start your day with motivation and a goal from Shine Mentor.',
+    description: 'Get daily study encouragement and a practical goal to help build consistent revision habits, focus and confidence.'
     icon: '🌞',
     href: '/tools/daily-mentor',
     category: 'Study',
