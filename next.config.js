@@ -14,6 +14,11 @@ const nextConfig = withPWA({
         destination: '/tools/past-questions',
         permanent: true,
       },
+      {
+        source: '/favicon.ico',
+        destination: '/icon.svg',
+        permanent: true,
+      },
     ];
   },
   reactStrictMode: true,
