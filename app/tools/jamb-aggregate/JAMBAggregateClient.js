@@ -194,6 +194,30 @@ export default function JAMBAggregateClient() {
           </div>
         )}
       </div>
+      <section className="mt-8 rounded-2xl border border-slate-200 bg-white p-6 sm:p-8" aria-labelledby="aggregate-guide-heading">
+        <h2 id="aggregate-guide-heading" className="text-2xl font-bold text-brand-blue">How a JAMB aggregate score is calculated</h2>
+        <p className="mt-3 leading-7 text-gray-700">A university aggregate is a combined score calculated using an institution’s admission formula. This calculator uses the formula shown below as a simple estimate: JAMB score divided by 8, plus points from your five highest selected O’Level grades. The formula is not universal; your institution may use a different weighting system or assess O’Level results differently.</p>
+        <div className="mt-4 rounded-xl bg-blue-50 p-4">
+          <p className="font-semibold text-slate-900">Formula used by this calculator</p>
+          <p className="mt-1 text-gray-700">Estimated aggregate = (UTME score ÷ 8) + points for the best five selected O’Level grades.</p>
+          <p className="mt-2 text-sm text-gray-600">Grade points used: A1 = 10, B2 = 9, B3 = 8, C4 = 7, C5 = 6, C6 = 5, D7 = 4, E8 = 3, F9 = 0.</p>
+        </div>
+        <h3 className="mt-6 text-lg font-bold text-slate-900">How to use the calculator</h3>
+        <ol className="mt-3 list-decimal space-y-2 pl-6 leading-7 text-gray-700">
+          <li>Enter your UTME score from 0 to 400.</li>
+          <li>Select at least five O’Level subjects and the grades you received.</li>
+          <li>You may enter your preferred institution and course as a reminder for your admission research.</li>
+          <li>Choose Calculate Aggregate to see the estimated score and which five grades were used.</li>
+          <li>Compare the result with the admission formula officially published by your institution.</li>
+        </ol>
+        <h3 className="mt-6 text-lg font-bold text-slate-900">Does a higher aggregate guarantee admission?</h3>
+        <p className="mt-3 leading-7 text-gray-700">No. Institutions may calculate aggregates differently, apply programme-specific requirements, consider screening results or use other eligibility rules. The school and course fields on this page do not automatically verify an institution’s formula. Treat this result as a planning estimate, confirm the official method, and make sure your O’Level subjects and grades satisfy the course requirements.</p>
+        <div className="mt-6 flex flex-wrap gap-3">
+          <a className="rounded-full bg-brand-blue px-4 py-2 font-semibold text-white hover:opacity-90" href="/tools/admission-chance">Check admission chances</a>
+          <a className="rounded-full border border-brand-blue px-4 py-2 font-semibold text-brand-blue hover:bg-blue-50" href="/tools/subject-combination">Check JAMB subject combinations</a>
+          <a className="rounded-full border border-brand-blue px-4 py-2 font-semibold text-brand-blue hover:bg-blue-50" href="/tools/cut-off-mark">Research cut-off marks</a>
+        </div>
+      </section>
     </div>
   );
 }
