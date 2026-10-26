@@ -7,7 +7,12 @@ export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
 export const maxDuration = 60;
 
-const scheduleNext = (request, secret) => waitUntil((async () => {\n  await new Promise(resolve => setTimeout(resolve, 1200));\n  try { await fetch(new URL('/api/internal/curriculum-worker', request.url), { method: 'POST', headers: { authorization: `Bearer ${secret}` } }); } catch (error) { console.error('Could not continue curriculum worker chain:', error); }\n})());\n\nconst clean = (value, max = 600) => typeof value === 'string' ? value.replace(/\s+/g, ' ').trim().slice(0, max) : '';
+const scheduleNext = (request, secret) => waitUntil((async () => {
+  await new Promise(resolve => setTimeout(resolve, 1200));
+  try { await fetch(new URL('/api/internal/curriculum-worker', request.url), { method: 'POST', headers: { authorization: `Bearer ${secret}` } }); } catch (error) { console.error('Could not continue curriculum worker chain:', error); }
+})());
+
+const clean = (value, max = 600) => typeof value === 'string' ? value.replace(/\s+/g, ' ').trim().slice(0, max) : '';
 const parseJson = value => JSON.parse(String(value || '').replace(/^\s*```(?:json)?/i, '').replace(/```\s*$/, '').trim());
 const withTimeout = (promise, ms, message) => {
   let timer;
@@ -16,7 +21,8 @@ const withTimeout = (promise, ms, message) => {
 };
 
 async function extractChunk(text, subject, index, total) {
-  const prompt = `Extract ONLY syllabus information explicitly present below. Do not invent topics or objectives. Subject: ${subject}; chunk ${index + 1}/${total}. Return JSON only: {"topics":[{"title":"main topic","code":"","description":"source-faithful brief description","objectives":["explicit learning objective"],"subtopics":[{"title":"subtopic","code":"","objectives":["explicit objective"]}]}]}. Preserve source numbering where available. Ignore headers/footers. If there are no clear topics, return {"topics":[]}. SOURCE:\n${text}`;
+  const prompt = `Extract ONLY syllabus information explicitly present below. Do not invent topics or objectives. Subject: ${subject}; chunk ${index + 1}/${total}. Return JSON only: {"topics":[{"title":"main topic","code":"","description":"source-faithful brief description","objectives":["explicit learning objective"],"subtopics":[{"title":"subtopic","code":"","objectives":["explicit objective"]}]}]}. Preserve source numbering where available. Ignore headers/footers. If there are no clear topics, return {"topics":[]}. SOURCE:
+${text}`;
   const result = await withTimeout(generateWithFallback(prompt, parseJson, value => value && Array.isArray(value.topics), 3500), 18000, 'AI syllabus extraction exceeded the 18-second chunk timeout.');
   if (!result?.result || !Array.isArray(result.result.topics)) throw new Error('AI response did not contain a valid topics array');
   return result.result.topics;
@@ -168,7 +174,8 @@ export async function POST(request) {
         notes: `Background syllabus build: ${next}/${chunks.length} chunks processed; ${stats.topics_added} topics/subtopics added, ${stats.assets_created} assets created, ${stats.assets_linked} topic-asset links.`,
         updated_at: new Date().toISOString(),
       }).eq('id', job.document_id);
-      if (!completed) scheduleNext(request, expected);\n      return NextResponse.json({ success: true, worked: true, job_id: job.id, chunk: next, total_chunks: chunks.length, status: nextStatus, stats });
+      if (!completed) scheduleNext(request, expected);
+      return NextResponse.json({ success: true, worked: true, job_id: job.id, chunk: next, total_chunks: chunks.length, status: nextStatus, stats });
     } catch (chunkError) {
       const attempts = { ...(job.attempts || {}) };
       attempts[String(index)] = Number(attempts[String(index)] || 0) + 1;
@@ -183,7 +190,8 @@ export async function POST(request) {
         notes: `Chunk ${index + 1}/${chunks.length} ${retry ? 'failed and will retry' : 'failed after 3 attempts'}: ${message}`,
         updated_at: new Date().toISOString(),
       }).eq('id', job.document_id);
-      if (retry) scheduleNext(request, expected);\n      return NextResponse.json({ success: false, worked: true, retry, job_id: job.id, chunk: index + 1, total_chunks: chunks.length, error: message }, { status: 200 });
+      if (retry) scheduleNext(request, expected);
+      return NextResponse.json({ success: false, worked: true, retry, job_id: job.id, chunk: index + 1, total_chunks: chunks.length, error: message }, { status: 200 });
     }
   } catch (error) {
     console.error('Curriculum worker failed:', error);
