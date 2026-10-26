@@ -24,8 +24,7 @@ const chunksOf = value => {
   const chunks = [];
   let rest = String(value || '').trim();
   while (rest.length > 6000) {
-    let splitAt = rest.lastIndexOf('
-', 6000);
+    let splitAt = rest.lastIndexOf('\\n', 6000);
     if (splitAt < 3000) splitAt = 6000;
     chunks.push(rest.slice(0, splitAt));
     rest = rest.slice(splitAt).trimStart();
