@@ -5,8 +5,9 @@ import Link from 'next/link';
 import Image from 'next/image';
 
 export const metadata = {
-  title: 'Library | Shiney Brain Academy',
-  description: 'Download exam prep books, past questions, and study guides for JAMB, WAEC, and NECO.',
+  title: 'Study Library: Exam Books, Past Questions and Study Guides',
+  description: 'Explore the Shiney Brain Academy study library for learning materials, exam preparation books, past-question resources and study guides for Nigerian students. Find resources to support JAMB UTME, WAEC, NECO, revision and independent study. Availability and access terms may vary by resource.',
+  alternates: { canonical: 'https://shineybrainacademy.vercel.app/library' },
   alternates: { canonical: 'https://shineybrainacademy.vercel.app/library' },
 };
 
