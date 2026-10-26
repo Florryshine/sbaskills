@@ -24,7 +24,8 @@ const chunksOf = value => {
   const chunks = [];
   let rest = String(value || '').trim();
   while (rest.length > 6000) {
-    let splitAt = rest.lastIndexOf('\n', 6000);
+    let splitAt = rest.lastIndexOf('
+', 6000);
     if (splitAt < 3000) splitAt = 6000;
     chunks.push(rest.slice(0, splitAt));
     rest = rest.slice(splitAt).trimStart();
@@ -65,7 +66,9 @@ export async function POST(request) {
       .in('status', ['queued', 'processing', 'partially_completed']).maybeSingle();
     if (activeError) throw activeError;
     if (activeJob) {
-      return NextResponse.json({ success: true, queued: false, job_id: activeJob.id, status: activeJob.status, message: 'This source already has an active processing job.' });
+      const workerSecret = process.env.CURRICULUM_WORKER_SECRET;
+      if (workerSecret) waitUntil(fetch(new URL('/api/internal/curriculum-worker', request.url), { method: 'POST', headers: { authorization: `Bearer ${workerSecret}` } }).catch(workerError => console.error('Could not resume curriculum worker:', workerError)));
+      return NextResponse.json({ success: true, queued: false, job_id: activeJob.id, status: activeJob.status, message: 'Existing processing job resumed.' });
     }
 
     const { data: job, error: jobError } = await admin.from('curriculum_processing_jobs').insert({
@@ -89,7 +92,9 @@ export async function POST(request) {
     }).eq('id', document_id);
     if (updateError) throw updateError;
 
-    const workerSecret = process.env.CURRICULUM_WORKER_SECRET;\n    if (workerSecret) waitUntil(fetch(new URL('/api/internal/curriculum-worker', request.url), { method: 'POST', headers: { authorization: `Bearer ${workerSecret}` } }).catch(error => console.error('Could not start curriculum worker:', error)));\n    return NextResponse.json({ success: true, queued: true, job_id: job.id, status: job.status, total_chunks: job.total_chunks, message: 'Syllabus processing is queued. You can leave this page; progress is saved between chunks.' });
+    const workerSecret = process.env.CURRICULUM_WORKER_SECRET;
+    if (workerSecret) waitUntil(fetch(new URL('/api/internal/curriculum-worker', request.url), { method: 'POST', headers: { authorization: `Bearer ${workerSecret}` } }).catch(error => console.error('Could not start curriculum worker:', error)));
+    return NextResponse.json({ success: true, queued: true, job_id: job.id, status: job.status, total_chunks: job.total_chunks, message: 'Syllabus processing is queued. You can leave this page; progress is saved between chunks.' });
   } catch (error) {
     console.error('Queue syllabus job failed:', error);
     return NextResponse.json({ error: error?.message || 'Could not queue syllabus processing.' }, { status: 500 });
