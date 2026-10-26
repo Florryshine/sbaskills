@@ -69,7 +69,7 @@ create policy "Admins manage curriculum topic assets"
 create or replace function public.claim_curriculum_processing_job()
 returns setof public.curriculum_processing_jobs
 language plpgsql
-security definer
+security invoker
 set search_path = public
 as $$
 begin
