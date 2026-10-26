@@ -131,6 +131,26 @@ export default function SubjectCombinationClient() {
           </div>
         )}
       </div>
+      <section className="mt-8 rounded-2xl border border-slate-200 bg-white p-6 sm:p-8" aria-labelledby="subject-guide-heading">
+        <h2 id="subject-guide-heading" className="text-2xl font-bold text-brand-blue">How to choose the right JAMB subject combination</h2>
+        <p className="mt-3 leading-7 text-gray-700">Your UTME subject combination should match the entry requirements for the exact course and institution you want. Choosing an unsuitable combination can affect eligibility even when your score is strong. Use this checker as a starting point, then confirm both UTME subjects and O’Level requirements in the current JAMB brochure and on your institution’s official admissions website.</p>
+        <h3 className="mt-6 text-lg font-bold text-slate-900">Examples of courses and subject requirements</h3>
+        <p className="mt-3 leading-7 text-gray-700">The course list in this tool currently provides examples for Medicine, Nursing, Pharmacy, Engineering, Computer Science, Law, Economics, Business Administration and Biochemistry. Requirements shown for some courses include alternatives, and these may not apply to every university. Do not assume that a general example is the final approved combination for your intended institution.</p>
+        <h3 className="mt-6 text-lg font-bold text-slate-900">Check these details before registering</h3>
+        <ul className="mt-3 list-disc space-y-2 pl-6 leading-7 text-gray-700">
+          <li><strong>Exact course name:</strong> Similar-sounding programmes may have different admission requirements.</li>
+          <li><strong>Four UTME subjects:</strong> Confirm the required subjects, including English Language where applicable, for the course.</li>
+          <li><strong>O’Level subjects:</strong> Check required credits, acceptable subjects and any grade conditions separately from UTME subjects.</li>
+          <li><strong>Institution-specific rules:</strong> A course may have additional or different conditions depending on the university or other institution.</li>
+          <li><strong>Current official brochure:</strong> Requirements can be revised. Check the latest official JAMB brochure and your school’s admission notice before making your final choice.</li>
+        </ul>
+        <p className="mt-4 leading-7 text-gray-700">If your desired course is not listed here, do not guess or choose a nearby option as a substitute. Consult the official requirements for your exact course and institution first.</p>
+        <div className="mt-6 flex flex-wrap gap-3">
+          <a className="rounded-full bg-brand-blue px-4 py-2 font-semibold text-white hover:opacity-90" href="/tools/admission-chance">Check admission chances</a>
+          <a className="rounded-full border border-brand-blue px-4 py-2 font-semibold text-brand-blue hover:bg-blue-50" href="/tools/jamb-aggregate">Calculate aggregate</a>
+          <a className="rounded-full border border-brand-blue px-4 py-2 font-semibold text-brand-blue hover:bg-blue-50" href="/tools/cut-off-mark">Check cut-off marks</a>
+        </div>
+      </section>
     </div>
   );
 }
