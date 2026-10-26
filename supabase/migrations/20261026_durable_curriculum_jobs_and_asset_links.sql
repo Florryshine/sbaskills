@@ -64,3 +64,36 @@ create policy "Admins manage curriculum topic assets"
   on public.curriculum_topic_assets for all to authenticated
   using (exists (select 1 from public.profiles p where p.id = auth.uid() and p.role = 'admin'))
   with check (exists (select 1 from public.profiles p where p.id = auth.uid() and p.role = 'admin'));
+
+-- Atomic job claiming: multiple scheduled worker invocations cannot claim the same job.
+create or replace function public.claim_curriculum_processing_job()
+returns setof public.curriculum_processing_jobs
+language plpgsql
+security definer
+set search_path = public
+as $$
+begin
+  return query
+  with candidate as (
+    select id
+    from public.curriculum_processing_jobs
+    where status in ('queued','processing','partially_completed')
+      and (locked_until is null or locked_until < now())
+      and next_chunk_index < total_chunks
+    order by created_at asc
+    for update skip locked
+    limit 1
+  )
+  update public.curriculum_processing_jobs j
+  set status = 'processing',
+      locked_until = now() + interval '90 seconds',
+      started_at = coalesce(started_at, now()),
+      updated_at = now()
+  from candidate c
+  where j.id = c.id
+  returning j.*;
+end;
+$$;
+
+revoke all on function public.claim_curriculum_processing_job() from public, anon, authenticated;
+grant execute on function public.claim_curriculum_processing_job() to service_role;
