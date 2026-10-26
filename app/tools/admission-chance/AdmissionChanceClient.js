@@ -291,6 +291,25 @@ export default function AdmissionChanceClient() {
           </div>
         )}
       </div>
+      <section className="mt-8 rounded-2xl border border-slate-200 bg-white p-6 sm:p-8" aria-labelledby="admission-guide-heading">
+        <h2 id="admission-guide-heading" className="text-2xl font-bold text-brand-blue">How to check your university admission chances</h2>
+        <p className="mt-3 leading-7 text-gray-700">Use this admission checker to compare your UTME score with the cut-off information available for your selected institution and course. Select the school and course, enter your JAMB score, and add your O’Level grades if you want the tool to include them in its estimate. The result is a guide for planning your next steps—not an admission decision.</p>
+        <h3 className="mt-6 text-lg font-bold text-slate-900">What affects admission into a Nigerian university?</h3>
+        <ul className="mt-3 list-disc space-y-2 pl-6 leading-7 text-gray-700">
+          <li><strong>UTME score:</strong> Your score is one factor institutions may use when screening candidates. Meeting a general minimum does not necessarily mean you meet a course’s competitive threshold.</li>
+          <li><strong>Course and institution:</strong> Requirements differ by programme and school. Competitive courses can have different expectations from other programmes in the same institution.</li>
+          <li><strong>O’Level results:</strong> Required subjects and acceptable grades matter. Confirm the subject and grade requirements for your chosen course.</li>
+          <li><strong>Post-UTME or screening:</strong> Some institutions conduct additional screening or assessments. Follow the current admission instructions issued by your school.</li>
+          <li><strong>Current official information:</strong> Cut-off marks and screening rules can change. Verify them through the institution’s official admission portal and current JAMB guidance.</li>
+        </ul>
+        <h3 className="mt-6 text-lg font-bold text-slate-900">How to use your result</h3>
+        <p className="mt-3 leading-7 text-gray-700">If your estimate is below the listed cut-off, check whether the data is current and review other courses or institutions only after confirming their official requirements. If you appear to meet the threshold, continue preparing for any screening stage and ensure your O’Level subjects meet the course requirements. No calculator can guarantee admission because final decisions depend on each institution’s current rules and applicant pool.</p>
+        <div className="mt-6 flex flex-wrap gap-3">
+          <a className="rounded-full bg-brand-blue px-4 py-2 font-semibold text-white hover:opacity-90" href="/tools/jamb-aggregate">Calculate JAMB aggregate</a>
+          <a className="rounded-full border border-brand-blue px-4 py-2 font-semibold text-brand-blue hover:bg-blue-50" href="/tools/cut-off-mark">Check cut-off marks</a>
+          <a className="rounded-full border border-brand-blue px-4 py-2 font-semibold text-brand-blue hover:bg-blue-50" href="/tools/subject-combination">Check subject combinations</a>
+        </div>
+      </section>
     </div>
   );
 }
