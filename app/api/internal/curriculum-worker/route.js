@@ -23,7 +23,7 @@ const withTimeout = (promise, ms, message) => {
 async function extractChunk(text, subject, index, total) {
   const prompt = `Extract ONLY syllabus information explicitly present below. Do not invent topics or objectives. Subject: ${subject}; chunk ${index + 1}/${total}. Return JSON only: {"topics":[{"title":"main topic","code":"","description":"source-faithful brief description","objectives":["explicit learning objective"],"subtopics":[{"title":"subtopic","code":"","objectives":["explicit objective"]}]}]}. Preserve source numbering where available. Ignore headers/footers. If there are no clear topics, return {"topics":[]}. SOURCE:
 ${text}`;
-  const result = await withTimeout(generateWithFallback(prompt, parseJson, value => value && Array.isArray(value.topics), 3500), 18000, 'AI syllabus extraction exceeded the 18-second chunk timeout.');
+  const result = await withTimeout(generateWithFallback(prompt, parseJson, value => value && Array.isArray(value.topics), 3500), 45000, 'AI syllabus extraction exceeded the 45-second worker timeout.');
   if (!result?.result || !Array.isArray(result.result.topics)) throw new Error('AI response did not contain a valid topics array');
   return result.result.topics;
 }
