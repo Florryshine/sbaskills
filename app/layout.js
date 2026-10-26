@@ -7,8 +7,11 @@ const SBA_LOGO = 'https://user24606.cn.imgto.link/public/20260926/1003107782.avi
 
 export const metadata = {
   metadataBase: new URL('https://shineybrainacademy.vercel.app'),
-  title: 'Shiney Brain Academy',
-  description: 'Where Champions Are Made – JAMB, Tech Skills, and Career Development for Nigerian students.',
+  title: {
+    default: 'Shiney Brain Academy | JAMB, WAEC, NECO & Student Learning',
+    template: '%s | Shiney Brain Academy',
+  },
+  description: 'Prepare for JAMB UTME, WAEC, NECO and Post-UTME with exam practice, past questions, study guides, admission tools and practical AI and digital skills for Nigerian students.',
   icons: {
     icon: SBA_LOGO,
     apple: SBA_LOGO,
