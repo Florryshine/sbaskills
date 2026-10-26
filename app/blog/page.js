@@ -26,7 +26,9 @@ const SLUG_MAP = Object.fromEntries(
 // ─── Metadata ───────────────────────────────────────────────
 export async function generateMetadata({ searchParams }) {
   const category = searchParams?.category || 'all';
-  const search = searchParams?.search || '';
+  const search = (searchParams?.search || '').trim();
+  const page = Math.max(1, parseInt(searchParams?.page, 10) || 1);
+  const sort = searchParams?.sort || 'newest';
 
   let title = 'Blog | Shiney Brain Academy';
   let description = 'Read the latest tips, study guides, and exam preparation advice for Nigerian students.';
@@ -37,16 +39,26 @@ export async function generateMetadata({ searchParams }) {
     const categoryName = CATEGORY_MAP[category] || category;
     title = `${categoryName} Posts | Shiney Brain Academy`;
     description = `Read ${categoryName} exam tips, study guides, and preparation advice.`;
-    canonicalUrl = `https://shineybrainacademy.vercel.app/blog?category=${category}`;
+    canonicalUrl = `${canonicalUrl}?category=${encodeURIComponent(category)}`;
+  }
+
+  // Paginated pages contain different articles, so they must not all canonicalize
+  // to page 1. Keep page and non-default sorting in the canonical URL.
+  if (page > 1) {
+    canonicalUrl += `${canonicalUrl.includes('?') ? '&' : '?'}page=${page}`;
+    if (sort && sort !== 'newest') {
+      canonicalUrl += `&sort=${encodeURIComponent(sort)}`;
+    }
   }
 
   if (search) {
-    // Search-query pages are thin/duplicate content — keep them out of the
-    // index and point back to the plain blog index instead of fighting it
-    // with a self canonical.
     title = `Search: ${search} | Shiney Brain Academy`;
     description = `Search results for "${search}" on Shiney Brain Academy.`;
+    // Search result URLs are utility views, not landing pages for search engines.
     canonicalUrl = 'https://shineybrainacademy.vercel.app/blog';
+    if (category !== 'all') {
+      canonicalUrl += `?category=${encodeURIComponent(category)}`;
+    }
     robots = { index: false, follow: true };
   }
 
