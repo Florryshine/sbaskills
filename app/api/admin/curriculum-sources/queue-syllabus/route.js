@@ -1,4 +1,5 @@
 import { NextResponse } from 'next/server';
+import { waitUntil } from '@vercel/functions';
 import { createServerClient } from '@/lib/supabase-server';
 import { createAdminClient } from '@/lib/supabase-admin';
 
@@ -88,7 +89,7 @@ export async function POST(request) {
     }).eq('id', document_id);
     if (updateError) throw updateError;
 
-    return NextResponse.json({ success: true, queued: true, job_id: job.id, status: job.status, total_chunks: job.total_chunks });
+    const workerSecret = process.env.CURRICULUM_WORKER_SECRET;\n    if (workerSecret) waitUntil(fetch(new URL('/api/internal/curriculum-worker', request.url), { method: 'POST', headers: { authorization: `Bearer ${workerSecret}` } }).catch(error => console.error('Could not start curriculum worker:', error)));\n    return NextResponse.json({ success: true, queued: true, job_id: job.id, status: job.status, total_chunks: job.total_chunks, message: 'Syllabus processing is queued. You can leave this page; progress is saved between chunks.' });
   } catch (error) {
     console.error('Queue syllabus job failed:', error);
     return NextResponse.json({ error: error?.message || 'Could not queue syllabus processing.' }, { status: 500 });
