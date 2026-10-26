@@ -39,27 +39,23 @@ export async function generateMetadata({ searchParams }) {
     const categoryName = CATEGORY_MAP[category] || category;
     title = `${categoryName} Posts | Shiney Brain Academy`;
     description = `Read ${categoryName} exam tips, study guides, and preparation advice.`;
-    canonicalUrl = `${canonicalUrl}?category=${encodeURIComponent(category)}`;
+    canonicalUrl += `?category=${encodeURIComponent(category)}`;
   }
 
-  // Paginated pages contain different articles, so they must not all canonicalize
-  // to page 1. Keep page and non-default sorting in the canonical URL.
+  // Each paginated page contains different articles; preserve its page number.
   if (page > 1) {
     canonicalUrl += `${canonicalUrl.includes('?') ? '&' : '?'}page=${page}`;
-    if (sort && sort !== 'newest') {
-      canonicalUrl += `&sort=${encodeURIComponent(sort)}`;
-    }
+  }
+  if (page > 1 && sort && sort !== 'newest') {
+    canonicalUrl += `&sort=${encodeURIComponent(sort)}`;
   }
 
   if (search) {
     title = `Search: ${search} | Shiney Brain Academy`;
     description = `Search results for "${search}" on Shiney Brain Academy.`;
-    // Search result URLs are utility views, not landing pages for search engines.
-    canonicalUrl = 'https://shineybrainacademy.vercel.app/blog';
-    if (category !== 'all') {
-      canonicalUrl += `?category=${encodeURIComponent(category)}`;
-    }
     robots = { index: false, follow: true };
+    // Search results are utility pages; don't create indexable URL variants.
+    canonicalUrl = 'https://shineybrainacademy.vercel.app/blog';
   }
 
   return {
@@ -67,12 +63,7 @@ export async function generateMetadata({ searchParams }) {
     description,
     alternates: { canonical: canonicalUrl },
     ...(robots ? { robots } : {}),
-    openGraph: {
-      title,
-      description,
-      url: canonicalUrl,
-      type: 'website',
-    },
+    openGraph: { title, description, url: canonicalUrl, type: 'website' },
   };
 }
 
