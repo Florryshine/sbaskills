@@ -97,3 +97,36 @@ $$;
 
 revoke all on function public.claim_curriculum_processing_job() from public, anon, authenticated;
 grant execute on function public.claim_curriculum_processing_job() to service_role;
+
+-- Expose only what the RLS policies permit.
+grant select on public.curriculum_processing_jobs to authenticated;
+grant all on public.curriculum_processing_jobs to service_role;
+grant select, insert, update, delete on public.curriculum_topic_assets to authenticated;
+grant all on public.curriculum_topic_assets to service_role;
+
+-- Preserve existing direct links in the new bridge table.
+insert into public.curriculum_topic_assets (curriculum_topic_id, knowledge_asset_id, relationship, source)
+select t.id, t.knowledge_asset_id, 'primary', 'existing_curriculum_link'
+from public.curriculum_topics t
+where t.knowledge_asset_id is not null
+on conflict (curriculum_topic_id, knowledge_asset_id) do nothing;
+
+-- Backfill exact title/subject matches only; do not manufacture placeholder assets
+-- for existing topics that have no meaningful knowledge content yet.
+with candidates as (
+  select t.id as topic_id, a.id as asset_id,
+         row_number() over (
+           partition by t.id
+           order by case a.topic_type when 'learning' then 0 when 'curriculum_topic' then 1 else 2 end,
+                    a.updated_at desc nulls last
+         ) as rn
+  from public.curriculum_topics t
+  join public.knowledge_assets a
+    on lower(trim(a.keyword)) = lower(trim(t.title))
+   and lower(trim(coalesce(a.subject,''))) = lower(trim(coalesce(t.subject,'')))
+  where t.knowledge_asset_id is null
+)
+insert into public.curriculum_topic_assets (curriculum_topic_id, knowledge_asset_id, relationship, source)
+select topic_id, asset_id, 'primary', 'exact_title_subject_backfill'
+from candidates where rn = 1
+on conflict (curriculum_topic_id, knowledge_asset_id) do nothing;
