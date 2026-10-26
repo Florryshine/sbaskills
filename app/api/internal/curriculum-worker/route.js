@@ -123,6 +123,81 @@ export async function POST(request) {
     job = Array.isArray(jobs) ? jobs[0] : null;
     if (!job) return NextResponse.json({ success: true, worked: false, message: 'No queued curriculum chunks.' });
 
+    const { data: sourceDoc, error: sourceError } = await admin.from('curriculum_source_documents')
+      .select('id,file_name,file_type,storage_path,extracted_text').eq('id', job.document_id).maybeSingle();
+    if (sourceError) throw sourceError;
+    if (!sourceDoc) throw new Error('Curriculum source document no longer exists.');
+
+    if (!sourceDoc.extracted_text || sourceDoc.extracted_text.trim().length < 50) {
+      try {
+        if (!sourceDoc.storage_path) throw new Error('No stored file is available for extraction.');
+        const { data: file, error: downloadError } = await admin.storage.from('curriculum-sources').download(sourceDoc.storage_path);
+        if (downloadError) throw downloadError;
+        if (!file) throw new Error('Source file could not be downloaded from Storage.');
+        const buffer = Buffer.from(await file.arrayBuffer());
+        if (!buffer.length || buffer.length > 15 * 1024 * 1024) throw new Error('File is empty or exceeds the 15MB upload limit.');
+        const name = String(sourceDoc.file_name || '').toLowerCase();
+        const type = String(sourceDoc.file_type || '').toLowerCase();
+        let extracted = '';
+        if (type === 'application/pdf' || name.endsWith('.pdf')) {
+          const { getData } = await import('pdf-parse/worker');
+          const { PDFParse } = await import('pdf-parse');
+          PDFParse.setWorker(getData());
+          const parser = new PDFParse({ data: buffer });
+          try { extracted = String((await withTimeout(parser.getText(), 52000, 'PDF text extraction exceeded the 52-second worker limit.'))?.text || '').trim(); }
+          finally { await parser.destroy(); }
+        } else if (name.endsWith('.txt') || name.endsWith('.csv') || type.startsWith('text/')) {
+          extracted = buffer.toString('utf8').trim();
+        } else if (name.endsWith('.docx') || type.includes('wordprocessingml')) {
+          const mammoth = await import('mammoth');
+          extracted = String((await mammoth.extractRawText({ buffer })).value || '').trim();
+        } else if (/\.(xlsx|xls)$/.test(name) || type.includes('spreadsheet') || type.includes('excel')) {
+          const XLSX = await import('xlsx');
+          const workbook = XLSX.read(buffer, { type: 'buffer' });
+          extracted = workbook.SheetNames.map(sheet => XLSX.utils.sheet_to_csv(workbook.Sheets[sheet])).join('\n\n').trim();
+        } else throw new Error('Unsupported source file type.');
+        if (extracted.length < 50) throw new Error('Too little readable text was extracted. Scanned PDFs require OCR or pasted text.');
+        const { error: saveTextError } = await admin.from('curriculum_source_documents').update({
+          extracted_text: extracted, extracted_chars: extracted.length, status: 'processing',
+          notes: `Background text extraction succeeded (${extracted.length.toLocaleString()} characters). Building syllabus chunks next.`,
+          updated_at: new Date().toISOString(),
+        }).eq('id', job.document_id);
+        if (saveTextError) throw saveTextError;
+        const extractedChunks = [];
+        let remaining = extracted;
+        while (remaining.length > 6000) {
+          let splitAt = remaining.lastIndexOf('\n', 6000);
+          if (splitAt < 3000) splitAt = 6000;
+          extractedChunks.push(remaining.slice(0, splitAt));
+          remaining = remaining.slice(splitAt).trimStart();
+        }
+        if (remaining.trim()) extractedChunks.push(remaining);
+        const { error: prepareError } = await admin.from('curriculum_processing_jobs').update({
+          chunks: extractedChunks, total_chunks: extractedChunks.length, next_chunk_index: 0,
+          status: 'queued', locked_until: null, last_error: null,
+          attempts: { ...(job.attempts || {}), extract: 0 }, updated_at: new Date().toISOString(),
+        }).eq('id', job.id);
+        if (prepareError) throw prepareError;
+        scheduleNext(request, expected);
+        return NextResponse.json({ success: true, worked: true, job_id: job.id, phase: 'extracted', extracted_chars: extracted.length, total_chunks: extractedChunks.length });
+      } catch (extractError) {
+        const attempts = { ...(job.attempts || {}), extract: Number(job.attempts?.extract || 0) + 1 };
+        const retry = attempts.extract < 3;
+        const message = String(extractError?.message || extractError).slice(0, 900);
+        await admin.from('curriculum_processing_jobs').update({
+          attempts, status: retry ? 'queued' : 'failed', locked_until: null, last_error: message,
+          updated_at: new Date().toISOString(),
+        }).eq('id', job.id);
+        await admin.from('curriculum_source_documents').update({
+          status: retry ? 'processing' : 'failed',
+          notes: `Background extraction ${retry ? 'failed and will retry' : 'failed after 3 attempts'}: ${message}`,
+          updated_at: new Date().toISOString(),
+        }).eq('id', job.document_id);
+        if (retry) scheduleNext(request, expected);
+        return NextResponse.json({ success: false, worked: true, phase: 'extract', retry, error: message });
+      }
+    }
+
     const index = job.next_chunk_index;
     const chunks = Array.isArray(job.chunks) ? job.chunks : [];
     if (index >= chunks.length) {
