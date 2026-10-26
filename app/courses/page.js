@@ -4,8 +4,9 @@ import CourseCard from '@/components/CourseCard';
 import { createServerClient } from '@/lib/supabase-server';
 
 export const metadata = {
-  title: 'Courses | Shiney Brain Academy',
-  description: 'Browse all courses on Shiney Brain Academy',
+  title: 'Online Courses for Exam Preparation and Digital Skills',
+  description: 'Explore learning opportunities from Shiney Brain Academy, including JAMB and Post-UTME preparation, technology and digital skills, graphics and video, business, freelancing, career development and personal growth. Browse available courses and choose learning that matches your academic or practical goals.',
+  alternates: { canonical: 'https://shineybrainacademy.vercel.app/courses' },
 };
 
 const categories = [
