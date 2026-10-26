@@ -45,6 +45,7 @@ const PLATFORMS = Object.keys(PLATFORM_FIELDS);
 // that, so they get a "Connect" button instead of relying on the manual
 // form below. See app/api/auth/{tiktok,youtube}/start.
 const OAUTH_PLATFORMS = {
+  meta: { label: 'Meta (Facebook + Instagram)', startUrl: '/api/auth/facebook/start', color: 'bg-blue-700' },
   tiktok: { label: 'TikTok', startUrl: '/api/auth/tiktok/start', color: 'bg-black' },
   youtube: { label: 'YouTube', startUrl: '/api/auth/youtube/start', color: 'bg-red-600' },
 };
@@ -154,7 +155,7 @@ export default function ChannelsPage() {
         </div>
       )}
 
-      {/* ── OAuth connect — TikTok and YouTube need a real consent round trip
+      {/* ── OAuth connect — Meta, TikTok and YouTube need a real consent round trip
           (PKCE / offline+consent) to get a working refresh_token; a pasted
           token alone can't produce that. ── */}
       <div className="bg-white rounded-2xl shadow-sm border p-4 mb-8">
