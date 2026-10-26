@@ -21,6 +21,15 @@ export default async function sitemap() {
     { url: `${baseUrl}/rewards`, priority: 0.6, lastModified: new Date() },
     { url: `${baseUrl}/about`, priority: 0.5, lastModified: new Date() },
     { url: `${baseUrl}/contact`, priority: 0.5, lastModified: new Date() },
+    { url: `${baseUrl}/tools`, priority: 0.9, lastModified: new Date() },
+    { url: `${baseUrl}/tools/jamb-aggregate`, priority: 0.85, lastModified: new Date() },
+    { url: `${baseUrl}/tools/subject-combination`, priority: 0.85, lastModified: new Date() },
+    { url: `${baseUrl}/tools/admission-chance`, priority: 0.85, lastModified: new Date() },
+    { url: `${baseUrl}/tools/cut-off-mark`, priority: 0.8, lastModified: new Date() },
+    { url: `${baseUrl}/tools/waec-grade-calculator`, priority: 0.75, lastModified: new Date() },
+    { url: `${baseUrl}/tools/cgpa-calculator`, priority: 0.75, lastModified: new Date() },
+    { url: `${baseUrl}/tools/past-questions`, priority: 0.8, lastModified: new Date() },
+    { url: `${baseUrl}/tools/study-timetable`, priority: 0.7, lastModified: new Date() },
   ];
 
   // Dedupe by url_slug — keep the most recently updated version if duplicates exist
