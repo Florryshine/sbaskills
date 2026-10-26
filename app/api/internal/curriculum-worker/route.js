@@ -256,7 +256,7 @@ export async function POST(request) {
       attempts[String(index)] = Number(attempts[String(index)] || 0) + 1;
       const retry = attempts[String(index)] < 3;
       const message = String(chunkError?.message || chunkError).slice(0, 900);
-      const status = retry ? 'queued' : 'partially_completed';
+      const status = retry ? 'queued' : 'failed';
       await admin.from('curriculum_processing_jobs').update({
         attempts, status, last_error: message, locked_until: null, updated_at: new Date().toISOString(),
       }).eq('id', job.id);
