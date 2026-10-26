@@ -36,7 +36,7 @@ export default function CurriculumSourcesPage() {
     }
   }
 
-  useEffect(() => { load(); const timer = setInterval(() => setNow(Date.now()), 30000); return () => clearInterval(timer); }, []);
+  useEffect(() => { load(); const timer = setInterval(() => { setNow(Date.now()); load(); }, 15000); return () => clearInterval(timer); }, []);
 
   function processingIsStale(doc) {
     const stamp = new Date(doc.updated_at || doc.created_at).getTime();
@@ -228,7 +228,7 @@ export default function CurriculumSourcesPage() {
                 {documents.map((doc) => (
                   <div key={doc.id} className="flex flex-col gap-2 rounded-2xl border p-4 sm:flex-row sm:items-center sm:justify-between">
                     <div><p className="font-bold">{doc.file_name}</p><p className="text-xs text-slate-500">{doc.file_type} • {new Date(doc.created_at).toLocaleString('en-NG')}</p>{doc.extracted_chars > 0 && <p className="mt-1 text-xs font-bold text-green-700">{doc.extracted_chars.toLocaleString()} characters extracted</p>}{doc.notes && <p className="mt-1 text-xs text-slate-500">{doc.notes}</p>}</div>
-                    <div className="flex items-center gap-2"><span className="rounded-full bg-amber-50 px-3 py-1 text-xs font-extrabold text-amber-700">{doc.status}</span>{(doc.status !== 'parsed' && doc.status !== 'published' || processingIsStale(doc)) && <button disabled={!!parsingId || busy || !!buildingId} onClick={() => parseSource(doc)} className="rounded-xl bg-brand-blue px-3 py-2 text-xs font-black text-white disabled:opacity-50">{parsingId === doc.id ? 'Parsing...' : doc.status === 'failed' || processingIsStale(doc) ? 'Retry extraction' : 'Extract text'}</button>}{(doc.status === 'parsed' || doc.status === 'failed' || doc.status === 'published') && doc.extracted_chars > 0 && <button disabled={!!buildingId || busy || !!parsingId} onClick={() => buildSyllabus(doc)} className="rounded-xl bg-brand-yellow px-3 py-2 text-xs font-black text-brand-dark disabled:opacity-50">{buildingId === doc.id ? 'Building...' : 'Build syllabus'}</button>}</div>
+                    <div className="flex items-center gap-2"><span className="rounded-full bg-amber-50 px-3 py-1 text-xs font-extrabold text-amber-700">{doc.status}</span>{(!doc.extracted_chars || doc.status === 'uploaded') && <button disabled={!!parsingId || busy || !!buildingId} onClick={() => parseSource(doc)} className="rounded-xl bg-brand-blue px-3 py-2 text-xs font-black text-white disabled:opacity-50">{parsingId === doc.id ? 'Parsing...' : 'Extract text'}</button>}{doc.extracted_chars > 0 && (doc.status === 'parsed' || doc.status === 'failed' || doc.status === 'published' || processingIsStale(doc)) && <button disabled={!!buildingId || busy || !!parsingId} onClick={() => buildSyllabus(doc)} className="rounded-xl bg-brand-yellow px-3 py-2 text-xs font-black text-brand-dark disabled:opacity-50">{buildingId === doc.id ? 'Queueing...' : processingIsStale(doc) ? 'Resume processing' : doc.status === 'published' ? 'Rebuild / sync assets' : 'Build syllabus & assets'}</button>}</div>
                   </div>
                 ))}
               </div>
