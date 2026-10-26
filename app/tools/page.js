@@ -30,7 +30,7 @@ const tools = [
   },
   {
     name: 'CGPA Calculator',
-    description: 'Calculate your cumulative grade point average using semester results, course grades and credit units. Track academic progress and plan your target CGPA.'
+    description: 'Calculate your cumulative grade point average using semester results, course grades and credit units. Track academic progress and plan your target CGPA.',
     icon: '🎓',
     href: '/tools/cgpa-calculator',
     category: 'Academic',
@@ -79,7 +79,7 @@ const tools = [
   },
   {
     name: 'Daily Mentor',
-    description: 'Get daily study encouragement and a practical goal to help build consistent revision habits, focus and confidence.'
+    description: 'Get daily study encouragement and a practical goal to help build consistent revision habits, focus and confidence.',
     icon: '🌞',
     href: '/tools/daily-mentor',
     category: 'Study',
@@ -124,8 +124,8 @@ export default function ToolsPage() {
             <h1 className="text-4xl font-extrabold text-brand-blue">
               🛠️ Student Tools Hub
             </h1>
-            <p className="text-gray-600 mt-2 max-w-2xl mx-auto">
-              Free tools, calculators, and games to help you learn, practice, and stay motivated.
+            <p className="text-gray-600 mt-2 max-w-3xl mx-auto">
+              Explore free study tools for Nigerian secondary school, JAMB UTME candidates and university students. Calculate admission aggregates, estimate admission readiness, check UTME subject combinations and cut-off marks, review WAEC grades, calculate CGPA, search exam practice questions and build a study timetable. Use these resources to plan revision, understand admission requirements and identify what to work on next.
             </p>
           </div>
 
