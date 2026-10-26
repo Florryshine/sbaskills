@@ -47,19 +47,20 @@ export async function POST(request) {
 
     const admin = createAdminClient();
     const { data: doc, error } = await admin.from('curriculum_source_documents')
-      .select('id,curriculum_id,file_name,source_subject,extracted_text,status')
+      .select('id,curriculum_id,file_name,file_type,storage_path,source_subject,extracted_text,status')
       .eq('id', document_id).maybeSingle();
     if (error) throw error;
     if (!doc) return NextResponse.json({ error: 'Source document not found.' }, { status: 404 });
-    if (!doc.extracted_text || doc.extracted_text.trim().length < 50) {
-      return NextResponse.json({ error: 'Extract text successfully before building the syllabus.' }, { status: 422 });
+    const hasExtractedText = Boolean(doc.extracted_text && doc.extracted_text.trim().length >= 50);
+    if (!hasExtractedText && !doc.storage_path) {
+      return NextResponse.json({ error: 'This source has no extracted text or stored file. Re-upload it before processing.' }, { status: 422 });
     }
 
     const subject = subjectName(doc.source_subject) || subjectName(doc.file_name);
     if (!subject) return NextResponse.json({ error: 'Could not identify a supported JAMB subject from the source filename/subject.' }, { status: 422 });
 
-    const chunks = chunksOf(doc.extracted_text);
-    if (!chunks.length) return NextResponse.json({ error: 'No readable syllabus chunks were found.' }, { status: 422 });
+    const chunks = hasExtractedText ? chunksOf(doc.extracted_text) : [];
+    if (hasExtractedText && !chunks.length) return NextResponse.json({ error: 'No readable syllabus chunks were found.' }, { status: 422 });
 
     const { data: activeJob, error: activeError } = await admin.from('curriculum_processing_jobs')
       .select('id,status').eq('document_id', document_id)
@@ -77,7 +78,7 @@ export async function POST(request) {
       subject,
       status: 'queued',
       chunks,
-      total_chunks: chunks.length,
+      total_chunks: hasExtractedText ? chunks.length : 1,
       next_chunk_index: 0,
       attempts: {},
       stats: { topics_added: 0, topics_already_existing: 0, objectives_added: 0, assets_created: 0, assets_linked: 0 },
@@ -87,7 +88,7 @@ export async function POST(request) {
     const { error: updateError } = await admin.from('curriculum_source_documents').update({
       status: 'processing',
       source_subject: subject,
-      notes: `Queued for background syllabus building (0/${chunks.length} chunks processed).`,
+      notes: hasExtractedText ? `Queued for background syllabus building (0/${chunks.length} chunks processed).` : 'Queued for background text extraction and syllabus building.',
       updated_at: new Date().toISOString(),
     }).eq('id', document_id);
     if (updateError) throw updateError;
