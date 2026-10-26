@@ -3,6 +3,18 @@ import Footer from '@/components/Footer';
 import CourseCard from '@/components/CourseCard';
 import { createServerClient } from '@/lib/supabase-server';
 
+export const metadata = {
+  title: 'JAMB, WAEC & NECO Preparation, Past Questions and Study Tools',
+  description: 'Prepare for JAMB UTME 2027, WAEC, NECO and Post-UTME with exam practice, past questions, study guides, subject combination checks, admission tools and AI-powered learning resources for Nigerian students.',
+  alternates: { canonical: 'https://shineybrainacademy.vercel.app/' },
+  openGraph: {
+    title: 'Shiney Brain Academy | Exam Preparation and Student Skills',
+    description: 'JAMB, WAEC, NECO and Post-UTME preparation, past questions, study tools and practical digital skills for Nigerian students.',
+    url: 'https://shineybrainacademy.vercel.app/',
+    type: 'website',
+  },
+};
+
 const stats = [
   { number: '6,000+', label: 'Community Members' },
   { number: '5', label: 'Learning Worlds' },
@@ -99,7 +111,7 @@ export default async function HomePage() {
               <span className="text-brand-yellow">Academic Excellence</span>
             </h1>
             <p className="mt-6 max-w-xl text-lg leading-8 text-blue-100">
-              A learning platform organized around the goal you are working on — from JAMB and WAEC to university, AI and practical skills.
+              Shiney Brain Academy helps Nigerian students prepare for JAMB UTME, WAEC, NECO and Post-UTME with exam practice, past questions, revision resources, admission tools and study support. Build your academic confidence while learning practical AI, technology, creative and career skills in one place.
             </p>
             <div className="mt-10 flex flex-wrap gap-4">
               <a
