@@ -5,7 +5,7 @@ import { generateToolMetadata } from '@/lib/seo';
 
 export const metadata = generateToolMetadata({
   title: 'Student Tools Hub',
-  description: 'Free educational tools for Nigerian students: JAMB aggregate calculator, WAEC grade calculator, CGPA calculator, past question search, and AI study planner.',
+  description: 'Use free student tools for JAMB UTME and Nigerian university admission: calculate JAMB aggregate scores, check subject combinations and cut-off marks, estimate admission chances, calculate WAEC grades and CGPA, search past questions, and build a personalised study timetable.',
   path: '/tools',
   keywords: ['student tools', 'JAMB tools', 'WAEC tools', 'calculator', 'study tools', 'Nigerian students'],
 });
@@ -14,7 +14,7 @@ const tools = [
   // ── Academic Tools ──
   {
     name: 'JAMB Aggregate Calculator',
-    description: 'Calculate your JAMB aggregate score from your JAMB and WAEC grades.',
+    description: 'Calculate your estimated university admission aggregate using your JAMB UTME score and O’Level grades. Check how your scores may compare with admission requirements, noting that each institution can use its own formula.',
     icon: '🎯',
     href: '/tools/jamb-aggregate',
     category: 'Academic',
@@ -22,7 +22,7 @@ const tools = [
   },
   {
     name: 'WAEC Grade Calculator',
-    description: 'Convert your WAEC grades to points and see your performance.',
+    description: 'Enter your WAEC subject grades to calculate grade points and review your performance. Use the result to organise revision and identify subjects that need more attention.',
     icon: '📊',
     href: '/tools/waec-grade-calculator',
     category: 'Academic',
@@ -37,7 +37,7 @@ const tools = [
   },
   {
     name: 'Subject Combination Checker',
-    description: 'Check the correct JAMB subject combination for any course.',
+    description: 'Find the UTME subject combination and O’Level subject requirements associated with your intended Nigerian university course. Verify final requirements against the institution and current JAMB brochure.',
     icon: '📚',
     href: '/tools/subject-combination',
     category: 'Academic',
@@ -45,7 +45,7 @@ const tools = [
   },
   {
     name: 'Admission Chance Checker',
-    description: 'Predict your admission chance based on your scores and school.',
+    description: 'Review admission factors using your JAMB score, intended course and institution. Treat estimates as guidance, not a guarantee of admission or an official decision.',
     icon: '🔮',
     href: '/tools/admission-chance',
     category: 'Academic',
@@ -53,14 +53,14 @@ const tools = [
   },
   {
     name: 'Cut-off Mark Checker',
-    description: 'Search for cut-off marks of schools and courses.',
+    description: 'Look up university, polytechnic and college cut-off mark information by institution or course to guide your admission research. Confirm current figures with official school announcements.',
     icon: '📉',
     href: '/tools/cut-off-mark',
     category: 'Academic',
   },
   {
     name: 'Past Question Search',
-    description: 'Search for past questions by subject, year, and exam type.',
+    description: 'Find exam practice questions by subject, year and exam type to prepare for JAMB UTME, WAEC, NECO and Post-UTME. Use practice to test recall, understand question patterns and identify weak topics.',
     icon: '📝',
     href: '/tools/past-questions',
     category: 'Academic',
@@ -70,7 +70,7 @@ const tools = [
   // ── Study & AI Tools ──
   {
     name: 'Study Timetable Generator',
-    description: 'Get a personalized study timetable for your exam.',
+    description: 'Build a personalised study timetable around your subjects, available study hours and exam goals. Organise revision, past-question practice and review sessions into a realistic routine.',
     icon: '📅',
     href: '/tools/study-timetable',
     category: 'Study',
