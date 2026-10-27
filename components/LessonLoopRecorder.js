@@ -197,53 +197,111 @@ export default function LessonLoopRecorder({ contentAsset, onSaved }) {
     const introT = Math.min(1, localElapsed / 0.4);
     const introEased = 1 - Math.pow(1 - introT, 3);
 
-    // ── High-impact on-screen caption, lower-third. ──
-    // Larger typography is designed for phone viewing at landscape 1080p.
-    // Keep the keyword short and visually dominant; the narration subtitle
-    // remains readable but clearly secondary.
+    // ── High-impact headline + narration-following captions. ──
     const captionText = current.onScreenText || current.text || '';
     ctx.font = '900 86px Arial';
     const keywordLines = wrapText(ctx, captionText, W - 180).slice(0, 2);
     const keywordLineH = 98;
-    const keywordTop = H * 0.64;
+    const keywordTop = H * 0.61;
 
-    const subtitleLines = [];
-    ctx.font = '600 38px Arial';
-    wrapText(ctx, current.text || '', W - 180).slice(0, 2).forEach(line => subtitleLines.push(line));
-    const subtitleTop = keywordTop + keywordLines.length * keywordLineH + 24;
-    const contentBottom = subtitleTop + Math.max(0, subtitleLines.length - 1) * 48 + 12;
-    const scrimTop = keywordTop - 74;
-    const scrimBottom = Math.min(H - 78, Math.max(H * 0.9, contentBottom + 48));
+    const spokenWords = String(current.text || '').trim().split(/\s+/).filter(Boolean);
+    const audioDuration = Number.isFinite(audioRef.current?.duration) && audioRef.current.duration > 0
+      ? audioRef.current.duration
+      : (current.durationSeconds || 1);
+    const progress = Math.max(0, Math.min(0.999, localElapsed / Math.max(0.1, audioDuration)));
+    const wordWeight = (word) => Math.max(1, word.replace(/[^\p{L}\p{N}]/gu, '').length);
+    const totalWeight = spokenWords.reduce((sum, word) => sum + wordWeight(word), 0);
+    let activeWordIndex = 0;
+    let accumulatedWeight = 0;
+    const targetWeight = progress * totalWeight;
+    for (let i = 0; i < spokenWords.length; i += 1) {
+      accumulatedWeight += wordWeight(spokenWords[i]);
+      activeWordIndex = i;
+      if (targetWeight < accumulatedWeight) break;
+    }
+
+    // Keep the spoken captions in a moving 8-word window around the active word.
+    const windowStart = Math.max(0, Math.min(Math.max(0, spokenWords.length - 8), activeWordIndex - 3));
+    const captionWords = spokenWords.slice(windowStart, windowStart + 8);
+    ctx.font = '700 40px Arial';
+    const subtitleMaxWidth = W - 184;
+    const wordRows = [];
+    let row = [];
+    let rowWidth = 0;
+    captionWords.forEach((word, localIndex) => {
+      const wordIndex = windowStart + localIndex;
+      const wordWidth = ctx.measureText(word).width;
+      const gap = row.length ? ctx.measureText(' ').width : 0;
+      if (row.length && rowWidth + gap + wordWidth > subtitleMaxWidth) {
+        wordRows.push(row);
+        row = [];
+        rowWidth = 0;
+      }
+      const nextGap = row.length ? ctx.measureText(' ').width : 0;
+      row.push({ word, wordIndex, width: wordWidth, x: rowWidth + nextGap });
+      rowWidth += nextGap + wordWidth;
+    });
+    if (row.length) wordRows.push(row);
+    const visibleRows = wordRows.slice(0, 2);
+    const keywordBottom = keywordTop + keywordLines.length * keywordLineH;
+    const spokenCaptionTop = Math.min(H - 150, keywordBottom + 64);
+    const scrimTop = keywordTop - 62;
+    const scrimBottom = H - 78;
     const scrim = ctx.createLinearGradient(0, scrimTop, 0, scrimBottom);
     scrim.addColorStop(0, 'rgba(15,23,42,0)');
-    scrim.addColorStop(0.18, 'rgba(15,23,42,0.78)');
-    scrim.addColorStop(1, 'rgba(15,23,42,0.94)');
+    scrim.addColorStop(0.18, 'rgba(15,23,42,0.82)');
+    scrim.addColorStop(1, 'rgba(15,23,42,0.96)');
     ctx.fillStyle = scrim;
     ctx.fillRect(0, scrimTop, W, scrimBottom - scrimTop);
 
+    // SBA yellow accent and a gentle pop-in for the main hook.
     ctx.save();
     ctx.globalAlpha = introEased;
+    ctx.fillStyle = BRAND_YELLOW;
+    ctx.fillRect(60, keywordTop - 52 + (1 - introEased) * 14, 12, Math.min(170, keywordLines.length * keywordLineH - 10));
+    const popScale = 0.94 + 0.06 * introEased;
+    ctx.translate(92, keywordTop + (1 - introEased) * 14);
+    ctx.scale(popScale, popScale);
+    ctx.font = '900 86px Arial';
     ctx.textAlign = 'left';
     ctx.textBaseline = 'alphabetic';
-
-    // Yellow accent rule gives the caption a consistent SBA visual identity.
-    ctx.fillStyle = BRAND_YELLOW;
-    ctx.fillRect(60, keywordTop - 58 + (1 - introEased) * 14, 12, Math.min(148, keywordLines.length * keywordLineH - 12));
-
-    ctx.font = '900 86px Arial';
     ctx.fillStyle = '#ffffff';
     ctx.shadowColor = 'rgba(0,0,0,0.72)';
     ctx.shadowBlur = 14;
-    keywordLines.forEach((line, i) => {
-      ctx.fillText(line, 92, keywordTop + i * keywordLineH + (1 - introEased) * 14);
-    });
+    keywordLines.forEach((line, i) => ctx.fillText(line, 0, i * keywordLineH));
+    ctx.restore();
 
-    // Subtitle is intentionally larger and brighter than the old 30px line.
-    ctx.shadowBlur = 4;
-    ctx.font = '600 38px Arial';
-    ctx.fillStyle = 'rgba(255,255,255,0.96)';
-    subtitleLines.forEach((line, i) => {
-      ctx.fillText(line, 92, subtitleTop + i * 48 + (1 - introEased) * 8);
+    // Karaoke-style word highlight follows audio playback time. Word timing
+    // is estimated by word length across the actual audio duration, not exact
+    // forced alignment; per-word TTS timestamps can improve precision later.
+    ctx.save();
+    ctx.globalAlpha = introEased * 0.99;
+    ctx.font = '700 40px Arial';
+    ctx.textBaseline = 'alphabetic';
+    ctx.shadowColor = 'rgba(0,0,0,0.75)';
+    ctx.shadowBlur = 5;
+    visibleRows.forEach((words, rowIndex) => {
+      const lineWidth = words.length ? words[words.length - 1].x + words[words.length - 1].width : 0;
+      const startX = Math.max(92, (W - lineWidth) / 2);
+      const baseline = spokenCaptionTop + rowIndex * 52;
+      words.forEach(({ word, wordIndex, x, width }) => {
+        const drawX = startX + x;
+        if (wordIndex === activeWordIndex) {
+          const pulse = 1 + 0.025 * (0.5 + 0.5 * Math.sin(localElapsed * 9));
+          const padX = 9;
+          ctx.save();
+          ctx.shadowBlur = 0;
+          ctx.fillStyle = BRAND_YELLOW;
+          ctx.beginPath();
+          ctx.roundRect(drawX - padX, baseline - 34, width * pulse + padX * 2, 44, 9);
+          ctx.fill();
+          ctx.restore();
+          ctx.fillStyle = DARK;
+        } else {
+          ctx.fillStyle = '#ffffff';
+        }
+        ctx.fillText(word, drawX, baseline);
+      });
     });
     ctx.restore();
 
