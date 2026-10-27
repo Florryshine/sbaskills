@@ -29,11 +29,38 @@ export default function BoldTextVideoPage() {
   const [error, setError] = useState('');
   const [recording, setRecording] = useState(false);
   const [progress, setProgress] = useState(0);
+  const [soundMode, setSoundMode] = useState('narration_music');
+  const [voice, setVoice] = useState('host_a');
+  const [emotion, setEmotion] = useState('excited');
+  const [musicTrack, setMusicTrack] = useState('');
+  const [musicTracks, setMusicTracks] = useState([]);
+  const [audioUrl, setAudioUrl] = useState('');
+  const [generatingAudio, setGeneratingAudio] = useState(false);
   const canvasRef = useRef(null);
   const rafRef = useRef(null);
   const streamRef = useRef(null);
   const recorderRef = useRef(null);
   const chunksRef = useRef([]);
+
+  useEffect(() => {
+    fetch('/api/admin/quote-loops/audio-list').then(r => r.json())
+      .then(d => setMusicTracks(d.tracks || [])).catch(() => setMusicTracks([]));
+  }, []);
+
+  const generateNarration = async () => {
+    if (!script?.scenes?.length) return;
+    setGeneratingAudio(true); setError('');
+    try {
+      const res = await fetch('/api/admin/bold-text-video/audio', {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ text: script.scenes.map(s => s.text).join('. '), voice, emotion })
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || 'Narration generation failed');
+      setAudioUrl('data:' + data.mimeType + ';base64,' + data.audioBase64);
+    } catch (e) { setError(e.message || 'Narration failed. The shared TTS service may be unavailable.'); }
+    finally { setGeneratingAudio(false); }
+  };
 
   const generate = async () => {
     setBusy(true); setError(''); setScript(null);
@@ -127,23 +154,51 @@ export default function BoldTextVideoPage() {
     if (!canvas.captureStream || typeof MediaRecorder === 'undefined') {
       setError('Video recording is not supported by this browser. Try Chrome.'); return;
     }
-    const stream = canvas.captureStream(30);
-    streamRef.current = stream;
-    const mime = ['video/webm;codecs=vp9','video/webm;codecs=vp8','video/webm'].find(t => MediaRecorder.isTypeSupported(t)) || '';
-    let recorder;
-    try { recorder = new MediaRecorder(stream, mime ? { mimeType: mime } : undefined); }
-    catch { setError('Could not start recording on this browser.'); return; }
-    recorderRef.current = recorder; chunksRef.current = [];
-    recorder.ondataavailable = e => { if (e.data?.size) chunksRef.current.push(e.data); };
-    recorder.onstop = () => {
-      const blob = new Blob(chunksRef.current, { type: recorder.mimeType || 'video/webm' });
-      const url = URL.createObjectURL(blob);
-      const a = document.createElement('a'); a.href = url; a.download = `bold-text-video-${Date.now()}.webm`;
-      document.body.appendChild(a); a.click(); a.remove();
-      setRecording(false); stream.getTracks().forEach(t => t.stop());
-    };
-    recorder.start(250); setRecording(true); setError('');
-    window.setTimeout(() => { if (recorder.state === 'recording') recorder.stop(); }, Number(seconds)*1000);
+    const videoStream = canvas.captureStream(30);
+    let combinedStream = videoStream;
+    let audioContext = null;
+    try {
+      const tracks = [...videoStream.getVideoTracks()];
+      if (soundMode !== 'none') {
+        audioContext = new AudioContext();
+        const destination = audioContext.createMediaStreamDestination();
+        if (soundMode === 'narration' || soundMode === 'narration_music') {
+          if (!audioUrl) throw new Error('Generate AI narration first, or choose a mode without narration.');
+          const narration = new Audio(audioUrl);
+          const source = audioContext.createMediaElementSource(narration);
+          source.connect(destination);
+          await audioContext.resume();
+          await narration.play();
+        }
+        if ((soundMode === 'music' || soundMode === 'narration_music') && musicTrack) {
+          const music = new Audio(musicTrack); music.loop = true; music.volume = 0.2;
+          const source = audioContext.createMediaElementSource(music);
+          const gain = audioContext.createGain();
+          gain.gain.value = soundMode === 'narration_music' ? 0.16 : 0.5;
+          source.connect(gain); gain.connect(destination); music.play().catch(() => {});
+        }
+        tracks.push(...destination.stream.getAudioTracks());
+      }
+      combinedStream = new MediaStream(tracks);
+      const mime = ['video/webm;codecs=vp9,opus','video/webm;codecs=vp8,opus','video/webm'].find(t => MediaRecorder.isTypeSupported(t)) || '';
+      const recorder = new MediaRecorder(combinedStream, mime ? { mimeType: mime } : undefined);
+      recorderRef.current = recorder; chunksRef.current = [];
+      recorder.ondataavailable = e => { if (e.data?.size) chunksRef.current.push(e.data); };
+      recorder.onstop = () => {
+        const blob = new Blob(chunksRef.current, { type: recorder.mimeType || 'video/webm' });
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement('a'); a.href = url; a.download = 'shiney-brain-video-' + Date.now() + '.webm';
+        document.body.appendChild(a); a.click(); a.remove();
+        setRecording(false); videoStream.getTracks().forEach(t => t.stop());
+        if (audioContext) audioContext.close().catch(() => {});
+      };
+      recorder.start(250); setRecording(true); setError('');
+      window.setTimeout(() => { if (recorder.state === 'recording') recorder.stop(); }, Number(seconds)*1000);
+    } catch (e) {
+      videoStream.getTracks().forEach(t => t.stop());
+      if (audioContext) audioContext.close().catch(() => {});
+      setError(e.message || 'Could not start recording. Try Chrome.');
+    }
   };
 
   return <main className="mx-auto max-w-5xl space-y-6 p-4 sm:p-6">
@@ -165,6 +220,24 @@ export default function BoldTextVideoPage() {
         <label className="block text-sm font-bold">Aspect ratio
           <select value={ratio} onChange={e=>setRatio(e.target.value)} className="mt-2 w-full rounded-xl border px-3 py-3 text-base"><option value="9:16">9:16 — TikTok / Reels / Shorts</option><option value="1:1">1:1 — Square</option><option value="16:9">16:9 — YouTube / Landscape</option></select>
         </label>
+        <label className="block text-sm font-bold">Sound
+          <select value={soundMode} onChange={e=>setSoundMode(e.target.value)} className="mt-2 w-full rounded-xl border px-3 py-3 text-base">
+            <option value="none">No audio</option><option value="music">Background music only</option><option value="narration">AI narration only</option><option value="narration_music">AI narration + music</option>
+          </select>
+        </label>
+        {(soundMode==='narration' || soundMode==='narration_music') && <div className="space-y-2 rounded-xl bg-blue-50 p-3">
+          <label className="block text-sm font-bold">Nigerian English voice
+            <select value={voice} onChange={e=>setVoice(e.target.value)} className="mt-2 w-full rounded-xl border px-3 py-2 text-base"><option value="host_a">Ezinne — female</option><option value="host_b">Abeo — male</option></select>
+          </label>
+          <label className="block text-sm font-bold">Delivery
+            <select value={emotion} onChange={e=>setEmotion(e.target.value)} className="mt-2 w-full rounded-xl border px-3 py-2 text-base"><option value="excited">Energetic</option><option value="curious">Curious</option><option value="serious">Serious</option><option value="calm">Calm</option><option value="dramatic">Dramatic</option><option value="neutral">Neutral</option></select>
+          </label>
+          <button onClick={generateNarration} disabled={generatingAudio || !script} className="w-full rounded-lg bg-blue-700 px-3 py-2 font-bold text-white">{generatingAudio ? 'Generating narration…' : audioUrl ? 'Regenerate AI narration' : 'Generate AI narration'}</button>
+          {audioUrl && <audio controls src={audioUrl} className="w-full" />}
+        </div>}
+        {(soundMode==='music' || soundMode==='narration_music') && <label className="block text-sm font-bold">Background music
+          <select value={musicTrack} onChange={e=>setMusicTrack(e.target.value)} className="mt-2 w-full rounded-xl border px-3 py-3 text-base"><option value="">No music track selected</option>{musicTracks.map((t,i)=><option key={t.url || t.path || i} value={t.url || t.path}>{t.title || t.name || ('Track '+(i+1))}</option>)}</select>
+        </label>}
         <label className="block text-sm font-bold">Caption animation
           <select value={style} onChange={e=>setStyle(e.target.value)} className="mt-2 w-full rounded-xl border px-3 py-3 text-base"><option value="pop">Bold pop-in</option><option value="clean">Clean kinetic text</option></select>
         </label>
@@ -180,7 +253,7 @@ export default function BoldTextVideoPage() {
           {!script && <p className="p-8 text-center text-sm text-white/70">Generate a script to preview the animated captions here.</p>}
         </div>
         {script && <div className="rounded-xl border p-4"><h2 className="font-bold">Script preview</h2><div className="mt-2 space-y-2">{script.scenes.map((s,i)=><p key={i} className="border-l-4 border-yellow-400 pl-3 text-sm"><strong>{s.label || 'SCENE'}</strong> — {s.text}</p>)}</div></div>}
-        <p className="text-xs text-gray-500">The first version exports animated text and branded backgrounds as WebM. It does not yet add voiceover or external footage.</p>
+        <p className="text-xs text-gray-500">Exports animated text as WebM with the selected AI narration and/or music mixed into the video.</p>
       </div>
     </section>
   </main>;
