@@ -204,26 +204,24 @@ export default function BoldTextVideoPage() {
     return () => { if (rafRef.current) cancelAnimationFrame(rafRef.current); };
   }, [script, ratio, seconds, style, captionMode, fontFamily, selectedBackground]);
 
-  const saveToCloudinary = async () => {
+  const saveToSupabase = async () => {
     if (!generatedBlob) { setError('Create a video first.'); return; }
     setSavingToCloud(true); setError('');
     try {
-      const sigRes = await fetch('/api/admin/bold-text-video/cloudinary-signature', { method: 'POST' });
-      const sig = await sigRes.json();
-      if (!sigRes.ok) throw new Error(sig.error || 'Could not prepare Cloudinary upload.');
       const form = new FormData();
       form.append('file', generatedBlob, 'shiney-brain-video-' + Date.now() + '.webm');
-      form.append('api_key', sig.apiKey); form.append('timestamp', String(sig.timestamp)); form.append('folder', sig.folder); form.append('signature', sig.signature);
-      const uploadRes = await fetch('https://api.cloudinary.com/v1_1/' + encodeURIComponent(sig.cloudName) + '/video/upload', { method: 'POST', body: form });
-      const uploaded = await uploadRes.json();
-      if (!uploadRes.ok) throw new Error(uploaded.error?.message || 'Cloudinary upload failed.');
       const title = (topic || script?.title || 'SBA Bold Text Video').trim().slice(0, 180);
       const caption = (script?.scenes || []).map(x => x.text).join(' ');
-      const savedRes = await fetch('/api/admin/bold-text-video/save', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ videoUrl: uploaded.secure_url, publicId: uploaded.public_id, title, script: caption, durationSeconds: Number(seconds), caption }) });
+      form.append('title', title);
+      form.append('topic', topic || title);
+      form.append('script', caption);
+      form.append('durationSeconds', String(Number(seconds) || 0));
+      form.append('caption', caption);
+      const savedRes = await fetch('/api/admin/bold-text-video/save', { method: 'POST', body: form });
       const saved = await savedRes.json();
-      if (!savedRes.ok) throw new Error(saved.error || 'Video uploaded but could not be added to the content library.');
-      setSavedVideo({ ...saved, publicId: uploaded.public_id });
-    } catch (e) { setError(e.message || 'Could not save video to cloud.'); }
+      if (!savedRes.ok) throw new Error(saved.error || 'Could not save video to Supabase.');
+      setSavedVideo(saved);
+    } catch (e) { setError(e.message || 'Could not save video to Supabase.'); }
     finally { setSavingToCloud(false); }
   };
 
@@ -352,7 +350,7 @@ export default function BoldTextVideoPage() {
         </label>
         <button onClick={generate} disabled={busy} className="w-full rounded-xl bg-blue-700 px-4 py-3 font-black text-white disabled:opacity-50">{busy ? 'AI IS WRITING…' : '✨ Generate script'}</button>
         {error && <p role="alert" className="text-sm font-semibold text-red-600">{error}</p>}
-        {generatedBlob && <section className="space-y-3 rounded-2xl border border-blue-200 bg-blue-50 p-4"><h2 className="text-lg font-black">Your video is ready</h2><p className="text-sm text-gray-700">The video has been downloaded to your device. You can also keep a cloud copy in your SBA media library.</p><div className="flex flex-wrap gap-2"><button type="button" onClick={()=>{const url=URL.createObjectURL(generatedBlob);const a=document.createElement('a');a.href=url;a.download='shiney-brain-video-'+Date.now()+'.webm';document.body.appendChild(a);a.click();a.remove();setTimeout(()=>URL.revokeObjectURL(url),30000);}} className="rounded-xl border bg-white px-4 py-3 font-bold">Download again</button><button type="button" onClick={saveToCloudinary} disabled={savingToCloud} className="rounded-xl bg-blue-700 px-4 py-3 font-bold text-white">{savingToCloud?'Saving to Cloudinary…':'Save to Cloudinary'}</button></div>{savedVideo && <div className="space-y-2 rounded-xl border bg-white p-3"><p className="font-bold text-green-700">Saved to your SBA content library.</p><a className="break-all text-sm text-blue-700 underline" href={savedVideo.videoUrl} target="_blank" rel="noreferrer">Open cloud video</a><a className="block text-sm underline" href="/admin/social-engine">Open Social Engine</a><PublishToChannels contentAssetId={savedVideo.contentAssetId} /></div>}</section>}
+        {generatedBlob && <section className="space-y-3 rounded-2xl border border-blue-200 bg-blue-50 p-4"><h2 className="text-lg font-black">Your video is ready</h2><p className="text-sm text-gray-700">The video has been downloaded to your device. You can also save a copy to your SBA Supabase media library.</p><div className="flex flex-wrap gap-2"><button type="button" onClick={()=>{const url=URL.createObjectURL(generatedBlob);const a=document.createElement('a');a.href=url;a.download='shiney-brain-video-'+Date.now()+'.webm';document.body.appendChild(a);a.click();a.remove();setTimeout(()=>URL.revokeObjectURL(url),30000);}} className="rounded-xl border bg-white px-4 py-3 font-bold">Download again</button><button type="button" onClick={saveToSupabase} disabled={savingToCloud} className="rounded-xl bg-blue-700 px-4 py-3 font-bold text-white">{savingToCloud?'Saving to Supabase…':'Save to Supabase'}</button></div>{savedVideo && <div className="space-y-2 rounded-xl border bg-white p-3"><p className="font-bold text-green-700">Saved to your SBA content library.</p><a className="break-all text-sm text-blue-700 underline" href={savedVideo.videoUrl} target="_blank" rel="noreferrer">Open saved video</a><a className="block text-sm underline" href="/admin/social-engine">Open Social Engine</a><PublishToChannels contentAssetId={savedVideo.contentAssetId} /></div>}</section>}
         {script && <div className="rounded-xl bg-blue-50 p-3"><p className="font-bold">{script.title}</p><p className="mt-1 text-sm text-gray-600">{script.scenes.length} caption scenes · {seconds}s · {ratio}</p><button onClick={recordVideo} disabled={recording} className="mt-3 w-full rounded-xl bg-yellow-400 px-4 py-3 font-black text-slate-950 disabled:opacity-60">{recording ? 'Recording… please keep this tab open' : '⬇ Record & download video'}</button>{recording&&<p className="mt-2 text-sm">Recording video for {seconds} seconds…</p>}</div>}
       </div>
       <div className="space-y-3">
