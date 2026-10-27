@@ -36,15 +36,26 @@ export default function BoldTextVideoPage() {
   const [musicTracks, setMusicTracks] = useState([]);
   const [audioUrl, setAudioUrl] = useState('');
   const [generatingAudio, setGeneratingAudio] = useState(false);
+  const [captionMode, setCaptionMode] = useState('scene');
+  const [fontFamily, setFontFamily] = useState('Impact');
+  const [backgroundQuery, setBackgroundQuery] = useState('');
+  const [backgroundKind, setBackgroundKind] = useState('video');
+  const [backgrounds, setBackgrounds] = useState([]);
+  const [selectedBackground, setSelectedBackground] = useState(null);
+  const [searchingBackgrounds, setSearchingBackgrounds] = useState(false);
+  const [backgroundError, setBackgroundError] = useState('');
   const canvasRef = useRef(null);
   const rafRef = useRef(null);
   const streamRef = useRef(null);
   const recorderRef = useRef(null);
   const chunksRef = useRef([]);
+  const audioElementsRef = useRef([]);
+  const backgroundMediaRef = useRef(null);
 
   useEffect(() => {
     fetch('/api/admin/quote-loops/audio-list').then(r => r.json())
-      .then(d => setMusicTracks(d.tracks || [])).catch(() => setMusicTracks([]));
+      .then(d => setMusicTracks((d.tracks || []).map((url, i) => ({ url, title: decodeURIComponent(url.split('/').pop().replace(/\\.mp3$/i, '').replace(/[-_]/g, ' ')) || ('Track ' + (i + 1)) }))))
+      .catch(() => setMusicTracks([]));
   }, []);
 
   const generateNarration = async () => {
@@ -60,6 +71,19 @@ export default function BoldTextVideoPage() {
       setAudioUrl('data:' + data.mimeType + ';base64,' + data.audioBase64);
     } catch (e) { setError(e.message || 'Narration failed. The shared TTS service may be unavailable.'); }
     finally { setGeneratingAudio(false); }
+  };
+
+  const searchBackgrounds = async () => {
+    if (!backgroundQuery.trim()) { setBackgroundError('Enter a search phrase, e.g. chemistry lab or students studying.'); return; }
+    setSearchingBackgrounds(true); setBackgroundError('');
+    try {
+      const res = await fetch('/api/admin/bold-text-video/backgrounds', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ query: backgroundQuery.trim(), kind: backgroundKind }) });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || 'Background search failed');
+      setBackgrounds(data.results || []);
+      if (!(data.results || []).length) setBackgroundError(data.warning || 'No results found. Try another search.');
+    } catch (e) { setBackgroundError(e.message || 'Could not search stock backgrounds.'); }
+    finally { setSearchingBackgrounds(false); }
   };
 
   const generate = async () => {
@@ -86,6 +110,17 @@ export default function BoldTextVideoPage() {
     const total = Math.max(5, Number(seconds) || 20);
     let start = performance.now();
     let lastProgress = 0;
+    let media = null;
+    if (selectedBackground && selectedBackground.url) {
+      try {
+        if (selectedBackground.type === 'photo') {
+          media = new Image(); media.crossOrigin = 'anonymous'; media.src = selectedBackground.url;
+        } else {
+          media = document.createElement('video'); media.crossOrigin = 'anonymous'; media.src = selectedBackground.url; media.muted = true; media.loop = true; media.playsInline = true; media.play().catch(() => {});
+        }
+        backgroundMediaRef.current = media;
+      } catch (_) { media = null; }
+    } else { backgroundMediaRef.current = null; }
     const draw = (now) => {
       const elapsed = ((now - start) / 1000) % total;
       const p = elapsed / total;
@@ -94,11 +129,27 @@ export default function BoldTextVideoPage() {
       const local = (p * scenes.length) % 1;
       lastProgress = p;
       setProgress(p);
-      // Deep, lively gradient with animated light bands.
-      const g = ctx.createLinearGradient(0, 0, W, H);
-      const hue = (220 + elapsed * 13) % 360;
-      g.addColorStop(0, '#071329'); g.addColorStop(.55, '#102f67'); g.addColorStop(1, `hsl(${hue}, 82%, 35%)`);
-      ctx.fillStyle = g; ctx.fillRect(0, 0, W, H);
+      // Draw selected stock media when ready; otherwise use the animated gradient.
+      let drewMedia = false;
+      if (media) {
+        try {
+          const isPhoto = selectedBackground.type === 'photo';
+          const ready = isPhoto ? media.complete && media.naturalWidth > 0 : media.readyState >= 2 && media.videoWidth > 0;
+          if (ready) {
+            const mw = isPhoto ? media.naturalWidth : media.videoWidth;
+            const mh = isPhoto ? media.naturalHeight : media.videoHeight;
+            const scale = Math.max(W / mw, H / mh);
+            ctx.drawImage(media, (W - mw * scale) / 2, (H - mh * scale) / 2, mw * scale, mh * scale);
+            ctx.fillStyle = 'rgba(3,10,25,.62)'; ctx.fillRect(0, 0, W, H); drewMedia = true;
+          }
+        } catch (_) { drewMedia = false; }
+      }
+      if (!drewMedia) {
+        const g = ctx.createLinearGradient(0, 0, W, H);
+        const hue = (220 + elapsed * 13) % 360;
+        g.addColorStop(0, '#071329'); g.addColorStop(.55, '#102f67'); g.addColorStop(1, 'hsl(' + hue + ', 82%, 35%)');
+        ctx.fillStyle = g; ctx.fillRect(0, 0, W, H);
+      }
       ctx.save();
       ctx.globalAlpha = .13;
       ctx.translate(W * (.5 + Math.sin(elapsed * .8) * .18), H * .4);
@@ -113,9 +164,10 @@ export default function BoldTextVideoPage() {
       ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
       ctx.fillStyle = '#ffcc00'; ctx.font = `900 ${Math.round(W*.035)}px Arial`;
       ctx.fillText('SHINEY BRAIN ACADEMY', W/2, H*.16);
-      const words = String(scene.text || '').trim().split(/\s+/).slice(0, 28);
+      const allWords = String(scene.text || '').trim().split(/\s+/).slice(0, 28);
+      const words = captionMode === 'word' ? allWords.slice(0, Math.max(1, Math.ceil(local * allWords.length))) : allWords;
       const fontSize = Math.round(Math.min(W*.105, H*.09, W*0.88 / Math.max(5, Math.min(11, Math.max(...words.map(w=>w.length), 5))*.55)));
-      ctx.font = `1000 ${fontSize}px Impact, Arial Black, Arial`;
+      ctx.font = `1000 ${fontSize}px ${fontFamily}, Impact, Arial Black, Arial`;
       ctx.lineJoin = 'round'; ctx.textAlign = 'center';
       const lines = []; let line = '';
       const maxWidth = W*.82;
@@ -146,7 +198,7 @@ export default function BoldTextVideoPage() {
     };
     rafRef.current = requestAnimationFrame(draw);
     return () => { if (rafRef.current) cancelAnimationFrame(rafRef.current); };
-  }, [script, ratio, seconds, style]);
+  }, [script, ratio, seconds, style, captionMode, fontFamily, selectedBackground]);
 
   const recordVideo = async () => {
     const canvas = canvasRef.current;
@@ -157,6 +209,8 @@ export default function BoldTextVideoPage() {
     const videoStream = canvas.captureStream(30);
     let combinedStream = videoStream;
     let audioContext = null;
+    audioElementsRef.current.forEach(a => { try { a.pause(); a.src = ''; } catch (_) {} });
+    audioElementsRef.current = [];
     try {
       const tracks = [...videoStream.getVideoTracks()];
       if (soundMode !== 'none') {
@@ -164,18 +218,18 @@ export default function BoldTextVideoPage() {
         const destination = audioContext.createMediaStreamDestination();
         if (soundMode === 'narration' || soundMode === 'narration_music') {
           if (!audioUrl) throw new Error('Generate AI narration first, or choose a mode without narration.');
-          const narration = new Audio(audioUrl);
+          const narration = new Audio(audioUrl); narration.preload = 'auto'; audioElementsRef.current.push(narration);
           const source = audioContext.createMediaElementSource(narration);
-          source.connect(destination);
+          const gain = audioContext.createGain(); gain.gain.value = 1;
+          source.connect(gain); gain.connect(destination); gain.connect(audioContext.destination);
           await audioContext.resume();
-          await narration.play();
         }
         if ((soundMode === 'music' || soundMode === 'narration_music') && musicTrack) {
-          const music = new Audio(musicTrack); music.loop = true; music.volume = 0.2;
+          const music = new Audio(musicTrack); music.loop = true; music.preload = 'auto'; audioElementsRef.current.push(music);
           const source = audioContext.createMediaElementSource(music);
           const gain = audioContext.createGain();
-          gain.gain.value = soundMode === 'narration_music' ? 0.16 : 0.5;
-          source.connect(gain); gain.connect(destination); music.play().catch(() => {});
+          gain.gain.value = soundMode === 'narration_music' ? 0.14 : 0.45;
+          source.connect(gain); gain.connect(destination); gain.connect(audioContext.destination);
         }
         tracks.push(...destination.stream.getAudioTracks());
       }
@@ -190,9 +244,14 @@ export default function BoldTextVideoPage() {
         const a = document.createElement('a'); a.href = url; a.download = 'shiney-brain-video-' + Date.now() + '.webm';
         document.body.appendChild(a); a.click(); a.remove();
         setRecording(false); videoStream.getTracks().forEach(t => t.stop());
+        audioElementsRef.current.forEach(a => { try { a.pause(); a.src = ''; } catch (_) {} }); audioElementsRef.current = [];
         if (audioContext) audioContext.close().catch(() => {});
       };
       recorder.start(250); setRecording(true); setError('');
+      for (const audio of audioElementsRef.current) {
+        try { audio.currentTime = 0; await audio.play(); }
+        catch (e) { throw new Error('Could not play selected audio: ' + (e.message || 'browser playback blocked')); }
+      }
       window.setTimeout(() => { if (recorder.state === 'recording') recorder.stop(); }, Number(seconds)*1000);
     } catch (e) {
       videoStream.getTracks().forEach(t => t.stop());
@@ -236,8 +295,30 @@ export default function BoldTextVideoPage() {
           {audioUrl && <audio controls src={audioUrl} className="w-full" />}
         </div>}
         {(soundMode==='music' || soundMode==='narration_music') && <label className="block text-sm font-bold">Background music
-          <select value={musicTrack} onChange={e=>setMusicTrack(e.target.value)} className="mt-2 w-full rounded-xl border px-3 py-3 text-base"><option value="">No music track selected</option>{musicTracks.map((t,i)=><option key={t.url || t.path || i} value={t.url || t.path}>{t.title || t.name || ('Track '+(i+1))}</option>)}</select>
+          <select value={musicTrack} onChange={e=>setMusicTrack(e.target.value)} className="mt-2 w-full rounded-xl border px-3 py-3 text-base"><option value="">No music track selected</option>{musicTracks.map((t,i)=><option key={t.url || i} value={t.url}>{t.title || ('Track '+(i+1))}</option>)}</select>
         </label>}
+        <div className="space-y-3 rounded-xl border p-3">
+          <h3 className="font-black">Stock background</h3>
+          <div className="grid grid-cols-[1fr_auto] gap-2">
+            <input value={backgroundQuery} onChange={e=>setBackgroundQuery(e.target.value)} placeholder="e.g. chemistry lab, students studying" className="min-w-0 rounded-xl border px-3 py-2 text-base" />
+            <button type="button" onClick={searchBackgrounds} disabled={searchingBackgrounds} className="rounded-xl bg-slate-900 px-3 py-2 font-bold text-white">{searchingBackgrounds ? 'Searching…' : 'Search'}</button>
+          </div>
+          <div className="flex flex-wrap gap-3 text-sm">
+            <label><input type="radio" checked={backgroundKind==='video'} onChange={()=>{setBackgroundKind('video');setBackgrounds([]);setSelectedBackground(null);}} /> Stock video</label>
+            <label><input type="radio" checked={backgroundKind==='photo'} onChange={()=>{setBackgroundKind('photo');setBackgrounds([]);setSelectedBackground(null);}} /> Photo</label>
+            <button type="button" onClick={()=>setSelectedBackground(null)} className="ml-auto underline">Use gradient</button>
+          </div>
+          {backgroundError && <p className="text-xs text-amber-700">{backgroundError}</p>}
+          {backgrounds.length > 0 && <div className="grid grid-cols-2 gap-2">{backgrounds.map((b,i)=><button type="button" key={b.url || i} onClick={()=>setSelectedBackground(b)} className={'overflow-hidden rounded-lg border-2 text-left '+(selectedBackground?.url===b.url?'border-blue-600':'border-transparent')}><div className="flex h-20 items-center justify-center bg-slate-200 text-xs">{b.thumbnail ? <img src={b.thumbnail} alt="" className="h-full w-full object-cover" /> : <span>{backgroundKind==='video'?'Stock video':'Stock photo'}</span>}</div><span className="block truncate px-2 py-1 text-xs">{b.title || b.photographer || ('Result '+(i+1))}</span></button>)}</div>}
+          {selectedBackground && <p className="text-xs font-semibold text-green-700">Selected background: {selectedBackground.title || selectedBackground.photographer || 'Stock media'}</p>}
+          <p className="text-xs text-gray-500">If a stock clip cannot play, the preview falls back to the gradient.</p>
+        </div>
+        <label className="block text-sm font-bold">Caption reveal
+          <select value={captionMode} onChange={e=>setCaptionMode(e.target.value)} className="mt-2 w-full rounded-xl border px-3 py-3 text-base"><option value="scene">Full phrase / scene</option><option value="word">Reveal one word at a time</option></select>
+        </label>
+        <label className="block text-sm font-bold">Caption font
+          <select value={fontFamily} onChange={e=>setFontFamily(e.target.value)} className="mt-2 w-full rounded-xl border px-3 py-3 text-base"><option value="Impact">Impact — bold viral</option><option value="Arial Black">Arial Black — heavy clean</option><option value="Arial">Arial — simple</option><option value="Georgia">Georgia — editorial</option><option value="Trebuchet MS">Trebuchet — modern</option><option value="Courier New">Courier — typewriter</option></select>
+        </label>
         <label className="block text-sm font-bold">Caption animation
           <select value={style} onChange={e=>setStyle(e.target.value)} className="mt-2 w-full rounded-xl border px-3 py-3 text-base"><option value="pop">Bold pop-in</option><option value="clean">Clean kinetic text</option></select>
         </label>
