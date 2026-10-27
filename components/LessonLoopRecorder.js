@@ -197,20 +197,27 @@ export default function LessonLoopRecorder({ contentAsset, onSaved }) {
     const introT = Math.min(1, localElapsed / 0.4);
     const introEased = 1 - Math.pow(1 - introT, 3);
 
-    // ── Big on-screen keyword/caption, lower-third. ──
-    ctx.font = '800 64px Arial';
-    // Older drafts may not have onScreenText. Fall back to the spoken line
-    // so the video never shows stock footage alone because a caption is blank.
-    const keywordLines = wrapText(ctx, current.onScreenText || current.text || '', W - 200).slice(0, 2);
-    const keywordLineH = 76;
-    const keywordTop = H * 0.68;
+    // ── High-impact on-screen caption, lower-third. ──
+    // Larger typography is designed for phone viewing at landscape 1080p.
+    // Keep the keyword short and visually dominant; the narration subtitle
+    // remains readable but clearly secondary.
+    const captionText = current.onScreenText || current.text || '';
+    ctx.font = '900 86px Arial';
+    const keywordLines = wrapText(ctx, captionText, W - 180).slice(0, 2);
+    const keywordLineH = 98;
+    const keywordTop = H * 0.64;
 
-    const scrimTop = keywordTop - 60;
-    const scrimBottom = H - 90;
+    const subtitleLines = [];
+    ctx.font = '600 38px Arial';
+    wrapText(ctx, current.text || '', W - 180).slice(0, 2).forEach(line => subtitleLines.push(line));
+    const subtitleTop = keywordTop + keywordLines.length * keywordLineH + 24;
+    const contentBottom = subtitleTop + Math.max(0, subtitleLines.length - 1) * 48 + 12;
+    const scrimTop = keywordTop - 74;
+    const scrimBottom = Math.min(H - 78, Math.max(H * 0.9, contentBottom + 48));
     const scrim = ctx.createLinearGradient(0, scrimTop, 0, scrimBottom);
     scrim.addColorStop(0, 'rgba(15,23,42,0)');
-    scrim.addColorStop(0.25, 'rgba(15,23,42,0.72)');
-    scrim.addColorStop(1, 'rgba(15,23,42,0.82)');
+    scrim.addColorStop(0.18, 'rgba(15,23,42,0.78)');
+    scrim.addColorStop(1, 'rgba(15,23,42,0.94)');
     ctx.fillStyle = scrim;
     ctx.fillRect(0, scrimTop, W, scrimBottom - scrimTop);
 
@@ -218,23 +225,25 @@ export default function LessonLoopRecorder({ contentAsset, onSaved }) {
     ctx.globalAlpha = introEased;
     ctx.textAlign = 'left';
     ctx.textBaseline = 'alphabetic';
-    ctx.fillStyle = '#ffffff';
-    ctx.shadowColor = 'rgba(0,0,0,0.5)';
-    ctx.shadowBlur = 10;
-    keywordLines.forEach((line, i) => {
-      ctx.fillText(line, 60, keywordTop + i * keywordLineH + (1 - introEased) * 14);
-    });
-    ctx.restore();
 
-    // ── Subtitle band — full spoken line, smaller, for muted viewers. ──
-    ctx.font = '500 30px Arial';
-    const subtitleLines = wrapText(ctx, current.text || '', W - 200).slice(0, 2);
-    const subtitleTop = keywordTop + keywordLines.length * keywordLineH + 20;
-    ctx.save();
-    ctx.globalAlpha = introEased * 0.92;
-    ctx.fillStyle = 'rgba(255,255,255,0.85)';
+    // Yellow accent rule gives the caption a consistent SBA visual identity.
+    ctx.fillStyle = BRAND_YELLOW;
+    ctx.fillRect(60, keywordTop - 58 + (1 - introEased) * 14, 12, Math.min(148, keywordLines.length * keywordLineH - 12));
+
+    ctx.font = '900 86px Arial';
+    ctx.fillStyle = '#ffffff';
+    ctx.shadowColor = 'rgba(0,0,0,0.72)';
+    ctx.shadowBlur = 14;
+    keywordLines.forEach((line, i) => {
+      ctx.fillText(line, 92, keywordTop + i * keywordLineH + (1 - introEased) * 14);
+    });
+
+    // Subtitle is intentionally larger and brighter than the old 30px line.
+    ctx.shadowBlur = 4;
+    ctx.font = '600 38px Arial';
+    ctx.fillStyle = 'rgba(255,255,255,0.96)';
     subtitleLines.forEach((line, i) => {
-      ctx.fillText(line, 60, subtitleTop + i * 38);
+      ctx.fillText(line, 92, subtitleTop + i * 48 + (1 - introEased) * 8);
     });
     ctx.restore();
 
