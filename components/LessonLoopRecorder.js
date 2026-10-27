@@ -204,12 +204,12 @@ export default function LessonLoopRecorder({ contentAsset, onSaved }) {
     const keywordLineH = 98;
     const keywordTop = H * 0.61;
 
-    const spokenWords = String(current.text || '').trim().split(/\\s+/).filter(Boolean);
+    const spokenWords = String(current.text || '').trim().split(/\s+/).filter(Boolean);
     const audioDuration = Number.isFinite(audioRef.current?.duration) && audioRef.current.duration > 0
       ? audioRef.current.duration
       : (current.durationSeconds || 1);
     const progress = Math.max(0, Math.min(0.999, localElapsed / Math.max(0.1, audioDuration)));
-    const wordWeight = (word) => Math.max(1, word.replace(/[^\\p{L}\\p{N}]/gu, '').length);
+    const wordWeight = (word) => Math.max(1, word.replace(/[^\p{L}\p{N}]/gu, '').length);
     const totalWeight = spokenWords.reduce((sum, word) => sum + wordWeight(word), 0);
     let activeWordIndex = 0;
     let accumulatedWeight = 0;
