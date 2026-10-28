@@ -148,7 +148,7 @@ export default function BoldTextVideoPage() {
     return () => { if (rafRef.current) cancelAnimationFrame(rafRef.current); };
   }, [script, ratio, seconds, style]);
 
-  const recordVideo = () => {
+  const recordVideo = async () => {
     const canvas = canvasRef.current;
     if (!canvas || !script) return;
     if (!canvas.captureStream || typeof MediaRecorder === 'undefined') {
