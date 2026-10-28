@@ -40,12 +40,10 @@ const PLATFORM_FIELDS = {
 
 const PLATFORMS = Object.keys(PLATFORM_FIELDS);
 
-// These two need a real OAuth round trip (PKCE for TikTok, offline+consent
-// for YouTube's refresh_token) — a pasted-in token alone can't produce
-// that, so they get a "Connect" button instead of relying on the manual
-// form below. See app/api/auth/{tiktok,youtube}/start.
+// These platforms use OAuth so the app can receive consent and store account tokens.
 const OAUTH_PLATFORMS = {
   meta: { label: 'Meta (Facebook + Instagram)', startUrl: '/api/auth/facebook/start', color: 'bg-blue-700' },
+  linkedin: { label: 'LinkedIn', startUrl: '/api/auth/linkedin/start', color: 'bg-sky-700' },
   tiktok: { label: 'TikTok', startUrl: '/api/auth/tiktok/start', color: 'bg-black' },
   youtube: { label: 'YouTube', startUrl: '/api/auth/youtube/start', color: 'bg-red-600' },
 };
