@@ -3,7 +3,7 @@
 import React from 'react';
 import {AbsoluteFill, Sequence, Audio, useCurrentFrame, useVideoConfig, interpolate, Easing} from 'remotion';
 
-const C={blue:'#1261a0',navy:'#102b4e',yellow:'#f4c542,ink:'#172b4d'};
+const C={blue:'#1261a0',navy:'#102b4e',yellow:'#f4c542',ink:'#172b4d'};
 const clamp={extrapolateLeft:'clamp',extrapolateRight:'clamp'};
 const smooth={...clamp,easing:Easing.out(Easing.cubic)};
 
