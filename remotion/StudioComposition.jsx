@@ -33,10 +33,9 @@ function AnimatedScene({scene,index,template,brand,accent}) {
     {isQuestion&&scene.options?.length>0&&<div style={{position:'absolute',left:'9%',right:'9%',top:'68%',display:'grid',gridTemplateColumns:'1fr 1fr',gap:14}}>{scene.options.map((o,i)=><div key={i} style={{border:`2px solid ${accent}`,borderRadius:16,padding:16,fontSize:23,fontWeight:700}}> {String.fromCharCode(65+i)}. {o}</div>)}</div>}
     {isBoard&&<div style={{position:'absolute',left:'9%',right:'9%',bottom:'12%',fontSize:27,lineHeight:1.25,textAlign:'center',fontWeight:650}}>{body}</div>}
     <div style={{position:'absolute',bottom:'4%',left:'7%',right:'7%',display:'flex',justifyContent:'space-between',fontSize:14,fontWeight:700,opacity:.65}}><span>{brand}</span><span>WHERE CHAMPIONS ARE MADE</span></div>
-    {scene.audioSrc&&<Audio src={scene.audioSrc}/>}
   </AbsoluteFill>;
 }
-export function StudioComposition({title='Shiney Brain Video',scenes=[],template='explainer',brand='SHINEY BRAIN ACADEMY',accent='#f4c542'}) {
+export function StudioComposition({title='Shiney Brain Video',scenes=[],template='explainer',brand='SHINEY BRAIN ACADEMY',accent='#f4c542',audioSrc=null}) {
   let from=0;
-  return <AbsoluteFill>{scenes.map((scene,index)=>{const duration=Math.max(60,Math.round((Number(scene.durationSeconds)||5)*30));const start=from;from+=duration;return <Sequence key={scene.id||index} from={start} durationInFrames={duration}><AnimatedScene scene={scene} index={index} template={template} brand={brand} accent={accent}/></Sequence>;})}</AbsoluteFill>;
+  return <AbsoluteFill>{scenes.map((scene,index)=>{const duration=Math.max(60,Math.round((Number(scene.durationSeconds)||5)*30));const start=from;from+=duration;return <Sequence key={scene.id||index} from={start} durationInFrames={duration}><AnimatedScene scene={scene} index={index} template={template} brand={brand} accent={accent}/></Sequence>;})}{audioSrc ? <Audio src={audioSrc} volume={0.9}/> : null}</AbsoluteFill>;
 }
