@@ -26,7 +26,11 @@ export default function VideoStudio(){
    const supported=await canRenderMediaOnWeb({codec:'h264',container:'mp4'});
    if(!supported)throw new Error('MP4/H.264 export is not supported by this browser. Try current Chrome on a laptop.');
    setStatus('Rendering on this device. Keep this tab open…');
-   const result=await renderMediaOnWeb({composition:{id:'ShineyBrainStudio',component:StudioComposition,durationInFrames:frames,fps,width,height,calculateMetadata:null},inputProps:props,codec:'h264',container:'mp4'});
+   const result=await renderMediaOnWeb({
+    composition:{id:'ShineyBrainStudio',component:StudioComposition,durationInFrames:frames,fps,width,height,calculateMetadata:null},
+    inputProps:props,videoCodec:'h264',container:'mp4',pageResponsiveness:'medium',
+    onProgress:({progress})=>setStatus('Rendering on this device… '+Math.round(progress*100)+'%')
+   });
    const blob=await result.getBlob(),url=URL.createObjectURL(blob),a=document.createElement('a');
    a.href=url;a.download=(title||'shiney-brain-video').replace(/[^a-z0-9-_]+/gi,'-').toLowerCase()+'.mp4';a.click();setTimeout(()=>URL.revokeObjectURL(url),60000);setStatus('MP4 exported. Check your Downloads folder.');
   }catch(e){setStatus(e?.message||'Export failed.');}finally{setBusy(false);}
