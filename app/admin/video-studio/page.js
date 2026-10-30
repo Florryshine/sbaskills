@@ -1,5 +1,5 @@
 'use client';
-import React,{useMemo,useRef,useState} from 'react';
+import React,{useEffect,useMemo,useRef,useState} from 'react';
 import {Player} from '@remotion/player';
 import {renderMediaOnWeb,canRenderMediaOnWeb} from '@remotion/web-renderer';
 import {StudioComposition} from '@/remotion/StudioComposition';
@@ -15,7 +15,8 @@ const totalFrames=s=>s.reduce((n,x)=>n+Math.max(60,Math.round((Number(x.duration
 export default function VideoStudio(){
  const [kind,setKind]=useState('explainer'),[scenes,setScenes]=useState(examples.explainer),[title,setTitle]=useState('Photosynthesis — JAMB Biology'),[ratio,setRatio]=useState('vertical'),[accent,setAccent]=useState('#f4c542'),[brand,setBrand]=useState('SHINEY BRAIN ACADEMY'),[status,setStatus]=useState(''),[busy,setBusy]=useState(false),[audio,setAudio]=useState(null);
  const fileRef=useRef(null),audioUrl=useMemo(()=>audio?URL.createObjectURL(audio):null,[audio]),fps=30,frames=totalFrames(scenes),width=ratio==='vertical'?1080:1920,height=ratio==='vertical'?1920:1080;
- const props={title,scenes:scenes.map((s,i)=>({...s,audioSrc:i===0?audioUrl:null})),template:kind,brand,accent};
+ useEffect(()=>()=>{if(audioUrl)URL.revokeObjectURL(audioUrl);},[audioUrl]);
+ const props={title,scenes,template:kind,brand,accent,audioSrc:audioUrl};
  const edit=(i,k,v)=>setScenes(old=>old.map((s,n)=>n===i?{...s,[k]:v}:s));
  function selectKind(k){setKind(k);setScenes(examples[k].map(s=>({...s})));setTitle(({explainer:'Educational Explainer',whiteboard:'Whiteboard Lesson',question:'JAMB Practice Question',story:'A Story That Matters'})[k]);}
  async function exportMp4(){
