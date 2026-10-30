@@ -78,6 +78,7 @@ const sections = [
       { href: '/admin/social-post-drafts', label: 'Legacy Social Dashboard' },
       { href: '/admin/quote-loops', label: 'Quote Loops' },
       { href: '/admin/teaching-loops', label: 'Teaching Loops' },
+      { href: '/admin/video-studio', label: 'Video Studio (Browser Export)' },
       { href: '/admin/bold-text-video', label: 'Bold Text Video' },
       { href: '/admin/meme-loops', label: 'Meme / Joke Loops' },
       { href: '/admin/lesson-loops', label: '2-Min Lesson Loops' },
