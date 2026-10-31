@@ -5,7 +5,6 @@ import { TegakiRenderer } from 'tegaki';
 import caveat from 'tegaki/fonts/caveat';
 import { DrawnVisual } from './DrawnVisual';
 import { SBAIllustration, findSBAIllustration } from './whiteboard/SBAAssetLibrary';
-import { SBAIllustration } from './whiteboard/SBAAssetLibrary';
 import {AbsoluteFill, Sequence, Audio, useCurrentFrame, useVideoConfig, interpolate, Easing} from 'remotion';
 
 const C={blue:'#1261a0',navy:'#102b4e',yellow:'#f4c542',ink:'#172b4d'};
