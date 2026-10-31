@@ -1,6 +1,7 @@
 'use client';
 
 import React from 'react';
+import { DrawnVisual } from './DrawnVisual';
 import {AbsoluteFill, Sequence, Audio, useCurrentFrame, useVideoConfig, interpolate, Easing} from 'remotion';
 
 const C={blue:'#1261a0',navy:'#102b4e',yellow:'#f4c542',ink:'#172b4d'};
@@ -31,25 +32,17 @@ function BoardBackground({brand}) {
 }
 
 function WhiteboardScene({scene,brand,accent,index}) {
- const f=useCurrentFrame(); const {fps}=useVideoConfig();
- const intro=interpolate(f,[0,12],[0,1],clamp);
- const draw=interpolate(f,[8,Math.min(92,Math.round((scene.durationSeconds||7)*fps*.68))],[0,1],smooth);
- const handX=interpolate(f,[8,Math.round((scene.durationSeconds||7)*fps*.68)],[160,810],clamp);
- const handY=interpolate(f,[8,Math.round((scene.durationSeconds||7)*fps*.68)],[650,1040],clamp);
- const title=scene.heading||'Let’s understand this';
- const body=scene.text||'One simple idea at a time.';
- return <AbsoluteFill style={{opacity:intro}}>
-  <BoardBackground brand={brand}/>
-  <div style={{position:'absolute',top:'13%',left:'8%',right:'8%',fontSize:54,fontWeight:900,lineHeight:1.08,color:C.navy}}>{title}</div>
-  <svg viewBox="0 0 900 850" style={{position:'absolute',left:'8%',top:'28%',width:'84%',height:'48%',overflow:'visible'}}>
-   {scene.diagram==='bonding' ? <BondingDoodle progress={draw} accent={accent}/> : <GenericDoodle progress={draw} accent={accent}/>}
-  </svg>
-  <div style={{position:'absolute',left:'9%',right:'9%',bottom:'13%',fontSize:35,lineHeight:1.28,fontWeight:700,color:C.navy}}>{body}</div>
+ const intro=interpolate(useCurrentFrame(),[0,12],[0,1],clamp);
+ return <AbsoluteFill style={{opacity:intro,background:'#fffef8',fontFamily:'Trebuchet MS, Arial, sans-serif',color:C.ink}}>
+  <svg width="100%" height="100%" viewBox="0 0 1080 1920" preserveAspectRatio="none" style={{position:'absolute',inset:0}}><defs><pattern id={'paperDots-'+index} width="34" height="34" patternUnits="userSpaceOnUse"><circle cx="2" cy="2" r="1.1" fill="#d8e0e5" opacity=".55"/></pattern></defs><rect width="1080" height="1920" fill={'url(#paperDots-'+index+')'}/></svg>
+  <div style={{position:'absolute',top:55,left:65,fontSize:27,fontWeight:900,letterSpacing:2,color:C.blue}}>{brand.toUpperCase()}</div>
+  <div style={{position:'absolute',top:55,right:65,fontSize:19,fontWeight:800,color:'#8794a1'}}>LET’S DRAW IT OUT</div>
+  <div style={{position:'absolute',top:'13%',left:'8%',right:'8%',fontSize:54,fontWeight:900,lineHeight:1.08,color:C.navy}}>{scene.heading||'Let’s understand this'}</div>
+  <DrawnVisual scene={scene}/>
+  <div style={{position:'absolute',left:'9%',right:'9%',bottom:'12%',fontSize:33,lineHeight:1.28,fontWeight:700,color:C.navy}}>{scene.narration}</div>
   <div style={{position:'absolute',left:'8%',bottom:'5%',fontSize:20,fontWeight:800,color:'#8794a1'}}>SHINEY BRAIN • {String(index+1).padStart(2,'0')}</div>
-  <Hand x={handX} y={handY} scale={.86} tilt={-12}/>
  </AbsoluteFill>;
 }
-
 function BondingDoodle({progress,accent}) {
  const stroke=(delay=0)=>({strokeDasharray:1200,strokeDashoffset:interpolate(progress,[delay,Math.min(1,delay+.35)],[1200,0],clamp)});
  return <>
