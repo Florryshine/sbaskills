@@ -36,12 +36,12 @@ function drawWrapped(ctx, value, x, y, maxWidth, lineHeight, maxFontSize, minFon
   let fontSize = maxFontSize;
   let lines = [];
   while (fontSize >= minFontSize) {
-    ctx.font = '600 ' + fontSize + 'px 'SBA Inter'';
+    ctx.font = '600 ' + fontSize + 'px "SBA Inter"';
     lines = wrapText(ctx, value, maxWidth);
     if (lines.every((line) => ctx.measureText(line).width <= maxWidth)) break;
     fontSize -= 2;
   }
-  ctx.font = '600 ' + fontSize + 'px 'SBA Inter'';
+  ctx.font = '600 ' + fontSize + 'px "SBA Inter"';
   lines.forEach((line, index) => ctx.fillText(line, x, y + index * lineHeight));
   return { lines, fontSize, nextY: y + lines.length * lineHeight };
 }
@@ -71,7 +71,7 @@ async function renderQuestion(template, q) {
   ctx.fillStyle = '#ffdf24';
   ctx.fillRect(444, 414, 240, 78);
   ctx.fillStyle = '#164a9c';
-  ctx.font = 'italic 700 38px 'SBA Inter'';
+  ctx.font = 'italic 700 38px "SBA Inter"';
   ctx.textAlign = 'center';
   ctx.fillText(String(q.subject || 'JAMB').toUpperCase(), 564, 464);
   ctx.textAlign = 'left';
@@ -84,7 +84,7 @@ async function renderQuestion(template, q) {
   ctx.stroke();
 
   ctx.fillStyle = '#164a9c';
-  ctx.font = '700 28px 'SBA Inter'';
+  ctx.font = '700 28px "SBA Inter"';
   ctx.fillText('QUESTION OF THE DAY', 455, 548);
 
   ctx.fillStyle = '#123b83';
@@ -94,7 +94,7 @@ async function renderQuestion(template, q) {
 
   for (const option of q.options) {
     const optionText = String(option.text || '');
-    ctx.font = '600 26px 'SBA Inter'';
+    ctx.font = '600 26px "SBA Inter"';
     const optionLines = wrapText(ctx, optionText, 405);
     const optionFont = optionLines.length > 2 ? 22 : 26;
     ctx.fillStyle = '#1761ce';
@@ -102,19 +102,19 @@ async function renderQuestion(template, q) {
     ctx.arc(525, cursorY - 9, 19, 0, Math.PI * 2);
     ctx.fill();
     ctx.fillStyle = '#fff';
-    ctx.font = '700 22px 'SBA Inter'';
+    ctx.font = '700 22px "SBA Inter"';
     ctx.textAlign = 'center';
     ctx.fillText(String(option.id), 525, cursorY - 2);
     ctx.textAlign = 'left';
     ctx.fillStyle = '#123b83';
-    ctx.font = '600 ' + optionFont + 'px 'SBA Inter'';
+    ctx.font = '600 ' + optionFont + 'px "SBA Inter"';
     const lineHeight = optionFont + 9;
     optionLines.forEach((line, index) => ctx.fillText(line, 565, cursorY + index * lineHeight));
     cursorY += Math.max(1, optionLines.length) * lineHeight + 24;
   }
 
   ctx.fillStyle = '#164a9c';
-  ctx.font = 'italic 700 28px 'SBA Inter'';
+  ctx.font = 'italic 700 28px "SBA Inter"';
   ctx.textAlign = 'center';
   ctx.fillText('Think Before You Choose!', 735, 1220);
   ctx.strokeStyle = '#ffcf00';
@@ -125,7 +125,7 @@ async function renderQuestion(template, q) {
   ctx.stroke();
 
   // Fail loudly instead of saving a blank/broken render if the Canvas text engine is unavailable.
-  ctx.font = '700 32px 'SBA Inter'';
+  ctx.font = '700 32px "SBA Inter"';
   const textWidth = ctx.measureText('SHINEY BRAIN').width;
   if (!Number.isFinite(textWidth) || textWidth <= 0) {
     throw new Error('SBA Inter font could not be loaded by the image renderer.');
