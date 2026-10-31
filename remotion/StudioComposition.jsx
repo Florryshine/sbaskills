@@ -39,7 +39,6 @@ function WhiteboardScene({scene,brand,accent,index,narrationVolume}) {
   <div style={{position:'absolute',top:55,right:65,fontSize:19,fontWeight:800,color:'#8794a1'}}>LET’S DRAW IT OUT</div>
   <div style={{position:'absolute',top:'13%',left:'8%',right:'8%',fontSize:54,fontWeight:900,lineHeight:1.08,color:C.navy}}>{scene.heading||'Let’s understand this'}</div>
   <DrawnVisual scene={scene}/>
-  {scene.audioSrc ? <Audio src={scene.audioSrc} volume={narrationVolume}/> : null}
   <div style={{position:'absolute',left:'9%',right:'9%',bottom:'12%',fontSize:33,lineHeight:1.28,fontWeight:700,color:C.navy}}>{scene.narration}</div>
   <div style={{position:'absolute',left:'8%',bottom:'5%',fontSize:20,fontWeight:800,color:'#8794a1'}}>SHINEY BRAIN • {String(index+1).padStart(2,'0')}</div>
  </AbsoluteFill>;
@@ -126,10 +125,12 @@ function StoryScene({scene,index,brand,accent}) {
 }
 
 function Scene({scene,index,template,brand,accent,narrationVolume}) {
- if(template==='whiteboard') return <WhiteboardScene scene={scene} brand={brand} accent={accent} index={index} narrationVolume={narrationVolume}/>;
- if(template==='question') return <QuestionScene scene={scene} brand={brand} accent={accent} index={index}/>;
- if(template==='story') return <StoryScene scene={scene} brand={brand} accent={accent} index={index}/>;
- return <ExplainerScene scene={scene} brand={brand} accent={accent} index={index}/>;
+ let visual;
+ if(template==='whiteboard') visual=<WhiteboardScene scene={scene} brand={brand} accent={accent} index={index}/>;
+ else if(template==='question') visual=<QuestionScene scene={scene} brand={brand} accent={accent} index={index}/>;
+ else if(template==='story') visual=<StoryScene scene={scene} brand={brand} accent={accent} index={index}/>;
+ else visual=<ExplainerScene scene={scene} brand={brand} accent={accent} index={index}/>;
+ return <>{visual}{scene.audioSrc?<Audio src={scene.audioSrc} volume={narrationVolume}/>:null}</>;
 }
 
 export function StudioComposition({title='Shiney Brain Video',scenes=[],template='explainer',brand='SHINEY BRAIN ACADEMY',accent='#f4c542',musicSrc=null,musicVolume=0.12,narrationVolume=1}) {
