@@ -67,27 +67,27 @@ export default function QuestionOfTheDayPage() {
 
     <section className="rounded-2xl border bg-white p-4 shadow-sm md:p-5">
       <div className="flex flex-wrap items-center justify-between gap-3">
-        <div><h2 className="font-bold text-gray-900">1. Classroom template</h2><p className="mt-1 text-sm text-gray-500">Upload the second classroom image once. The engine keeps the photograph and replaces the whiteboard writing.</p></div>
+        <div><h2 className="font-bold text-gray-900">1. Classroom template</h2><p className="mt-1 text-sm text-gray-500">Choose the blank-board classroom image, then tap <b>Save template</b>. Selecting a file alone does not upload it.</p></div>
         <span className={'rounded-full px-3 py-1 text-xs font-bold ' + (templateReady ? 'bg-green-100 text-green-700' : 'bg-amber-100 text-amber-700')}>{templateReady ? 'Template ready' : 'Template required'}</span>
       </div>
       {!templateReady && <div className="mt-4 flex flex-col gap-3 sm:flex-row sm:items-center">
         <input type="file" accept="image/*" onChange={(e) => setTemplateFile(e.target.files && e.target.files[0])} className="min-w-0 flex-1 text-sm" />
         <button onClick={uploadTemplate} disabled={!templateFile || uploading} className="rounded-xl bg-brand-blue px-4 py-2.5 text-sm font-bold text-white disabled:opacity-50">{uploading ? 'Uploading…' : 'Save template'}</button>
       </div>}
-      {templateReady && <p className="mt-3 text-sm text-green-700">✓ Saved. You only need to upload again if you change the template.</p>}
+      {templateReady && <p className="mt-3 text-sm text-green-700">✓ Template saved. You only need to upload again if you change the classroom image.</p>}
     </section>
 
     <section className="rounded-2xl border bg-white p-4 shadow-sm md:p-5">
-      <h2 className="font-bold text-gray-900">2. Generate a JAMB question</h2>
+      <h2 className="font-bold text-gray-900">2. Generate your question and image</h2>
       <div className="mt-4 grid gap-3 md:grid-cols-[1fr_160px_auto]">
         <select value={assetId} onChange={(e) => setAssetId(e.target.value)} className="rounded-xl border px-3 py-3 text-sm">
           <option value="">Select a topic from Knowledge Assets…</option>
           {assets.map((a) => <option key={a.id} value={a.id}>{a.subject ? a.subject + ' — ' : ''}{a.keyword}</option>)}
         </select>
         <select value={difficulty} onChange={(e) => setDifficulty(e.target.value)} className="rounded-xl border px-3 py-3 text-sm"><option>Easy</option><option>Medium</option><option>Hard</option></select>
-        <button onClick={generate} disabled={!templateReady || !assetId || generating} className="rounded-xl bg-brand-blue px-6 py-3 text-sm font-bold text-white disabled:opacity-50">{generating ? 'Generating & rendering…' : '✨ Generate image'}</button>
+        <button onClick={generate} disabled={!templateReady || !assetId || generating} title={!templateReady ? 'Save the classroom template first' : !assetId ? 'Select a topic first' : 'Generate a question and render the image'} className="rounded-xl bg-brand-blue px-6 py-3 text-sm font-bold text-white disabled:cursor-not-allowed disabled:opacity-40">{generating ? 'Generating question & image…' : '✨ Generate question + image'}</button>
       </div>
-      <p className="mt-2 text-xs text-gray-400">Uses the existing SBA AI fallback chain. Review the answer before publishing.</p>
+      <p className="mt-2 text-xs text-gray-500">No need to type a question: AI creates one from the selected Knowledge Asset topic and difficulty, then places it on your template.</p>{!templateReady && <p className="mt-2 rounded-lg bg-amber-50 p-3 text-sm font-medium text-amber-800">First, save the selected image above. The Generate button stays disabled until the template status changes to “Template ready”.</p>}
       {error && <p className="mt-3 rounded-lg bg-red-50 p-3 text-sm text-red-700">{error}</p>}
     </section>
 
