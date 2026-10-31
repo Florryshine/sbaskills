@@ -1,6 +1,8 @@
 'use client';
 
 import React from 'react';
+import { TegakiRenderer } from 'tegaki';
+import caveat from 'tegaki/fonts/caveat';
 import { DrawnVisual } from './DrawnVisual';
 import {AbsoluteFill, Sequence, Audio, useCurrentFrame, useVideoConfig, interpolate, Easing} from 'remotion';
 
@@ -115,15 +117,28 @@ function QuestionScene({scene,index,brand,accent}) {
 }
 
 function StoryScene({scene,index,brand,accent}) {
- const f=useCurrentFrame(); const scale=interpolate(f,[0,30],[1.08,1],clamp);
- return <AbsoluteFill style={{background:'linear-gradient(145deg,#07182e,#163f68 60%,#081525)',color:'#fff',fontFamily:'Arial,sans-serif',padding:'9%',transform:`scale(${scale})`}}>
-  <div style={{fontSize:22,fontWeight:900,color:accent,letterSpacing:3}}>{brand.toUpperCase()}</div>
-  <div style={{position:'absolute',left:'9%',right:'9%',top:'27%',fontSize:66,lineHeight:1.1,fontWeight:900}}>{scene.heading}</div>
-  <div style={{position:'absolute',left:'9%',right:'9%',bottom:'19%',fontSize:34,lineHeight:1.35,color:'#d8e8f8'}}>{scene.text}</div>
-  <div style={{position:'absolute',bottom:'7%',fontSize:20,fontWeight:900,color:accent}}>HER NEXT CHAPTER STARTS NOW</div>
+ const f=useCurrentFrame(); const {fps}=useVideoConfig();
+ const heading=scene.heading||'A story worth remembering';
+ const body=scene.text||'Every great result begins with one small decision.';
+ const headingProgress=interpolate(f,[8,Math.max(9,Math.round(fps*2.1))],[0,1],clamp);
+ const bodyStart=Math.round(fps*2.0);
+ const bodyProgress=interpolate(f,[bodyStart,Math.max(bodyStart+1,Math.round(fps*5.1))],[0,1],clamp);
+ return <AbsoluteFill style={{background:'#fbf7ed',color:'#1b2b40',fontFamily:'Georgia,serif',padding:'8% 8% 10%',overflow:'hidden'}}>
+  <div style={{position:'absolute',inset:0,opacity:.38,backgroundImage:'repeating-linear-gradient(to bottom,transparent 0px,transparent 58px,#b8c9d5 59px,#b8c9d5 60px)'}}/>
+  <div style={{position:'absolute',top:'5%',left:'8%',fontFamily:'Arial,sans-serif',fontSize:20,fontWeight:900,letterSpacing:3,color:'#1769aa'}}>{brand.toUpperCase()}</div>
+  <div style={{position:'absolute',top:'12%',right:'8%',fontFamily:'Arial,sans-serif',fontSize:17,fontWeight:800,color:'#9a8060'}}>CHAPTER {String(index+1).padStart(2,'0')}</div>
+  <div style={{position:'absolute',left:'9%',right:'9%',top:'24%',minHeight:'18%',fontSize:58,lineHeight:1.1,color:'#173f68',fontWeight:700}}>
+   <TegakiRenderer font={caveat} text={heading} seed={17+index} time={{mode:'controlled',value:headingProgress,unit:'progress'}} style={{fontSize:'1em',fontWeight:700,color:'#173f68',lineHeight:1.1}}/>
+  </div>
+  <div style={{position:'absolute',left:'10%',right:'9%',top:'49%',fontSize:39,lineHeight:1.34,color:'#34465a'}}>
+   <TegakiRenderer font={caveat} text={body} seed={31+index} time={{mode:'controlled',value:bodyProgress,unit:'progress'}} style={{fontSize:'1em',color:'#34465a',lineHeight:1.34}}/>
+  </div>
+  <svg viewBox="0 0 800 120" style={{position:'absolute',left:'10%',bottom:'10%',width:'80%',height:'7%'}}>
+   <path d="M8 60 Q180 38 390 58 T790 50" fill="none" stroke={accent} strokeWidth="7" strokeLinecap="round" opacity=".9"/>
+  </svg>
+  <div style={{position:'absolute',bottom:'4%',left:'9%',fontFamily:'Arial,sans-serif',fontSize:17,fontWeight:900,letterSpacing:2,color:'#8b9aa7'}}>A SHINEY BRAIN STORY</div>
  </AbsoluteFill>;
 }
-
 function Scene({scene,index,template,brand,accent,narrationVolume}) {
  let visual;
  if(template==='whiteboard') visual=<WhiteboardScene scene={scene} brand={brand} accent={accent} index={index}/>;
