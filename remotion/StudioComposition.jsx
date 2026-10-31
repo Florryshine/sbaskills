@@ -4,6 +4,7 @@ import React from 'react';
 import { TegakiRenderer } from 'tegaki';
 import caveat from 'tegaki/fonts/caveat';
 import { DrawnVisual } from './DrawnVisual';
+import { SBAIllustration } from './whiteboard/SBAAssetLibrary';
 import {AbsoluteFill, Sequence, Audio, useCurrentFrame, useVideoConfig, interpolate, Easing} from 'remotion';
 
 const C={blue:'#1261a0',navy:'#102b4e',yellow:'#f4c542',ink:'#172b4d'};
@@ -179,7 +180,7 @@ function StoryScene({scene,index,brand,accent}) {
    <div style={{fontSize:hSize,lineHeight:vertical?1.02:1.06,fontWeight:950,letterSpacing:-2,color:p.ink,textShadow:'0 8px 30px rgba(0,0,0,.22)',overflowWrap:'anywhere'}}>{titleLines}</div>
    <div style={{height:Math.max(7,width*.009),width:interpolate(f,[20,38],[0,Math.min(width*.42,520)],clamp),background:p.hot,borderRadius:20,marginTop:height*.025}}/>
   </div>
-  <div style={{position:'absolute',left:width*(vertical?.07:.09),right:width*(vertical?.07:.09),top:artTop,height:artHeight,transform:'translateY('+interpolate(f,[0,fps*7],[25,-25],clamp)+'px)',opacity:interpolate(f,[12,30],[0,1],clamp)}}><StoryArt index={index} progress={interpolate(f,[8,Math.max(9,fps*3)],[0,1],clamp)} accent={p.hot}/></div>
+  <div style={{position:'absolute',left:width*(vertical?.07:.09),right:width*(vertical?.07:.09),top:artTop,height:artHeight,transform:'translateY('+interpolate(f,[0,fps*7],[25,-25],clamp)+'px)',opacity:interpolate(f,[12,30],[0,1],clamp)}}>{scene.illustration ? <SBAIllustration type={scene.illustration} accent={p.hot} /> : <StoryArt index={index} progress={interpolate(f,[8,Math.max(9,fps*3)],[0,1],clamp)} accent={p.hot}/>}</div>
   <div style={{position:'absolute',left:width*(vertical?.085:.09),right:width*(vertical?.085:.09),top:bodyY,height:height*(vertical?.22:.22),display:'flex',flexDirection:'column'}}>
    <div style={{fontSize:Math.max(16,width*.019),fontWeight:900,letterSpacing:3,color:p.hot,marginBottom:height*.012}}>{index===4?'TAKE THE FIRST STEP':'THE STORY CONTINUES'}</div>
    <div style={{fontSize:bSize,lineHeight:1.18,fontWeight:650,color:p.muted,textShadow:'0 3px 14px rgba(0,0,0,.18)'}}>{bLines.map((line,i)=><div key={i} style={{opacity:interpolate(f,[Math.round(fps*.7)+i*5,Math.round(fps*.7)+i*5+9],[0,1],clamp),transform:'translateY('+interpolate(f,[Math.round(fps*.7)+i*5,Math.round(fps*.7)+i*5+9],[22,0],clamp)+'px)'}}>{line}</div>)}</div>
