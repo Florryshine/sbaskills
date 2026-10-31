@@ -20,18 +20,6 @@ function pointAt(points, lengths, target) {
   }
   return points[points.length-1];
 }
-function DrawingHand({x,y}) {
-  // The pen nib is positioned at the SVG coordinate (x,y).
-  return <g transform={`translate(${x} ${y})`} pointerEvents="none" filter="drop-shadow(2px 3px 2px #0003)">
-    <path d="M0 0 L-10 -22 L-2 -28 L8 -7 Z" fill="#e0b33b" stroke="#765a21" strokeWidth="2"/>
-    <path d="M-10 -22 L-2 -28 L-5 -34 L-14 -27 Z" fill="#27384a" stroke="#172b3d" strokeWidth="1.5"/>
-    <path d="M-8 -24 L-4 -27" stroke="#fff0b0" strokeWidth="2"/>
-    <path d="M8 -7 C15 -25 27 -43 42 -48 C55 -53 68 -45 72 -33 L80 -4 C84 10 75 25 61 30 L35 37 C21 40 9 32 6 19 L1 5 Z" fill="#8b563e" stroke="#593a2e" strokeWidth="3" strokeLinejoin="round"/>
-    <path d="M13 3 C24 -8 33 -19 43 -29 C49 -35 58 -35 63 -29 C67 -23 63 -16 58 -11 L39 10" fill="none" stroke="#c98d6c" strokeWidth="8" strokeLinecap="round"/>
-    <path d="M8 13 Q22 28 40 24" fill="none" stroke="#c98d6c" strokeWidth="5" strokeLinecap="round"/>
-    <path d="M45 -39 Q55 -47 64 -38" fill="none" stroke="#e7b398" strokeWidth="3" strokeLinecap="round"/>
-  </g>;
-}
 export function DrawnVisual({scene}) {
  const frame=useCurrentFrame(), {fps}=useVideoConfig();
  const strokes=Array.isArray(scene?.strokes)?scene.strokes.filter(s=>Array.isArray(s.points)&&s.points.length>1):[];
@@ -60,7 +48,7 @@ export function DrawnVisual({scene}) {
  const assetProgress=interpolate(frame,[0,drawFrames],[0,1],clamp);
  const assetX=80+840*assetProgress;
  const labelFrames=Math.max(1,Math.round(drawFrames*.24));
- const activeHand=hasAsset&&frame<drawFrames?[assetX,350]:hand;
+
  return <AbsoluteFill>
   <svg viewBox="0 0 1000 700" preserveAspectRatio="xMidYMid meet" style={{position:'absolute',left:'5%',top:'25%',width:'90%',height:'47%',overflow:'visible'}}>
    {hasAsset ? <g>
@@ -70,7 +58,6 @@ export function DrawnVisual({scene}) {
     </g>
    </g>:null}
    {!hasAsset?rendered:null}
-   {activeHand&&frame<drawFrames?<DrawingHand x={activeHand[0]} y={activeHand[1]}/>:null}
   </svg>
   <div style={{position:'absolute',left:'7%',right:'7%',top:'23%',height:'51%',pointerEvents:'none'}}>
    {labels.map((label,index)=>{
