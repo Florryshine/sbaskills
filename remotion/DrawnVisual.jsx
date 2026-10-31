@@ -2,6 +2,7 @@
 import React from 'react';
 import { TegakiRenderer } from 'tegaki';
 import { WhiteboardIllustration } from './whiteboard/IllustrationLibrary';
+import { SBAIllustration } from './whiteboard/SBAAssetLibrary';
 import caveat from 'tegaki/fonts/caveat';
 import { AbsoluteFill, interpolate, useCurrentFrame, useVideoConfig } from 'remotion';
 
@@ -51,7 +52,7 @@ export function DrawnVisual({scene}) {
  const labelFrames=Math.max(1,Math.round(drawFrames*.24));
  return <AbsoluteFill>
   <svg viewBox="0 0 1000 700" preserveAspectRatio="xMidYMid meet" style={{position:'absolute',left:'5%',top:'25%',width:'90%',height:'47%',overflow:'visible'}}>
-   {scene.illustration ? <WhiteboardIllustration type={scene.illustration} accent={scene.illustrationAccent || '#e1a82b'} /> : null}
+   {scene.illustration ? <SBAIllustration type={scene.illustration} accent={scene.illustrationAccent || '#e1a82b'} /> : null}
    {rendered}{hand&&frame<drawFrames?<DrawingHand x={hand[0]} y={hand[1]}/>:null}
   </svg>
   <div style={{position:'absolute',left:'7%',right:'7%',top:'23%',height:'51%',pointerEvents:'none'}}>
