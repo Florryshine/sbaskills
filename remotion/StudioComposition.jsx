@@ -39,6 +39,7 @@ function WhiteboardScene({scene,brand,accent,index}) {
   <div style={{position:'absolute',top:55,right:65,fontSize:19,fontWeight:800,color:'#8794a1'}}>LET’S DRAW IT OUT</div>
   <div style={{position:'absolute',top:'13%',left:'8%',right:'8%',fontSize:54,fontWeight:900,lineHeight:1.08,color:C.navy}}>{scene.heading||'Let’s understand this'}</div>
   <DrawnVisual scene={scene}/>
+  {scene.audioSrc ? <Audio src={scene.audioSrc} volume={1}/> : null}
   <div style={{position:'absolute',left:'9%',right:'9%',bottom:'12%',fontSize:33,lineHeight:1.28,fontWeight:700,color:C.navy}}>{scene.narration}</div>
   <div style={{position:'absolute',left:'8%',bottom:'5%',fontSize:20,fontWeight:800,color:'#8794a1'}}>SHINEY BRAIN • {String(index+1).padStart(2,'0')}</div>
  </AbsoluteFill>;
