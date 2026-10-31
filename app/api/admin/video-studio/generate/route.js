@@ -18,12 +18,21 @@ function cleanText(value, max = 240) {
   return String(value ?? '').trim().slice(0, max);
 }
 
-function validateScenePlan(data) {
+function chooseFallbackIllustration(subject, topic, heading = '') {
+  const text = String(topic + ' ' + heading).toLowerCase();
+  const rules = [[/plant cell|photosynth|chlorophyll/,'plant-cell'],[/animal cell|cell membrane|cytoplasm|nucleus/,'animal-cell'],[/chloroplast/,'chloroplast'],[/mitochondri/,'mitochondrion'],[/heart|blood circulation|cardiac/,'human-heart'],[/kidney|urinary|excretion/,'human-kidney'],[/digest|alimentary/,'digestive-system'],[/respirat|breath|lung/,'respiratory-system'],[/dna|gene|genetic|chromosome/,'dna-double-helix'],[/flower|pollinat/,'flower-anatomy'],[/germinat|seed/,'seed-germination'],[/food chain|ecosystem/,'food-chain'],[/atom|electron|proton|neutron/,'atomic-structure'],[/periodic table|element/,'periodic-table'],[/bond|ionic|covalent|molecule/,'chemical-bonding'],[/filtrat/,'filtration'],[/distill/,'distillation'],[/titration/,'titration'],[/electrolys/,'electrolysis'],[/pendulum|oscillat/,'simple-pendulum'],[/force|vector|motion|projectile/,'vectors-forces'],[/wave|sound|frequency/,'wave-anatomy'],[/electric|circuit|current/,'electric-circuit'],[/magnet/,'magnetic-field'],[/refraction|reflection|lens|light/,'reflection-refraction'],[/vernier/,'vernier-calipers'],[/micrometer/,'micrometer'],[/lever|pulley|machine/,'simple-machines']];
+  for (const rule of rules) if (rule[0].test(text)) return rule[1];
+  if (subject === 'biology') return 'animal-cell';
+  if (subject === 'chemistry') return 'atomic-structure';
+  if (subject === 'physics' || subject === 'mathematics') return 'vectors-forces';
+  return 'food-chain';
+}
+function validateScenePlan(data, subject, topic) {
   if (!data || !Array.isArray(data.scenes) || data.scenes.length < 2 || data.scenes.length > 10) {
     throw new Error('The lesson planner returned an invalid scene list.');
   }
   const scenes = data.scenes.map((scene, index) => {
-    if (!scene || !Array.isArray(scene.strokes) || scene.strokes.length < 2 || scene.strokes.length > 14) {
+    if (!scene || !Array.isArray(scene.strokes) || scene.strokes.length > 14) {
       throw new Error(`Scene ${index + 1} has invalid drawing instructions.`);
     }
     const strokes = scene.strokes.map((stroke) => {
@@ -57,7 +66,7 @@ function validateScenePlan(data) {
       durationSeconds: Math.max(4, Math.min(18, Number(scene.durationSeconds) || 8)),
       strokes,
       labels,
-      illustration: SBA_ILLUSTRATION_IDS.has(scene.illustration) ? scene.illustration : null,
+      illustration: SBA_ILLUSTRATION_IDS.has(scene.illustration) ? scene.illustration : chooseFallbackIllustration(subject, topic, scene.heading),
       illustrationAccent: /^#[0-9a-f]{6}$/i.test(scene.illustrationAccent || '') ? scene.illustrationAccent : '#e1a82b'
     };
   });
@@ -73,9 +82,9 @@ export async function POST(request) {
     const guidance = SUBJECT_GUIDANCE[subject] || SUBJECT_GUIDANCE.general;
     const prompt = `You are the instructional designer and storyboard artist for Shiney Brain Academy. Create a scientifically accurate, visually teachable whiteboard lesson about: "${topic}". Subject: ${subject}. Visual guidance: ${guidance}
 
-Return 3–6 scenes. Each scene needs a concise heading, a natural spoken narration paragraph in clear Nigerian English (not pidgin), original hand-drawable vector strokes, and optionally one reusable illustration. Set illustration to one of these reusable SBA asset IDs when appropriate: "animal-cell", "plant-cell", "chloroplast", "mitochondrion", "digestive-system", "respiratory-system", "circulatory-system", "human-heart", "excretory-system", "human-kidney", "nervous-system", "human-eye", "human-ear", "human-skeleton", "muscular-system", "reproductive-systems", "flower-anatomy", "seed-germination", "dna-double-helix", "chromosomes-genes", "microorganisms", "food-chain", "atomic-structure", "periodic-table", "chemical-bonding", "molecular-structures", "lab-apparatus", "filtration", "distillation", "titration", "electrolysis", "electrochemical-cell", "gas-collection", "heating-curve", "collision-theory", "fractional-distillation", "vernier-calipers", "micrometer", "beam-balance", "simple-pendulum", "inclined-plane", "simple-machines", "projectile-motion", "vectors-forces", "hydraulic-press", "wave-anatomy", "sound-wave", "reflection-refraction", "electric-circuit", "magnetic-field", "cat", "dog", "butterfly", "frog", "fish", "bird", "lion", "rainforest", "savanna", "desert", "river-waterfall", "ocean", "mountain", "farm", "fruits", "vegetables", "nigerian-food", "kitchen-utensils", "bicycle", "drinking-water", or null. Choose it only when visually useful; strokes should add arrows, labels, callouts and supporting details around it. Do not merely describe visuals: encode them as point paths.
+Return 3–6 scenes. Each scene needs a concise heading, a natural spoken narration paragraph in clear Nigerian English (not pidgin), a mandatory reusable SBA illustration for the main visual. Add only a few meaningful supporting strokes when needed. Every scene MUST set illustration to the most relevant one of these reusable SBA asset IDs: "animal-cell", "plant-cell", "chloroplast", "mitochondrion", "digestive-system", "respiratory-system", "circulatory-system", "human-heart", "excretory-system", "human-kidney", "nervous-system", "human-eye", "human-ear", "human-skeleton", "muscular-system", "reproductive-systems", "flower-anatomy", "seed-germination", "dna-double-helix", "chromosomes-genes", "microorganisms", "food-chain", "atomic-structure", "periodic-table", "chemical-bonding", "molecular-structures", "lab-apparatus", "filtration", "distillation", "titration", "electrolysis", "electrochemical-cell", "gas-collection", "heating-curve", "collision-theory", "fractional-distillation", "vernier-calipers", "micrometer", "beam-balance", "simple-pendulum", "inclined-plane", "simple-machines", "projectile-motion", "vectors-forces", "hydraulic-press", "wave-anatomy", "sound-wave", "reflection-refraction", "electric-circuit", "magnetic-field", "cat", "dog", "butterfly", "frog", "fish", "bird", "lion", "rainforest", "savanna", "desert", "river-waterfall", "ocean", "mountain", "farm", "fruits", "vegetables", "nigerian-food", "kitchen-utensils", "bicycle", "drinking-water", or null. Do not use freehand strokes as the main visual. Use strokes only for meaningful arrows or callouts. Never draw repeated circles, decorative loops, random squiggles or generic placeholder doodles.
 
-COORDINATE SYSTEM: 1000 wide x 700 high. All stroke points are arrays [x,y] within those bounds. Keep drawings centred between x=80..920 and y=80..620. Use 2–14 strokes per scene, each 2–35 points. Use connected points to form outlines, curves approximated by enough points, arrows, axes, molecule bonds, labels, diagrams. Avoid excessive detail. Add text labels separately with x/y coordinates. Do not put words inside stroke paths. Plan drawing order so the visual builds progressively. Make every scene's drawing meaningfully different and directly related to its narration. The first scene introduces the concept; later scenes explain steps/mechanisms; final scene summarises.
+COORDINATE SYSTEM: 1000 wide x 700 high. All stroke points are arrays [x,y] within those bounds. Keep drawings centred between x=80..920 and y=80..620. Use 0–4 supporting strokes per scene, each 2–20 points. Use connected points to form outlines, curves approximated by enough points, arrows, axes, molecule bonds, labels, diagrams. Avoid excessive detail. Add text labels separately with x/y coordinates. Do not put words inside stroke paths. Plan drawing order so the visual builds progressively. Make every scene's drawing meaningfully different and directly related to its narration. The first scene introduces the concept; later scenes explain steps/mechanisms; final scene summarises.
 
 For arrows use kind "arrow"; other strokes use "line". Stroke width 2–12. Use dark blue #173f68 for most lines, and restrained accent colours such as #e1a82b, #25845d, #c14e45. Each label has text, x, y, size (16–42), color. Coordinates refer to a 1000x700 drawing board. Each scene durationSeconds 4–18.
 
@@ -83,7 +92,7 @@ Return ONLY JSON:
 {"title":"...","subject":"...","scenes":[{"heading":"...","narration":"...","durationSeconds":8,"illustration":"plant-cell","illustrationAccent":"#e1a82b","strokes":[{"points":[[100,100],[200,200]],"color":"#173f68","width":5,"kind":"line"}],"labels":[{"text":"label","x":200,"y":100,"size":28,"color":"#173f68"}]}]}
 Ensure explanations and drawings are factually correct. Do not invent equations, structures or mechanisms.`;
     const generated = await generateJson(prompt, { expect: 'object', maxTokens: 6500 });
-    const plan = validateScenePlan({ ...generated, subject });
+    const plan = validateScenePlan({ ...generated, subject }, subject, topic);
     if (plan.scenes.some(scene => !scene.narration)) throw new Error('A scene is missing its narration.');
     return NextResponse.json({ success: true, plan });
   } catch (error) {
