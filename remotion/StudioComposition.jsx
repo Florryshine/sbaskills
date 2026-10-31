@@ -116,27 +116,75 @@ function QuestionScene({scene,index,brand,accent}) {
  </AbsoluteFill>;
 }
 
+function storyLines(text,maxChars) {
+ const words=String(text||'').trim().split(/\s+/).filter(Boolean), lines=[]; let line='';
+ words.forEach(word=>{const next=line?line+' '+word:word;if(next.length>maxChars&&line){lines.push(line);line=word;}else line=next;});
+ if(line) lines.push(line); return lines;
+}
+function StoryArt({index,progress,accent}) {
+ if(index===0) return <svg viewBox="0 0 900 650" width="100%" height="100%">
+  <path d="M170 80 H600 L720 200 V560 H170 Z" fill="#f8e8c7" stroke="#e9bd73" strokeWidth="8" transform={'translate('+interpolate(progress,[0,1],[70,0],clamp)+' 0)'}/>
+  <path d="M600 80 V200 H720 M235 185 H535 M235 250 H465" stroke="#9c7042" strokeWidth="14" fill="none"/>
+  <text x="450" y="380" textAnchor="middle" fontSize="112" fontWeight="900" fill="#9c382d">21 DAYS</text>
+  <path d="M255 490 L310 545 L405 465" stroke="#16856b" strokeWidth="17" fill="none" strokeLinecap="round" strokeLinejoin="round" strokeDasharray="220" strokeDashoffset={interpolate(progress,[.35,.8],[220,0],clamp)}/>
+  <circle cx="740" cy="115" r="58" fill={accent}/><path d="M740 78 V115 L772 136" stroke="#17243c" strokeWidth="10" fill="none" strokeLinecap="round"/>
+ </svg>;
+ if(index===1) return <svg viewBox="0 0 900 650" width="100%" height="100%">
+  <circle cx="450" cy="300" r="205" fill="#20243c" stroke="#f07a65" strokeWidth="12"/>
+  {Array.from({length:12},(_,i)=><path key={i} d="M450 105 V145" transform={'rotate('+(i*30)+' 450 300)'} stroke="#f6c7a8" strokeWidth="9" strokeLinecap="round"/> )}
+  <path d="M450 300 L450 170 M450 300 L560 350" stroke="#fff0df" strokeWidth="17" strokeLinecap="round"/>
+  <path d="M140 180 Q220 70 320 150 Q390 50 485 140 Q620 75 700 190 Q820 220 745 330 Q800 430 680 455 H230 Q100 420 160 320 Q85 250 140 180" fill="#5b3655" opacity=".9"/>
+  <text x="450" y="530" textAnchor="middle" fill="#ffe1cb" fontSize="45" fontWeight="900">FEAR STEALS TIME</text>
+ </svg>;
+ if(index===2) return <svg viewBox="0 0 900 650" width="100%" height="100%">
+  {['ONE TOPIC','PRACTISE','TIME IT','REVIEW'].map((label,i)=>{const y=70+i*140;return <g key={label} opacity={interpolate(progress,[i*.13,i*.13+.2],[0,1],clamp)}><rect x="170" y={y} width="560" height="105" rx="24" fill={i%2?'#e8f1ff':'#fff8e7'} stroke={i%2?'#6b9bd1':'#d9ae59'} strokeWidth="5"/><circle cx="230" cy={y+52} r="27" fill="#16856b"/><path d={'M216 '+(y+52)+' l12 13 25 -29'} stroke="#fff" strokeWidth="8" fill="none" strokeLinecap="round" strokeLinejoin="round"/><text x="290" y={y+67} fontSize="43" fontWeight="900" fill="#172b4d">{label}</text></g>;})}
+ </svg>;
+ if(index===3) return <svg viewBox="0 0 900 650" width="100%" height="100%">
+  <path d="M120 540 H790" stroke="#a8c9b7" strokeWidth="8"/>
+  {[130,250,370,490,610].map((x,i)=><rect key={x} x={x} y={520-(i+1)*68} width="76" height={(i+1)*68} rx="12" fill={i===4?'#f4c542':'#42a68a'} opacity={interpolate(progress,[i*.12,i*.12+.2],[0,1],clamp)}/>)}
+  <path d="M150 440 Q270 390 355 330 T560 215 T755 100" stroke="#fff" strokeWidth="20" fill="none" strokeLinecap="round" strokeDasharray="900" strokeDashoffset={interpolate(progress,[.15,.85],[900,0],clamp)}/>
+  <path d="M700 100 L755 100 L745 155" stroke="#fff" strokeWidth="18" fill="none" strokeLinecap="round" strokeLinejoin="round"/>
+  <text x="450" y="610" textAnchor="middle" fontSize="43" fontWeight="900" fill="#eafff4">SMALL WINS. REAL PROGRESS.</text>
+ </svg>;
+ return <svg viewBox="0 0 900 650" width="100%" height="100%">
+  <circle cx="450" cy="315" r="190" fill="#ffd66b" opacity=".18"/><circle cx="450" cy="315" r="130" fill="#ffd66b" opacity=".35"/>
+  <path d="M170 470 Q450 80 730 470 M450 70 V190 M220 180 L300 250 M680 180 L600 250 M260 490 H640" stroke="#fff2bf" strokeWidth="13" fill="none" strokeLinecap="round"/>
+  <path d="M450 360 V505 M390 445 L450 505 L510 445" stroke="#fff" strokeWidth="17" fill="none" strokeLinecap="round" strokeLinejoin="round"/>
+  <text x="450" y="585" textAnchor="middle" fontSize="44" fontWeight="900" fill="#fff">YOUR NEXT CHAPTER</text>
+ </svg>;
+}
 function StoryScene({scene,index,brand,accent}) {
- const f=useCurrentFrame(); const {fps}=useVideoConfig();
- const heading=scene.heading||'A story worth remembering';
- const body=scene.text||'Every great result begins with one small decision.';
- const headingProgress=interpolate(f,[8,Math.max(9,Math.round(fps*2.1))],[0,1],clamp);
- const bodyStart=Math.round(fps*2.0);
- const bodyProgress=interpolate(f,[bodyStart,Math.max(bodyStart+1,Math.round(fps*5.1))],[0,1],clamp);
- return <AbsoluteFill style={{background:'#fbf7ed',color:'#1b2b40',fontFamily:'Georgia,serif',padding:'8% 8% 10%',overflow:'hidden'}}>
-  <div style={{position:'absolute',inset:0,opacity:.38,backgroundImage:'repeating-linear-gradient(to bottom,transparent 0px,transparent 58px,#b8c9d5 59px,#b8c9d5 60px)'}}/>
-  <div style={{position:'absolute',top:'5%',left:'8%',fontFamily:'Arial,sans-serif',fontSize:20,fontWeight:900,letterSpacing:3,color:'#1769aa'}}>{brand.toUpperCase()}</div>
-  <div style={{position:'absolute',top:'12%',right:'8%',fontFamily:'Arial,sans-serif',fontSize:17,fontWeight:800,color:'#9a8060'}}>CHAPTER {String(index+1).padStart(2,'0')}</div>
-  <div style={{position:'absolute',left:'9%',right:'9%',top:'24%',minHeight:'18%',fontSize:58,lineHeight:1.1,color:'#173f68',fontWeight:700}}>
-   <TegakiRenderer font={caveat} text={heading} seed={17+index} time={{mode:'controlled',value:headingProgress,unit:'progress'}} style={{fontSize:'1em',fontWeight:700,color:'#173f68',lineHeight:1.1}}/>
-  </div>
-  <div style={{position:'absolute',left:'10%',right:'9%',top:'49%',fontSize:39,lineHeight:1.34,color:'#34465a'}}>
-   <TegakiRenderer font={caveat} text={body} seed={31+index} time={{mode:'controlled',value:bodyProgress,unit:'progress'}} style={{fontSize:'1em',color:'#34465a',lineHeight:1.34}}/>
-  </div>
-  <svg viewBox="0 0 800 120" style={{position:'absolute',left:'10%',bottom:'10%',width:'80%',height:'7%'}}>
-   <path d="M8 60 Q180 38 390 58 T790 50" fill="none" stroke={accent} strokeWidth="7" strokeLinecap="round" opacity=".9"/>
+ const f=useCurrentFrame(), {fps,width,height}=useVideoConfig(), vertical=height>width;
+ const heading=scene.heading||'A story worth remembering', body=scene.text||'Every great result begins with one small decision.';
+ const palettes=[{bg:'#101a35',glow:'#244d78',ink:'#fff8e8',muted:'#c5d6eb',hot:'#f4c542'},{bg:'#25182d',glow:'#693b55',ink:'#fff0e7',muted:'#f0c9bd',hot:'#ff8b70'},{bg:'#102d3b',glow:'#1b6c70',ink:'#f4fff9',muted:'#c2e8df',hot:'#f4c542'},{bg:'#123a32',glow:'#24745b',ink:'#f2fff5',muted:'#c8e9d3',hot:'#f4c542'},{bg:'#17264b',glow:'#a45d42',ink:'#fff8e8',muted:'#f4dfc5',hot:'#ffd36a'}];
+ const p=palettes[Math.min(index,4)], reveal=interpolate(f,[5,22],[0,1],smooth);
+ const hLines=storyLines(heading,vertical?17:29), bLines=storyLines(body,vertical?27:52);
+ const maxH=Math.max(...hLines.map(x=>x.length),10), maxB=Math.max(...bLines.map(x=>x.length),18);
+ const hSize=Math.min(vertical?112:94,(vertical?920:1450)/(maxH*.56));
+ const bSize=Math.min(vertical?66:56,(vertical?930:1480)/(maxB*.55));
+ const titleY=height*(vertical?.15:.19), artTop=height*(vertical?.34:.30), artHeight=height*(vertical?.24:.42), bodyY=height*(vertical?.60:.64);
+ const label=['THE LAST CHANCE','THE REAL ENEMY','A BETTER PLAN','THE TURNING POINT','YOUR MOVE'][Math.min(index,4)];
+ const titleLines=hLines.map((line,i)=><div key={i} style={{opacity:interpolate(f,[8+i*4,20+i*4],[0,1],clamp),transform:'translateX('+interpolate(f,[8+i*4,24+i*4],[55,0],clamp)+'px)'}}>{line.split(' ').map((word,j)=><React.Fragment key={j}><span style={{color:((index===0&&/chance|one/i.test(word))||(index===4&&/now|chapter/i.test(word)))?p.hot:'inherit'}}>{word}</span>{j<line.split(' ').length-1?' ':''}</React.Fragment>)}</div>);
+ return <AbsoluteFill style={{background:p.bg,color:p.ink,fontFamily:'Arial,Helvetica,sans-serif',overflow:'hidden',opacity:interpolate(f,[0,18],[0,1],clamp)}}>
+  <svg width="100%" height="100%" viewBox={'0 0 '+width+' '+height} preserveAspectRatio="none" style={{position:'absolute',inset:0}}>
+   <defs><linearGradient id={'sbg'+index} x1="0" y1="0" x2="1" y2="1"><stop offset="0" stopColor={p.bg}/><stop offset="1" stopColor={p.glow}/></linearGradient><radialGradient id={'sglow'+index}><stop offset="0" stopColor={p.hot} stopOpacity=".3"/><stop offset="1" stopColor={p.hot} stopOpacity="0"/></radialGradient></defs>
+   <rect width={width} height={height} fill={'url(#sbg'+index+')'}/><ellipse cx={width*.78} cy={height*.22} rx={width*.55} ry={height*.28} fill={'url(#sglow'+index+')'}/>
+   <path d={'M0 '+height*.84+' Q'+width*.42+' '+height*.72+' '+width+' '+height*.91} stroke={p.hot} strokeOpacity=".14" strokeWidth={width*.012} fill="none"/>
+   <circle cx={width*.9} cy={height*.1} r={width*.14} fill={p.hot} opacity=".07"/>
   </svg>
-  <div style={{position:'absolute',bottom:'4%',left:'9%',fontFamily:'Arial,sans-serif',fontSize:17,fontWeight:900,letterSpacing:2,color:'#8b9aa7'}}>A SHINEY BRAIN STORY</div>
+  <div style={{position:'absolute',top:height*(vertical?.045:.06),left:width*.075,fontSize:Math.max(17,width*.022),fontWeight:900,letterSpacing:3,color:p.muted}}>{brand.toUpperCase()}</div>
+  <div style={{position:'absolute',top:height*(vertical?.045:.06),right:width*.075,fontSize:Math.max(15,width*.018),fontWeight:800,letterSpacing:2,color:p.muted}}>{String(index+1).padStart(2,'0')} / 05</div>
+  <div style={{position:'absolute',left:width*(vertical?.085:.09),right:width*.075,top:titleY,opacity:reveal}}>
+   <div style={{fontSize:Math.max(16,width*.021),fontWeight:900,letterSpacing:4,color:p.hot,marginBottom:height*(vertical?.018:.025)}}>{label}</div>
+   <div style={{fontSize:hSize,lineHeight:vertical?1.02:1.06,fontWeight:950,letterSpacing:-2,color:p.ink,textShadow:'0 8px 30px rgba(0,0,0,.22)',overflowWrap:'anywhere'}}>{titleLines}</div>
+   <div style={{height:Math.max(7,width*.009),width:interpolate(f,[20,38],[0,Math.min(width*.42,520)],clamp),background:p.hot,borderRadius:20,marginTop:height*.025}}/>
+  </div>
+  <div style={{position:'absolute',left:width*(vertical?.07:.09),right:width*(vertical?.07:.09),top:artTop,height:artHeight,transform:'translateY('+interpolate(f,[0,fps*7],[25,-25],clamp)+'px)',opacity:interpolate(f,[12,30],[0,1],clamp)}}><StoryArt index={index} progress={interpolate(f,[8,Math.max(9,fps*3)],[0,1],clamp)} accent={p.hot}/></div>
+  <div style={{position:'absolute',left:width*(vertical?.085:.09),right:width*(vertical?.085:.09),top:bodyY,height:height*(vertical?.22:.22),display:'flex',flexDirection:'column'}}>
+   <div style={{fontSize:Math.max(16,width*.019),fontWeight:900,letterSpacing:3,color:p.hot,marginBottom:height*.012}}>{index===4?'TAKE THE FIRST STEP':'THE STORY CONTINUES'}</div>
+   <div style={{fontSize:bSize,lineHeight:1.18,fontWeight:650,color:p.muted,textShadow:'0 3px 14px rgba(0,0,0,.18)'}}>{bLines.map((line,i)=><div key={i} style={{opacity:interpolate(f,[Math.round(fps*.7)+i*5,Math.round(fps*.7)+i*5+9],[0,1],clamp),transform:'translateY('+interpolate(f,[Math.round(fps*.7)+i*5,Math.round(fps*.7)+i*5+9],[22,0],clamp)+'px)'}}>{line}</div>)}</div>
+  </div>
+  <div style={{position:'absolute',left:width*.075,right:width*.075,bottom:height*.045,display:'flex',justifyContent:'space-between',alignItems:'center',fontSize:Math.max(14,width*.016),fontWeight:900,letterSpacing:2,color:p.muted}}><span>SHINEY BRAIN • STORY REEL</span><span style={{color:p.hot}}>{index===4?'START TODAY':'KEEP GOING'}</span></div>
  </AbsoluteFill>;
 }
 function Scene({scene,index,template,brand,accent,narrationVolume}) {
