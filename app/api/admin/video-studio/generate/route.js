@@ -5,8 +5,8 @@ export const runtime = 'nodejs';
 export const maxDuration = 60;
 
 const SUBJECT_GUIDANCE = {
-  chemistry: 'Use accurate molecular, atomic, electron-shell, apparatus and reaction diagrams.',
-  biology: 'Use accurate cells, organs, organisms, cycles, food webs and process diagrams.',
+  chemistry: 'Use accurate molecular, atomic, electron-shell, apparatus and reaction diagrams. For atom/electron-shell scenes use illustration 'atom'.',
+  biology: 'Use accurate cells, organs, organisms, cycles, food webs and process diagrams. For a plant or photosynthesis scene use illustration 'plant'; for cell structure use 'cell'; for chloroplast structure use 'chloroplast'.',
   physics: 'Use accurate forces, vectors, circuits, waves, rays and motion diagrams.',
   mathematics: 'Use accurate graphs, axes, geometric figures, number lines and worked equations.',
   general: 'Use clear educational diagrams, labelled objects, arrows and process illustrations.'
@@ -54,7 +54,9 @@ function validateScenePlan(data) {
       narration: cleanText(scene.narration, 700),
       durationSeconds: Math.max(4, Math.min(18, Number(scene.durationSeconds) || 8)),
       strokes,
-      labels
+      labels,
+      illustration: ['plant', 'atom', 'cell', 'chloroplast'].includes(scene.illustration) ? scene.illustration : null,
+      illustrationAccent: /^#[0-9a-f]{6}$/i.test(scene.illustrationAccent || '') ? scene.illustrationAccent : '#e1a82b'
     };
   });
   return { title: cleanText(data.title, 120), subject: cleanText(data.subject, 40), scenes };
@@ -69,14 +71,14 @@ export async function POST(request) {
     const guidance = SUBJECT_GUIDANCE[subject] || SUBJECT_GUIDANCE.general;
     const prompt = `You are the instructional designer and storyboard artist for Shiney Brain Academy. Create a scientifically accurate, visually teachable whiteboard lesson about: "${topic}". Subject: ${subject}. Visual guidance: ${guidance}
 
-Return 3–6 scenes. Each scene needs a concise heading, a natural spoken narration paragraph in clear Nigerian English (not pidgin), and original hand-drawable vector strokes. Do not merely describe visuals: encode them as point paths.
+Return 3–6 scenes. Each scene needs a concise heading, a natural spoken narration paragraph in clear Nigerian English (not pidgin), original hand-drawable vector strokes, and optionally one reusable illustration. Set illustration to one of: "plant", "atom", "cell", "chloroplast", or null. Choose it only when scientifically appropriate; strokes should add arrows, labels, callouts and supporting details around it. Do not merely describe visuals: encode them as point paths.
 
 COORDINATE SYSTEM: 1000 wide x 700 high. All stroke points are arrays [x,y] within those bounds. Keep drawings centred between x=80..920 and y=80..620. Use 2–14 strokes per scene, each 2–35 points. Use connected points to form outlines, curves approximated by enough points, arrows, axes, molecule bonds, labels, diagrams. Avoid excessive detail. Add text labels separately with x/y coordinates. Do not put words inside stroke paths. Plan drawing order so the visual builds progressively. Make every scene's drawing meaningfully different and directly related to its narration. The first scene introduces the concept; later scenes explain steps/mechanisms; final scene summarises.
 
 For arrows use kind "arrow"; other strokes use "line". Stroke width 2–12. Use dark blue #173f68 for most lines, and restrained accent colours such as #e1a82b, #25845d, #c14e45. Each label has text, x, y, size (16–42), color. Coordinates refer to a 1000x700 drawing board. Each scene durationSeconds 4–18.
 
 Return ONLY JSON:
-{"title":"...","subject":"...","scenes":[{"heading":"...","narration":"...","durationSeconds":8,"strokes":[{"points":[[100,100],[200,200]],"color":"#173f68","width":5,"kind":"line"}],"labels":[{"text":"label","x":200,"y":100,"size":28,"color":"#173f68"}]}]}
+{"title":"...","subject":"...","scenes":[{"heading":"...","narration":"...","durationSeconds":8,"illustration":"plant","illustrationAccent":"#e1a82b","strokes":[{"points":[[100,100],[200,200]],"color":"#173f68","width":5,"kind":"line"}],"labels":[{"text":"label","x":200,"y":100,"size":28,"color":"#173f68"}]}]}
 Ensure explanations and drawings are factually correct. Do not invent equations, structures or mechanisms.`;
     const generated = await generateJson(prompt, { expect: 'object', maxTokens: 6500 });
     const plan = validateScenePlan({ ...generated, subject });
