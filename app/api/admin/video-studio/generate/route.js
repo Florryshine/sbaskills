@@ -5,8 +5,8 @@ export const runtime = 'nodejs';
 export const maxDuration = 60;
 
 const SUBJECT_GUIDANCE = {
-  chemistry: 'Use accurate molecular, atomic, electron-shell, apparatus and reaction diagrams. For atom/electron-shell scenes use illustration 'atom'.',
-  biology: 'Use accurate cells, organs, organisms, cycles, food webs and process diagrams. For a plant or photosynthesis scene use illustration 'plant'; for cell structure use 'cell'; for chloroplast structure use 'chloroplast'.',
+  chemistry: 'Use accurate molecular, atomic, electron-shell, apparatus and reaction diagrams. For atom/electron-shell scenes use the reusable illustration atom.',
+  biology: 'Use accurate cells, organs, organisms, cycles, food webs and process diagrams. For a plant or photosynthesis scene use the reusable illustration plant; for cell structure use cell; for chloroplast structure use chloroplast.',
   physics: 'Use accurate forces, vectors, circuits, waves, rays and motion diagrams.',
   mathematics: 'Use accurate graphs, axes, geometric figures, number lines and worked equations.',
   general: 'Use clear educational diagrams, labelled objects, arrows and process illustrations.'
