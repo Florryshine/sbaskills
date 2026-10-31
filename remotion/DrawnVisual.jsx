@@ -3,6 +3,7 @@ import React from 'react';
 import { TegakiRenderer } from 'tegaki';
 import { WhiteboardIllustration } from './whiteboard/IllustrationLibrary';
 import { SBAIllustration } from './whiteboard/SBAAssetLibrary';
+import { SBAIllustration } from './whiteboard/SBAAssetLibrary';
 import caveat from 'tegaki/fonts/caveat';
 import { AbsoluteFill, interpolate, useCurrentFrame, useVideoConfig } from 'remotion';
 
