@@ -102,7 +102,7 @@ export async function POST(request) {
     const { error: uploadError } = await supabase.storage.from(BUCKET).upload(imagePath, imageBuffer, { contentType: 'image/jpeg' });
     if (uploadError) throw uploadError;
     const imageUrl = supabase.storage.from(BUCKET).getPublicUrl(imagePath).data.publicUrl;
-    const caption = 'Can you solve today’s ' + question.subject + ' question? Drop your answer in the comments.\\n\\nFollow Shiney Brain Academy for daily JAMB practice.\\n\\n#ShineyBrainAcademy #JAMB #UTME #JAMB2027 #QuestionOfTheDay';
+    const caption = 'Can you solve today’s ' + question.subject + ' question? Drop your answer in the comments.\n\nFollow Shiney Brain Academy for daily JAMB practice.\n\n#ShineyBrainAcademy #JAMB #UTME #JAMB2027 #QuestionOfTheDay';
     const metadata = {
       subject: question.subject, topic: question.topic, difficulty: question.difficulty,
       options: question.options, correctOptionId: question.correctOptionId,
