@@ -12,6 +12,8 @@ const SUBJECT_GUIDANCE = {
   general: 'Use clear educational diagrams, labelled objects, arrows and process illustrations.'
 };
 
+const SBA_ILLUSTRATION_IDS = new Set(["animal-cell","plant-cell","chloroplast","mitochondrion","digestive-system","respiratory-system","circulatory-system","human-heart","excretory-system","human-kidney","nervous-system","human-eye","human-ear","human-skeleton","muscular-system","reproductive-systems","flower-anatomy","seed-germination","dna-double-helix","chromosomes-genes","microorganisms","food-chain","atomic-structure","periodic-table","chemical-bonding","molecular-structures","lab-apparatus","filtration","distillation","titration","electrolysis","electrochemical-cell","gas-collection","heating-curve","collision-theory","fractional-distillation","vernier-calipers","micrometer","beam-balance","simple-pendulum","inclined-plane","simple-machines","projectile-motion","vectors-forces","hydraulic-press","wave-anatomy","sound-wave","reflection-refraction","electric-circuit","magnetic-field","cat","dog","butterfly","frog","fish","bird","lion","rainforest","savanna","desert","river-waterfall","ocean","mountain","farm","fruits","vegetables","nigerian-food","kitchen-utensils","bicycle","drinking-water"]);
+
 function cleanText(value, max = 240) {
   return String(value ?? '').trim().slice(0, max);
 }
@@ -55,7 +57,7 @@ function validateScenePlan(data) {
       durationSeconds: Math.max(4, Math.min(18, Number(scene.durationSeconds) || 8)),
       strokes,
       labels,
-      illustration: ['plant', 'atom', 'cell', 'chloroplast'].includes(scene.illustration) ? scene.illustration : null,
+      illustration: SBA_ILLUSTRATION_IDS.has(scene.illustration) ? scene.illustration : null,
       illustrationAccent: /^#[0-9a-f]{6}$/i.test(scene.illustrationAccent || '') ? scene.illustrationAccent : '#e1a82b'
     };
   });
@@ -71,14 +73,14 @@ export async function POST(request) {
     const guidance = SUBJECT_GUIDANCE[subject] || SUBJECT_GUIDANCE.general;
     const prompt = `You are the instructional designer and storyboard artist for Shiney Brain Academy. Create a scientifically accurate, visually teachable whiteboard lesson about: "${topic}". Subject: ${subject}. Visual guidance: ${guidance}
 
-Return 3–6 scenes. Each scene needs a concise heading, a natural spoken narration paragraph in clear Nigerian English (not pidgin), original hand-drawable vector strokes, and optionally one reusable illustration. Set illustration to one of: "plant", "atom", "cell", "chloroplast", or null. Choose it only when scientifically appropriate; strokes should add arrows, labels, callouts and supporting details around it. Do not merely describe visuals: encode them as point paths.
+Return 3–6 scenes. Each scene needs a concise heading, a natural spoken narration paragraph in clear Nigerian English (not pidgin), original hand-drawable vector strokes, and optionally one reusable illustration. Set illustration to one of these reusable SBA asset IDs when appropriate: "animal-cell", "plant-cell", "chloroplast", "mitochondrion", "digestive-system", "respiratory-system", "circulatory-system", "human-heart", "excretory-system", "human-kidney", "nervous-system", "human-eye", "human-ear", "human-skeleton", "muscular-system", "reproductive-systems", "flower-anatomy", "seed-germination", "dna-double-helix", "chromosomes-genes", "microorganisms", "food-chain", "atomic-structure", "periodic-table", "chemical-bonding", "molecular-structures", "lab-apparatus", "filtration", "distillation", "titration", "electrolysis", "electrochemical-cell", "gas-collection", "heating-curve", "collision-theory", "fractional-distillation", "vernier-calipers", "micrometer", "beam-balance", "simple-pendulum", "inclined-plane", "simple-machines", "projectile-motion", "vectors-forces", "hydraulic-press", "wave-anatomy", "sound-wave", "reflection-refraction", "electric-circuit", "magnetic-field", "cat", "dog", "butterfly", "frog", "fish", "bird", "lion", "rainforest", "savanna", "desert", "river-waterfall", "ocean", "mountain", "farm", "fruits", "vegetables", "nigerian-food", "kitchen-utensils", "bicycle", "drinking-water", or null. Choose it only when visually useful; strokes should add arrows, labels, callouts and supporting details around it. Do not merely describe visuals: encode them as point paths.
 
 COORDINATE SYSTEM: 1000 wide x 700 high. All stroke points are arrays [x,y] within those bounds. Keep drawings centred between x=80..920 and y=80..620. Use 2–14 strokes per scene, each 2–35 points. Use connected points to form outlines, curves approximated by enough points, arrows, axes, molecule bonds, labels, diagrams. Avoid excessive detail. Add text labels separately with x/y coordinates. Do not put words inside stroke paths. Plan drawing order so the visual builds progressively. Make every scene's drawing meaningfully different and directly related to its narration. The first scene introduces the concept; later scenes explain steps/mechanisms; final scene summarises.
 
 For arrows use kind "arrow"; other strokes use "line". Stroke width 2–12. Use dark blue #173f68 for most lines, and restrained accent colours such as #e1a82b, #25845d, #c14e45. Each label has text, x, y, size (16–42), color. Coordinates refer to a 1000x700 drawing board. Each scene durationSeconds 4–18.
 
 Return ONLY JSON:
-{"title":"...","subject":"...","scenes":[{"heading":"...","narration":"...","durationSeconds":8,"illustration":"plant","illustrationAccent":"#e1a82b","strokes":[{"points":[[100,100],[200,200]],"color":"#173f68","width":5,"kind":"line"}],"labels":[{"text":"label","x":200,"y":100,"size":28,"color":"#173f68"}]}]}
+{"title":"...","subject":"...","scenes":[{"heading":"...","narration":"...","durationSeconds":8,"illustration":"plant-cell","illustrationAccent":"#e1a82b","strokes":[{"points":[[100,100],[200,200]],"color":"#173f68","width":5,"kind":"line"}],"labels":[{"text":"label","x":200,"y":100,"size":28,"color":"#173f68"}]}]}
 Ensure explanations and drawings are factually correct. Do not invent equations, structures or mechanisms.`;
     const generated = await generateJson(prompt, { expect: 'object', maxTokens: 6500 });
     const plan = validateScenePlan({ ...generated, subject });
