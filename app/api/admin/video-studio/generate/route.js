@@ -1,5 +1,6 @@
 import { NextResponse } from 'next/server';
 import { generateJson } from '@/lib/content-factory/generators/_shared';
+import { synthesizeLine, estimateDurationSeconds } from '@/lib/podcastTTS';
 
 export const runtime = 'nodejs';
 
@@ -20,7 +21,7 @@ function validateScenePlan(data) {
     throw new Error('The lesson planner returned an invalid scene list.');
   }
   const scenes = data.scenes.map((scene, index) => {
-    if (!scene || !Array.isArray(scene.strokes) || scene.strokes.length > 14) {
+    if (!scene || !Array.isArray(scene.strokes) || scene.strokes.length < 2 || scene.strokes.length > 14) {
       throw new Error(`Scene ${index + 1} has invalid drawing instructions.`);
     }
     const strokes = scene.strokes.map((stroke) => {
@@ -79,6 +80,12 @@ Return ONLY JSON:
 Ensure explanations and drawings are factually correct. Do not invent equations, structures or mechanisms.`;
     const generated = await generateJson(prompt, { expect: 'object', maxTokens: 6500 });
     const plan = validateScenePlan({ ...generated, subject });
+    for (const scene of plan.scenes) {
+      if (!scene.narration) throw new Error('A scene is missing its narration.');
+      const audio = await synthesizeLine(scene.narration, 'host_a', 'neutral');
+      scene.audioSrc = 'data:audio/mpeg;base64,' + audio.toString('base64');
+      scene.durationSeconds = Math.max(scene.durationSeconds, estimateDurationSeconds(scene.narration) + 1);
+    }
     return NextResponse.json({ success: true, plan });
   } catch (error) {
     console.error('Whiteboard lesson generation failed:', error);
