@@ -203,7 +203,34 @@ export async function POST(request) {
       explanation: question.explanation, image_url: imageUrl, storage_path: imagePath, caption,
       source: body.questionId ? 'past_questions' : 'manual'
     };
+    // content_assets requires a knowledge_assets parent. Reuse the subject/topic
+    // asset when available; create a lightweight curriculum-topic record otherwise.
+    let { data: knowledgeAsset, error: knowledgeLookupError } = await supabase
+      .from('knowledge_assets')
+      .select('id')
+      .eq('keyword', question.topic)
+      .eq('subject', question.subject)
+      .maybeSingle();
+    if (knowledgeLookupError) throw knowledgeLookupError;
+    if (!knowledgeAsset) {
+      const { data: createdKnowledgeAsset, error: knowledgeCreateError } = await supabase
+        .from('knowledge_assets')
+        .insert({
+          keyword: question.topic || question.subject,
+          topic_type: 'curriculum_topic',
+          subject: question.subject || 'JAMB',
+          summary: 'Question of the Day content for ' + (question.subject || 'JAMB') + '.',
+          status: 'active',
+          source: 'question_of_the_day'
+        })
+        .select('id')
+        .single();
+      if (knowledgeCreateError) throw knowledgeCreateError;
+      knowledgeAsset = createdKnowledgeAsset;
+    }
+
     const { data: content, error: contentError } = await supabase.from('content_assets').insert({
+      knowledge_asset_id: knowledgeAsset.id,
       asset_type: 'question_of_the_day', platform: null, format: 'image',
       title: question.subject + ' Question of the Day', body: question.question,
       status: 'draft', generated_by: 'sba-question-of-the-day-renderer', metadata
