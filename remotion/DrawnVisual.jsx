@@ -1,5 +1,7 @@
 'use client';
 import React from 'react';
+import { TegakiRenderer } from 'tegaki';
+import caveat from 'tegaki/fonts/caveat';
 import { AbsoluteFill, interpolate, useCurrentFrame, useVideoConfig } from 'remotion';
 
 const clamp = { extrapolateLeft: 'clamp', extrapolateRight: 'clamp' };
@@ -54,11 +56,20 @@ export function DrawnVisual({ scene }) {
       {stroke.kind === 'arrow' && local >= .92 ? <path d={(() => { const pts=stroke.points; const a=pts[Math.max(0,pts.length-2)],b=pts[pts.length-1]; const angle=Math.atan2(b[1]-a[1],b[0]-a[0]); const size=22; const p1=[b[0]-size*Math.cos(angle-.48),b[1]-size*Math.sin(angle-.48)],p2=[b[0]-size*Math.cos(angle+.48),b[1]-size*Math.sin(angle+.48)]; return `M${p1.join(' ')} L${b.join(' ')} L${p2.join(' ')}`; })()} fill="none" stroke={stroke.color || '#173f68'} strokeWidth={stroke.width || 5} strokeLinecap="round"/> : null}
     </g>;
   });
-  const labelOpacity = interpolate(frame, [totalDuration * .72, totalDuration * .84], [0, 1], clamp);
+  const labelStart = totalDuration * .72;
+  const labelWindow = Math.max(10, (totalDuration * .26) / Math.max(1, (scene?.labels || []).length));
   return <AbsoluteFill>
     <svg viewBox="0 0 1000 700" preserveAspectRatio="xMidYMid meet" style={{ position: 'absolute', inset: '13% 5% 20%', width: '90%', height: '67%', overflow: 'visible' }}>
       {rendered}
-      {(scene?.labels || []).map((label, index) => <text key={index} x={label.x} y={label.y} fontSize={label.size || 26} fontWeight="700" fill={label.color || '#173f68'} opacity={labelOpacity}>{label.text}</text>)}
+      {(scene?.labels || []).map((label, index) => {
+        const start = labelStart + index * labelWindow;
+        const progress = interpolate(frame, [start, start + labelWindow * .82], [0, 1], clamp);
+        return <foreignObject key={index} x={label.x} y={label.y - (label.size || 26)} width={420} height={76} style={{ overflow: 'visible' }}>
+          <div xmlns="http://www.w3.org/1999/xhtml" style={{ display: 'inline-block', whiteSpace: 'nowrap', color: label.color || '#173f68', fontWeight: 700, fontSize: label.size || 26, lineHeight: 1.2 }}>
+            <TegakiRenderer font={caveat} text={label.text} time={{ mode: 'controlled', value: progress, unit: 'progress' }} style={{ fontSize: label.size || 26, color: label.color || '#173f68' }} />
+          </div>
+        </foreignObject>;
+      })}
       {hand ? <DrawingHand x={hand[0]} y={hand[1]}/> : null}
     </svg>
   </AbsoluteFill>;
