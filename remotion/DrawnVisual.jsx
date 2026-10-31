@@ -66,7 +66,7 @@ export function DrawnVisual({ scene }) {
         const progress = interpolate(frame, [start, start + labelWindow * .82], [0, 1], clamp);
         return <foreignObject key={index} x={label.x} y={label.y - (label.size || 26)} width={420} height={76} style={{ overflow: 'visible' }}>
           <div xmlns="http://www.w3.org/1999/xhtml" style={{ display: 'inline-block', whiteSpace: 'nowrap', color: label.color || '#173f68', fontWeight: 700, fontSize: label.size || 26, lineHeight: 1.2 }}>
-            <TegakiRenderer font={caveat} text={label.text} time={{ mode: 'controlled', value: progress, unit: 'progress' }} style={{ fontSize: label.size || 26, color: label.color || '#173f68' }} />
+            <TegakiRenderer font={caveat} time={{ mode: 'controlled', value: progress, unit: 'progress' }} style={{ fontSize: label.size || 26, color: label.color || '#173f68' }}>{label.text}</TegakiRenderer>
           </div>
         </foreignObject>;
       })}
