@@ -1,6 +1,5 @@
 import { NextResponse } from 'next/server';
 import { generateJson } from '@/lib/content-factory/generators/_shared';
-import { synthesizeLine, estimateDurationSeconds } from '@/lib/podcastTTS';
 
 export const runtime = 'nodejs';
 export const maxDuration = 60;
@@ -81,12 +80,7 @@ Return ONLY JSON:
 Ensure explanations and drawings are factually correct. Do not invent equations, structures or mechanisms.`;
     const generated = await generateJson(prompt, { expect: 'object', maxTokens: 6500 });
     const plan = validateScenePlan({ ...generated, subject });
-    await Promise.all(plan.scenes.map(async (scene) => {
-      if (!scene.narration) throw new Error('A scene is missing its narration.');
-      const audio = await synthesizeLine(scene.narration, 'host_a', 'neutral');
-      scene.audioSrc = 'data:audio/mpeg;base64,' + audio.toString('base64');
-      scene.durationSeconds = Math.max(scene.durationSeconds, estimateDurationSeconds(scene.narration) + 1);
-    }));
+    if (plan.scenes.some(scene => !scene.narration)) throw new Error('A scene is missing its narration.');
     return NextResponse.json({ success: true, plan });
   } catch (error) {
     console.error('Whiteboard lesson generation failed:', error);
