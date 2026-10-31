@@ -6,9 +6,11 @@ import { interpolate, useCurrentFrame, useVideoConfig } from 'remotion';
 const clamp = { extrapolateLeft: 'clamp', extrapolateRight: 'clamp' };
 
 function Reveal({ progress, children, stroke = '#173f68', width = 7 }) {
+  const revealChildren = React.Children.map(children, child => React.isValidElement(child)
+    ? React.cloneElement(child, { pathLength: 1 }) : child);
   return <g fill="none" stroke={stroke} strokeWidth={width} strokeLinecap="round" strokeLinejoin="round"
-    strokeDasharray="1200" strokeDashoffset={interpolate(progress, [0, 1], [1200, 0], clamp)}>
-    {children}
+    strokeDasharray="1" strokeDashoffset={interpolate(progress, [0, 1], [1, 0], clamp)}>
+    {revealChildren}
   </g>;
 }
 
