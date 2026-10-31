@@ -53,7 +53,8 @@
     "uuid": "^14.0.1",
     "xlsx": "^0.18.5",
     "@remotion/web-renderer": "4.0.490",
-    "@remotion/player": "4.0.490"
+    "@remotion/player": "4.0.490",
+    "tegaki": "^0.22.1"
   },
   "devDependencies": {
     "@marp-team/marp-cli": "^4.4.1",
