@@ -2,8 +2,6 @@ import { NextResponse } from 'next/server';
 import sharp from 'sharp';
 import { createCanvas, loadImage } from '@napi-rs/canvas';
 import { createAdminClient } from '@/lib/supabase-admin';
-import { generateWithFallback } from '@/lib/llmFallbackChain';
-import { parseJsonFromText } from '@/lib/robustJsonParse';
 
 export const runtime = 'nodejs';
 export const maxDuration = 60;
@@ -128,26 +126,6 @@ async function renderQuestion(template, q) {
   }
   return canvas.toBuffer('image/jpeg', 92);
 }
-async function generateQuestion(asset, difficulty) {
-  const prompt = 'You are an expert Nigerian JAMB examiner. Write ONE original, accurate JAMB-style MCQ for Shiney Brain Academy.\n' +
-    'TOPIC: ' + asset.keyword + '\nSUBJECT: ' + (asset.subject || 'General') +
-    '\nREFERENCE SUMMARY: ' + (asset.summary || 'Use established syllabus knowledge.') +
-    '\nKEY CONCEPTS: ' + (asset.key_concepts || []).slice(0, 8).join('; ') +
-    '\nFACTS: ' + (asset.facts || []).slice(0, 8).join('; ') + '\nDIFFICULTY: ' + difficulty +
-    '\nRequirements: meaningful conceptual test; exactly four plausible options A-D; exactly one correct answer; no all/none of the above; avoid ambiguity; question preferably under 25 words; options ideally under 10 words each; explanation 2-4 accurate sentences. This is an original JAMB-style practice question, NOT a claim that it appeared in an official past paper. Return only JSON: ' +
-    '{"question":"...","options":[{"id":"A","text":"..."},{"id":"B","text":"..."},{"id":"C","text":"..."},{"id":"D","text":"..."}],"correctOptionId":"A","explanation":"..."}';
-  const { result, errors } = await generateWithFallback(
-    prompt,
-    (text) => parseJsonFromText(text, 'object'),
-    (q) => q && typeof q.question === 'string' && q.question.trim() &&
-      Array.isArray(q.options) && q.options.length === 4 &&
-      ['A','B','C','D'].every((id) => q.options.some((o) => o && o.id === id && typeof o.text === 'string' && o.text.trim())) &&
-      ['A','B','C','D'].includes(q.correctOptionId) && typeof q.explanation === 'string' && q.explanation.trim(),
-    1600
-  );
-  if (!result) throw new Error('Question generation failed across providers. ' + (errors || []).join('; '));
-  return { ...result, subject: asset.subject || 'General', topic: asset.keyword, difficulty };
-}
 
 export async function GET() {
   try {
@@ -163,43 +141,78 @@ export async function GET() {
 export async function POST(request) {
   try {
     const body = await request.json();
-    const knowledgeAssetId = body.knowledgeAssetId;
-    const difficulty = ['Easy','Medium','Hard'].includes(body.difficulty) ? body.difficulty : 'Hard';
-    if (!knowledgeAssetId) return NextResponse.json({ error: 'Choose a topic from Knowledge Assets first.' }, { status: 400 });
     const supabase = createAdminClient();
-    const { data: asset, error: assetError } = await supabase.from('knowledge_assets').select('*').eq('id', knowledgeAssetId).single();
-    if (assetError || !asset) return NextResponse.json({ error: 'Knowledge asset not found.' }, { status: 404 });
-    const { data: template, error: templateError } = await supabase.storage.from(BUCKET).download('templates/classroom-template.jpg');
-    if (templateError || !template) return NextResponse.json({ error: 'Upload the classroom template once before generating.' }, { status: 400 });
+    let question;
 
-    const question = await generateQuestion(asset, difficulty);
+    if (body.questionId) {
+      const { data: row, error } = await supabase.from('past_questions')
+        .select('*').eq('id', body.questionId).single();
+      if (error || !row) return NextResponse.json({ error: 'Question not found in the question bank.' }, { status: 404 });
+      question = {
+        question: row.question,
+        subject: row.subject || 'JAMB',
+        topic: row.topic || 'Practice',
+        difficulty: row.difficulty ? (row.difficulty >= 4 ? 'Hard' : row.difficulty >= 2 ? 'Medium' : 'Easy') : 'Practice',
+        options: [
+          { id: 'A', text: row.option_a || '' },
+          { id: 'B', text: row.option_b || '' },
+          { id: 'C', text: row.option_c || '' },
+          { id: 'D', text: row.option_d || '' }
+        ].filter(o => o.text.trim()),
+        correctOptionId: String(row.correct_answer || '').toUpperCase(),
+        explanation: row.explanation || ''
+      };
+    } else {
+      const options = ['A','B','C','D'].map((id, i) => ({ id, text: String(body['option_' + id] || '').trim() })).filter(o => o.text);
+      question = {
+        question: String(body.question || '').trim(),
+        subject: String(body.subject || 'JAMB').trim(),
+        topic: String(body.topic || 'Practice').trim(),
+        difficulty: 'Manual',
+        options,
+        correctOptionId: String(body.correctOptionId || '').toUpperCase(),
+        explanation: String(body.explanation || '').trim()
+      };
+    }
+
+    if (!question.question || question.options.length < 2) {
+      return NextResponse.json({ error: 'Add a question and at least two answer options.' }, { status: 400 });
+    }
+    if (!['A','B','C','D'].includes(question.correctOptionId) || !question.options.some(o => o.id === question.correctOptionId)) {
+      return NextResponse.json({ error: 'Select the correct answer.' }, { status: 400 });
+    }
+
+    const { data: template, error: templateError } = await supabase.storage.from(BUCKET).download('templates/classroom-template.jpg');
+    if (templateError || !template) return NextResponse.json({ error: 'Upload the classroom template once before rendering.' }, { status: 400 });
+
     const imageBuffer = await renderQuestion(Buffer.from(await template.arrayBuffer()), question);
     const imagePath = 'generated/' + Date.now() + '-' + crypto.randomUUID() + '.jpg';
     const { error: uploadError } = await supabase.storage.from(BUCKET).upload(imagePath, imageBuffer, { contentType: 'image/jpeg' });
     if (uploadError) throw uploadError;
     const imageUrl = supabase.storage.from(BUCKET).getPublicUrl(imagePath).data.publicUrl;
-    const caption = 'Can you solve today’s ' + question.subject + ' question? Drop your answer in the comments.\n\nFollow Shiney Brain Academy for daily JAMB practice.\n\n#ShineyBrainAcademy #JAMB #UTME #JAMB2027 #QuestionOfTheDay';
+    const caption = 'Can you solve today’s ' + question.subject + ' question? Drop your answer in the comments.\\n\\nFollow Shiney Brain Academy for daily JAMB practice.\\n\\n#ShineyBrainAcademy #JAMB #UTME #JAMB2027 #QuestionOfTheDay';
     const metadata = {
       subject: question.subject, topic: question.topic, difficulty: question.difficulty,
       options: question.options, correctOptionId: question.correctOptionId,
-      explanation: question.explanation, image_url: imageUrl, storage_path: imagePath, caption
+      explanation: question.explanation, image_url: imageUrl, storage_path: imagePath, caption,
+      source: body.questionId ? 'past_questions' : 'manual'
     };
     const { data: content, error: contentError } = await supabase.from('content_assets').insert({
-      knowledge_asset_id: knowledgeAssetId, asset_type: 'question_of_the_day', platform: null,
-      format: 'image', title: question.subject + ' Question of the Day', body: question.question,
-      status: 'draft', generated_by: 'sba-question-of-the-day-engine', metadata
+      asset_type: 'question_of_the_day', platform: null, format: 'image',
+      title: question.subject + ' Question of the Day', body: question.question,
+      status: 'draft', generated_by: 'sba-question-of-the-day-renderer', metadata
     }).select().single();
     if (contentError) throw contentError;
     const { error: mediaError } = await supabase.from('media_files').insert({
       content_asset_id: content.id, media_type: 'image', role: 'primary', position: 0,
       url: imageUrl, storage_path: imagePath, width: W, height: H,
       file_size_bytes: imageBuffer.length, mime_type: 'image/jpeg', source: 'render',
-      alt_text: question.subject + ' JAMB practice question from Shiney Brain Academy'
+      alt_text: question.subject + ' question from Shiney Brain Academy'
     });
     if (mediaError) throw mediaError;
     return NextResponse.json({ success: true, question: { ...question, id: content.id, imageUrl, caption } });
   } catch (error) {
-    console.error('Question of the Day generation failed:', error);
-    return NextResponse.json({ error: error.message || 'Generation failed.' }, { status: 500 });
+    console.error('Question of the Day render failed:', error);
+    return NextResponse.json({ error: error.message || 'Rendering failed.' }, { status: 500 });
   }
 }
