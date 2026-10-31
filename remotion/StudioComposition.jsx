@@ -198,5 +198,5 @@ function Scene({scene,index,template,brand,accent,narrationVolume}) {
 
 export function StudioComposition({title='Shiney Brain Video',scenes=[],template='explainer',brand='SHINEY BRAIN ACADEMY',accent='#f4c542',musicSrc=null,musicVolume=0.12,narrationVolume=1}) {
  let from=0;
- return <AbsoluteFill>{scenes.map((scene,index)=>{const duration=Math.max(60,Math.round((Number(scene.durationSeconds)||5)*30));const start=from;from+=duration;return <Sequence key={scene.id||index} from={start} durationInFrames={duration}><Scene scene={scene} index={index} template={template} brand={brand} accent={accent} narrationVolume={narrationVolume}/></Sequence>;})}{musicSrc?<Audio src={musicSrc} volume={musicVolume}/>:null}</AbsoluteFill>;
+ return <AbsoluteFill>{scenes.map((scene,index)=>{const duration=Math.max(60,Math.round((Number(scene.durationSeconds)||5)*30));const start=from;from+=duration;return <Sequence key={scene.id||index} from={start} durationInFrames={duration}><Scene scene={scene} index={index} template={template} brand={brand} accent={accent} narrationVolume={narrationVolume}/></Sequence>;})}{musicSrc?<Audio src={musicSrc} volume={musicVolume} loop/>:null}</AbsoluteFill>;
 }
