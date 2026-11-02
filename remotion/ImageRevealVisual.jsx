@@ -1,10 +1,10 @@
 'use client';
 import React from 'react';
-import { AbsoluteFill, interpolate, useCurrentFrame, useVideoConfig, Audio } from 'remotion';
+import { AbsoluteFill, interpolate, useCurrentFrame, useVideoConfig } from 'remotion';
 
 const clamp = { extrapolateLeft: 'clamp', extrapolateRight: 'clamp' };
 
-function ScribbleReveal({ image, progress }) {
+function ScribbleReveal({ image, progress, index, reveal }) {
   const { width, height } = useVideoConfig();
   const w = width * 0.84, h = height * 0.47;
   const x = width * 0.08, y = height * 0.29;
@@ -14,12 +14,12 @@ function ScribbleReveal({ image, progress }) {
   M ${x - 40} ${y + h * .82} Q ${x + w * .2} ${y + h * .72} ${x + w * .35} ${y + h * .85} T ${x + w * .7} ${y + h * .78} T ${x + w + 40} ${y + h * .88}`;
   return <g>
     <defs>
-      <mask id="imageScribbleMask" maskUnits="userSpaceOnUse" x={x} y={y} width={w} height={h}>
+      <mask id={"imageScribbleMask-" + index} maskUnits="userSpaceOnUse" x={x} y={y} width={w} height={h}>
         <rect x={x} y={y} width={w} height={h} fill="black"/>
-        <path d={zig} fill="none" stroke="white" strokeWidth={h * .34} strokeLinecap="round" strokeLinejoin="round" strokeDasharray={w * 4} strokeDashoffset={revealOffset}/>
+        <path d={zig} fill="none" stroke="white" strokeWidth={h * .34} strokeLinecap="round" strokeLinejoin="round" strokeDasharray={reveal === 'wipe' ? undefined : w * 4} strokeDashoffset={reveal === 'wipe' ? undefined : revealOffset} opacity={reveal === 'wipe' ? progress : 1}/>
       </mask>
     </defs>
-    <image href={image} x={x} y={y} width={w} height={h} preserveAspectRatio="xMidYMid meet" mask="url(#imageScribbleMask)"/>
+    <image href={image} x={x} y={y} width={w} height={h} preserveAspectRatio="xMidYMid meet" mask={"url(#imageScribbleMask-" + index + ")"}/>
     <path d={zig} fill="none" stroke="#f4c542" strokeWidth={Math.max(5, width * .004)} strokeLinecap="round" strokeLinejoin="round" strokeDasharray={w * 4} strokeDashoffset={revealOffset} opacity=".9"/>
   </g>;
 }
@@ -35,10 +35,9 @@ export function ImageRevealVisual({ scene, brand, accent = '#f4c542', index = 0 
     <div style={{ position: 'absolute', top: '4%', left: '7%', fontSize: 24, fontWeight: 900, color: '#1769aa', letterSpacing: 2 }}>{brand}</div>
     <div style={{ position: 'absolute', top: '12%', left: '7%', right: '7%', fontSize: 52, lineHeight: 1.08, fontWeight: 900 }}>{scene.heading}</div>
     {scene.image?.url ? <svg width="100%" height="100%" viewBox={`0 0 ${useVideoConfig().width} ${useVideoConfig().height}`} style={{ position: 'absolute', inset: 0 }}>
-      <ScribbleReveal image={scene.image.url} progress={progress}/>
+      <ScribbleReveal image={scene.image.url} progress={progress} index={index} reveal={scene.reveal || 'scribble'}/>
     </svg> : <div style={{ position: 'absolute', top: '35%', left: '10%', right: '10%', textAlign: 'center', padding: 30, border: '3px dashed #c14e45', borderRadius: 20, color: '#9b3028', fontSize: 28, fontWeight: 800 }}>No suitable image found for this scene. Choose another visual before export.</div>}
     <div style={{ position: 'absolute', left: '8%', right: '8%', bottom: '11%', fontSize: 30, lineHeight: 1.28, fontWeight: 650, opacity: .98 }}>{scene.narration}</div>
     <div style={{ position: 'absolute', bottom: '5%', left: '8%', fontSize: 18, color: '#718096', fontWeight: 800 }}>SHINEY BRAIN • {String(index + 1).padStart(2, '0')}</div>
-    {scene.audioUrl ? <Audio src={scene.audioUrl}/> : null}
   </AbsoluteFill>;
 }
