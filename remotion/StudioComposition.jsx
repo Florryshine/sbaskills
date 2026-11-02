@@ -4,6 +4,7 @@ import React from 'react';
 import { TegakiRenderer } from 'tegaki';
 import caveat from 'tegaki/fonts/caveat';
 import { DrawnVisual } from './DrawnVisual';
+import { ImageRevealVisual } from './ImageRevealVisual';
 import { SBAIllustration, findSBAIllustration } from './whiteboard/SBAAssetLibrary';
 import {AbsoluteFill, Sequence, Audio, useCurrentFrame, useVideoConfig, interpolate, Easing} from 'remotion';
 
@@ -36,6 +37,7 @@ function BoardBackground({brand}) {
 
 function WhiteboardScene({scene,brand,accent,index,narrationVolume}) {
  const intro=interpolate(useCurrentFrame(),[0,12],[0,1],clamp);
+ if(scene.image?.url) return <ImageRevealVisual scene={scene} brand={brand} accent={accent} index={index}/>;
  return <AbsoluteFill style={{opacity:intro,background:'#fffef8',fontFamily:'Trebuchet MS, Arial, sans-serif',color:C.ink}}>
   <svg width="100%" height="100%" viewBox="0 0 1080 1920" preserveAspectRatio="none" style={{position:'absolute',inset:0}}><defs><pattern id={'paperDots-'+index} width="34" height="34" patternUnits="userSpaceOnUse"><circle cx="2" cy="2" r="1.1" fill="#d8e0e5" opacity=".55"/></pattern></defs><rect width="1080" height="1920" fill={'url(#paperDots-'+index+')'}/></svg>
   <div style={{position:'absolute',top:55,left:65,fontSize:27,fontWeight:900,letterSpacing:2,color:C.blue}}>{brand.toUpperCase()}</div>
