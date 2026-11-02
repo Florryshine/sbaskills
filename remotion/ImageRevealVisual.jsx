@@ -62,7 +62,7 @@ export function ImageRevealVisual({ scene, brand = 'SHINEY BRAIN ACADEMY', accen
               ? `inset(0 ${revealPercent}% 0 0 round 16px)`
               : `inset(0 ${revealPercent}% 0 0 round 16px)`,
           }}>
-            <Img src={scene.image.url} alt={scene.heading || 'Lesson visual'} style={{ width: '100%', height: '100%', objectFit: 'contain', display: 'block' }} />
+            <Img src={scene.image.url} alt={scene.heading || 'Lesson visual'} style={{ width: '100%', height: '100%', objectFit: 'contain', display: 'block', filter: scene.imageGrayscale === false ? 'none' : 'grayscale(1)' }} />
           </div>
           {scene.reveal !== 'wipe' && (
             <svg width={width} height={height} viewBox={`0 0 ${width} ${height}`} style={{ position: 'absolute', inset: 0, pointerEvents: 'none', overflow: 'visible' }}>
