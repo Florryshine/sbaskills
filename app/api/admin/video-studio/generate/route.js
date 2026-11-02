@@ -2,7 +2,7 @@ import { NextResponse } from 'next/server';
 import { generateJson } from '@/lib/content-factory/generators/_shared';
 import { synthesizeLine, estimateDurationSeconds } from '@/lib/podcastTTS';
 import { createAdminClient } from '@/lib/supabase-admin';
-import { searchWikimediaMulti, searchPexelsMulti, searchPixabayMulti } from '@/lib/image-search';
+import { searchWikimediaMulti, searchPexelsMulti, searchPixabayMulti, downloadImageBuffer } from '@/lib/image-search';
 
 export const runtime = 'nodejs';
 export const maxDuration = 60;
@@ -25,6 +25,18 @@ async function findSceneImage(query, subject) {
     }
   }
   return null;
+}
+
+
+async function hostSceneImage(supabase, image, index) {
+  if (!image?.url) return null;
+  const buffer = await downloadImageBuffer(image.url);
+  const ext = /\\.png(?:\\?|$)/i.test(image.url) ? 'png' : /\\.webp(?:\\?|$)/i.test(image.url) ? 'webp' : 'jpg';
+  const contentType = ext === 'png' ? 'image/png' : ext === 'webp' ? 'image/webp' : 'image/jpeg';
+  const path = 'video-studio/images/' + Date.now() + '-' + index + '-' + Math.random().toString(36).slice(2, 8) + '.' + ext;
+  const { error } = await supabase.storage.from(BUCKET).upload(path, buffer, { contentType, upsert: true, cacheControl: '31536000' });
+  if (error) throw new Error('Image hosting failed: ' + error.message);
+  return supabase.storage.from(BUCKET).getPublicUrl(path).data.publicUrl;
 }
 
 async function uploadNarration(supabase, key, buffer) {
@@ -76,12 +88,14 @@ Return ONLY JSON:
       if (!narration) throw new Error(`Scene ${index + 1} has no narration.`);
       const visualQuery = clean(scene.visualQuery, 140);
       if (!visualQuery) throw new Error(`Scene ${index + 1} has no image search query.`);
-      const [image, audio] = await Promise.all([
+      const [candidate, audio] = await Promise.all([
         findSceneImage(visualQuery, subjectName),
         synthesizeLine(narration, voice, 'curious').then(buffer =>
-          uploadNarration(supabase, `${Date.now()}-${index}-${Math.random().toString(36).slice(2, 8)}`, buffer)
+          uploadNarration(supabase, Date.now() + '-' + index + '-' + Math.random().toString(36).slice(2, 8), buffer)
         ),
       ]);
+      const hostedImageUrl = candidate ? await hostSceneImage(supabase, candidate, index) : null;
+      const image = candidate ? { ...candidate, url: hostedImageUrl || candidate.url } : null;
       return {
         heading: clean(scene.heading, 100),
         narration,
