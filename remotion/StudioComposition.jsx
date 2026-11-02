@@ -182,9 +182,28 @@ function StoryScene({scene,index,brand,accent}) {
   <div style={{position:'absolute',left:width*.075,right:width*.075,bottom:height*.045,display:'flex',justifyContent:'space-between',alignItems:'center',fontSize:Math.max(14,width*.016),fontWeight:900,letterSpacing:2,color:p.muted}}><span>SHINEY BRAIN • STORY REEL</span><span style={{color:p.hot}}>{index===4?'START TODAY':'KEEP GOING'}</span></div>
  </AbsoluteFill>;
 }
+function TegakiScene({scene,brand,accent,index}) {
+ const frame=useCurrentFrame(), {fps}=useVideoConfig();
+ const duration=Math.max(2,Number(scene.durationSeconds)||8);
+ const total=Math.max(1,Math.round(duration*fps));
+ const headingProgress=interpolate(frame,[0,Math.max(1,total*.38)],[0,1],clamp);
+ const bodyProgress=interpolate(frame,[Math.max(1,total*.38),Math.max(2,total*.92)],[0,1],clamp);
+ return <AbsoluteFill style={{background:'#fffef8',color:C.navy,fontFamily:'Arial,sans-serif',padding:'8% 7%',overflow:'hidden'}}>
+  <div style={{position:'absolute',top:38,left:48,fontSize:22,fontWeight:900,letterSpacing:2,color:C.blue}}>{brand.toUpperCase()}</div>
+  <div style={{position:'absolute',top:'17%',left:'8%',right:'8%',fontSize:54,fontWeight:800,color:C.navy}}>
+   <TegakiRenderer font={caveat} text={scene.heading||'Write your heading'} time={{mode:'controlled',value:headingProgress,unit:'progress'}} style={{fontSize:68,fontWeight:700,color:C.navy,lineHeight:1.15}}/>
+  </div>
+  <div style={{position:'absolute',top:'36%',left:'9%',right:'9%',fontSize:35,lineHeight:1.45,color:C.ink}}>
+   <TegakiRenderer font={caveat} text={scene.text||scene.narration||'Write your lesson here.'} time={{mode:'controlled',value:bodyProgress,unit:'progress'}} style={{fontSize:46,fontWeight:600,color:C.ink,lineHeight:1.35}}/>
+  </div>
+  <div style={{position:'absolute',left:'9%',right:'9%',bottom:'13%',height:5,background:accent,borderRadius:8,opacity:.8}}/>
+  <div style={{position:'absolute',bottom:42,left:48,fontSize:18,fontWeight:800,color:'#8794a1'}}>TEGAKI • HANDWRITTEN LESSON {String(index+1).padStart(2,'0')}</div>
+ </AbsoluteFill>;
+}
 function Scene({scene,index,template,brand,accent,narrationVolume}) {
  let visual;
  if(template==='whiteboard') visual=<WhiteboardScene scene={scene} brand={brand} accent={accent} index={index}/>;
+ else if(template==='tegaki') visual=<TegakiScene scene={scene} brand={brand} accent={accent} index={index}/>;
  else if(template==='question') visual=<QuestionScene scene={scene} brand={brand} accent={accent} index={index}/>;
  else if(template==='story') visual=<StoryScene scene={scene} brand={brand} accent={accent} index={index}/>;
  else visual=<ExplainerScene scene={scene} brand={brand} accent={accent} index={index}/>;
