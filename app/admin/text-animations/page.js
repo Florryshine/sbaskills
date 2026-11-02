@@ -86,7 +86,7 @@ function KineticScene({scene,index,preset,brand,animation}) {
   </AbsoluteFill>;
 }
 
-export function TextAnimationsComposition({scenes=[],preset='impact',brand='SHINEY BRAIN ACADEMY',animation='auto'}) {
+function TextAnimationsComposition({scenes=[],preset='impact',brand='SHINEY BRAIN ACADEMY',animation='auto'}) {
  const selected=PRESETS.find(p=>p.id===preset)||PRESETS[0]; let from=0;
  return <AbsoluteFill>{scenes.map((scene,index)=>{const duration=Math.max(30,Math.round((Number(scene.durationSeconds)||2.5)*30));const start=from;from+=duration;return <Sequence key={scene.id||index} from={start} durationInFrames={duration}><KineticScene scene={scene} index={index} preset={selected} brand={brand} animation={animation}/></Sequence>;})}</AbsoluteFill>;
 }
