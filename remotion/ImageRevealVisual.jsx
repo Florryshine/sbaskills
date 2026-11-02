@@ -8,14 +8,19 @@ function ScribbleReveal({ image, progress }) {
   const { width, height } = useVideoConfig();
   const w = width * 0.84, h = height * 0.47;
   const x = width * 0.08, y = height * 0.29;
-  const revealed = Math.max(0, Math.min(100, progress * 100));
+  const revealOffset = w * 4 * (1 - progress);
   const zig = `M ${x - 40} ${y + h * .12} Q ${x + w * .12} ${y - 15} ${x + w * .2} ${y + h * .22} T ${x + w * .4} ${y + h * .16} T ${x + w * .6} ${y + h * .25} T ${x + w * .8} ${y + h * .14} T ${x + w + 40} ${y + h * .2}
   M ${x + w + 40} ${y + h * .48} Q ${x + w * .8} ${y + h * .36} ${x + w * .7} ${y + h * .53} T ${x + w * .4} ${y + h * .49} T ${x - 40} ${y + h * .57}
   M ${x - 40} ${y + h * .82} Q ${x + w * .2} ${y + h * .72} ${x + w * .35} ${y + h * .85} T ${x + w * .7} ${y + h * .78} T ${x + w + 40} ${y + h * .88}`;
   return <g>
-    <defs><clipPath id="imageRevealClip"><rect x={x} y={y} width={w * revealed / 100} height={h}/></clipPath></defs>
-    <image href={image} x={x} y={y} width={w} height={h} preserveAspectRatio="xMidYMid meet" clipPath="url(#imageRevealClip)"/>
-    <path d={zig} fill="none" stroke="#f4c542" strokeWidth={Math.max(8, width * .009)} strokeLinecap="round" strokeLinejoin="round" strokeDasharray={w * 4} strokeDashoffset={w * 4 * (1 - progress)} opacity=".95"/>
+    <defs>
+      <mask id="imageScribbleMask" maskUnits="userSpaceOnUse" x={x} y={y} width={w} height={h}>
+        <rect x={x} y={y} width={w} height={h} fill="black"/>
+        <path d={zig} fill="none" stroke="white" strokeWidth={h * .34} strokeLinecap="round" strokeLinejoin="round" strokeDasharray={w * 4} strokeDashoffset={revealOffset}/>
+      </mask>
+    </defs>
+    <image href={image} x={x} y={y} width={w} height={h} preserveAspectRatio="xMidYMid meet" mask="url(#imageScribbleMask)"/>
+    <path d={zig} fill="none" stroke="#f4c542" strokeWidth={Math.max(5, width * .004)} strokeLinecap="round" strokeLinejoin="round" strokeDasharray={w * 4} strokeDashoffset={revealOffset} opacity=".9"/>
   </g>;
 }
 
