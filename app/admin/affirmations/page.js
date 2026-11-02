@@ -6,7 +6,7 @@ const W = 720, H = 1280;
 const STARTER = ['I WILL NOT FAIL.', 'I AM PREPARED FOR SUCCESS.', 'I AM CAPABLE OF SCORING 300+.', 'I WILL STAY FOCUSED.', 'EVERY DAY, I AM GETTING BETTER.', 'I WILL WALK INTO THAT EXAM HALL WITH CONFIDENCE.'];
 
 function wrap(ctx, text, maxWidth) {
-  const words = text.split(/\\s+/); const lines = []; let line = '';
+  const words = text.split(/\s+/); const lines = []; let line = '';
   for (const word of words) {
     const test = line ? line + ' ' + word : word;
     if (ctx.measureText(test).width > maxWidth && line) { lines.push(line); line = word; } else line = test;
@@ -16,7 +16,7 @@ function wrap(ctx, text, maxWidth) {
 }
 
 export default function AffirmationStudioPage() {
-  const [text, setText] = useState(STARTER.join('\\n'));
+  const [text, setText] = useState(STARTER.join('\n'));
   const [intro, setIntro] = useState('JAMB STUDENTS, SAY THIS AFTER ME');
   const [query, setQuery] = useState('peaceful sunrise nature scenery');
   const [background, setBackground] = useState(null);
@@ -34,7 +34,7 @@ export default function AffirmationStudioPage() {
   const recorderRef = useRef(null), chunksRef = useRef([]), audioCtxRef = useRef(null);
   const startRef = useRef(0), stopRef = useRef(null);
 
-  const lines = text.split(/\\n+/).map(s => s.trim()).filter(Boolean);
+  const lines = text.split(/\n+/).map(s => s.trim()).filter(Boolean);
   const duration = Math.max(12, lines.length * 4.5 + 3);
 
   useEffect(() => {
@@ -92,8 +92,8 @@ export default function AffirmationStudioPage() {
       const title = elapsed < 2 ? intro : (lines[index] || lines[0] || 'I WILL SUCCEED.');
       ctx.font='900 66px Arial';
       let wrapped=wrap(ctx,title.toUpperCase(),W*.84);
-      while(wrapped.length>4 && ctx.font.match(/(\\d+)px/)[1]>38) { const n=Number(ctx.font.match(/(\\d+)px/)[1])-4;ctx.font='900 '+n+'px Arial';wrapped=wrap(ctx,title.toUpperCase(),W*.84); }
-      const fs=Number(ctx.font.match(/(\\d+)px/)[1]), lineH=fs*1.22;
+      while(wrapped.length>4 && ctx.font.match(/(\d+)px/)[1]>38) { const n=Number(ctx.font.match(/(\d+)px/)[1])-4;ctx.font='900 '+n+'px Arial';wrapped=wrap(ctx,title.toUpperCase(),W*.84); }
+      const fs=Number(ctx.font.match(/(\d+)px/)[1]), lineH=fs*1.22;
       const base=H*.49-(wrapped.length-1)*lineH/2;
       ctx.save();ctx.globalAlpha=elapsed<2?Math.min(1,elapsed/0.7):Math.min(1,local);
       ctx.translate(W/2, H*.49);ctx.scale(.96+.04*Math.min(1,local),.96+.04*Math.min(1,local));
