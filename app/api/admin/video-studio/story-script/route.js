@@ -9,7 +9,7 @@ function clean(value, max = 500) {
 }
 
 function validateStory(value) {
-  if (!value || !Array.isArray(value.scenes) || value.scenes.length < 3 || value.scenes.length > 8) {
+  if (!value || !Array.isArray(value.scenes) || value.scenes.length !== 5) {
     throw new Error('Gemini returned an invalid story. Please generate it again.');
   }
   const scenes = value.scenes.map((scene, index) => {
@@ -48,7 +48,7 @@ STORYTELLING RULES:
 - Keep the pacing tight for a ${platform} video. Each scene must be visually imaginable and understandable without seeing the narration.
 - The headings are short on-screen animated typography. Keep each heading punchy (ideally 3–8 words).
 - Each scene's text is the spoken narration. Aim for 1–3 concise sentences per scene; no stage directions, camera directions, markdown, or speaker labels.
-- Build 4–6 scenes, with a clear progression. Give the climax enough room; do not rush directly from problem to moral.
+- Build EXACTLY 5 scenes, with a clear progression. Match these beats: (1) hook + protagonist/desire, (2) obstacle/villain + rising stakes, (3) struggle/failed attempt, (4) turning point + decisive action/climax, (5) payoff + emotional close. Give the climax enough room; do not rush directly from problem to moral.
 - The final scene should deliver an emotionally satisfying payoff and a natural, brief SBA sign-off such as "This is Questions of the Day from Shiney Brain Academy. See you at the next question." Only use a question-of-the-day sign-off if the story is about an exam question; otherwise use a natural story close and a light brand sign-off.
 - Do not invent claims about SBA student results, statistics, services or guarantees.
 - Do not include exam answers or factual educational claims unless they are necessary and you are certain they are correct.
