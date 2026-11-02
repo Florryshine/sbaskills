@@ -10,7 +10,7 @@ const examples={
   {heading:'Meet the human heart',text:'The heart is a muscular organ that pumps blood around the body. Let’s draw it and see how it works.',diagram:'heart',durationSeconds:8},
   {heading:'Four chambers, one pump',text:'The heart has four chambers: two atria at the top and two ventricles below. The right and left sides have different jobs.',diagram:'chambers',durationSeconds:8},
   {heading:'Follow the blood',text:'The right side sends oxygen-poor blood to the lungs. The left side receives oxygen-rich blood and pumps it to the rest of the body.',diagram:'flow',durationSeconds:9}
-
+ ],
  question:[{heading:'Which organelle is the site of photosynthesis?',text:'Choose the correct answer. Pause before checking.',options:['Mitochondrion','Chloroplast','Ribosome','Nucleus'],durationSeconds:7},{heading:'Correct answer: Chloroplast',text:'Chloroplasts contain chlorophyll, which absorbs light energy for photosynthesis.',durationSeconds:6}],
  story:[{heading:'She had one more chance.',text:'The exam was three weeks away. Every failed mock felt like proof that she could not do it.',durationSeconds:6},{heading:'Then she changed her strategy.',text:'One topic. One focused session. One timed test every day. Small wins began to add up.',durationSeconds:6}]
 };
