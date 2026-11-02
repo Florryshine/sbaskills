@@ -19,6 +19,7 @@ const examples={
 const choices=[['explainer','Educational explainer'],['whiteboard','Whiteboard lesson'],['question','JAMB question'],['story','Story / reel'],['tegaki','Tegaki handwriting',true]];
 const totalFrames=s=>s.reduce((n,x)=>n+Math.max(60,Math.round((Number(x.durationSeconds)||5)*30)),0);
 export default function VideoStudio(){
+ const [imageQueries,setImageQueries]=useState({}),[imageResults,setImageResults]=useState({}),[imageSearching,setImageSearching]=useState({}),[imageUploading,setImageUploading]=useState({});
  const [topic,setTopic]=useState('Cell structure and functions'),[subject,setSubject]=useState('biology'),[generating,setGenerating]=useState(false),[kind,setKind]=useState('whiteboard'),[scenes,setScenes]=useState([]),[title,setTitle]=useState('New Whiteboard Lesson'),[ratio,setRatio]=useState('vertical'),[accent,setAccent]=useState('#f4c542'),[brand,setBrand]=useState('SHINEY BRAIN ACADEMY'),[status,setStatus]=useState(''),[busy,setBusy]=useState(false),[narrating,setNarrating]=useState(false),[musicTracks,setMusicTracks]=useState([]),[musicSrc,setMusicSrc]=useState(''),[musicVolume,setMusicVolume]=useState(0.12),[narrationVolume,setNarrationVolume]=useState(1),[musicPreview,setMusicPreview]=useState(false);
  const previewAudioRef=useRef(null),fps=30,frames=totalFrames(scenes),width=ratio==='vertical'?1080:1920,height=ratio==='vertical'?1920:1080;
  useEffect(()=>{fetch('/api/admin/quote-loops/audio-list').then(r=>r.json()).then(d=>setMusicTracks(Array.isArray(d.tracks)?d.tracks:[])).catch(()=>setMusicTracks([]));},[]);
