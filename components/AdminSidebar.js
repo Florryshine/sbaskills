@@ -81,6 +81,7 @@ const sections = [
       { href: '/admin/teaching-loops', label: 'Teaching Loops' },
       { href: '/admin/video-studio', label: 'Video Studio' },
       { href: '/admin/text-animations', label: 'Text Animations' },
+      { href: '/admin/affirmations', label: 'Affirmation Studio' },
       { href: '/admin/bold-text-video', label: 'Bold Text Video' },
       { href: '/admin/meme-loops', label: 'Meme / Joke Loops' },
       { href: '/admin/lesson-loops', label: '2-Min Lesson Loops' },
