@@ -103,7 +103,7 @@ Return ONLY JSON:
         visualType: ['educational_diagram', 'process', 'real_world_photo'].includes(scene.visualType) ? scene.visualType : 'educational_diagram',
         reveal: scene.reveal === 'wipe' ? 'wipe' : 'scribble',
         highlightTerms: Array.isArray(scene.highlightTerms) ? scene.highlightTerms.slice(0, 4).map(x => clean(x, 50)).filter(Boolean) : [],
-        durationSeconds: Math.max(6, Math.min(20, Number(scene.durationSeconds) || estimateDurationSeconds(narration))),
+        durationSeconds: Math.max(6, Math.min(30, Math.max(Number(scene.durationSeconds) || 8, estimateDurationSeconds(narration) + 1))),
         image: image ? { url: image.url, source: image.source, sourceUrl: image.sourceUrl, photographer: image.photographer, license: image.license } : null,
         audioUrl: audio,
       };
