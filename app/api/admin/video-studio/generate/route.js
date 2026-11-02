@@ -24,12 +24,12 @@ Create 3–6 scenes in a logical teaching order. Do not create drawings, SVG ins
 
 Each scene must contain:
 - heading: short, clear on-screen heading
-- narration: natural, accurate spoken explanation in clear Nigerian English, not pidgin (35–65 words)
+- narration: one concise, accurate spoken explanation in clear Nigerian English, not pidgin (12–18 words maximum; it must take 5–8 seconds to say aloud)
 - visualQuery: a short literal 2–5 word image-search phrase for a real educational diagram or photo
 - visualType: exactly "educational_diagram", "process", or "real_world_photo"
 - reveal: exactly "scribble" or "wipe"
 - highlightTerms: up to 4 short labels/parts to look for in the selected image
-- durationSeconds: 6–16
+- durationSeconds: 5–8
 
 Avoid repeated visual queries. Keep the lesson factually grounded. Return ONLY JSON:
 {"title":"...","scenes":[{"heading":"...","narration":"...","visualQuery":"human heart anatomy diagram","visualType":"educational_diagram","reveal":"scribble","highlightTerms":["atria","ventricles"],"durationSeconds":10}]}`;
@@ -49,7 +49,7 @@ Avoid repeated visual queries. Keep the lesson factually grounded. Return ONLY J
     }
 
     const scenes = generated.scenes.map((scene, index) => {
-      const narration = clean(scene.narration, 900);
+      const narration = clean(String(scene.narration || "").trim().split(/\\s+/).slice(0, 18).join(" "), 240).replace(/[,:;\\s]+$/, "") + ".";
       const visualQuery = clean(scene.visualQuery, 140);
       if (!narration) throw new Error(`Scene ${index + 1} has no narration.`);
       if (!visualQuery) throw new Error(`Scene ${index + 1} has no image search phrase.`);
@@ -61,7 +61,7 @@ Avoid repeated visual queries. Keep the lesson factually grounded. Return ONLY J
         visualType: ['educational_diagram', 'process', 'real_world_photo'].includes(scene.visualType) ? scene.visualType : 'educational_diagram',
         reveal: scene.reveal === 'wipe' ? 'wipe' : 'scribble',
         highlightTerms: Array.isArray(scene.highlightTerms) ? scene.highlightTerms.slice(0, 4).map(x => clean(x, 50)).filter(Boolean) : [],
-        durationSeconds: Math.max(6, Math.min(30, Number(scene.durationSeconds) || 8)),
+        durationSeconds: Math.max(5, Math.min(8, Number(scene.durationSeconds) || 8)),
         image: null,
         audioSrc: null,
       };
