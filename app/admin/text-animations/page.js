@@ -72,7 +72,7 @@ function KineticScene({scene,index,preset,brand,animation}) {
   const palette=['#ff477e','#ffd166','#06d6a0','#4cc9f0','#b517ff'];
   const glow=palette[index%palette.length];
   const long=words.join(' ').length>34;
-  const titleSize=long?14:words.join(' ').length>22?18:23;
+  const titleSize=long?30:words.join(' ').length>22?40:52;
   const wholeTextMotion=mode==='float'?Math.sin(frame/10)*16:mode==='wave'?Math.sin(frame/8)*12:0;
   return <AbsoluteFill style={{background:bg,color:'#fff',fontFamily:isEditorial?'Georgia,serif':'Arial Black,Impact,sans-serif',overflow:'hidden'}}>
     <AbsoluteFill style={{background:isNeon?'radial-gradient(circle at 50% 45%, #421078 0%, #09051d 60%)':isEditorial?'linear-gradient(135deg,#171717,#30202d)':'linear-gradient(135deg,#071426 0%,#172554 50%,#09051d 100%)'}}/>
@@ -83,8 +83,8 @@ function KineticScene({scene,index,preset,brand,animation}) {
     <div style={{position:'absolute',top:'6%',left:'7%',right:'7%',display:'flex',justifyContent:'space-between',fontFamily:'Arial,sans-serif',fontSize:22,fontWeight:900,letterSpacing:4,color:'#fff',opacity:reveal,textShadow:'0 2px 12px #0008'}}>
       <span>{brand.toUpperCase()}</span><span>{String(index+1).padStart(2,'0')}</span>
     </div>
-    <div style={{position:'absolute',left:'4%',right:'4%',top:'20%',height:'60%',display:'flex',alignItems:'center',justifyContent:'center',textAlign:'center',fontSize:`min(24vw, ${titleSize}vh)`,lineHeight:.98,fontWeight:1000,letterSpacing:isEditorial?'-.06em':'-.055em',textTransform:isEditorial?'none':'uppercase',transform:`translateY(${wholeTextMotion}px) scale(${1+Math.sin(frame/16)*.012})`,filter:'drop-shadow(0 12px 18px #0008)',overflow:'visible'}}>
-      <div style={{maxWidth:'100%',background:isEditorial?'none':undefined}}>{words.map((w,i)=><Word key={i} word={{text:w,emphasis:emphasis && emphasis.includes(w.toLowerCase().replace(/[.,!?]/g,''))}} index={i} frame={frame} preset={preset.id} mode={mode} accent={preset.accent}/>)}</div>
+    <div style={{position:'absolute',left:'2%',right:'2%',top:'14%',height:'72%',display:'flex',alignItems:'center',justifyContent:'center',textAlign:'center',fontSize:`min(58vw, ${titleSize}vh)`,lineHeight:.88,fontWeight:1000,letterSpacing:isEditorial?'-.07em':'-.065em',textTransform:isEditorial?'none':'uppercase',transform:`translateY(${wholeTextMotion}px) scale(${1+Math.sin(frame/16)*.012})`,filter:'drop-shadow(0 12px 18px #0008)',overflow:'visible'}}>
+      <div style={{maxWidth:'100%',width:'100%',background:isEditorial?'none':undefined}}>{words.map((w,i)=><Word key={i} word={{text:w,emphasis:emphasis && emphasis.includes(w.toLowerCase().replace(/[.,!?]/g,''))}} index={i} frame={frame} preset={preset.id} mode={mode} accent={preset.accent}/>)}</div>
     </div>
     <div style={{position:'absolute',left:'8%',right:'8%',bottom:'13%',height:7,borderRadius:99,background:'#ffffff25',overflow:'hidden'}}><div style={{height:'100%',width:(progress*100)+'%',background:`linear-gradient(90deg,${palette.join(',')})`,borderRadius:99}}/></div>
     <div style={{position:'absolute',left:'8%',bottom:'6%',fontFamily:'Arial,sans-serif',fontSize:18,fontWeight:900,letterSpacing:3,color:'#ffffffcc'}}>THINK BIG. LEARN SMARTER.</div>
