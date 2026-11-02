@@ -26,7 +26,7 @@ function ScribbleReveal({ image, progress, index, reveal }) {
 
 export function ImageRevealVisual({ scene, brand, accent = '#f4c542', index = 0 }) {
   const frame = useCurrentFrame();
-  const { fps } = useVideoConfig();
+  const { fps, width, height } = useVideoConfig();
   const duration = Math.max(1, (scene.durationSeconds || 10) * fps);
   const revealFrames = Math.min(duration * .68, fps * 5);
   const progress = interpolate(frame, [4, revealFrames], [0, 1], clamp);
@@ -34,7 +34,7 @@ export function ImageRevealVisual({ scene, brand, accent = '#f4c542', index = 0 
   return <AbsoluteFill style={{ background: '#fffef8', color: '#142c4b', fontFamily: 'Arial, sans-serif' }}>
     <div style={{ position: 'absolute', top: '4%', left: '7%', fontSize: 24, fontWeight: 900, color: '#1769aa', letterSpacing: 2 }}>{brand}</div>
     <div style={{ position: 'absolute', top: '12%', left: '7%', right: '7%', fontSize: 52, lineHeight: 1.08, fontWeight: 900 }}>{scene.heading}</div>
-    {scene.image?.url ? <svg width="100%" height="100%" viewBox={`0 0 ${useVideoConfig().width} ${useVideoConfig().height}`} style={{ position: 'absolute', inset: 0 }}>
+    {scene.image?.url ? <svg width="100%" height="100%" viewBox={`0 0 ${width} ${height}`} style={{ position: 'absolute', inset: 0 }}>
       <ScribbleReveal image={scene.image.url} progress={progress} index={index} reveal={scene.reveal || 'scribble'}/>
     </svg> : <div style={{ position: 'absolute', top: '35%', left: '10%', right: '10%', textAlign: 'center', padding: 30, border: '3px dashed #c14e45', borderRadius: 20, color: '#9b3028', fontSize: 28, fontWeight: 800 }}>No suitable image found for this scene. Choose another visual before export.</div>}
     <div style={{ position: 'absolute', left: '8%', right: '8%', bottom: '11%', fontSize: 30, lineHeight: 1.28, fontWeight: 650, opacity: .98 }}>{scene.narration}</div>
