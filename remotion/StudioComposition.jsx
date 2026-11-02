@@ -5,6 +5,8 @@ import { TegakiRenderer } from 'tegaki';
 import caveat from 'tegaki/fonts/caveat';
 import { DrawnVisual } from './DrawnVisual';
 import { SBAIllustration, findSBAIllustration } from './whiteboard/SBAAssetLibrary';
+import { Checklist } from './story/Checklist';
+import { Growth } from './story/Growth';
 import {AbsoluteFill, Sequence, Audio, useCurrentFrame, useVideoConfig, interpolate, Easing} from 'remotion';
 
 const C={blue:'#1261a0',navy:'#102b4e',yellow:'#f4c542',ink:'#172b4d'};
@@ -137,16 +139,8 @@ function StoryArt({index,progress,accent}) {
   <path d="M140 180 Q220 70 320 150 Q390 50 485 140 Q620 75 700 190 Q820 220 745 330 Q800 430 680 455 H230 Q100 420 160 320 Q85 250 140 180" fill="#5b3655" opacity=".9"/>
   <text x="450" y="530" textAnchor="middle" fill="#ffe1cb" fontSize="45" fontWeight="900">FEAR STEALS TIME</text>
  </svg>;
- if(index===2) return <svg viewBox="0 0 900 650" width="100%" height="100%">
-  {['ONE TOPIC','PRACTISE','TIME IT','REVIEW'].map((label,i)=>{const y=70+i*140;return <g key={label} opacity={interpolate(progress,[i*.13,i*.13+.2],[0,1],clamp)}><rect x="170" y={y} width="560" height="105" rx="24" fill={i%2?'#e8f1ff':'#fff8e7'} stroke={i%2?'#6b9bd1':'#d9ae59'} strokeWidth="5"/><circle cx="230" cy={y+52} r="27" fill="#16856b"/><path d={'M216 '+(y+52)+' l12 13 25 -29'} stroke="#fff" strokeWidth="8" fill="none" strokeLinecap="round" strokeLinejoin="round"/><text x="290" y={y+67} fontSize="43" fontWeight="900" fill="#172b4d">{label}</text></g>;})}
- </svg>;
- if(index===3) return <svg viewBox="0 0 900 650" width="100%" height="100%">
-  <path d="M120 540 H790" stroke="#a8c9b7" strokeWidth="8"/>
-  {[130,250,370,490,610].map((x,i)=><rect key={x} x={x} y={520-(i+1)*68} width="76" height={(i+1)*68} rx="12" fill={i===4?'#f4c542':'#42a68a'} opacity={interpolate(progress,[i*.12,i*.12+.2],[0,1],clamp)}/>)}
-  <path d="M150 440 Q270 390 355 330 T560 215 T755 100" stroke="#fff" strokeWidth="20" fill="none" strokeLinecap="round" strokeDasharray="900" strokeDashoffset={interpolate(progress,[.15,.85],[900,0],clamp)}/>
-  <path d="M700 100 L755 100 L745 155" stroke="#fff" strokeWidth="18" fill="none" strokeLinecap="round" strokeLinejoin="round"/>
-  <text x="450" y="610" textAnchor="middle" fontSize="43" fontWeight="900" fill="#eafff4">SMALL WINS. REAL PROGRESS.</text>
- </svg>;
+ if(index===2) return <Checklist progress={progress}/>;
+ if(index===3) return <Growth progress={progress}/>;
  return <svg viewBox="0 0 900 650" width="100%" height="100%">
   <circle cx="450" cy="315" r="190" fill="#ffd66b" opacity=".18"/><circle cx="450" cy="315" r="130" fill="#ffd66b" opacity=".35"/>
   <path d="M170 470 Q450 80 730 470 M450 70 V190 M220 180 L300 250 M680 180 L600 250 M260 490 H640" stroke="#fff2bf" strokeWidth="13" fill="none" strokeLinecap="round"/>
