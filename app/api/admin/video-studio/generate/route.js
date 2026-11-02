@@ -49,7 +49,7 @@ Avoid repeated visual queries. Keep the lesson factually grounded. Return ONLY J
     }
 
     const scenes = generated.scenes.map((scene, index) => {
-      const narration = clean(String(scene.narration || "").trim().split(/\\s+/).slice(0, 18).join(" "), 240).replace(/[,:;\\s]+$/, "") + ".";
+      const narration = clean(String(scene.narration || "").trim().split(/\s+/).slice(0, 18).join(" "), 240).replace(/[,:;\s]+$/, "") + ".";
       const visualQuery = clean(scene.visualQuery, 140);
       if (!narration) throw new Error(`Scene ${index + 1} has no narration.`);
       if (!visualQuery) throw new Error(`Scene ${index + 1} has no image search phrase.`);
