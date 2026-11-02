@@ -11,7 +11,7 @@ export async function POST(request) {
       return NextResponse.json({ error: 'Provide between 1 and 12 scenes.' }, { status: 400 });
     }
     const scenes = body.scenes.map((scene, index) => {
-      const text = String(scene?.text || '').trim().slice(0, 700);
+      const text = String(scene?.text || '').trim().split(/\s+/).slice(0, 18).join(' ').slice(0, 240);
       if (!text) throw new Error('Scene ' + (index + 1) + ' has no narration text.');
       return text;
     });
@@ -19,7 +19,7 @@ export async function POST(request) {
       const buffer = await synthesizeLine(text, 'host_a', 'neutral');
       return {
         audioSrc: 'data:audio/mpeg;base64,' + buffer.toString('base64'),
-        durationSeconds: Math.max(3, estimateDurationSeconds(text) + 1)
+        durationSeconds: Math.min(8, Math.max(5, estimateDurationSeconds(text) + 1))
       };
     }));
     return NextResponse.json({ success: true, audio });
