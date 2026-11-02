@@ -36,7 +36,7 @@ export default function VideoStudio(){
   }catch(e){setStatus((e.name==='AbortError'?'The request took too long. Please try again.':e.message||'Could not generate lesson script.')+' Your existing scenes and title were kept.');}finally{clearTimeout(timeout);setGenerating(false);}
  }
 
- const edit=(i,k,v)=>setScenes(old=>old.map((s,n)=>{if(n!==i)return s;const next=(kind==='whiteboard'&&['narration','text'].includes(k)?String(v).trim().split(/\\s+/).filter(Boolean).slice(0,18).join(' '):v);return {...s,[k]:next,...(['narration','text'].includes(k)?{audioSrc:null}:{})};}));
+ const edit=(i,k,v)=>setScenes(old=>old.map((s,n)=>{if(n!==i)return s;const next=(kind==='whiteboard'&&['narration','text'].includes(k)?String(v).trim().split(/\s+/).filter(Boolean).slice(0,18).join(' '):v);return {...s,[k]:next,...(['narration','text'].includes(k)?{audioSrc:null}:{})};}));
  async function searchSceneImages(i){
   const q=(imageQueries[i]||scenes[i]?.visualQuery||scenes[i]?.heading||topic).trim();
   if(q.length<2){setStatus('Enter an image search phrase first.');return;}
