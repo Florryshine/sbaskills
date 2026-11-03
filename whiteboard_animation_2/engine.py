@@ -11,12 +11,12 @@ import tempfile
 from pathlib import Path
 from typing import Any
 
-from PIL import Image, ImageDraw, ImageFont
+from PIL import Image, ImageChops, ImageDraw, ImageFont, ImageOps
 
 BG = (250, 249, 244)
 INK = (25, 34, 39)
 MUTED = (100, 110, 112)
-SUPPORTED = {"text", "line", "polyline", "arrow", "circle", "rect"}
+SUPPORTED = {"text", "line", "polyline", "arrow", "circle", "rect", "image"}
 
 
 def font_path(bold: bool = False) -> str:
@@ -92,7 +92,38 @@ def draw_revealed_text(image: Image.Image, obj: dict[str, Any], p: float,
     image.paste(color_layer, (x, y), mask)
 
 
-def draw_object(image: Image.Image, obj: dict[str, Any], t: float, scale: float) -> None:
+def load_ink_image(path: Path, color: tuple[int, int, int]) -> Image.Image:
+    """Convert a clean diagram into transparent ink for whiteboard reveal."""
+    source = Image.open(path).convert("RGBA")
+    white = Image.new("RGB", source.size, "white")
+    white.paste(source, mask=source.getchannel("A"))
+    gray = ImageOps.grayscale(white)
+    alpha = gray.point(lambda value: 255 if value < 238 else 0)
+    ink = Image.new("RGBA", source.size, color + (0,))
+    ink.putalpha(alpha)
+    return ink
+
+
+def draw_image_object(image: Image.Image, obj: dict[str, Any], p: float,
+                      scale: float, assets: dict[str, Image.Image]) -> None:
+    source = assets[str(obj["path"])]
+    x = int(float(obj.get("x", 0)) * scale)
+    y = int(float(obj.get("y", 0)) * scale)
+    w = max(1, int(float(obj.get("w", source.width)) * scale))
+    h = max(1, int(float(obj.get("h", source.height)) * scale))
+    fitted = ImageOps.contain(source, (w, h), method=Image.Resampling.LANCZOS)
+    layer = Image.new("RGBA", (w, h), (0, 0, 0, 0))
+    layer.alpha_composite(fitted, ((w-fitted.width)//2, (h-fitted.height)//2))
+    reveal = max(0, min(w, int(math.ceil(w * p))))
+    if reveal == 0:
+        return
+    mask = Image.new("L", (w, h), 0)
+    ImageDraw.Draw(mask).rectangle((0, 0, reveal-1, h), fill=255)
+    alpha = ImageChops.multiply(layer.getchannel("A"), mask)
+    image.paste(layer.convert("RGB"), (x, y), alpha)
+
+
+def draw_object(image: Image.Image, obj: dict[str, Any], t: float, scale: float,\n                assets: dict[str, Image.Image]) -> None:
     start = float(obj.get("start", 0))
     if t < start:
         return
@@ -101,6 +132,10 @@ def draw_object(image: Image.Image, obj: dict[str, Any], t: float, scale: float)
     width = max(1, int(round(float(obj.get("width", 5)) * scale)))
     color = tuple(obj.get("color", INK))
     draw = ImageDraw.Draw(image)
+
+    if kind == "image":
+        draw_image_object(image, obj, p, scale, assets)
+        return
 
     if kind == "text":
         draw_revealed_text(image, obj, p, scale)
@@ -173,6 +208,8 @@ def validate_plan(plan: Any) -> dict[str, Any]:
             raise ValueError(f"Object {index} has an unsupported or missing type.")
         if float(obj.get("start", 0)) < 0 or float(obj.get("draw_duration", 0.8)) <= 0:
             raise ValueError(f"Object {index} has invalid timing.")
+        if obj["type"] == "image" and not obj.get("path"):
+            raise ValueError(f"Image object {index} is missing path.")
         if obj["type"] == "text" and "text" not in obj:
             raise ValueError(f"Text object {index} is missing 'text'.")
         if obj["type"] in ("polyline", "arrow") and len(obj.get("points", [])) < 2:
@@ -200,6 +237,14 @@ def render(plan_path: Path, output_path: Path) -> None:
     supersample = max(1, int(plan.get("supersample", 2)))
     scale = (width * supersample) / coordinate_width
     objects = plan.get("objects", [])
+    assets: dict[str, Image.Image] = {}
+    for obj in objects:
+        if obj.get("type") == "image":
+            key = str(obj["path"])
+            asset_path = (base / key).resolve()
+            if not asset_path.is_file():
+                raise FileNotFoundError(f"Illustration file not found: {asset_path}")
+            assets[key] = load_ink_image(asset_path, tuple(obj.get("color", INK)))
     frame_count = math.ceil(duration * fps)
 
     with tempfile.TemporaryDirectory(prefix="sba-whiteboard-") as tmp:
@@ -215,7 +260,7 @@ def render(plan_path: Path, output_path: Path) -> None:
                     font=load_font(max(12, int(20*scale)), True), fill=MUTED
                 )
             for obj in objects:
-                draw_object(image, obj, t, scale)
+                draw_object(image, obj, t, scale, assets)
             if supersample > 1:
                 image = image.resize((width, height), Image.Resampling.LANCZOS)
             image.save(frame_dir / f"frame_{frame_no:06d}.png", optimize=False)
