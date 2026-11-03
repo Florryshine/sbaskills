@@ -13,7 +13,7 @@ sys.path.insert(0, str(ROOT))
 import engine  # noqa: E402
 
 
-@unittest.skipUnless(shutil.which("ffmpeg"), "FFmpeg is required for render smoke test")
+@unittest.skipUnless(shutil.which("ffmpeg") and shutil.which("ffprobe"), "FFmpeg and ffprobe are required for render smoke test")
 class RenderSmokeTest(unittest.TestCase):
     def test_renders_a_short_portrait_mp4_with_image_asset(self):
         with tempfile.TemporaryDirectory() as tmp:
@@ -21,12 +21,14 @@ class RenderSmokeTest(unittest.TestCase):
             illustration = Image.new("RGB", (100, 100), "white")
             ImageDraw.Draw(illustration).ellipse((15, 15, 85, 85), outline="black", width=5)
             illustration.save(folder / "diagram.png")
+            audio_path = folder / "narration.wav"
+            subprocess.run(\n                ["ffmpeg", "-y", "-hide_banner", "-loglevel", "error", "-f", "lavfi",\n                 "-i", "anullsrc=r=44100:cl=mono", "-t", "0.8", "-c:a", "pcm_s16le", str(audio_path)],\n                check=True\n            )
             plan = {
                 "width": 360,
                 "height": 640,
                 "coordinate_width": 1080,
                 "fps": 5,
-                "duration": 1.2,
+                "duration": 99,\n                "audio": "narration.wav",
                 "watermark": "",
                 "objects": [
                     {"type": "text", "text": "TEST", "x": 80, "y": 100,
@@ -48,7 +50,7 @@ class RenderSmokeTest(unittest.TestCase):
                  "-of", "default=noprint_wrappers=1:nokey=1", str(output)],
                 check=True, capture_output=True, text=True
             )
-            self.assertGreater(float(probe.stdout.strip()), 0.5)
+            self.assertAlmostEqual(float(probe.stdout.strip()), 0.8, delta=0.15)
 
 
 if __name__ == "__main__":
