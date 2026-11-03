@@ -1,0 +1,3 @@
+# Optional heavier renderer: real line-art tracing, brush fills and text detection.
+# CPU-only; downloads an approximately 77 MB package including its CRAFT model.
+whiteboard-animator==0.1.1
