@@ -1,0 +1,32 @@
+name: Whiteboard Animation 2 smoke test
+
+on:
+  push:
+    branches:
+      - feature/whiteboard-animation-2
+    paths:
+      - "whiteboard_animation_2/**"
+      - ".github/workflows/whiteboard-animation-2-smoke.yml"
+  pull_request:
+    paths:
+      - "whiteboard_animation_2/**"
+      - ".github/workflows/whiteboard-animation-2-smoke.yml"
+
+jobs:
+  render-smoke-test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - name: Install FFmpeg
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y ffmpeg
+      - name: Install dependencies
+        run: python -m pip install -r whiteboard_animation_2/requirements.txt
+      - name: Compile renderer
+        run: python -m py_compile whiteboard_animation_2/engine.py
+      - name: Run render smoke test
+        run: python -m unittest discover -s whiteboard_animation_2/tests -v
