@@ -1,6 +1,7 @@
 import React from 'react';
 import { AbsoluteFill, Sequence, interpolate, useCurrentFrame, useVideoConfig } from 'remotion';
 import { CharacterRig } from './CharacterRig';
+import { AnimatedCharacter } from './AnimatedCharacter';
 import { getCharacterPreset } from './characterPresets';
 
 const C = { ink: '#243247', blue: '#1769AA', cream: '#FFF4E2', yellow: '#F5C451' };
@@ -47,7 +48,7 @@ function SceneOne() {
     <div style={{ position: 'absolute', left: '36%', bottom: '16%', width: '28%', height: 90, background: '#A8794E', borderRadius: 12, border: '8px solid #80583D' }} />
     <div style={{ position: 'absolute', left: '41%', bottom: '20%', width: '18%', height: 25, background: '#F8E6B6', borderRadius: 4, transform: 'rotate(-5deg)' }} />
     <div style={{ position: 'absolute', left: '25%', bottom: '13%', width: '48%', height: '77%', transform: `translateX(${x}px)` }}>
-      <CharacterRig character={getCharacterPreset('tobi')} expression="neutral" pose="walking" action="walk" />
+      <AnimatedCharacter character={getCharacterPreset('tobi')} defaultExpression="happy" cues={[{ from: 0, duration: 45, action: "walk", pose: "walking", x: -55 }, { from: 45, duration: 195, action: "idle", expression: "neutral" }]} />
     </div>
     <Caption>Tobi walked into the classroom, ready for Biology.</Caption>
   </Classroom>;
