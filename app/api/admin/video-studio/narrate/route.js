@@ -1,11 +1,32 @@
 import { NextResponse } from 'next/server';
+import { createRouteHandlerClient } from '@/lib/supabase-server';
 import { synthesizeLine, estimateDurationSeconds } from '@/lib/podcastTTS';
 
 export const runtime = 'nodejs';
+export const dynamic = 'force-dynamic';
 export const maxDuration = 60;
+
+async function requireAdminApi() {
+  const supabase = createRouteHandlerClient();
+  const { data: { user }, error: userError } = await supabase.auth.getUser();
+  if (userError || !user) {
+    return { response: NextResponse.json({ error: 'Unauthorized' }, { status: 401 }) };
+  }
+  const { data: profile, error: profileError } = await supabase
+    .from('profiles')
+    .select('role')
+    .eq('id', user.id)
+    .single();
+  if (profileError || profile?.role !== 'admin') {
+    return { response: NextResponse.json({ error: 'Forbidden' }, { status: 403 }) };
+  }
+  return { response: null };
+}
 
 export async function POST(request) {
   try {
+    const auth = await requireAdminApi();
+    if (auth.response) return auth.response;
     const body = await request.json();
     if (!Array.isArray(body.scenes) || body.scenes.length < 1 || body.scenes.length > 12) {
       return NextResponse.json({ error: 'Provide between 1 and 12 scenes.' }, { status: 400 });
