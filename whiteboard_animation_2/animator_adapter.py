@@ -1,70 +1,55 @@
 #!/usr/bin/env python3
-"""Optional adapter for the MIT whiteboard-animator renderer.
-
-This is kept separate from engine.py so the base prototype stays lightweight.
-The package is installed only when explicitly requested.
-"""
+"""Render manifest scenes with the optional MIT whiteboard-animator package."""
 from __future__ import annotations
 
 import argparse
 import json
-import shutil
-import subprocess
 from pathlib import Path
+
+from whiteboard_animator import Scene, SnippetRegionPlan, render_video
+
+
+def inside(base: Path, value: str, label: str, index: int) -> Path:
+    path = (base / value).resolve()
+    if not path.is_relative_to(base.resolve()):
+        raise SystemExit(f"Scene {index}: {label} must stay inside the manifest folder.")
+    if not path.is_file():
+        raise SystemExit(f"Scene {index}: {label} not found: {path}")
+    return path
 
 
 def main() -> None:
     parser = argparse.ArgumentParser(
-        description="Render a sequence of finished line-art scenes with whiteboard-animator."
+        description="Render line-art scenes using whiteboard-animator."
     )
     parser.add_argument("manifest", type=Path, help="JSON manifest containing scenes and audio")
     parser.add_argument("-o", "--output", type=Path, default=Path("whiteboard-animator-output.mp4"))
     parser.add_argument("--quality", choices=("low", "medium", "high"), default="high")
     args = parser.parse_args()
 
-    if shutil.which("whiteboard-animate") is None:
-        raise SystemExit(
-            "whiteboard-animate is missing. Install the optional dependency with: "
-            "python -m pip install -r requirements-whiteboard-animator.txt"
-        )
-
     manifest_path = args.manifest.resolve()
     base = manifest_path.parent
     manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
-    scenes = manifest.get("scenes")
-    if not isinstance(scenes, list) or not scenes:
+    scenes_data = manifest.get("scenes")
+    if not isinstance(scenes_data, list) or not scenes_data:
         raise SystemExit("Manifest must contain a non-empty 'scenes' array.")
 
-    images: list[str] = []
-    audios: list[str] = []
-    for index, scene in enumerate(scenes):
-        image_value = scene.get("image")
-        audio_value = scene.get("audio")
-        if not image_value or not audio_value:
-            raise SystemExit(f"Scene {index} must include both image and audio.")
-        image_path = (base / image_value).resolve()
-        audio_path = (base / audio_value).resolve()
-        if not image_path.is_relative_to(base) or not audio_path.is_relative_to(base):
-            raise SystemExit(f"Scene {index} asset path must stay inside the manifest folder.")
-        if not image_path.is_file():
-            raise SystemExit(f"Scene {index} image not found: {image_path}")
-        if not audio_path.is_file():
-            raise SystemExit(f"Scene {index} audio not found: {audio_path}")
-        images.append(str(image_path))
-        audios.append(str(audio_path))
+    scenes = []
+    for index, data in enumerate(scenes_data):
+        if not isinstance(data, dict) or not data.get("image") or not data.get("audio"):
+            raise SystemExit(f"Scene {index} must include image and audio paths.")
+        image_path = inside(base, data["image"], "image", index)
+        audio_path = inside(base, data["audio"], "audio", index)
+        region_plan = None
+        if data.get("regions"):
+            region_path = inside(base, data["regions"], "region plan", index)
+            region_plan = SnippetRegionPlan.model_validate_json(
+                region_path.read_text(encoding="utf-8")
+            )
+        scenes.append(Scene(str(image_path), audio=str(audio_path), region_plan=region_plan))
 
     args.output.parent.mkdir(parents=True, exist_ok=True)
-    command = [
-        "whiteboard-animate",
-        *images,
-        "--audio",
-        *audios,
-        "--quality",
-        args.quality,
-        "-o",
-        str(args.output.resolve()),
-    ]
-    subprocess.run(command, check=True)
+    render_video(scenes, str(args.output.resolve()), quality=args.quality)
     print(f"Rendered: {args.output.resolve()}")
 
 
