@@ -1,9 +1,5 @@
 #!/usr/bin/env python3
-"""Whiteboard Animation 2 — deterministic Python + FFmpeg renderer.
-
-The AI writes a scene JSON plan. This program renders that plan; it never
-executes generated Python. Times in the plan are seconds from audio start.
-"""
+"""Whiteboard Animation 2 — deterministic Python + FFmpeg renderer."""
 from __future__ import annotations
 
 import argparse
@@ -20,27 +16,22 @@ from PIL import Image, ImageDraw, ImageFont
 BG = (250, 249, 244)
 INK = (25, 34, 39)
 MUTED = (100, 110, 112)
-ACCENT = (36, 116, 166)
+SUPPORTED = {"text", "line", "polyline", "arrow", "circle", "rect"}
 
 
 def font_path(bold: bool = False) -> str:
     candidates = (
-        ["/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf",
-         "C:/Windows/Fonts/arialbd.ttf"]
+        ["/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf", "C:/Windows/Fonts/arialbd.ttf"]
         if bold else
-        ["/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf",
-         "C:/Windows/Fonts/arial.ttf"]
+        ["/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf", "C:/Windows/Fonts/arial.ttf"]
     )
-    for candidate in candidates:
-        if Path(candidate).exists():
-            return candidate
-    return ""
+    return next((p for p in candidates if Path(p).exists()), "")
 
 
-def load_font(size: int, bold: bool = False) -> ImageFont.FreeTypeFont | ImageFont.ImageFont:
+def load_font(size: int, bold: bool = False) -> ImageFont.ImageFont:
     path = font_path(bold)
     try:
-        return ImageFont.truetype(path, size) if path else ImageFont.load_default()
+        return ImageFont.truetype(path, max(1, int(size))) if path else ImageFont.load_default()
     except OSError:
         return ImageFont.load_default()
 
@@ -62,10 +53,7 @@ def partial_points(points: list[list[float]], amount: float) -> list[tuple[float
         math.hypot(points[i + 1][0] - points[i][0], points[i + 1][1] - points[i][1])
         for i in range(len(points) - 1)
     ]
-    total = sum(lengths)
-    if total <= 0:
-        return [(float(points[0][0]), float(points[0][1]))]
-    remaining = total * amount
+    remaining = sum(lengths) * amount
     result = [(float(points[0][0]), float(points[0][1]))]
     for i, length in enumerate(lengths):
         a, b = points[i], points[i + 1]
@@ -80,51 +68,47 @@ def partial_points(points: list[list[float]], amount: float) -> list[tuple[float
     return result
 
 
-def draw_revealed_text(draw: ImageDraw.ImageDraw, obj: dict[str, Any], p: float,
+def draw_revealed_text(image: Image.Image, obj: dict[str, Any], p: float,
                        scale: float) -> None:
+    """Reveal text through a temporary mask; compatible with current Pillow."""
     text = str(obj.get("text", ""))
-    x, y = float(obj.get("x", 80)) * scale, float(obj.get("y", 100)) * scale
-    size = max(12, int(float(obj.get("size", 42)) * scale))
+    if not text or p <= 0:
+        return
+    x = int(round(float(obj.get("x", 80)) * scale))
+    y = int(round(float(obj.get("y", 100)) * scale))
+    size = max(12, int(round(float(obj.get("size", 42)) * scale)))
     font = load_font(size, bool(obj.get("bold", False)))
     fill = tuple(obj.get("color", INK))
-    # Reveal glyphs progressively from left to right. This is a legible
-    # handwriting-style reveal; actual pen-stroke fonts can be plugged in later.
-    bbox = draw.textbbox((x, y), text, font=font)
-    width = max(1, bbox[2] - bbox[0])
-    reveal = int(width * p)
-    if reveal <= 0:
-        return
-    mask = Image.new("L", (width + 4, max(1, bbox[3] - bbox[1] + 4)), 0)
-    md = ImageDraw.Draw(mask)
-    md.text((2 - bbox[0] + x, 2 - bbox[1] + y), text, font=font, fill=255)
-    crop = mask.crop((0, 0, reveal, mask.height))
-    layer = Image.new("RGBA", crop.size, fill + (255,))
-    layer.putalpha(crop)
-    canvas = draw._image
-    canvas.paste(layer, (int(x), int(y)), layer)
+    scratch = ImageDraw.Draw(Image.new("L", (1, 1)))
+    bbox = scratch.textbbox((0, 0), text, font=font)
+    text_width = max(1, int(math.ceil(bbox[2] - bbox[0])))
+    text_height = max(1, int(math.ceil(bbox[3] - bbox[1])))
+    reveal_width = max(1, min(text_width, int(math.ceil(text_width * p))))
+    mask = Image.new("L", (text_width, text_height), 0)
+    mask_draw = ImageDraw.Draw(mask)
+    mask_draw.text((-int(bbox[0]), -int(bbox[1])), text, font=font, fill=255)
+    mask = mask.crop((0, 0, reveal_width, text_height))
+    color_layer = Image.new("RGB", mask.size, fill)
+    image.paste(color_layer, (x, y), mask)
 
 
-def draw_object(image: Image.Image, obj: dict[str, Any], t: float,
-                scale: float) -> None:
+def draw_object(image: Image.Image, obj: dict[str, Any], t: float, scale: float) -> None:
     start = float(obj.get("start", 0))
     if t < start:
         return
     p = progress_at(obj, t)
     kind = obj.get("type", "line")
-    width = max(1, int(float(obj.get("width", 5)) * scale))
+    width = max(1, int(round(float(obj.get("width", 5)) * scale)))
     color = tuple(obj.get("color", INK))
     draw = ImageDraw.Draw(image)
 
     if kind == "text":
-        draw_revealed_text(draw, obj, p, scale)
+        draw_revealed_text(image, obj, p, scale)
         return
 
     if kind in ("line", "polyline", "arrow"):
-        if kind == "line":
-            pts = [[obj["x1"], obj["y1"]], [obj["x2"], obj["y2"]]]
-        else:
-            pts = obj.get("points", [])
-        pts = [[float(x) * scale, float(y) * scale] for x, y in pts]
+        raw = [[obj["x1"], obj["y1"]], [obj["x2"], obj["y2"]]] if kind == "line" else obj.get("points", [])
+        pts = [[float(x) * scale, float(y) * scale] for x, y in raw]
         shown = partial_points(pts, p)
         if len(shown) >= 2:
             draw.line(shown, fill=color, width=width, joint="curve")
@@ -132,35 +116,29 @@ def draw_object(image: Image.Image, obj: dict[str, Any], t: float,
             x1, y1 = pts[-2]
             x2, y2 = pts[-1]
             angle = math.atan2(y2 - y1, x2 - x1)
-            head = 16 * scale
-            left = (x2 - head * math.cos(angle - 0.48),
-                    y2 - head * math.sin(angle - 0.48))
-            right = (x2 - head * math.cos(angle + 0.48),
-                     y2 - head * math.sin(angle + 0.48))
+            head = 22 * scale
+            left = (x2 - head * math.cos(angle - 0.48), y2 - head * math.sin(angle - 0.48))
+            right = (x2 - head * math.cos(angle + 0.48), y2 - head * math.sin(angle + 0.48))
             draw.polygon([(x2, y2), left, right], fill=color)
         return
 
     if kind == "circle":
         x, y, radius = [float(obj[k]) * scale for k in ("x", "y", "radius")]
-        box = (x - radius, y - radius, x + radius, y + radius)
-        draw.arc(box, -90, -90 + 360 * p, fill=color, width=width)
+        draw.arc((x-radius, y-radius, x+radius, y+radius),
+                 -90, -90 + 360 * p, fill=color, width=width)
         return
 
     if kind == "rect":
         x, y = float(obj["x"]) * scale, float(obj["y"]) * scale
         w, h = float(obj["w"]) * scale, float(obj["h"]) * scale
-        # Four sides are revealed in drawing order, not as an instant shape.
-        perimeter = 2 * (w + h)
-        remaining = perimeter * p
-        corners = [(x, y), (x + w, y), (x + w, y + h),
-                    (x, y + h), (x, y)]
+        remaining = 2 * (w + h) * p
+        corners = [(x, y), (x+w, y), (x+w, y+h), (x, y+h), (x, y)]
         for a, b in zip(corners, corners[1:]):
-            length = math.hypot(b[0] - a[0], b[1] - a[1])
+            length = math.hypot(b[0]-a[0], b[1]-a[1])
             if remaining <= 0:
                 break
-            ratio = min(1, remaining / max(length, 0.001))
-            end = (a[0] + (b[0] - a[0]) * ratio,
-                   a[1] + (b[1] - a[1]) * ratio)
+            ratio = min(1.0, remaining / max(length, 0.001))
+            end = (a[0] + (b[0]-a[0])*ratio, a[1] + (b[1]-a[1])*ratio)
             draw.line([a, end], fill=color, width=width)
             remaining -= length
         return
@@ -168,22 +146,59 @@ def draw_object(image: Image.Image, obj: dict[str, Any], t: float,
     raise ValueError(f"Unsupported object type: {kind}")
 
 
+def probe_audio_duration(audio_path: Path) -> float:
+    if shutil.which("ffprobe") is None:
+        raise RuntimeError("ffprobe is required to read the narration duration.")
+    result = subprocess.run(
+        ["ffprobe", "-v", "error", "-show_entries", "format=duration",
+         "-of", "default=noprint_wrappers=1:nokey=1", str(audio_path)],
+        check=True, capture_output=True, text=True
+    )
+    try:
+        duration = float(result.stdout.strip())
+    except ValueError as exc:
+        raise ValueError(f"Could not read audio duration for {audio_path}") from exc
+    if not math.isfinite(duration) or duration <= 0:
+        raise ValueError(f"Audio duration is invalid for {audio_path}")
+    return duration
+
+
+def validate_plan(plan: Any) -> dict[str, Any]:
+    if not isinstance(plan, dict):
+        raise ValueError("Scene plan must be a JSON object.")
+    if not isinstance(plan.get("objects", []), list):
+        raise ValueError("'objects' must be an array.")
+    for index, obj in enumerate(plan.get("objects", [])):
+        if not isinstance(obj, dict) or obj.get("type") not in SUPPORTED:
+            raise ValueError(f"Object {index} has an unsupported or missing type.")
+        if float(obj.get("start", 0)) < 0 or float(obj.get("draw_duration", 0.8)) <= 0:
+            raise ValueError(f"Object {index} has invalid timing.")
+        if obj["type"] == "text" and "text" not in obj:
+            raise ValueError(f"Text object {index} is missing 'text'.")
+        if obj["type"] in ("polyline", "arrow") and len(obj.get("points", [])) < 2:
+            raise ValueError(f"Object {index} needs at least two points.")
+    return plan
+
+
 def render(plan_path: Path, output_path: Path) -> None:
-    plan = json.loads(plan_path.read_text(encoding="utf-8"))
+    plan = validate_plan(json.loads(plan_path.read_text(encoding="utf-8")))
     base = plan_path.parent
-    width = int(plan.get("width", 1080))
-    height = int(plan.get("height", 1920))
+    width, height = int(plan.get("width", 1080)), int(plan.get("height", 1920))
     fps = int(plan.get("fps", 30))
-    duration = float(plan["duration"])
     audio_value = plan.get("audio")
     audio_path = (base / audio_value).resolve() if audio_value else None
     if audio_path and not audio_path.is_file():
         raise FileNotFoundError(f"Audio file not found: {audio_path}")
+    duration = probe_audio_duration(audio_path) if audio_path else float(plan.get("duration", 0))
     if width < 320 or height < 320 or fps < 1 or duration <= 0:
         raise ValueError("Invalid width, height, fps, or duration in scene plan.")
+    coordinate_width = float(plan.get("coordinate_width", 1080))
+    if coordinate_width <= 0:
+        raise ValueError("'coordinate_width' must be greater than zero.")
 
     output_path.parent.mkdir(parents=True, exist_ok=True)
-    scale = width / float(plan.get("coordinate_width", 1080))
+    supersample = max(1, int(plan.get("supersample", 2)))
+    scale = (width * supersample) / coordinate_width
     objects = plan.get("objects", [])
     frame_count = math.ceil(duration * fps)
 
@@ -191,15 +206,18 @@ def render(plan_path: Path, output_path: Path) -> None:
         frame_dir = Path(tmp)
         for frame_no in range(frame_count):
             t = frame_no / fps
-            image = Image.new("RGB", (width, height), tuple(plan.get("background", BG)))
-            draw = ImageDraw.Draw(image)
-            # Small academy signature, intentionally unobtrusive.
+            image = Image.new("RGB", (width*supersample, height*supersample),
+                              tuple(plan.get("background", BG)))
             title = plan.get("watermark", "SHINEY BRAIN")
             if title:
-                draw.text((int(48 * scale), int(42 * scale)), title,
-                          font=load_font(max(12, int(20 * scale)), True), fill=MUTED)
+                ImageDraw.Draw(image).text(
+                    (int(48*scale), int(42*scale)), title,
+                    font=load_font(max(12, int(20*scale)), True), fill=MUTED
+                )
             for obj in objects:
                 draw_object(image, obj, t, scale)
+            if supersample > 1:
+                image = image.resize((width, height), Image.Resampling.LANCZOS)
             image.save(frame_dir / f"frame_{frame_no:06d}.png", optimize=False)
 
         command = [
@@ -208,9 +226,9 @@ def render(plan_path: Path, output_path: Path) -> None:
         ]
         if audio_path:
             command += ["-i", str(audio_path), "-map", "0:v:0", "-map", "1:a:0",
-                        "-c:a", "aac", "-b:a", "192k", "-shortest"]
+                        "-c:a", "aac", "-b:a", "192k", "-t", f"{duration:.6f}"]
         else:
-            command += ["-an", "-t", str(duration)]
+            command += ["-an", "-t", f"{duration:.6f}"]
         command += ["-c:v", "libx264", "-preset", "veryfast", "-crf", "20",
                     "-pix_fmt", "yuv420p", "-movflags", "+faststart",
                     str(output_path.resolve())]
