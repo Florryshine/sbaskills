@@ -61,6 +61,36 @@ width. Supported objects:
 Colors are RGB arrays. All timing values are seconds from the beginning of
 the audio. Keep the audio file and JSON plan together so relative paths work.
 
+## Multiple timed scenes (new)
+
+A single narration can now be divided into sequential visual scenes. Add a top-level `scenes` array to the plan. Each scene has absolute `start` and `end` times measured from the beginning of the narration, plus its own `objects` array. Object `start` values are relative to that scene's start, so the same drawing instructions can be reused naturally in each scene.
+
+```json
+{
+  "audio": "narration.mp3",
+  "scenes": [
+    {
+      "start": 0,
+      "end": 4.5,
+      "objects": [
+        {"type": "circle", "x": 540, "y": 800, "radius": 220,
+         "start": 0.2, "draw_duration": 1.5}
+      ]
+    },
+    {
+      "start": 4.5,
+      "end": 8,
+      "objects": [
+        {"type": "circle", "x": 540, "y": 800, "radius": 90,
+         "start": 0.2, "draw_duration": 1}
+      ]
+    }
+  ]
+}
+```
+
+Scenes must be ordered, non-overlapping and end within the narration duration. A gap between scenes displays the blank board. Each scene clears the previous scene, allowing a new illustration or concept to take focus. The original top-level `objects` format remains supported for backward compatibility. See `examples/photosynthesis/multi-scene-demo.json` for a three-part cell lesson example (it expects a matching narration file).
+
 ## Next milestones
 
 1. Render and visually inspect a real narration-backed test, including a real line-art image.
