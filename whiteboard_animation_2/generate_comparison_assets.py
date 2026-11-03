@@ -130,6 +130,8 @@ def main() -> None:
     image = image.resize((W,H), Image.Resampling.LANCZOS)
     board = out / "photosynthesis-board.png"
     image.save(board, optimize=True)
+    comparison_board = out / "photosynthesis-board-360.png"
+    image.resize((360, 640), Image.Resampling.LANCZOS).save(comparison_board, optimize=True)
 
     audio = out / "photosynthesis-narration.wav"
     subprocess.run(
@@ -161,17 +163,17 @@ def main() -> None:
 
     # The lightweight engine uses the exact same completed board image and audio.
     plan = {
-        "width": W, "height": H, "coordinate_width": W, "fps": 24,
+        "width": 360, "height": 640, "coordinate_width": 360, "fps": 10,
         "audio": "photosynthesis-narration.wav", "watermark": "SBA • WHITEBOARD ENGINE A",
-        "supersample": 2,
+        "supersample": 1,
         "objects": [{
-            "type":"image","path":"photosynthesis-board.png","x":0,"y":0,"w":W,"h":H,
+            "type":"image","path":"photosynthesis-board-360.png","x":0,"y":0,"w":360,"h":640,
             "start":0.0,"draw_duration":1.0
         }]
     }
     (out / "engine-a-scene.json").write_text(json.dumps(plan, indent=2), encoding="utf-8")
     manifest = {"scenes":[{
-        "image":"photosynthesis-board.png",
+        "image":"photosynthesis-board-360.png",
         "audio":"photosynthesis-narration.wav",
         "regions":"photosynthesis-regions.json"
     }]}
