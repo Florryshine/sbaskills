@@ -148,13 +148,13 @@ def main() -> None:
             {"label":"plant","role":"main_concept","object":"green plant with leaves and roots","reveal_order":2,
              "box":{"ymin":330,"xmin":250,"ymax":850,"xmax":760},
              "expected_visual":"Stem, leaves, roots and chlorophyll","annotation":"Photosynthesis is how green plants make their own food.","reveal":"fill"},
-            {"label":"water","role":"input","object":"water droplets entering roots","reveal_order":3,
+            {"label":"water","role":"supporting_detail","object":"water droplets entering roots","reveal_order":3,
              "box":{"ymin":650,"xmin":60,"ymax":850,"xmax":430},
              "expected_visual":"Water droplets and arrow into roots","annotation":"The roots absorb water from the soil.","reveal":"fill"},
             {"label":"carbon dioxide","role":"input","object":"carbon dioxide bubbles entering the leaf","reveal_order":4,
              "box":{"ymin":350,"xmin":650,"ymax":560,"xmax":970},
              "expected_visual":"CO2 bubbles and arrow into leaf","annotation":"Carbon dioxide enters the leaf through tiny openings.","reveal":"fill"},
-            {"label":"products","role":"products","object":"glucose and oxygen output label","reveal_order":5,
+            {"label":"products","role":"main_concept","object":"glucose and oxygen output label","reveal_order":5,
              "box":{"ymin":870,"xmin":300,"ymax":990,"xmax":700},
              "expected_visual":"Glucose and oxygen produced by photosynthesis","annotation":"The plant converts water and carbon dioxide into glucose and releases oxygen.","reveal":"fill"}
         ]
