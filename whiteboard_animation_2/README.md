@@ -76,3 +76,31 @@ The prototype currently expects narration audio to be supplied; it does not
 call TTS itself. The example is a visual/timing scaffold and needs a matching
 audio file before it can produce a narrated MP4. No existing SBA routes,
 Remotion files, dependencies, or production UI are changed.
+
+## Optional real stroke-tracing backend
+
+The lightweight renderer above is useful for custom timed overlays, but it is
+not the strongest handwriting renderer. For clean black-ink illustrations,
+there is a second, optional backend: **whiteboard-animator 0.1.1**. It is MIT
+licensed, CPU-only, and includes a text detector. Its package is much heavier
+(about 77 MB) and has scientific Python dependencies, so it is deliberately
+not part of the default requirements. The optional install does not require
+the Gemini extra or an API key.
+
+Install it only when you want to test that backend:
+
+```bat
+py -m pip install -r requirements-whiteboard-animator.txt
+```
+
+Prepare one clean whiteboard-style PNG and one narration WAV per scene. Keep
+them beside a manifest based on `examples/animator-manifest.json`, then run:
+
+```bat
+py animator_adapter.py examples/animator-manifest.json -o photosynthesis-traced.mp4 --quality high
+```
+
+This backend traces finished diagrams and handwriting more naturally than
+the simple progressive image wipe in `engine.py`. Its automatic narration
+pacing is estimated from image regions, not true word-level speech alignment.
+We must judge the actual output before choosing it as the main renderer.
