@@ -184,20 +184,26 @@ function StoryScene({scene,index,brand,accent}) {
 }
 function TegakiScene({scene,brand,accent,index}) {
  const frame=useCurrentFrame(), {fps}=useVideoConfig();
- const duration=Math.max(2,Number(scene.durationSeconds)||8);
- const total=Math.max(1,Math.round(duration*fps));
- const headingProgress=interpolate(frame,[0,Math.max(1,total*.38)],[0,1],clamp);
- const bodyProgress=interpolate(frame,[Math.max(1,total*.38),Math.max(2,total*.92)],[0,1],clamp);
- return <AbsoluteFill style={{background:'#fffef8',color:C.navy,fontFamily:'Arial,sans-serif',padding:'8% 7%',overflow:'hidden'}}>
-  <div style={{position:'absolute',top:38,left:48,fontSize:22,fontWeight:900,letterSpacing:2,color:C.blue}}>{brand.toUpperCase()}</div>
-  <div style={{position:'absolute',top:'17%',left:'8%',right:'8%',fontSize:54,fontWeight:800,color:C.navy}}>
-   <TegakiRenderer font={caveat} text={scene.heading||'Write your heading'} time={{mode:'controlled',value:headingProgress,unit:'progress'}} style={{fontSize:68,fontWeight:700,color:C.navy,lineHeight:1.15}}/>
+ const duration=Math.max(2,Number(scene.durationSeconds)||40), total=Math.max(1,Math.round(duration*fps));
+ const headingProgress=interpolate(frame,[0,Math.max(1,total*.16)],[0,1],clamp);
+ const bodyProgress=interpolate(frame,[Math.max(1,total*.12),Math.max(2,total*.78)],[0,1],clamp);
+ const imageProgress=interpolate(frame,[Math.max(1,total*.22),Math.max(2,total*.48)],[0,1],clamp);
+ const illustration=scene.illustration||scene.illustrationAsset||scene.assetId||'animal-cell';
+ const asset=findSBAIllustration(illustration), body=scene.text||scene.narration||'Write your complete lesson here.';
+ const bodySize=Math.max(31,Math.min(44,Math.round(4300/Math.max(100,body.length))));
+ return <AbsoluteFill style={{background:'#e9e2d8',fontFamily:'Arial,sans-serif',overflow:'hidden'}}>
+  <div style={{position:'absolute',inset:'2.2%',borderRadius:24,background:'#fffdf6',boxShadow:'0 18px 55px rgba(55,42,28,.22)',overflow:'hidden'}}>
+   <svg width="100%" height="100%" viewBox="0 0 1080 1920" preserveAspectRatio="none" style={{position:'absolute',inset:0}}>
+    <defs><pattern id="tegakiRules" width="1080" height="58" patternUnits="userSpaceOnUse"><path d="M0 57 H1080" stroke="#b9d5e4" strokeWidth="2" opacity=".62"/></pattern><pattern id="tegakiGrain" width="29" height="29" patternUnits="userSpaceOnUse"><circle cx="4" cy="5" r="1" fill="#b6a98f" opacity=".16"/></pattern></defs>
+    <rect width="1080" height="1920" fill="#fffdf6"/><rect width="1080" height="1920" fill="url(#tegakiRules)"/><rect width="1080" height="1920" fill="url(#tegakiGrain)"/><path d="M115 0 V1920" stroke="#e7a5a0" strokeWidth="3" opacity=".75"/><path d="M0 190 H1080" stroke="#d8e3e6" strokeWidth="3"/>
+   </svg>
+   <div style={{position:'absolute',top:48,left:150,right:115,display:'flex',justifyContent:'space-between',alignItems:'center',fontSize:22,fontWeight:900,letterSpacing:2,color:C.blue}}><span>{brand.toUpperCase()}</span><span style={{fontSize:17,color:'#8997a1'}}>STUDY NOTES</span></div>
+   <div style={{position:'absolute',top:145,left:150,right:115,fontSize:56,fontWeight:800,color:C.navy,lineHeight:1.1}}><TegakiRenderer font={caveat} text={scene.heading||'Your lesson title'} time={{mode:'controlled',value:headingProgress,unit:'progress'}} style={{fontSize:72,fontWeight:700,color:C.navy,lineHeight:1.12}}/></div>
+   <div style={{position:'absolute',top:300,left:150,right:115,height:690,overflow:'hidden',fontSize:bodySize,lineHeight:1.28,color:C.ink}}><TegakiRenderer font={caveat} text={body} time={{mode:'controlled',value:bodyProgress,unit:'progress'}} style={{fontSize:bodySize+5,fontWeight:600,color:C.ink,lineHeight:1.28}}/></div>
+   <div style={{position:'absolute',left:150,right:115,top:1030,height:700,borderTop:'3px dashed #c5d8df',paddingTop:24,opacity:imageProgress,clipPath:'inset('+(100-imageProgress*100)+'% 0 0 0)'}}><div style={{fontSize:22,fontWeight:900,letterSpacing:3,color:accent,marginBottom:12}}>ILLUSTRATION</div>{asset?<SBAIllustration type={asset.id} accent={accent} animated={false} showLabel={true} style={{width:'100%',height:610}}/>:<div style={{fontSize:28,color:C.navy}}>Choose a matching SBA illustration in the editor.</div>}</div>
+   <div style={{position:'absolute',bottom:30,left:150,right:115,display:'flex',justifyContent:'space-between',fontSize:18,fontWeight:800,color:'#8794a1'}}><span>TEGAKI • ONE-PAGE LESSON</span><span>SHINEY BRAIN ACADEMY</span></div>
+   <div style={{position:'absolute',top:0,right:24,bottom:0,width:52,display:'flex',flexDirection:'column',justifyContent:'space-evenly',alignItems:'center',pointerEvents:'none'}}>{Array.from({length:17},(_,i)=><div key={i} style={{width:42,height:42,borderRadius:'50%',border:'9px solid #e6a0bb',background:'#f7dbe5',boxShadow:'inset 0 2px 4px #fff,0 2px 3px #9b7180'}}/>)}</div>
   </div>
-  <div style={{position:'absolute',top:'36%',left:'9%',right:'9%',fontSize:35,lineHeight:1.45,color:C.ink}}>
-   <TegakiRenderer font={caveat} text={scene.text||scene.narration||'Write your lesson here.'} time={{mode:'controlled',value:bodyProgress,unit:'progress'}} style={{fontSize:46,fontWeight:600,color:C.ink,lineHeight:1.35}}/>
-  </div>
-  <div style={{position:'absolute',left:'9%',right:'9%',bottom:'13%',height:5,background:accent,borderRadius:8,opacity:.8}}/>
-  <div style={{position:'absolute',bottom:42,left:48,fontSize:18,fontWeight:800,color:'#8794a1'}}>TEGAKI • HANDWRITTEN LESSON {String(index+1).padStart(2,'0')}</div>
  </AbsoluteFill>;
 }
 function Scene({scene,index,template,brand,accent,narrationVolume}) {
