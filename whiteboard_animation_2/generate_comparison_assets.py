@@ -151,7 +151,7 @@ def main() -> None:
             {"label":"water","role":"supporting_detail","object":"water droplets entering roots","reveal_order":3,
              "box":{"ymin":650,"xmin":60,"ymax":850,"xmax":430},
              "expected_visual":"Water droplets and arrow into roots","annotation":"The roots absorb water from the soil.","reveal":"fill"},
-            {"label":"carbon dioxide","role":"input","object":"carbon dioxide bubbles entering the leaf","reveal_order":4,
+            {"label":"carbon dioxide","role":"supporting_detail","object":"carbon dioxide bubbles entering the leaf","reveal_order":4,
              "box":{"ymin":350,"xmin":650,"ymax":560,"xmax":970},
              "expected_visual":"CO2 bubbles and arrow into leaf","annotation":"Carbon dioxide enters the leaf through tiny openings.","reveal":"fill"},
             {"label":"products","role":"main_concept","object":"glucose and oxygen output label","reveal_order":5,
