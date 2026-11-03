@@ -171,7 +171,7 @@ def main() -> None:
     # The lightweight engine uses the exact same completed board image and audio.
     plan = {
         "width": 360, "height": 640, "coordinate_width": 360, "fps": 10,
-        "audio": "photosynthesis-narration.wav", "watermark": "SBA • WHITEBOARD ENGINE A",
+        "audio": "photosynthesis-narration.wav", "watermark": "",
         "supersample": 1,
         "objects": [{
             "type":"image","path":"photosynthesis-board-360.png","x":0,"y":0,"w":360,"h":640,
