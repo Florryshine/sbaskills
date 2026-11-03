@@ -2,7 +2,6 @@ import json
 import shutil
 import subprocess
 import sys
-import tempfile
 import unittest
 from pathlib import Path
 
@@ -41,28 +40,33 @@ class PhotosynthesisComparisonTest(unittest.TestCase):
         self.assertTrue(audio.is_file())
         expected_duration = duration(audio)
 
-        with tempfile.TemporaryDirectory() as tmp:
-            folder = Path(tmp)
-            engine_a = folder / "engine-a.mp4"
-            engine_b = folder / "engine-b.mp4"
+        engine_a = assets / "engine-a.mp4"
+        engine_b = assets / "engine-b.mp4"
 
-            subprocess.run(
+        subprocess.run(
                 [sys.executable, str(ENGINE), str(plan), "-o", str(engine_a)],
-                check=True,
-                cwd=ROOT,
-            )
-            subprocess.run(
+            check=True,
+            cwd=ROOT,
+        )
+        subprocess.run(
                 [
                     sys.executable, str(ADAPTER), str(manifest),
                     "-o", str(engine_b), "--quality", "low",
                 ],
+            check=True,
+            cwd=ROOT,
+        )
+        for output in (engine_a, engine_b):
+            self.assertTrue(output.is_file())
+            self.assertGreater(output.stat().st_size, 10_000)
+            self.assertAlmostEqual(duration(output), expected_duration, delta=0.3)
+            preview = output.with_name(output.stem + "-preview.jpg")
+            subprocess.run(
+                ["ffmpeg", "-y", "-hide_banner", "-loglevel", "error", "-ss", "4",
+                 "-i", str(output), "-frames:v", "1", str(preview)],
                 check=True,
-                cwd=ROOT,
             )
-            for output in (engine_a, engine_b):
-                self.assertTrue(output.is_file())
-                self.assertGreater(output.stat().st_size, 10_000)
-                self.assertAlmostEqual(duration(output), expected_duration, delta=0.3)
+            self.assertTrue(preview.is_file())
 
 
 if __name__ == "__main__":
