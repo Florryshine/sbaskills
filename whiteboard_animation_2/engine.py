@@ -83,7 +83,7 @@ def partial_points(points: list[list[float]], amount: float) -> list[tuple[float
 def draw_revealed_text(draw: ImageDraw.ImageDraw, obj: dict[str, Any], p: float,
                        scale: float) -> None:
     text = str(obj.get("text", ""))
-    x, y = float(obj.get("x", 80)), float(obj.get("y", 100))
+    x, y = float(obj.get("x", 80)) * scale, float(obj.get("y", 100)) * scale
     size = max(12, int(float(obj.get("size", 42)) * scale))
     font = load_font(size, bool(obj.get("bold", False)))
     fill = tuple(obj.get("color", INK))
