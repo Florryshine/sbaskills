@@ -123,7 +123,8 @@ def draw_image_object(image: Image.Image, obj: dict[str, Any], p: float,
     image.paste(layer.convert("RGB"), (x, y), alpha)
 
 
-def draw_object(image: Image.Image, obj: dict[str, Any], t: float, scale: float,\n                assets: dict[str, Image.Image]) -> None:
+def draw_object(image: Image.Image, obj: dict[str, Any], t: float, scale: float,
+                assets: dict[str, Image.Image]) -> None:
     start = float(obj.get("start", 0))
     if t < start:
         return
