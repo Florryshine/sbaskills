@@ -43,8 +43,8 @@ jobs:
       - name: Install FFmpeg
         run: |
           sudo apt-get update
-          sudo apt-get install -y ffmpeg
+          sudo apt-get install -y ffmpeg espeak
       - name: Install optional MIT tracing backend
         run: python -m pip install -r whiteboard_animation_2/requirements-whiteboard-animator.txt
-      - name: Test real line-art tracing
+      - name: Compare both renderers on the same photosynthesis lesson
         run: python -m unittest whiteboard_animation_2/tests/test_animator_adapter.py -v
