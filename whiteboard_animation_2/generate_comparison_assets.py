@@ -138,7 +138,7 @@ def main() -> None:
         ["espeak", "-v", "en-gb", "-s", "145", "-w", str(audio), NARRATION],
         check=True,
     )
-    # Region boxes use normalized 0..1000 coordinates as required by the package.
+    audio_probe = subprocess.run(\n        ["ffprobe", "-v", "error", "-show_entries", "format=duration",\n         "-of", "default=noprint_wrappers=1:nokey=1", str(audio)],\n        check=True, capture_output=True, text=True,\n    )\n    audio_duration = float(audio_probe.stdout.strip())\n\n    # Region boxes use normalized 0..1000 coordinates as required by the package.
     regions = {
         "idea": "Photosynthesis: how green plants make food",
         "regions": [
@@ -168,7 +168,7 @@ def main() -> None:
         "supersample": 1,
         "objects": [{
             "type":"image","path":"photosynthesis-board-360.png","x":0,"y":0,"w":360,"h":640,
-            "start":0.0,"draw_duration":1.0
+            "start":0.0,"draw_duration":audio_duration * 0.75
         }]
     }
     (out / "engine-a-scene.json").write_text(json.dumps(plan, indent=2), encoding="utf-8")
