@@ -138,7 +138,14 @@ def main() -> None:
         ["espeak", "-v", "en-gb", "-s", "145", "-w", str(audio), NARRATION],
         check=True,
     )
-    audio_probe = subprocess.run(\n        ["ffprobe", "-v", "error", "-show_entries", "format=duration",\n         "-of", "default=noprint_wrappers=1:nokey=1", str(audio)],\n        check=True, capture_output=True, text=True,\n    )\n    audio_duration = float(audio_probe.stdout.strip())\n\n    # Region boxes use normalized 0..1000 coordinates as required by the package.
+    audio_probe = subprocess.run(
+        ["ffprobe", "-v", "error", "-show_entries", "format=duration",
+         "-of", "default=noprint_wrappers=1:nokey=1", str(audio)],
+        check=True, capture_output=True, text=True,
+    )
+    audio_duration = float(audio_probe.stdout.strip())
+
+    # Region boxes use normalized 0..1000 coordinates as required by the package.
     regions = {
         "idea": "Photosynthesis: how green plants make food",
         "regions": [
