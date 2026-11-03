@@ -23,7 +23,7 @@ export default function VideoStudio(){
  const [topic,setTopic]=useState('Cell structure and functions'),[storyIdea,setStoryIdea]=useState('A JAMB candidate who keeps failing mock tests until she changes her study strategy'),[subject,setSubject]=useState('biology'),[generating,setGenerating]=useState(false),[storyGenerating,setStoryGenerating]=useState(false),[kind,setKind]=useState('whiteboard'),[scenes,setScenes]=useState([]),[title,setTitle]=useState('New Whiteboard Lesson'),[ratio,setRatio]=useState('vertical'),[accent,setAccent]=useState('#f4c542'),[brand,setBrand]=useState('SHINEY BRAIN ACADEMY'),[status,setStatus]=useState(''),[busy,setBusy]=useState(false),[narrating,setNarrating]=useState(false),[musicTracks,setMusicTracks]=useState([]),[musicSrc,setMusicSrc]=useState(''),[musicVolume,setMusicVolume]=useState(0.12),[narrationVolume,setNarrationVolume]=useState(1),[musicPreview,setMusicPreview]=useState(false);
  const previewAudioRef=useRef(null),fps=30,frames=Math.max(1,totalFrames(scenes)),width=ratio==='vertical'?1080:1920,height=ratio==='vertical'?1920:1080;
  useEffect(()=>{fetch('/api/admin/quote-loops/audio-list').then(r=>r.json()).then(d=>setMusicTracks(Array.isArray(d.tracks)?d.tracks:[])).catch(()=>setMusicTracks([]));},[]);
- useEffect(()=>{fetch('/api/admin/quote-loops/audio-list').then(r=>r.json()).then(d=>setMusicTracks(d.tracks||[])).catch(()=>setMusicTracks([]));},[]);
+
  const props={title,scenes,template:kind,brand,accent,musicSrc:musicSrc||null,musicVolume,narrationVolume};
  async function generateWhiteboard(){
   setGenerating(true);setScenes([]);setTitle('Generating: '+topic);setStatus('Generating a fresh lesson for “'+topic+'”…');
