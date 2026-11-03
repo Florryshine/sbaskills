@@ -83,7 +83,7 @@ The lightweight renderer above is useful for custom timed overlays, but it is
 not the strongest handwriting renderer. For clean black-ink illustrations,
 there is a second, optional backend: **whiteboard-animator 0.1.1**. It is MIT
 licensed, CPU-only, and includes a text detector. Its package is much heavier
-(about 77 MB) and has scientific Python dependencies, so it is deliberately
+(about 83 MB including its bundled text-detection model) and has scientific Python dependencies, so it is deliberately
 not part of the default requirements. The optional install does not require
 the Gemini extra or an API key.
 
@@ -101,6 +101,28 @@ py animator_adapter.py examples/animator-manifest.json -o photosynthesis-traced.
 ```
 
 This backend traces finished diagrams and handwriting more naturally than
-the simple progressive image wipe in `engine.py`. Its automatic narration
-pacing is estimated from image regions, not true word-level speech alignment.
+the simple progressive image wipe in `engine.py`. Region plans estimate pacing
+from annotation text and box area; they do not perform true word-level speech
+alignment. Exact start/end cue times require the lower-level element-plan API.
 We must judge the actual output before choosing it as the main renderer.
+
+## Reproducible renderer comparison
+
+The comparison script creates one photosynthesis board, one narration WAV, and
+one region plan. Both renderers consume the same 360×640 board and exact same
+audio, so differences come from the renderer rather than different inputs.
+The temporary narration is generated with free eSpeak (English UK voice) only
+for this repeatable test; it is not the final SBA Nigerian voice.
+
+On Ubuntu/Debian install the test speech utility with `sudo apt-get install espeak`.
+Then run:
+
+```bash
+python generate_comparison_assets.py
+python engine.py comparison/engine-a-scene.json -o comparison/engine-a.mp4
+python animator_adapter.py comparison/engine-b-manifest.json -o comparison/engine-b.mp4 --quality low
+```
+
+The GitHub Actions comparison job runs both renders and checks that each MP4
+matches the narration duration. The final visual choice still requires viewing
+both videos side by side.
