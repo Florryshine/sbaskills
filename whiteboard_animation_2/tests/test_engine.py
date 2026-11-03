@@ -8,7 +8,7 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT))
-import engine  # noqa: E402
+from PIL import Image, ImageDraw\n\nimport engine  # noqa: E402
 
 
 @unittest.skipUnless(shutil.which("ffmpeg"), "FFmpeg is required for render smoke test")
@@ -16,6 +16,9 @@ class RenderSmokeTest(unittest.TestCase):
     def test_renders_a_short_portrait_mp4(self):
         with tempfile.TemporaryDirectory() as tmp:
             folder = Path(tmp)
+            illustration = Image.new("RGB", (100, 100), "white")
+            ImageDraw.Draw(illustration).ellipse((15, 15, 85, 85), outline="black", width=5)
+            illustration.save(folder / "diagram.png")
             plan = {
                 "width": 360,
                 "height": 640,
@@ -27,7 +30,9 @@ class RenderSmokeTest(unittest.TestCase):
                     {"type": "text", "text": "TEST", "x": 80, "y": 100,
                      "size": 70, "start": 0, "draw_duration": 0.5},
                     {"type": "circle", "x": 540, "y": 900, "radius": 100,
-                     "start": 0.2, "draw_duration": 0.7}
+                     "start": 0.2, "draw_duration": 0.7},
+                    {"type": "image", "path": "diagram.png", "x": 300, "y": 1100,
+                     "w": 300, "h": 300, "start": 0.1, "draw_duration": 0.8}
                 ]
             }
             plan_path = folder / "scene.json"
