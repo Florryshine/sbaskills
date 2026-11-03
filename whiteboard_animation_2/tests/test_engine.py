@@ -6,14 +6,16 @@ import tempfile
 import unittest
 from pathlib import Path
 
+from PIL import Image, ImageDraw
+
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT))
-from PIL import Image, ImageDraw\n\nimport engine  # noqa: E402
+import engine  # noqa: E402
 
 
 @unittest.skipUnless(shutil.which("ffmpeg"), "FFmpeg is required for render smoke test")
 class RenderSmokeTest(unittest.TestCase):
-    def test_renders_a_short_portrait_mp4(self):
+    def test_renders_a_short_portrait_mp4_with_image_asset(self):
         with tempfile.TemporaryDirectory() as tmp:
             folder = Path(tmp)
             illustration = Image.new("RGB", (100, 100), "white")
