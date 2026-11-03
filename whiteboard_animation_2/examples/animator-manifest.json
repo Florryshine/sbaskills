@@ -1,0 +1,12 @@
+{
+  "scenes": [
+    {
+      "image": "scene-01.png",
+      "audio": "scene-01.wav"
+    },
+    {
+      "image": "scene-02.png",
+      "audio": "scene-02.wav"
+    }
+  ]
+}
