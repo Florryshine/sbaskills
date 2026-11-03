@@ -50,10 +50,12 @@ export function CharacterRig({
   const p = { ...PALETTE, ...(character.palette || {}) };
   const face = EXPRESSIONS[expression] || EXPRESSIONS.neutral;
   const t = animate ? frame / fps : 0;
-  const walk = action === 'walk' || pose === 'walking';
+  const walk = action === 'walk' || action === 'run' || pose === 'walking';
+  const runMultiplier = action === 'run' ? 1.65 : 1;
+  const gait = walkCycle * runMultiplier;
   const talk = speaking || action === 'talk';
-  const bob = animate && action === 'idle' ? Math.sin(t * 2.6) * 2.2 : 0;
-  const walkCycle = walk && animate ? Math.sin(t * Math.PI * 4) : 0;
+  const bob = animate && action === 'idle' ? Math.sin(t * 2.6) * (action === 'idle' ? 2.2 : 0.8) : 0;
+  const walkCycle = walk && animate ? Math.sin(t * Math.PI * (action === 'run' ? 6 : 4)) : 0;
   const armWave = action === 'wave' && animate ? Math.sin(t * 5) * 17 : 0;
   const mouthOpen = talk && animate ? (Math.sin(frame * 0.85) > 0.12 ? 1 : 0) : 0;
   const blink = animate && (frame % Math.max(1, Math.round(fps * 3.7)) < 4);
@@ -73,8 +75,8 @@ export function CharacterRig({
       <g transform={`translate(${x} ${y + bob}) scale(${scale})`} stroke={p.outline} strokeWidth="7" strokeLinecap="round" strokeLinejoin="round">
         {/* Rear legs and shoes */}
         <g id="legs" fill={p.trousers}>
-          <path d={leftLeg} />
-          <path d={rightLeg} />
+          <path d={leftLeg} transform={walk ? `rotate(${walkCycle * 24} 240 500)` : 'rotate(0 240 500)'} />
+          <path d={rightLeg} transform={walk ? `rotate(${-walkCycle * 24} 260 500)` : 'rotate(0 260 500)'} />
           <path d={sitting ? 'M119 574 Q91 576 91 601 L91 612 L197 612 Q207 600 190 589 L153 575 Z' : 'M183 648 Q154 655 151 680 Q150 694 166 697 L238 697 Q252 691 245 677 L221 653 Z'} fill={p.shoe} />
           <path d={sitting ? 'M93 601 H199' : 'M157 683 H244'} stroke={p.sole} strokeWidth="9" fill="none" />
           <path d={sitting ? 'M263 585 Q276 573 302 574 L361 572 Q390 577 393 599 L393 612 L278 612 Q260 604 263 585 Z' : 'M280 649 Q308 655 325 680 Q330 694 314 697 L246 697 Q232 691 239 677 L260 653 Z'} fill={p.shoe} />
