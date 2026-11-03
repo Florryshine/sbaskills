@@ -30,6 +30,7 @@ jobs:
         run: |
           python -m py_compile whiteboard_animation_2/engine.py
           python -m py_compile whiteboard_animation_2/animator_adapter.py
+          python -m py_compile whiteboard_animation_2/generate_comparison_assets.py
       - name: Render smoke test
         run: python -m unittest discover -s whiteboard_animation_2/tests -p "test_engine.py" -v
 
@@ -48,3 +49,13 @@ jobs:
         run: python -m pip install -r whiteboard_animation_2/requirements-whiteboard-animator.txt
       - name: Compare both renderers on the same photosynthesis lesson
         run: python -m unittest whiteboard_animation_2/tests/test_animator_adapter.py -v
+      - name: Upload comparison videos and preview frames
+        uses: actions/upload-artifact@v4
+        with:
+          name: whiteboard-animation-photosynthesis-comparison
+          path: |
+            whiteboard_animation_2/comparison/engine-a.mp4
+            whiteboard_animation_2/comparison/engine-b.mp4
+            whiteboard_animation_2/comparison/engine-a-preview.jpg
+            whiteboard_animation_2/comparison/engine-b-preview.jpg
+          if-no-files-found: error
