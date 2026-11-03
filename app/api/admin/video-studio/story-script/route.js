@@ -1,8 +1,27 @@
 import { NextResponse } from 'next/server';
+import { createRouteHandlerClient } from '@/lib/supabase-server';
 import { generateJson } from '@/lib/content-factory/generators/_shared';
 
 export const runtime = 'nodejs';
+export const dynamic = 'force-dynamic';
 export const maxDuration = 60;
+
+async function requireAdminApi() {
+  const supabase = createRouteHandlerClient();
+  const { data: { user }, error: userError } = await supabase.auth.getUser();
+  if (userError || !user) {
+    return { response: NextResponse.json({ error: 'Unauthorized' }, { status: 401 }) };
+  }
+  const { data: profile, error: profileError } = await supabase
+    .from('profiles')
+    .select('role')
+    .eq('id', user.id)
+    .single();
+  if (profileError || profile?.role !== 'admin') {
+    return { response: NextResponse.json({ error: 'Forbidden' }, { status: 403 }) };
+  }
+  return { response: null };
+}
 
 function clean(value, max = 500) {
   return String(value ?? '').trim().slice(0, max);
@@ -24,6 +43,8 @@ function validateStory(value) {
 
 export async function POST(request) {
   try {
+    const auth = await requireAdminApi();
+    if (auth.response) return auth.response;
     const body = await request.json();
     const idea = clean(body.idea, 700);
     const subject = clean(body.subject || 'general', 40);
