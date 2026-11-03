@@ -98,7 +98,7 @@ def load_ink_image(path: Path, color: tuple[int, int, int]) -> Image.Image:
     white = Image.new("RGB", source.size, "white")
     white.paste(source, mask=source.getchannel("A"))
     gray = ImageOps.grayscale(white)
-    alpha = gray.point(lambda value: 255 if value < 238 else 0)
+    alpha = ImageOps.invert(gray)
     ink = Image.new("RGBA", source.size, color + (0,))
     ink.putalpha(alpha)
     return ink
@@ -242,6 +242,8 @@ def render(plan_path: Path, output_path: Path) -> None:
         if obj.get("type") == "image":
             key = str(obj["path"])
             asset_path = (base / key).resolve()
+            if not asset_path.is_relative_to(base.resolve()):
+                raise ValueError(f"Image path escapes the scene folder: {key}")
             if not asset_path.is_file():
                 raise FileNotFoundError(f"Illustration file not found: {asset_path}")
             assets[key] = load_ink_image(asset_path, tuple(obj.get("color", INK)))
