@@ -58,4 +58,6 @@ jobs:
             whiteboard_animation_2/comparison/engine-b.mp4
             whiteboard_animation_2/comparison/engine-a-preview.jpg
             whiteboard_animation_2/comparison/engine-b-preview.jpg
+            whiteboard_animation_2/comparison/engine-a-final.jpg
+            whiteboard_animation_2/comparison/engine-b-final.jpg
           if-no-files-found: error
