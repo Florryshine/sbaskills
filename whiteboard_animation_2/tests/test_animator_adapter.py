@@ -67,6 +67,14 @@ class PhotosynthesisComparisonTest(unittest.TestCase):
                 check=True,
             )
             self.assertTrue(preview.is_file())
+            final_preview = output.with_name(output.stem + "-final.jpg")
+            final_time = max(0.1, expected_duration - 0.5)
+            subprocess.run(
+                ["ffmpeg", "-y", "-hide_banner", "-loglevel", "error", "-ss", str(final_time),
+                 "-i", str(output), "-frames:v", "1", str(final_preview)],
+                check=True,
+            )
+            self.assertTrue(final_preview.is_file())
 
 
 if __name__ == "__main__":
