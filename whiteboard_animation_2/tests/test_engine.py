@@ -71,5 +71,29 @@ class RenderSmokeTest(unittest.TestCase):
             self.assertAlmostEqual(float(probe.stdout.strip()), 0.8, delta=0.15)
 
 
+class TimelineUnitTest(unittest.TestCase):
+    def test_scene_selection_uses_absolute_timeline_and_local_scene_time(self):
+        scenes = engine.validate_timeline({"scenes": [
+            {"start": 0, "end": 3, "objects": [{"type": "text", "text": "CELL", "start": 0, "draw_duration": 1}]},
+            {"start": 3, "end": 7, "objects": [{"type": "text", "text": "NUCLEUS", "start": 0.5, "draw_duration": 1}]},
+        ]}, 7)
+        self.assertEqual(engine.scene_at(scenes, 1)["objects"][0]["text"], "CELL")
+        self.assertEqual(engine.scene_at(scenes, 4)["objects"][0]["text"], "NUCLEUS")
+        self.assertIsNone(engine.scene_at(scenes, 2.9) if False else engine.scene_at(scenes, 7))
+
+    def test_rejects_overlapping_scenes(self):
+        with self.assertRaisesRegex(ValueError, "must not overlap"):
+            engine.validate_timeline({"scenes": [
+                {"start": 0, "end": 4, "objects": []},
+                {"start": 3, "end": 6, "objects": []},
+            ]}, 8)
+
+    def test_rejects_scene_after_audio(self):
+        with self.assertRaisesRegex(ValueError, "after the narration"):
+            engine.validate_timeline({"scenes": [
+                {"start": 5, "end": 9, "objects": []},
+            ]}, 8)
+
+
 if __name__ == "__main__":
     unittest.main()

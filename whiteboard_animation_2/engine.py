@@ -218,6 +218,45 @@ def validate_plan(plan: Any) -> dict[str, Any]:
     return plan
 
 
+def validate_timeline(plan: dict[str, Any], duration: float) -> list[dict[str, Any]]:
+    """Validate absolute-time scenes; object times are relative to each scene start."""
+    scenes = plan.get("scenes")
+    if scenes is None:
+        return []
+    if not isinstance(scenes, list) or not scenes:
+        raise ValueError("'scenes' must be a non-empty array when supplied.")
+    validated: list[dict[str, Any]] = []
+    previous_end = 0.0
+    for index, scene in enumerate(scenes):
+        if not isinstance(scene, dict):
+            raise ValueError(f"Scene {index} must be an object.")
+        try:
+            start, end = float(scene["start"]), float(scene["end"])
+        except (KeyError, TypeError, ValueError) as exc:
+            raise ValueError(f"Scene {index} requires numeric start and end values.") from exc
+        if not math.isfinite(start) or not math.isfinite(end) or start < 0 or end <= start:
+            raise ValueError(f"Scene {index} has an invalid time range.")
+        if start < previous_end:
+            raise ValueError("Scenes must be ordered and must not overlap.")
+        if end > duration + 0.001:
+            raise ValueError(f"Scene {index} ends after the narration.")
+        objects = scene.get("objects")
+        if not isinstance(objects, list):
+            raise ValueError(f"Scene {index} requires an objects array.")
+        validate_plan({"objects": objects})
+        validated.append({**scene, "start": start, "end": end})
+        previous_end = end
+    return validated
+
+
+def scene_at(scenes: list[dict[str, Any]], t: float) -> dict[str, Any] | None:
+    """Return the active scene at narration time t, or None during a gap."""
+    for scene in scenes:
+        if scene["start"] <= t < scene["end"]:
+            return scene
+    return None
+
+
 def render(plan_path: Path, output_path: Path) -> None:
     plan = validate_plan(json.loads(plan_path.read_text(encoding="utf-8")))
     base = plan_path.parent
@@ -239,7 +278,9 @@ def render(plan_path: Path, output_path: Path) -> None:
     scale = (width * supersample) / coordinate_width
     objects = plan.get("objects", [])
     assets: dict[str, Image.Image] = {}
-    for obj in objects:
+    scenes = validate_timeline(plan, duration)
+    render_objects = [obj for scene in scenes for obj in scene["objects"]] if scenes else objects
+    for obj in render_objects:
         if obj.get("type") == "image":
             key = str(obj["path"])
             asset_path = (base / key).resolve()
@@ -254,16 +295,19 @@ def render(plan_path: Path, output_path: Path) -> None:
         frame_dir = Path(tmp)
         for frame_no in range(frame_count):
             t = frame_no / fps
-            image = Image.new("RGB", (width*supersample, height*supersample),
-                              tuple(plan.get("background", BG)))
-            title = plan.get("watermark", "SHINEY BRAIN")
+            active_scene = scene_at(scenes, t) if scenes else None
+            scene_objects = active_scene["objects"] if active_scene else objects
+            scene_time = t - active_scene["start"] if active_scene else t
+            background = active_scene.get("background", plan.get("background", BG)) if active_scene else plan.get("background", BG)
+            image = Image.new("RGB", (width*supersample, height*supersample), tuple(background))
+            title = active_scene.get("watermark", plan.get("watermark", "SHINEY BRAIN")) if active_scene else plan.get("watermark", "SHINEY BRAIN")
             if title:
                 ImageDraw.Draw(image).text(
                     (int(48*scale), int(42*scale)), title,
                     font=load_font(max(12, int(20*scale)), True), fill=MUTED
                 )
-            for obj in objects:
-                draw_object(image, obj, t, scale, assets)
+            for obj in scene_objects:
+                draw_object(image, obj, scene_time, scale, assets)
             if supersample > 1:
                 image = image.resize((width, height), Image.Resampling.LANCZOS)
             image.save(frame_dir / f"frame_{frame_no:06d}.png", optimize=False)
