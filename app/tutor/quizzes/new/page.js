@@ -2,6 +2,7 @@
 
 import { useState, useRef } from 'react';
 import { createBrowserClient } from '@/lib/supabase';
+import { parseQuizTxt } from '@/lib/quizParser';
 import { useRouter } from 'next/navigation';
 import Link from 'next/link';
 
@@ -158,9 +159,9 @@ export default function NewQuiz() {
         const mammoth = await import('mammoth/mammoth.browser');
         const buffer = await file.arrayBuffer();
         const result = await mammoth.extractRawText({ arrayBuffer: buffer });
-        parsed = parseBulkText(result.value);
+        parsed = parseQuizTxt(result.value).questions;
       } else if (ext === 'txt') {
-        parsed = parseBulkText(await file.text());
+        parsed = parseQuizTxt(await file.text()).questions;
       } else {
         alert('Supported formats: TXT, CSV, Excel (.xlsx/.xls), and Word (.docx).');
         return;
