@@ -5,6 +5,8 @@ import { useEffect, useRef, useState } from 'react';
 const WIDTH = 720;
 const HEIGHT = 1280;
 
+function formatTime(seconds) { const value = Math.max(0, Math.floor(Number(seconds) || 0)); return `${Math.floor(value / 60)}:${String(value % 60).padStart(2, '0')}`; }
+
 function wrapLines(ctx, value, maxWidth) {
   const words = String(value || '').trim().split(/\s+/).filter(Boolean);
   const lines = [];
@@ -30,6 +32,8 @@ export default function DanceContentStudio() {
   const [videoName, setVideoName] = useState('');
   const [musicUrl, setMusicUrl] = useState('');
   const [musicName, setMusicName] = useState('');
+  const [musicDuration, setMusicDuration] = useState(0);
+  const [musicStart, setMusicStart] = useState(0);
   const [stockQuery, setStockQuery] = useState('dancing silhouette');
   const [stockResults, setStockResults] = useState([]);
   const [searching, setSearching] = useState(false);
@@ -119,7 +123,9 @@ export default function DanceContentStudio() {
     if (!file.type.startsWith('audio/')) return setStatus('Please choose an audio file.');
     setMusicUrl(URL.createObjectURL(file));
     setMusicName(file.name);
-    setStatus('Music loaded. You can adjust both audio levels.');
+    setMusicStart(0);
+    setMusicDuration(0);
+    setStatus('Music loaded. Choose where the soundtrack should begin.');
   }
 
   async function searchStock(event) {
@@ -244,7 +250,7 @@ export default function DanceContentStudio() {
       };
       recorder.start(1000);
       await video.play();
-      if (audioRef.current && musicUrl) await audioRef.current.play().catch(() => {});
+      if (audioRef.current && musicUrl) { audioRef.current.currentTime = Math.min(musicStart, Math.max(0, (audioRef.current.duration || musicStart) - 0.01)); await audioRef.current.play().catch(() => {}); }
       setStatus('Recording your finished video…');
       video.onended = () => {
         if (recorder.state !== 'inactive') recorder.stop();
@@ -264,7 +270,7 @@ export default function DanceContentStudio() {
     if (!video) return;
     if (video.paused) {
       video.play().catch(() => setStatus('Could not play this clip.'));
-      if (audioRef.current && musicUrl) audioRef.current.play().catch(() => {});
+      if (audioRef.current && musicUrl) { audioRef.current.currentTime = Math.min(musicStart, Math.max(0, (audioRef.current.duration || musicStart) - 0.01)); audioRef.current.play().catch(() => {}); }
     } else {
       video.pause();
       audioRef.current?.pause();
@@ -311,6 +317,8 @@ export default function DanceContentStudio() {
             <h2 className="text-lg font-extrabold">2. Add background music</h2>
             <input className="mt-3 block w-full text-sm" type="file" accept="audio/*" onChange={(event) => loadMusic(event.target.files?.[0])} />
             {musicName && <p className="mt-1 break-all text-xs text-slate-500">{musicName}</p>}
+            <label className="mt-3 block text-sm font-semibold">Music starts at: {formatTime(musicStart)}<input className="mt-2 w-full" type="range" min="0" max={Math.max(0, musicDuration)} step="1" value={Math.min(musicStart, musicDuration || 0)} disabled={!musicDuration} onChange={(event) => setMusicStart(Number(event.target.value))} /></label>
+            <p className="mt-1 text-xs text-slate-500">Your video controls the soundtrack length. Choose a start point in the longer song; playback stops automatically when the video ends. Song length: {formatTime(musicDuration)}.</p>
             <label className="mt-3 block text-sm font-semibold">Music volume: {musicVolume}%<input className="mt-2 w-full" type="range" min="0" max="100" value={musicVolume} onChange={(event) => setMusicVolume(Number(event.target.value))} /></label>
             <label className="mt-3 block text-sm font-semibold">Original video sound: {originalVolume}%<input className="mt-2 w-full" type="range" min="0" max="100" value={originalVolume} onChange={(event) => setOriginalVolume(Number(event.target.value))} /></label>
           </div>
@@ -348,7 +356,7 @@ export default function DanceContentStudio() {
           <div className="flex items-center justify-between"><h2 className="text-lg font-extrabold">Live preview</h2><span className="rounded-full bg-blue-100 px-3 py-1 text-xs font-bold text-blue-800">9:16 vertical</span></div>
           <div className="mx-auto max-w-[320px] overflow-hidden rounded-2xl bg-slate-950 shadow-xl"><canvas ref={canvasRef} width={WIDTH} height={HEIGHT} className="block h-auto w-full" /></div>
           <video ref={videoRef} src={videoUrl || undefined} playsInline preload="auto" crossOrigin="anonymous" className="fixed -left-[2000px] top-0 h-px w-px opacity-0" />
-          <audio ref={audioRef} src={musicUrl || undefined} className="hidden" />
+          <audio ref={audioRef} src={musicUrl || undefined} preload="metadata" onLoadedMetadata={(event) => { setMusicDuration(Number.isFinite(event.currentTarget.duration) ? event.currentTarget.duration : 0); }} className="hidden" />
           <button type="button" onClick={previewPlayback} disabled={!videoUrl || busy} className="w-full rounded-xl border bg-white p-3 font-bold text-blue-800 disabled:opacity-40">▶ Play / pause preview</button>
           <button type="button" onClick={exportVideo} disabled={!videoUrl || busy} className="w-full rounded-xl bg-yellow-400 p-4 font-extrabold text-blue-950 disabled:opacity-40">{busy ? 'Rendering… keep this page open' : 'Export finished video'}</button>
           <div className="rounded-xl bg-white p-4 text-sm"><b>Status</b><p aria-live="polite" className="mt-1 text-slate-600">{status}</p></div>
