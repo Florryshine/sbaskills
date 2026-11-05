@@ -41,6 +41,7 @@ export default function DanceContentStudio() {
   const [textColor, setTextColor] = useState('#ffffff');
   const [panelColor, setPanelColor] = useState('#09284b');
   const [textSize, setTextSize] = useState(35);
+  const [headlineSize, setHeadlineSize] = useState(42);
   const [position, setPosition] = useState(72);
   const [musicVolume, setMusicVolume] = useState(35);
   const [originalVolume, setOriginalVolume] = useState(0);
@@ -69,23 +70,19 @@ export default function DanceContentStudio() {
         ctx.textBaseline = 'middle';
         ctx.shadowColor = '#000000a8';
         ctx.shadowBlur = 7;
-        ctx.font = '900 34px Arial, sans-serif';
+        ctx.font = '900 ' + headlineSize + 'px Arial, sans-serif';
         const titleLines = wrapLines(ctx, headline, maxWidth);
         const bodyFont = Math.max(22, Math.min(44, textSize));
         ctx.font = '700 ' + bodyFont + 'px Arial, sans-serif';
         const bodyLines = wrapLines(ctx, overlayText, maxWidth);
-        const titleHeight = titleLines.length * 43;
+        const titleLineHeight = headlineSize * 1.2;
+        const titleHeight = titleLines.length * titleLineHeight;
         const bodyHeight = bodyLines.length * (bodyFont * 1.28);
         const gap = 20;
         const totalHeight = titleHeight + gap + bodyHeight;
         const top = Math.max(50, Math.min(HEIGHT - totalHeight - 50, HEIGHT * position / 100 - totalHeight / 2));
-        const panelHeight = totalHeight + 58;
-        ctx.fillStyle = panelColor + 'D9';
-        ctx.beginPath();
-        ctx.roundRect(28, top - 29, WIDTH - 56, panelHeight, 22);
-        ctx.fill();
         ctx.fillStyle = '#f5c542';
-        titleLines.forEach((line, index) => ctx.fillText(line, WIDTH / 2, top + index * 43 + 21, maxWidth));
+        titleLines.forEach((line, index) => ctx.fillText(line, WIDTH / 2, top + index * titleLineHeight + titleLineHeight / 2, maxWidth));
         ctx.font = '700 ' + bodyFont + 'px Arial, sans-serif';
         ctx.fillStyle = textColor;
         bodyLines.forEach((line, index) => ctx.fillText(line, WIDTH / 2, top + titleHeight + gap + index * bodyFont * 1.28 + bodyFont / 2, maxWidth));
@@ -101,7 +98,7 @@ export default function DanceContentStudio() {
     };
     frame = requestAnimationFrame(draw);
     return () => cancelAnimationFrame(frame);
-  }, [headline, overlayText, textColor, panelColor, textSize, position, showBrand, videoUrl]);
+  }, [headline, overlayText, textColor, textSize, headlineSize, position, showBrand, videoUrl]);
 
   useEffect(() => () => {
     if (videoUrl.startsWith('blob:')) URL.revokeObjectURL(videoUrl);
@@ -339,9 +336,9 @@ export default function DanceContentStudio() {
             <h2 className="text-lg font-extrabold">4. Style the video</h2>
             <div className="grid grid-cols-2 gap-3">
               <label className="text-sm font-semibold">Text colour<input type="color" value={textColor} onChange={(event) => setTextColor(event.target.value)} className="mt-1 block h-10 w-full" /></label>
-              <label className="text-sm font-semibold">Panel colour<input type="color" value={panelColor} onChange={(event) => setPanelColor(event.target.value)} className="mt-1 block h-10 w-full" /></label>
             </div>
-            <label className="block text-sm font-semibold">Message size: {textSize}px<input type="range" min="22" max="42" value={textSize} onChange={(event) => setTextSize(Number(event.target.value))} className="mt-2 w-full" /></label>
+            <label className="block text-sm font-semibold">Headline size: {headlineSize}px<input type="range" min="24" max="72" value={headlineSize} onChange={(event) => setHeadlineSize(Number(event.target.value))} className="mt-2 w-full" /></label>
+            <label className="block text-sm font-semibold">Message size: {textSize}px<input type="range" min="18" max="64" value={textSize} onChange={(event) => setTextSize(Number(event.target.value))} className="mt-2 w-full" /></label>
             <label className="block text-sm font-semibold">Message position: {position}%<input type="range" min="35" max="85" value={position} onChange={(event) => setPosition(Number(event.target.value))} className="mt-2 w-full" /></label>
             <label className="flex items-center gap-2 text-sm font-semibold"><input type="checkbox" checked={showBrand} onChange={(event) => setShowBrand(event.target.checked)} /> Show subtle SBA branding</label>
           </div>
