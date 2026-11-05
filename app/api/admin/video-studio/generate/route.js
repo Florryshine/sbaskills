@@ -4,101 +4,89 @@ import { generateJson } from '@/lib/content-factory/generators/_shared';
 export const runtime = 'nodejs';
 export const maxDuration = 60;
 
-const SUBJECT_GUIDANCE = {
-  chemistry: 'Use accurate molecular, atomic, electron-shell, apparatus and reaction diagrams. For atom/electron-shell scenes use the reusable illustration atom.',
-  biology: 'Use accurate cells, organs, organisms, cycles, food webs and process diagrams. For a plant or photosynthesis scene use the reusable illustration plant; for cell structure use cell; for chloroplast structure use chloroplast.',
-  physics: 'Use accurate forces, vectors, circuits, waves, rays and motion diagrams.',
-  mathematics: 'Use accurate graphs, axes, geometric figures, number lines and worked equations.',
-  general: 'Use clear educational diagrams, labelled objects, arrows and process illustrations.'
-};
-
-const SBA_ILLUSTRATION_IDS = new Set(["animal-cell","plant-cell","chloroplast","mitochondrion","digestive-system","respiratory-system","circulatory-system","human-heart","excretory-system","human-kidney","nervous-system","human-eye","human-ear","human-skeleton","muscular-system","reproductive-systems","flower-anatomy","seed-germination","dna-double-helix","chromosomes-genes","microorganisms","food-chain","atomic-structure","periodic-table","chemical-bonding","molecular-structures","lab-apparatus","filtration","distillation","titration","electrolysis","electrochemical-cell","gas-collection","heating-curve","collision-theory","fractional-distillation","vernier-calipers","micrometer","beam-balance","simple-pendulum","inclined-plane","simple-machines","projectile-motion","vectors-forces","hydraulic-press","wave-anatomy","sound-wave","reflection-refraction","electric-circuit","magnetic-field","cat","dog","butterfly","frog","fish","bird","lion","rainforest","savanna","desert","river-waterfall","ocean","mountain","farm","fruits","vegetables","nigerian-food","kitchen-utensils","bicycle","drinking-water"]);
-
-function cleanText(value, max = 240) {
-  return String(value ?? '').trim().slice(0, max);
-}
-
-function chooseFallbackIllustration(subject, topic, heading = '') {
-  const text = String(topic + ' ' + heading).toLowerCase();
-  const rules = [[/plant cell|photosynth|chlorophyll/,'plant-cell'],[/animal cell|cell membrane|cytoplasm|nucleus/,'animal-cell'],[/chloroplast/,'chloroplast'],[/mitochondri/,'mitochondrion'],[/heart|blood circulation|cardiac/,'human-heart'],[/kidney|urinary|excretion/,'human-kidney'],[/digest|alimentary/,'digestive-system'],[/respirat|breath|lung/,'respiratory-system'],[/dna|gene|genetic|chromosome/,'dna-double-helix'],[/flower|pollinat/,'flower-anatomy'],[/germinat|seed/,'seed-germination'],[/food chain|ecosystem/,'food-chain'],[/atom|electron|proton|neutron/,'atomic-structure'],[/periodic table|element/,'periodic-table'],[/bond|ionic|covalent|molecule/,'chemical-bonding'],[/filtrat/,'filtration'],[/distill/,'distillation'],[/titration/,'titration'],[/electrolys/,'electrolysis'],[/pendulum|oscillat/,'simple-pendulum'],[/force|vector|motion|projectile/,'vectors-forces'],[/wave|sound|frequency/,'wave-anatomy'],[/electric|circuit|current/,'electric-circuit'],[/magnet/,'magnetic-field'],[/refraction|reflection|lens|light/,'reflection-refraction'],[/vernier/,'vernier-calipers'],[/micrometer/,'micrometer'],[/lever|pulley|machine/,'simple-machines']];
-  for (const rule of rules) if (rule[0].test(text)) return rule[1];
-  if (subject === 'biology') return 'animal-cell';
-  if (subject === 'chemistry') return 'atomic-structure';
-  if (subject === 'physics' || subject === 'mathematics') return 'vectors-forces';
-  return 'food-chain';
-}
-function validateScenePlan(data, subject, topic) {
-  if (!data || !Array.isArray(data.scenes) || data.scenes.length < 2 || data.scenes.length > 10) {
-    throw new Error('The lesson planner returned an invalid scene list.');
-  }
-  const scenes = data.scenes.map((scene, index) => {
-    if (!scene || !Array.isArray(scene.strokes) || scene.strokes.length > 14) {
-      throw new Error(`Scene ${index + 1} has invalid drawing instructions.`);
-    }
-    const strokes = scene.strokes.map((stroke) => {
-      if (!Array.isArray(stroke.points) || stroke.points.length < 2 || stroke.points.length > 80) {
-        throw new Error('A drawing stroke must contain 2–80 points.');
-      }
-      const points = stroke.points.map((point) => {
-        const x = Number(point?.[0]), y = Number(point?.[1]);
-        if (!Number.isFinite(x) || !Number.isFinite(y) || x < 0 || x > 1000 || y < 0 || y > 700) {
-          throw new Error('Drawing coordinates must be between 0–1000 and 0–700.');
-        }
-        return [x, y];
-      });
-      return {
-        points,
-        color: /^#[0-9a-f]{6}$/i.test(stroke.color || '') ? stroke.color : '#173f68',
-        width: Math.max(2, Math.min(12, Number(stroke.width) || 5)),
-        kind: stroke.kind === 'arrow' ? 'arrow' : 'line'
-      };
-    });
-    const labels = (Array.isArray(scene.labels) ? scene.labels : []).slice(0, 10).map((label) => ({
-      text: cleanText(label.text, 70),
-      x: Math.max(0, Math.min(1000, Number(label.x) || 0)),
-      y: Math.max(0, Math.min(700, Number(label.y) || 0)),
-      size: Math.max(16, Math.min(42, Number(label.size) || 26)),
-      color: /^#[0-9a-f]{6}$/i.test(label.color || '') ? label.color : '#173f68'
-    })).filter(label => label.text);
-    return {
-      heading: cleanText(scene.heading, 100),
-      narration: cleanText(scene.narration, 700),
-      durationSeconds: Math.max(4, Math.min(18, Number(scene.durationSeconds) || 8)),
-      // The illustration library is the visual source of truth. Ignore AI-generated
-      // freehand coordinates so malformed plans cannot create looping doodles.
-      strokes: [],
-      labels,
-      illustration: SBA_ILLUSTRATION_IDS.has(scene.illustration) ? scene.illustration : chooseFallbackIllustration(subject, topic, scene.heading),
-      illustrationAccent: /^#[0-9a-f]{6}$/i.test(scene.illustrationAccent || '') ? scene.illustrationAccent : '#e1a82b'
-    };
-  });
-  return { title: cleanText(data.title, 120), subject: cleanText(data.subject, 40), scenes };
-}
+const clean = (value, max = 240) => String(value ?? '').trim().slice(0, max);
+const SUBJECTS = ['biology', 'chemistry', 'physics', 'mathematics', 'general'];
 
 export async function POST(request) {
   try {
     const body = await request.json();
-    const topic = cleanText(body.topic, 240);
-    const subject = cleanText(body.subject || 'general', 30).toLowerCase();
-    if (topic.length < 3) return NextResponse.json({ error: 'Enter a lesson topic first.' }, { status: 400 });
-    const guidance = SUBJECT_GUIDANCE[subject] || SUBJECT_GUIDANCE.general;
-    const prompt = `You are the instructional designer and storyboard artist for Shiney Brain Academy. Create a scientifically accurate, visually teachable whiteboard lesson about: "${topic}". Subject: ${subject}. Visual guidance: ${guidance}
+    const topic = clean(body.topic, 240);
+    const subject = clean(body.subject || 'general', 30).toLowerCase();
+    const subjectName = SUBJECTS.includes(subject) ? subject : 'general';
 
-Return 3–6 scenes. Each scene needs a concise heading, a natural spoken narration paragraph in clear Nigerian English (not pidgin), a mandatory reusable SBA illustration for the main visual. Do not generate freehand strokes; all main visuals come from the reusable illustration library. Every scene MUST set illustration to the most relevant one of these reusable SBA asset IDs: "animal-cell", "plant-cell", "chloroplast", "mitochondrion", "digestive-system", "respiratory-system", "circulatory-system", "human-heart", "excretory-system", "human-kidney", "nervous-system", "human-eye", "human-ear", "human-skeleton", "muscular-system", "reproductive-systems", "flower-anatomy", "seed-germination", "dna-double-helix", "chromosomes-genes", "microorganisms", "food-chain", "atomic-structure", "periodic-table", "chemical-bonding", "molecular-structures", "lab-apparatus", "filtration", "distillation", "titration", "electrolysis", "electrochemical-cell", "gas-collection", "heating-curve", "collision-theory", "fractional-distillation", "vernier-calipers", "micrometer", "beam-balance", "simple-pendulum", "inclined-plane", "simple-machines", "projectile-motion", "vectors-forces", "hydraulic-press", "wave-anatomy", "sound-wave", "reflection-refraction", "electric-circuit", "magnetic-field", "cat", "dog", "butterfly", "frog", "fish", "bird", "lion", "rainforest", "savanna", "desert", "river-waterfall", "ocean", "mountain", "farm", "fruits", "vegetables", "nigerian-food", "kitchen-utensils", "bicycle", "drinking-water", or null. Do not use freehand strokes as the main visual. Do not generate strokes, paths, circles, loops, or freehand coordinates. Never draw repeated circles, decorative loops, random squiggles or generic placeholder doodles.
+    if (topic.length < 3) {
+      return NextResponse.json({ error: 'Enter a lesson topic first.' }, { status: 400 });
+    }
 
-COORDINATE SYSTEM: 1000 wide x 700 high. All stroke points are arrays [x,y] within those bounds. Keep drawings centred between x=80..920 and y=80..620. Set strokes to an empty array for every scene. Do not provide drawing coordinates. Use the selected illustration and explanatory labels only. Add text labels separately with x/y coordinates. Do not put words inside stroke paths. Plan drawing order so the visual builds progressively. Make every scene's drawing meaningfully different and directly related to its narration. The first scene introduces the concept; later scenes explain steps/mechanisms; final scene summarises.
+    const prompt = `You are the instructional designer for Shiney Brain Academy. Create a scientifically accurate, teacher-friendly whiteboard video lesson about "${topic}" (subject: ${subjectName}).
 
-For arrows use kind "arrow"; other strokes use "line". Stroke width 2–12. Use dark blue #173f68 for most lines, and restrained accent colours such as #e1a82b, #25845d, #c14e45. Each label has text, x, y, size (16–42), color. Coordinates refer to a 1000x700 drawing board. Each scene durationSeconds 4–18.
+Create 4–8 scenes in a logical teaching order. Treat the scenes as a visual storyboard, not merely paragraphs split into chunks. Do not create drawings, SVG instructions, stroke coordinates or image descriptions pretending to be actual images. The teacher will search for or upload real images after the script is generated.
 
-Return ONLY JSON:
-{"title":"...","subject":"...","scenes":[{"heading":"...","narration":"...","durationSeconds":8,"illustration":"plant-cell","illustrationAccent":"#e1a82b","strokes":[{"points":[[100,100],[200,200]],"color":"#173f68","width":5,"kind":"line"}],"labels":[{"text":"label","x":200,"y":100,"size":28,"color":"#173f68"}]}]}
-Ensure explanations and drawings are factually correct. Do not invent equations, structures or mechanisms.`;
-    const generated = await generateJson(prompt, { expect: 'object', maxTokens: 6500 });
-    const plan = validateScenePlan({ ...generated, subject }, subject, topic);
-    if (plan.scenes.some(scene => !scene.narration)) throw new Error('A scene is missing its narration.');
-    return NextResponse.json({ success: true, plan });
+VISUAL STORYBOARD RULES (important):
+- Teach one main concept or one stage of a process per scene.
+- When a topic contains several named parts, give important parts their own scenes instead of cramming them into one image. Example: for a cell lesson, use separate scenes for the whole cell, nucleus, mitochondrion and cell membrane where each part is explained.
+- Every scene must introduce a genuinely new visual focus. Do not repeat the same diagram/query with slightly different wording.
+- Make the visualQuery specific to the exact object or process being explained in that scene (for example, "mitochondrion labelled structure", not just "cell diagram").
+- Use a sensible teaching sequence: introduce the whole system first, then zoom into its parts or stages, then show how they work together.
+- Narration must describe the visual that belongs to that scene. Never mention a structure that is not the scene's visual focus unless briefly connecting it to the previous scene.
+- Do not force 8 scenes for a simple topic. Use 4–8 only when the topic genuinely contains enough distinct concepts; avoid filler and repetition.
+
+Each scene must contain:
+- heading: short, clear on-screen heading
+- narration: one concise, accurate spoken explanation in clear Nigerian English, not pidgin (12–18 words maximum; it must take 5–8 seconds to say aloud)
+- visualQuery: a short literal 2–5 word image-search phrase for a real educational diagram or photo
+- visualType: exactly "educational_diagram", "process", or "real_world_photo"
+- reveal: exactly "scribble" or "wipe"
+- highlightTerms: up to 4 short labels/parts to look for in the selected image
+- durationSeconds: 5–8
+
+Avoid repeated visual queries. Keep the lesson factually grounded. Return ONLY JSON:
+{"title":"...","scenes":[{"heading":"...","narration":"...","visualQuery":"human heart anatomy diagram","visualType":"educational_diagram","reveal":"scribble","highlightTerms":["atria","ventricles"],"durationSeconds":10}]}`;
+
+    // Keep script generation separate from image downloads and TTS. Those are
+    // teacher-controlled next steps in the Studio and must not hold this request open.
+    let timeoutId;
+    const generated = await Promise.race([
+      generateJson(prompt, { expect: 'object', maxTokens: 3500 }),
+      new Promise((_, reject) => {
+        timeoutId = setTimeout(() => reject(new Error('The AI script request timed out. Please try again.')), 45000);
+      }),
+    ]).finally(() => clearTimeout(timeoutId));
+
+    if (!Array.isArray(generated.scenes) || generated.scenes.length < 2 || generated.scenes.length > 8) {
+      throw new Error('The lesson planner returned an invalid scene list. Please try again.');
+    }
+
+    const scenes = generated.scenes.map((scene, index) => {
+      const narration = clean(String(scene.narration || "").trim().split(/\s+/).slice(0, 18).join(" "), 240).replace(/[,:;\s]+$/, "") + ".";
+      const visualQuery = clean(scene.visualQuery, 140);
+      if (!narration) throw new Error(`Scene ${index + 1} has no narration.`);
+      if (!visualQuery) throw new Error(`Scene ${index + 1} has no image search phrase.`);
+      return {
+        heading: clean(scene.heading, 100) || `Scene ${index + 1}`,
+        narration,
+        text: narration,
+        visualQuery,
+        visualType: ['educational_diagram', 'process', 'real_world_photo'].includes(scene.visualType) ? scene.visualType : 'educational_diagram',
+        reveal: scene.reveal === 'wipe' ? 'wipe' : 'scribble',
+        highlightTerms: Array.isArray(scene.highlightTerms) ? scene.highlightTerms.slice(0, 4).map(x => clean(x, 50)).filter(Boolean) : [],
+        durationSeconds: Math.max(5, Math.min(8, Number(scene.durationSeconds) || 8)),
+        image: null,
+        audioSrc: null,
+      };
+    });
+
+    return NextResponse.json({
+      success: true,
+      plan: { title: clean(generated.title || topic, 120), subject: subjectName, scenes },
+      nextStep: 'Choose or upload an image for each scene, then generate narration when ready.',
+    });
   } catch (error) {
-    console.error('Whiteboard lesson generation failed:', error);
-    return NextResponse.json({ error: error.message || 'Could not generate this lesson.' }, { status: 500 });
+    console.error('Video Studio script generation failed:', error);
+    const timedOut = /timed out/i.test(error.message || '');
+    return NextResponse.json(
+      { error: error.message || 'Could not generate this lesson.' },
+      { status: timedOut ? 504 : 500 }
+    );
   }
 }

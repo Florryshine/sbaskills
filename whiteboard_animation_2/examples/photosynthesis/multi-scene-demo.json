@@ -1,0 +1,227 @@
+{
+  "width": 1080,
+  "height": 1920,
+  "coordinate_width": 1080,
+  "fps": 30,
+  "audio": "narration.mp3",
+  "watermark": "SHINEY BRAIN ACADEMY",
+  "scenes": [
+    {
+      "start": 0,
+      "end": 4.5,
+      "objects": [
+        {
+          "type": "text",
+          "text": "THE ANIMAL CELL",
+          "x": 180,
+          "y": 180,
+          "size": 56,
+          "bold": true,
+          "start": 0,
+          "draw_duration": 0.8
+        },
+        {
+          "type": "circle",
+          "x": 540,
+          "y": 820,
+          "radius": 260,
+          "width": 10,
+          "color": [
+            36,
+            116,
+            166
+          ],
+          "start": 0.4,
+          "draw_duration": 1.8
+        },
+        {
+          "type": "circle",
+          "x": 540,
+          "y": 820,
+          "radius": 225,
+          "width": 5,
+          "color": [
+            36,
+            116,
+            166
+          ],
+          "start": 1.2,
+          "draw_duration": 1.2
+        },
+        {
+          "type": "text",
+          "text": "Cell membrane",
+          "x": 620,
+          "y": 1120,
+          "size": 34,
+          "start": 2.2,
+          "draw_duration": 0.8
+        }
+      ]
+    },
+    {
+      "start": 4.5,
+      "end": 8.5,
+      "objects": [
+        {
+          "type": "text",
+          "text": "THE NUCLEUS",
+          "x": 250,
+          "y": 180,
+          "size": 56,
+          "bold": true,
+          "start": 0,
+          "draw_duration": 0.8
+        },
+        {
+          "type": "circle",
+          "x": 540,
+          "y": 820,
+          "radius": 190,
+          "width": 10,
+          "color": [
+            130,
+            95,
+            160
+          ],
+          "start": 0.3,
+          "draw_duration": 1.5
+        },
+        {
+          "type": "circle",
+          "x": 540,
+          "y": 820,
+          "radius": 70,
+          "width": 8,
+          "color": [
+            130,
+            95,
+            160
+          ],
+          "start": 1.2,
+          "draw_duration": 1
+        },
+        {
+          "type": "text",
+          "text": "Controls cell activities",
+          "x": 220,
+          "y": 1120,
+          "size": 36,
+          "start": 2.5,
+          "draw_duration": 1
+        }
+      ]
+    },
+    {
+      "start": 8.5,
+      "end": 13,
+      "objects": [
+        {
+          "type": "text",
+          "text": "MITOCHONDRION",
+          "x": 190,
+          "y": 180,
+          "size": 54,
+          "bold": true,
+          "start": 0,
+          "draw_duration": 0.8
+        },
+        {
+          "type": "polyline",
+          "points": [
+            [
+              300,
+              820
+            ],
+            [
+              340,
+              700
+            ],
+            [
+              470,
+              640
+            ],
+            [
+              650,
+              660
+            ],
+            [
+              790,
+              760
+            ],
+            [
+              810,
+              880
+            ],
+            [
+              720,
+              970
+            ],
+            [
+              520,
+              990
+            ],
+            [
+              360,
+              930
+            ],
+            [
+              300,
+              820
+            ]
+          ],
+          "width": 10,
+          "color": [
+            40,
+            133,
+            82
+          ],
+          "start": 0.3,
+          "draw_duration": 2
+        },
+        {
+          "type": "polyline",
+          "points": [
+            [
+              390,
+              820
+            ],
+            [
+              470,
+              740
+            ],
+            [
+              540,
+              860
+            ],
+            [
+              620,
+              740
+            ],
+            [
+              700,
+              850
+            ]
+          ],
+          "width": 7,
+          "color": [
+            40,
+            133,
+            82
+          ],
+          "start": 1.5,
+          "draw_duration": 1.2
+        },
+        {
+          "type": "text",
+          "text": "Produces usable energy",
+          "x": 220,
+          "y": 1120,
+          "size": 38,
+          "start": 2.7,
+          "draw_duration": 1
+        }
+      ]
+    }
+  ]
+}

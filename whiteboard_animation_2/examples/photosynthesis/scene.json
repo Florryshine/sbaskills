@@ -1,0 +1,167 @@
+{
+  "width": 1080,
+  "height": 1920,
+  "coordinate_width": 1080,
+  "fps": 30,
+  "duration": 12,
+  "audio": "narration.mp3",
+  "watermark": "SHINEY BRAIN ACADEMY",
+  "objects": [
+    {
+      "type": "text",
+      "text": "PHOTOSYNTHESIS",
+      "x": 110,
+      "y": 170,
+      "size": 62,
+      "bold": true,
+      "start": 0,
+      "draw_duration": 1.1
+    },
+    {
+      "type": "text",
+      "text": "How plants make food",
+      "x": 112,
+      "y": 260,
+      "size": 34,
+      "color": [36, 116, 166],
+      "start": 0.8,
+      "draw_duration": 0.9
+    },
+    {
+      "type": "line",
+      "x1": 540,
+      "y1": 420,
+      "x2": 540,
+      "y2": 560,
+      "color": [220, 157, 43],
+      "width": 8,
+      "start": 1.8,
+      "draw_duration": 0.7
+    },
+    {
+      "type": "circle",
+      "x": 540,
+      "y": 390,
+      "radius": 66,
+      "color": [220, 157, 43],
+      "width": 8,
+      "start": 1.8,
+      "draw_duration": 0.8
+    },
+    {
+      "type": "text",
+      "text": "SUNLIGHT",
+      "x": 440,
+      "y": 490,
+      "size": 28,
+      "bold": true,
+      "start": 2.4,
+      "draw_duration": 0.6
+    },
+    {
+      "type": "polyline",
+      "points": [[540, 720], [500, 660], [450, 620], [405, 660], [390, 735], [430, 805], [540, 835], [650, 805], [690, 735], [675, 660], [630, 620], [580, 660], [540, 720]],
+      "color": [40, 133, 82],
+      "width": 9,
+      "start": 3.1,
+      "draw_duration": 1.8
+    },
+    {
+      "type": "line",
+      "x1": 540,
+      "y1": 720,
+      "x2": 540,
+      "y2": 1030,
+      "color": [40, 133, 82],
+      "width": 8,
+      "start": 4.2,
+      "draw_duration": 1.0
+    },
+    {
+      "type": "text",
+      "text": "LEAF",
+      "x": 480,
+      "y": 860,
+      "size": 34,
+      "bold": true,
+      "color": [40, 133, 82],
+      "start": 4.6,
+      "draw_duration": 0.5
+    },
+    {
+      "type": "arrow",
+      "points": [[230, 950], [380, 950], [440, 850]],
+      "color": [36, 116, 166],
+      "width": 7,
+      "start": 5.1,
+      "draw_duration": 0.9
+    },
+    {
+      "type": "text",
+      "text": "WATER",
+      "x": 150,
+      "y": 990,
+      "size": 32,
+      "bold": true,
+      "color": [36, 116, 166],
+      "start": 5.7,
+      "draw_duration": 0.5
+    },
+    {
+      "type": "arrow",
+      "points": [[850, 950], [700, 950], [640, 850]],
+      "color": [130, 95, 160],
+      "width": 7,
+      "start": 6.0,
+      "draw_duration": 0.9
+    },
+    {
+      "type": "text",
+      "text": "CARBON DIOXIDE",
+      "x": 690,
+      "y": 990,
+      "size": 27,
+      "bold": true,
+      "color": [130, 95, 160],
+      "start": 6.6,
+      "draw_duration": 0.8
+    },
+    {
+      "type": "arrow",
+      "points": [[540, 1080], [540, 1190]],
+      "color": [40, 133, 82],
+      "width": 8,
+      "start": 7.5,
+      "draw_duration": 0.7
+    },
+    {
+      "type": "text",
+      "text": "GLUCOSE + OXYGEN",
+      "x": 260,
+      "y": 1220,
+      "size": 38,
+      "bold": true,
+      "color": [40, 133, 82],
+      "start": 8.2,
+      "draw_duration": 1.0
+    },
+    {
+      "type": "text",
+      "text": "Light energy is converted",
+      "x": 210,
+      "y": 1450,
+      "size": 34,
+      "start": 9.3,
+      "draw_duration": 0.8
+    },
+    {
+      "type": "text",
+      "text": "into chemical energy.",
+      "x": 230,
+      "y": 1510,
+      "size": 34,
+      "start": 10.0,
+      "draw_duration": 0.8
+    }
+  ]
+}

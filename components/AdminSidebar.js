@@ -80,6 +80,8 @@ const sections = [
       { href: '/admin/quote-loops', label: 'Quote Loops' },
       { href: '/admin/teaching-loops', label: 'Teaching Loops' },
       { href: '/admin/video-studio', label: 'Video Studio' },
+      { href: '/admin/text-animations', label: 'Text Animations' },
+      { href: '/admin/affirmations', label: 'Affirmation Studio' },
       { href: '/admin/dance-content-studio', label: 'Dance Content Studio' },
       { href: '/admin/overlay-video-studio', label: 'Overlay Video Studio' },
       { href: '/admin/bold-text-video', label: 'Bold Text Video' },
