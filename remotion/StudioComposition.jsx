@@ -3,6 +3,7 @@
 import React from 'react';
 import { DrawnVisual } from './DrawnVisual';
 import { ImageRevealVisual } from './ImageRevealVisual';
+import { SBAIllustration, findSBAIllustration } from './whiteboard/SBAAssetLibrary';
 import {AbsoluteFill, Sequence, Audio, useCurrentFrame, useVideoConfig, interpolate, Easing} from 'remotion';
 
 const C={blue:'#1261a0',navy:'#102b4e',yellow:'#f4c542',ink:'#172b4d'};
@@ -35,6 +36,8 @@ function BoardBackground({brand}) {
 function WhiteboardScene({scene,brand,accent,index,narrationVolume}) {
  const intro=interpolate(useCurrentFrame(),[0,12],[0,1],clamp);
  if(scene.image?.url || scene.visualQuery) return <ImageRevealVisual scene={scene} brand={brand} accent={accent} index={index}/>;
+ const illustrationId=scene.assetId || scene.illustrationAsset || scene.illustration;
+ if(illustrationId && findSBAIllustration(illustrationId)) return <AbsoluteFill style={{opacity:intro,background:'#fffef8',fontFamily:'Trebuchet MS, Arial, sans-serif',color:C.ink}}><div style={{position:'absolute',top:55,left:65,fontSize:27,fontWeight:900,letterSpacing:2,color:C.blue}}>{brand.toUpperCase()}</div><div style={{position:'absolute',top:55,right:65,fontSize:19,fontWeight:800,color:'#8794a1'}}>LET’S DRAW IT OUT</div><div style={{position:'absolute',top:'13%',left:'8%',right:'8%',fontSize:54,fontWeight:900,lineHeight:1.08,color:C.navy}}>{scene.heading||'Let’s understand this'}</div><div style={{position:'absolute',left:'9%',right:'9%',top:'29%',height:'48%'}}><SBAIllustration type={illustrationId} accent={accent} style={{width:'100%',height:'100%'}}/></div><div style={{position:'absolute',left:'9%',right:'9%',bottom:'12%',fontSize:33,lineHeight:1.28,fontWeight:700,color:C.navy}}>{scene.narration||scene.text}</div><div style={{position:'absolute',left:'8%',bottom:'5%',fontSize:20,fontWeight:800,color:'#8794a1'}}>SHINEY BRAIN • {String(index+1).padStart(2,'0')}</div></AbsoluteFill>;
  return <AbsoluteFill style={{opacity:intro,background:'#fffef8',fontFamily:'Trebuchet MS, Arial, sans-serif',color:C.ink}}>
   <svg width="100%" height="100%" viewBox="0 0 1080 1920" preserveAspectRatio="none" style={{position:'absolute',inset:0}}><defs><pattern id={'paperDots-'+index} width="34" height="34" patternUnits="userSpaceOnUse"><circle cx="2" cy="2" r="1.1" fill="#d8e0e5" opacity=".55"/></pattern></defs><rect width="1080" height="1920" fill={'url(#paperDots-'+index+')'}/></svg>
   <div style={{position:'absolute',top:55,left:65,fontSize:27,fontWeight:900,letterSpacing:2,color:C.blue}}>{brand.toUpperCase()}</div>
