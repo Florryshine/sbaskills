@@ -20,7 +20,16 @@ export async function POST(request) {
 
     const prompt = `You are the instructional designer for Shiney Brain Academy. Create a scientifically accurate, teacher-friendly whiteboard video lesson about "${topic}" (subject: ${subjectName}).
 
-Create 3–6 scenes in a logical teaching order. Do not create drawings, SVG instructions, stroke coordinates or image descriptions pretending to be actual images. The teacher will search for or upload real images after the script is generated.
+Create 4–8 scenes in a logical teaching order. Treat the scenes as a visual storyboard, not merely paragraphs split into chunks. Do not create drawings, SVG instructions, stroke coordinates or image descriptions pretending to be actual images. The teacher will search for or upload real images after the script is generated.
+
+VISUAL STORYBOARD RULES (important):
+- Teach one main concept or one stage of a process per scene.
+- When a topic contains several named parts, give important parts their own scenes instead of cramming them into one image. Example: for a cell lesson, use separate scenes for the whole cell, nucleus, mitochondrion and cell membrane where each part is explained.
+- Every scene must introduce a genuinely new visual focus. Do not repeat the same diagram/query with slightly different wording.
+- Make the visualQuery specific to the exact object or process being explained in that scene (for example, "mitochondrion labelled structure", not just "cell diagram").
+- Use a sensible teaching sequence: introduce the whole system first, then zoom into its parts or stages, then show how they work together.
+- Narration must describe the visual that belongs to that scene. Never mention a structure that is not the scene's visual focus unless briefly connecting it to the previous scene.
+- Do not force 8 scenes for a simple topic. Use 4–8 only when the topic genuinely contains enough distinct concepts; avoid filler and repetition.
 
 Each scene must contain:
 - heading: short, clear on-screen heading
