@@ -82,7 +82,7 @@ export default function NewQuiz() {
         continue;
       }
 
-      if (/^Question:/i.test(line) || /^Q\d+[:.]/i.test(line)) {
+      if (/^Question:/i.test(line) || /^Q\d+(?:\s*[:.]|\s+|$)/i.test(line)) {
         if (current) flushQuestion();
         current = {
           question: '',
@@ -94,7 +94,7 @@ export default function NewQuiz() {
           explanation: '',
           points: 1,
         };
-        const qText = line.replace(/^Question:\s*/i, '').replace(/^Q\d+[:.]\s*/, '');
+        const qText = line.replace(/^Question:\s*/i, '').replace(/^Q\d+\s*[:.]?\s*/i, '');
         questionLines = [qText];
         continue;
       }
