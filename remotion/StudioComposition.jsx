@@ -6,7 +6,8 @@ import caveat from 'tegaki/fonts/caveat';
 import { DrawnVisual } from './DrawnVisual';
 import { ImageRevealVisual } from './ImageRevealVisual';
 import { SBAIllustration, findSBAIllustration } from './whiteboard/SBAAssetLibrary';
-import {AbsoluteFill, Sequence, Audio, useCurrentFrame, useVideoConfig, interpolate, Easing} from 'remotion';
+import {AbsoluteFill, Sequence, useCurrentFrame, useVideoConfig, interpolate, Easing} from 'remotion';
+import {Audio} from '@remotion/media';
 
 const C={blue:'#1261a0',navy:'#102b4e',yellow:'#f4c542',ink:'#172b4d'};
 const clamp={extrapolateLeft:'clamp',extrapolateRight:'clamp'};
