@@ -17,6 +17,9 @@ function wrap(ctx, text, maxWidth) {
 
 export default function AffirmationStudioPage() {
   const [text, setText] = useState(STARTER.join('\n'));
+  const [scriptTopic, setScriptTopic] = useState('confidence and success in JAMB');
+  const [scriptCount, setScriptCount] = useState('8');
+  const [generatingScript, setGeneratingScript] = useState(false);
   const [intro, setIntro] = useState('JAMB STUDENTS, SAY THIS AFTER ME');
   const [query, setQuery] = useState('peaceful sunrise nature scenery');
   const [background, setBackground] = useState(null);
@@ -47,6 +50,22 @@ export default function AffirmationStudioPage() {
     vid.crossOrigin = 'anonymous'; vid.src = background.url; vid.loop = true; vid.muted = true;
     vid.oncanplay = () => {}; vid.load();
   }, [background]);
+
+  const generateScript = async () => {
+    setGeneratingScript(true); setError('');
+    try {
+      const res = await fetch('/api/admin/affirmations/generate-script', {
+        method: 'POST', headers: {'Content-Type':'application/json'},
+        body: JSON.stringify({topic: scriptTopic, count: Number(scriptCount)})
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || 'Could not generate affirmation script.');
+      setIntro(data.script.intro);
+      setText(data.script.affirmations.join('\n'));
+      setAudioUrl('');
+    } catch (e) { setError(e.message); }
+    finally { setGeneratingScript(false); }
+  };
 
   const findBackground = async () => {
     setBusy(true); setError('');
@@ -140,6 +159,13 @@ export default function AffirmationStudioPage() {
     <header><p className="text-xs font-black uppercase tracking-[.25em] text-blue-600">SBA VIDEO STUDIO</p><h1 className="text-3xl font-black">Affirmation Studio</h1><p className="mt-2 max-w-2xl text-sm text-slate-600">Create calm, confidence-building videos for JAMB students with cinematic stock footage, slow narration and soft background music.</p></header>
     <div className="grid gap-5 lg:grid-cols-[1fr_380px]">
       <section className="space-y-4 rounded-2xl border bg-white p-4">
+        <div className="rounded-xl border border-violet-200 bg-violet-50 p-3 space-y-3">
+          <h2 className="font-black text-violet-950">AI affirmation script generator</h2>
+          <p className="text-xs text-violet-900">Choose a theme and let AI write a complete, ready-to-narrate affirmation sequence.</p>
+          <label className="block text-sm font-semibold">Theme or topic<input value={scriptTopic} onChange={e=>setScriptTopic(e.target.value)} className="mt-1 w-full rounded-lg border p-2" placeholder="e.g. overcoming exam fear and staying focused"/></label>
+          <label className="block text-sm font-semibold">Number of affirmations<select value={scriptCount} onChange={e=>setScriptCount(e.target.value)} className="mt-1 w-full rounded-lg border p-2"><option value="5">5 affirmations</option><option value="8">8 affirmations</option><option value="10">10 affirmations</option><option value="12">12 affirmations</option></select></label>
+          <button type="button" onClick={generateScript} disabled={generatingScript||busy} className="rounded-xl bg-violet-700 px-4 py-3 font-bold text-white disabled:opacity-50">{generatingScript?'Writing your script…':'✨ Generate affirmation script'}</button>
+        </div>
         <label className="block text-sm font-bold">Opening message<input value={intro} onChange={e=>setIntro(e.target.value)} className="mt-2 w-full rounded-xl border p-3" /></label>
         <label className="block text-sm font-bold">Affirmations <span className="font-normal text-slate-500">— one affirmation per line</span><textarea value={text} onChange={e=>setText(e.target.value)} rows={9} className="mt-2 w-full rounded-xl border p-3 text-base leading-7" /></label>
         <div className="rounded-xl bg-blue-50 p-3 space-y-3">
