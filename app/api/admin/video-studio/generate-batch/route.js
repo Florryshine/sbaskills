@@ -1,3 +1,18 @@
+export async function GET() {
+  try {
+    const supabase = createAdminClient();
+    const { data, error } = await supabase.from('content_assets')
+      .select('id, title, body, metadata, status, created_at, knowledge_assets(keyword)')
+      .eq('asset_type', 'video_script')
+      .order('created_at', { ascending: false })
+      .limit(40);
+    if (error) throw error;
+    return NextResponse.json({ success: true, scripts: data || [] });
+  } catch (error) {
+    return NextResponse.json({ error: error.message || 'Could not load saved scripts.' }, { status: 500 });
+  }
+}
+
 import { NextResponse } from 'next/server';
 import { createAdminClient } from '@/lib/supabase-admin';
 import { generateJson } from '@/lib/content-factory/generators/_shared';
@@ -76,24 +91,9 @@ Only return formats requested. Do not return code, markdown or SVG.`;
       }).select().single();
       if (contentError) throw contentError;
 
-      const segments = scenes.map((s) => ({
-        text: s.narration || s.text,
-        visual_cue: s.visual_cue,
-        stock_search: s.stock_search,
-        durationSeconds: s.durationSeconds,
-      }));
-      const { data: videoScript, error: scriptError } = await supabase.from('video_scripts').insert({
-        content_asset_id: contentAsset.id,
-        title,
-        format: 'short',
-        script_segments: segments,
-        render_status: 'pending',
-      }).select().single();
       saved.push({
         format, title, contentAssetId: contentAsset.id,
-        videoScriptId: videoScript?.id || null,
         saved: true,
-        warning: scriptError?.message || null,
         scenes,
         illustrationCues: item.illustrationCues || [],
       });
