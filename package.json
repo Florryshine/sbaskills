@@ -54,7 +54,8 @@
     "xlsx": "^0.18.5",
     "@remotion/web-renderer": "4.0.490",
     "@remotion/player": "4.0.490",
-    "tegaki": "^1.1.0"
+    "tegaki": "^1.1.0",
+    "@remotion/media": "4.0.490"
   },
   "devDependencies": {
     "@marp-team/marp-cli": "^4.4.1",
