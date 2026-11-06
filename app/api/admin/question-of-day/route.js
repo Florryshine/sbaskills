@@ -16,7 +16,7 @@ const FONT_PATH = path.join(process.cwd(), 'assets/fonts/Inter-Bold.ttf');
 try { GlobalFonts.registerFromPath(FONT_PATH, 'SBA Inter'); } catch (error) { console.warn('SBA font registration:', error.message); }
 
 function wrapText(ctx, value, maxWidth) {
-  const words = String(value || '').trim().split(/\\s+/).filter(Boolean);
+  const words = String(value || '').trim().split(/\s+/).filter(Boolean);
   const lines = [];
   let line = '';
   for (const word of words) {
