@@ -1,3 +1,7 @@
+import { NextResponse } from 'next/server';
+import { createAdminClient } from '@/lib/supabase-admin';
+import { generateJson } from '@/lib/content-factory/generators/_shared';
+
 export async function GET() {
   try {
     const supabase = createAdminClient();
@@ -12,10 +16,6 @@ export async function GET() {
     return NextResponse.json({ error: error.message || 'Could not load saved scripts.' }, { status: 500 });
   }
 }
-
-import { NextResponse } from 'next/server';
-import { createAdminClient } from '@/lib/supabase-admin';
-import { generateJson } from '@/lib/content-factory/generators/_shared';
 
 export const runtime = 'nodejs';
 export const maxDuration = 60;
