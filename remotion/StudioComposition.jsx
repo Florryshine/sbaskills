@@ -192,9 +192,39 @@ function StoryScene({scene,index,brand,accent}) {
   <div style={{position:'absolute',left:width*.075,right:width*.075,bottom:height*.045,display:'flex',justifyContent:'space-between',alignItems:'center',fontSize:Math.max(14,width*.016),fontWeight:900,letterSpacing:2,color:p.muted}}><span>SHINEY BRAIN • STORY REEL</span><span style={{color:p.hot}}>{index===4?'START TODAY':'KEEP GOING'}</span></div>
  </AbsoluteFill>;
 }
+function TegakiScene({scene,index,brand,accent}) {
+ const frame=useCurrentFrame(),{fps,width,height}=useVideoConfig();
+ const vertical=height>width;
+ const heading=scene.heading||'A lesson worth remembering';
+ const body=scene.text||scene.narration||'Write your explanation here.';
+ const headingEnd=Math.max(1,Math.round(fps*2.2));
+ const bodyStart=Math.round(fps*2.1);
+ const bodyEnd=Math.max(bodyStart+1,Math.round(fps*5.5));
+ const headingProgress=interpolate(frame,[Math.round(fps*.25),headingEnd],[0,1],clamp);
+ const bodyProgress=interpolate(frame,[bodyStart,bodyEnd],[0,1],clamp);
+ const ruledLines=Array.from({length:vertical?15:8},(_,i)=>height*(vertical?.22:.28)+i*height*(vertical?.043:.075));
+ return <AbsoluteFill style={{background:'#fffdf5',color:'#183653',fontFamily:'Georgia,serif',overflow:'hidden'}}>
+  <svg width="100%" height="100%" viewBox={'0 0 '+width+' '+height} preserveAspectRatio="none" style={{position:'absolute',inset:0}}>
+   <rect width={width} height={height} fill="#fffdf5"/>
+   {ruledLines.map((y,i)=><line key={i} x1={width*.07} x2={width*.93} y1={y} y2={y} stroke="#c9d9e6" strokeWidth={Math.max(1,width*.0012)}/>)}
+   <line x1={width*.13} x2={width*.13} y1={height*.12} y2={height*.94} stroke="#e7a9a9" strokeWidth={Math.max(2,width*.002)}/>
+  </svg>
+  <div style={{position:'absolute',top:height*.045,left:width*.075,fontFamily:'Arial,sans-serif',fontSize:Math.max(16,width*.022),fontWeight:900,letterSpacing:2,color:'#1769aa'}}>{brand.toUpperCase()}</div>
+  <div style={{position:'absolute',top:height*.05,right:width*.075,fontFamily:'Arial,sans-serif',fontSize:Math.max(13,width*.016),fontWeight:800,color:'#8a98a5'}}>HANDWRITTEN LESSON · {String(index+1).padStart(2,'0')}</div>
+  <div style={{position:'absolute',left:width*.17,right:width*.08,top:height*(vertical?.17:.20),fontSize:Math.min(vertical?width*.078:width*.052,vertical?76:94),lineHeight:1.15,color:'#173f68'}}>
+   <TegakiRenderer font={caveat} text={heading} seed={17+index} time={{mode:'controlled',value:headingProgress,unit:'progress'}} style={{fontSize:'1em',fontWeight:700,color:'#173f68',lineHeight:1.15}}/>
+  </div>
+  <div style={{position:'absolute',left:width*.17,right:width*.08,top:height*(vertical?.40:.48),fontSize:Math.min(vertical?width*.052:width*.034,vertical?52:64),lineHeight:1.35,color:'#34465a'}}>
+   <TegakiRenderer font={caveat} text={body} seed={41+index} time={{mode:'controlled',value:bodyProgress,unit:'progress'}} style={{fontSize:'1em',color:'#34465a',lineHeight:1.35}}/>
+  </div>
+  <div style={{position:'absolute',left:width*.17,bottom:height*.055,fontFamily:'Arial,sans-serif',fontSize:Math.max(13,width*.016),fontWeight:900,letterSpacing:2,color:accent}}>WRITE IT · SEE IT · REMEMBER IT</div>
+ </AbsoluteFill>;
+}
+
 function Scene({scene,index,template,brand,accent,narrationVolume}) {
  let visual;
  if(template==='whiteboard') visual=<WhiteboardScene scene={scene} brand={brand} accent={accent} index={index}/>;
+ else if(template==='tegaki') visual=<TegakiScene scene={scene} index={index} brand={brand} accent={accent}/>;
  else if(template==='question') visual=<QuestionScene scene={scene} brand={brand} accent={accent} index={index}/>;
  else if(template==='story') visual=<StoryScene scene={scene} brand={brand} accent={accent} index={index}/>;
  else visual=<ExplainerScene scene={scene} brand={brand} accent={accent} index={index}/>;
