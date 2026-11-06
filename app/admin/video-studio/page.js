@@ -3,6 +3,7 @@ import React,{useEffect,useRef,useState} from 'react';
 import {Player} from '@remotion/player';
 import {renderMediaOnWeb,canRenderMediaOnWeb} from '@remotion/web-renderer';
 import {StudioComposition} from '@/remotion/StudioComposition';
+import {createBrowserClient} from '@/lib/supabase';
 
 const examples={
  explainer:[{heading:'Photosynthesis: how plants make food',text:'Plants capture light energy and use it to convert water and carbon dioxide into glucose. Oxygen is released as a by-product.',durationSeconds:6},{heading:'Look inside the leaf',text:'Chloroplasts contain chlorophyll, the green pigment that absorbs light energy. This is where photosynthesis takes place.',durationSeconds:6},{heading:'Remember the equation',text:'Carbon dioxide + water — light energy → glucose + oxygen. Light energy becomes chemical energy stored in glucose.',durationSeconds:6}],
@@ -85,8 +86,10 @@ export default function VideoStudio(){
    a.href=url;a.download=filename;a.click();setTimeout(()=>URL.revokeObjectURL(url),60000);
    if(activeContentAssetId){
     setStatus('MP4 exported. Saving a copy to Social Engine…');
-    const form=new FormData();form.append('video',blob,filename);form.append('contentAssetId',activeContentAssetId);form.append('title',title);form.append('metadata',JSON.stringify({video_format:kind,scenes,body:scenes.map(s=>s.text||s.narration||'').join('\\n\\n'),durationSeconds:Math.ceil(frames/fps)}));
-    const saved=await fetch('/api/admin/video-studio/save-video',{method:'POST',body:form});const savedData=await saved.json();if(!saved.ok)throw new Error(savedData.error||'Video exported, but Social Engine save failed.');
+    const metadata={video_format:kind,scenes,body:scenes.map(s=>s.text||s.narration||'').join('\\n\\n'),durationSeconds:Math.ceil(frames/fps)};
+    const prepared=await fetch('/api/admin/video-studio/save-video',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({contentAssetId:activeContentAssetId,title})});const uploadInfo=await prepared.json();if(!prepared.ok)throw new Error(uploadInfo.error||'Could not prepare the Social Engine upload.');
+    const client=createBrowserClient();const uploaded=await client.storage.from(uploadInfo.bucket).uploadToSignedUrl(uploadInfo.path,uploadInfo.token,blob,{contentType:'video/mp4',upsert:false});if(uploaded.error)throw new Error('MP4 exported, but Storage upload failed: '+uploaded.error.message);
+    const attached=await fetch('/api/admin/video-studio/complete-video',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({contentAssetId:activeContentAssetId,path:uploadInfo.path,title,metadata,fileSizeBytes:blob.size})});const attachedData=await attached.json();if(!attached.ok)throw new Error(attachedData.error||'Video uploaded, but Social Engine attachment failed.');
     setStatus('MP4 exported and saved to Social Engine as a draft. Open Social Engine to review and approve before publishing.');
    }else{setStatus('MP4 exported. To attach it to Social Engine, load a saved Knowledge Asset script before exporting.');}
   }catch(e){setStatus(e?.message||'Export failed.');}finally{setBusy(false);}
