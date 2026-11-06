@@ -42,7 +42,8 @@ const PLATFORMS = Object.keys(PLATFORM_FIELDS);
 
 // These platforms use OAuth so the app can receive consent and store account tokens.
 const OAUTH_PLATFORMS = {
-  meta: { label: 'Meta (Facebook + Instagram)', startUrl: '/api/auth/facebook/start', color: 'bg-blue-700' },
+  facebook: { label: 'Facebook Pages', startUrl: '/api/auth/facebook/start', color: 'bg-blue-700' },
+  instagram: { label: 'Instagram', startUrl: '/api/auth/instagram/start', color: 'bg-gradient-to-r from-purple-600 to-pink-500' },
   linkedin: { label: 'LinkedIn', startUrl: '/api/auth/linkedin/start', color: 'bg-sky-700' },
   tiktok: { label: 'TikTok', startUrl: '/api/auth/tiktok/start', color: 'bg-black' },
   youtube: { label: 'YouTube', startUrl: '/api/auth/youtube/start', color: 'bg-red-600' },
@@ -153,11 +154,11 @@ export default function ChannelsPage() {
         </div>
       )}
 
-      {/* ── OAuth connect — Meta, TikTok and YouTube need a real consent round trip
+      {/* ── OAuth connect — Facebook and Instagram now authorize independently. TikTok and YouTube retain their existing flows.
           (PKCE / offline+consent) to get a working refresh_token; a pasted
           token alone can't produce that. ── */}
       <div className="bg-white rounded-2xl shadow-sm border p-4 mb-8">
-        <h2 className="font-bold mb-3">Connect via OAuth</h2>
+        <h2 className="font-bold mb-3">Connect your social accounts</h2>
         <div className="flex flex-wrap gap-3">
           {Object.entries(OAUTH_PLATFORMS).map(([key, cfg]) => (
             <a
