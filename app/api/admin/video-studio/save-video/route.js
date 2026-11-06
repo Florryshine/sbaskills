@@ -41,6 +41,8 @@ export async function POST(request) {
     }).eq('id', contentAssetId);
     if (updateError) throw updateError;
 
+    await admin.from('media_files').delete().eq('content_asset_id', contentAssetId).eq('media_type', 'video').eq('role', 'primary');
+
     const { data: media, error: mediaError } = await admin.from('media_files').insert({
       content_asset_id: contentAssetId,
       media_type: 'video',
