@@ -21,6 +21,7 @@ export const runtime = 'nodejs';
 export const maxDuration = 60;
 
 const FORMATS = ['explainer', 'whiteboard', 'question', 'story', 'tegaki'];
+const ILLUSTRATIONS = ['animal-cell','plant-cell','chloroplast','mitochondrion','digestive-system','respiratory-system','circulatory-system','human-heart','excretory-system','human-kidney','nervous-system','human-eye','human-ear','human-skeleton','muscular-system','reproductive-systems','flower-anatomy','seed-germination','dna-double-helix','chromosomes-genes','atomic-structure','periodic-table','chemical-bonding','molecular-structures','lab-apparatus','filtration','distillation','titration','electrolysis','electric-circuit','wave-anatomy','sound-wave','cat','dog','butterfly','frog','fish','bird','lion'];
 const clean = (value, max = 500) => String(value ?? '').trim().slice(0, max);
 
 export async function POST(request) {
@@ -49,7 +50,7 @@ export async function POST(request) {
     const prompt = `You are the senior instructional scriptwriter for Shiney Brain Academy. Create one script for EACH requested video format in a SINGLE generation. Source knowledge asset (use as the factual source): ${source}
 Requested formats: ${formats.join(', ')}.
 Teach Nigerian secondary-school/JAMB learners. Be scientifically accurate, engaging, clear and moderately detailed: not childish or oversimplified, but easy for a mid-school student to understand. Use clear Nigerian English, never pidgin. Do not invent facts absent from the source; use standard established science only when needed to explain.
-For each format, create 3–6 scenes except Tegaki, which must be ONE continuous page/scene with a complete lesson text and 2–5 illustration cues timed across the narration. Whiteboard needs scene-specific visual cues and concise spoken narration. Question format must include one JAMB-style multiple-choice question, four options and answer/explanation. Story must teach the same topic through a compelling short narrative with a clear climax and takeaway. Return valid JSON only:
+For each format, create 3–6 scenes except Tegaki, which must be ONE continuous page/scene with a complete lesson text and 2–5 illustration cues timed across the narration. Tegaki illustration IDs MUST be chosen only from this exact list: ${ILLUSTRATIONS.join(', ')}. Set the first cue at 0 and space later cues according to when each new concept is explained. Whiteboard needs scene-specific visual cues and concise spoken narration. Question format must include one JAMB-style multiple-choice question, four options and answer/explanation. Story must teach the same topic through a compelling short narrative with a clear climax and takeaway. Return valid JSON only:
 {"scripts":[{"format":"explainer","title":"...","scenes":[{"heading":"...","text":"...","narration":"...","visual_cue":"...","durationSeconds":8,"options":[],"answer":"","explanation":""}],"illustrationCues":[{"at":0,"label":"...","illustration":"animal-cell"}]}]}
 Only return formats requested. Do not return code, markdown or SVG.`;
 
@@ -74,8 +75,14 @@ Only return formats requested. Do not return code, markdown or SVG.`;
         answer: clean(scene.answer, 240),
         explanation: clean(scene.explanation, 800),
       }));
-      if (format === 'tegaki' && !Array.isArray(item.illustrationCues)) {
-        item.illustrationCues = [{ at: 0, label: 'Main concept', illustration: 'animal-cell' }];
+      if (format === 'tegaki') {
+        const rawCues = Array.isArray(item.illustrationCues) ? item.illustrationCues.slice(0, 5) : [];
+        item.illustrationCues = rawCues.map((cue, index) => ({
+          at: index === 0 ? 0 : Math.max(1, Math.min(99, Number(cue.at) || index * 25)),
+          label: clean(cue.label, 80) || `Concept ${index + 1}`,
+          illustration: ILLUSTRATIONS.includes(cue.illustration) ? cue.illustration : 'animal-cell',
+        })).sort((a, b) => a.at - b.at);
+        if (!item.illustrationCues.length) item.illustrationCues = [{ at: 0, label: 'Main concept', illustration: 'animal-cell' }];
       }
       const title = clean(item.title, 160) || `${asset.keyword} — ${format}`;
       const { data: contentAsset, error: contentError } = await supabase.from('content_assets').insert({
