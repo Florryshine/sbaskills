@@ -1,13 +1,13 @@
 export async function GET() {
   try {
     const supabase = createAdminClient();
-    const { data, error } = await supabase.from('content_assets')
-      .select('id, title, body, metadata, status, created_at, knowledge_assets(keyword)')
-      .eq('asset_type', 'video_script')
-      .order('created_at', { ascending: false })
-      .limit(40);
+    const [{ data, error }, { data: knowledgeAssets, error: knowledgeError }] = await Promise.all([
+      supabase.from('content_assets').select('id, title, body, metadata, status, created_at, knowledge_assets(keyword)').eq('asset_type', 'video_script').order('created_at', { ascending: false }).limit(40),
+      supabase.from('knowledge_assets').select('id, keyword, subject').order('keyword').limit(500),
+    ]);
     if (error) throw error;
-    return NextResponse.json({ success: true, scripts: data || [] });
+    if (knowledgeError) throw knowledgeError;
+    return NextResponse.json({ success: true, scripts: data || [], knowledgeAssets: knowledgeAssets || [] });
   } catch (error) {
     return NextResponse.json({ error: error.message || 'Could not load saved scripts.' }, { status: 500 });
   }
