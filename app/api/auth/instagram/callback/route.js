@@ -10,9 +10,47 @@ function redirectError(message) {
 
 async function graphJson(url, label) {
   const response = await fetch(url, { cache: 'no-store' });
-  const data = await response.json();
-  if (!response.ok || data.error) throw new Error(data.error?.message || `${label} failed (${response.status})`);
-  return data;
+  const data = await response.json().catch(() => ({}));
+  if (!response.ok || data.error) {
+    const error = new Error(data.error?.message || `${label} failed (${response.status})`);
+    error.meta = {
+      httpStatus: response.status,
+      errorType: data.error?.type || null,
+      errorCode: data.error?.code || null,
+      errorSubcode: data.error?.error_subcode || null,
+      fbtraceId: data.error?.fbtrace_id || response.headers.get('x-fb-trace-id') || null,
+      requestId: response.headers.get('x-fb-request-id') || null,
+    };
+    throw error;
+  }
+  return {
+    data,
+    meta: {
+      httpStatus: response.status,
+      fbtraceId: response.headers.get('x-fb-trace-id') || null,
+      requestId: response.headers.get('x-fb-request-id') || null,
+    },
+  };
+}
+
+function safeTokenDebug(data) {
+  // Explicit allowlist: never log the token itself or any secret.
+  return {
+    app_id: data?.app_id || null,
+    application: data?.application || null,
+    type: data?.type || null,
+    is_valid: typeof data?.is_valid === 'boolean' ? data.is_valid : null,
+    user_id: data?.user_id || null,
+    expires_at: data?.expires_at || null,
+    data_access_expires_at: data?.data_access_expires_at || null,
+    scopes: Array.isArray(data?.scopes) ? data.scopes : [],
+    granular_scopes: Array.isArray(data?.granular_scopes)
+      ? data.granular_scopes.map((item) => ({
+          scope: item.scope || null,
+          target_ids: Array.isArray(item.target_ids) ? item.target_ids : [],
+        }))
+      : [],
+  };
 }
 
 export async function GET(req) {
@@ -28,23 +66,69 @@ export async function GET(req) {
   const appId = process.env.META_APP_ID;
   const appSecret = process.env.META_APP_SECRET;
   const redirectUri = process.env.INSTAGRAM_REDIRECT_URI;
-  if (!appId || !appSecret || !process.env.INSTAGRAM_UNIFIED_CONFIG_ID || !redirectUri) {
+  const configId = process.env.INSTAGRAM_UNIFIED_CONFIG_ID;
+  if (!appId || !appSecret || !configId || !redirectUri) {
     return redirectError('Instagram Unified Login is not configured in the server environment.');
   }
 
   try {
     const tokenUrl = new URL(`${GRAPH}/oauth/access_token`);
     tokenUrl.search = new URLSearchParams({ client_id: appId, client_secret: appSecret, redirect_uri: redirectUri, code }).toString();
-    const tokenData = await graphJson(tokenUrl, 'Instagram authorization-code exchange');
+    const tokenResult = await graphJson(tokenUrl, 'Instagram authorization-code exchange');
+    const tokenData = tokenResult.data;
     if (!tokenData.access_token) throw new Error('Meta did not return an access token.');
     const accessToken = tokenData.access_token;
 
     const accountsUrl = new URL(`${GRAPH}/me/assigned_instagram_accounts`);
     accountsUrl.search = new URLSearchParams({ fields: 'id,username', access_token: accessToken }).toString();
-    const accountsData = await graphJson(accountsUrl, 'Instagram account lookup');
-    const accounts = accountsData.data || [];
+    const accountsResult = await graphJson(accountsUrl, 'Instagram account lookup');
+    const accounts = accountsResult.data.data || [];
+
     if (!accounts.length) {
-      throw new Error('Login succeeded, but Meta returned no Instagram accounts. Confirm @shineybrainacademy is assigned to the business and included in this app configuration, then reconnect.');
+      const appToken = `${appId}|${appSecret}`;
+      const diagnosticRequests = await Promise.allSettled([
+        graphJson(new URL(`${GRAPH}/debug_token?${new URLSearchParams({ input_token: accessToken, access_token: appToken })}`), 'debug_token'),
+        graphJson(new URL(`${GRAPH}/me/permissions?${new URLSearchParams({ access_token: accessToken })}`), 'permissions'),
+        graphJson(new URL(`${GRAPH}/me?${new URLSearchParams({ fields: 'id,name', access_token: accessToken })}`), 'me'),
+      ]);
+
+      const diagnostic = (result) => {
+        if (result.status === 'rejected') {
+          return { error: result.reason?.message || 'Diagnostic request failed', meta: result.reason?.meta || null };
+        }
+        return result.value;
+      };
+      const [debugResult, permissionsResult, meResult] = diagnosticRequests.map(diagnostic);
+      const debugData = debugResult?.data?.data || {};
+      const permissions = permissionsResult?.data?.data || [];
+      const me = meResult?.data || {};
+
+      console.error('[IG_UNIFIED_EMPTY_ACCOUNTS]', JSON.stringify({
+        event: 'instagram_unified_empty_assigned_accounts',
+        appId,
+        configId,
+        redirectUri,
+        authorization: {
+          tokenType: tokenData.token_type || null,
+          expiresIn: tokenData.expires_in || null,
+          tokenDebug: safeTokenDebug(debugData),
+        },
+        permissions: Array.isArray(permissions)
+          ? permissions.map((item) => ({ permission: item.permission || null, status: item.status || null }))
+          : [],
+        me: { id: me.id || null, name: me.name || null },
+        accountLookup: {
+          returnedCount: accounts.length,
+          responseMeta: accountsResult.meta,
+        },
+        diagnostics: {
+          debugToken: debugResult?.meta || null,
+          permissions: permissionsResult?.meta || null,
+          me: meResult?.meta || null,
+        },
+      }));
+
+      throw new Error('Login succeeded, but Meta returned no Instagram accounts. Diagnostic details were recorded in the Vercel function log as IG_UNIFIED_EMPTY_ACCOUNTS. No access token or app secret was logged.');
     }
 
     const supabase = createAdminClient();
@@ -73,6 +157,10 @@ export async function GET(req) {
     response.cookies.delete('instagram_oauth_state');
     return response;
   } catch (error) {
+    console.error('[IG_UNIFIED_CALLBACK_ERROR]', JSON.stringify({
+      message: error?.message || 'Unknown Instagram OAuth callback error',
+      meta: error?.meta || null,
+    }));
     return redirectError(`Instagram connection failed: ${error.message}`);
   }
 }
