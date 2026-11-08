@@ -16,7 +16,7 @@ const examples={
   {heading:'Her effort finally had direction.',text:'Her scores began to rise. She was not suddenly perfect. She was simply improving, one deliberate day at a time.',durationSeconds:7},
   {heading:'Your next chapter starts now.',text:'Do not wait until you feel ready. Start with the topic in front of you. Your future score is built by what you do today.',durationSeconds:7}
  ],
- tegaki:[{heading:'Cell structure and functions',text:'The cell is the basic structural and functional unit of life. The cell membrane controls what enters and leaves the cell, while the cytoplasm is where many chemical reactions take place. The nucleus contains genetic material and controls cell activities. Mitochondria release energy through aerobic respiration, while ribosomes make proteins. Plant cells also have a cellulose cell wall for support, a large permanent vacuole containing cell sap, and chloroplasts for photosynthesis. Remember: the nucleus controls, the membrane regulates, mitochondria release energy, and ribosomes build proteins.',illustration:'animal-cell',durationSeconds:40}],
+ tegaki:[{heading:'Cell structure and functions',text:'The cell is the basic structural and functional unit of life. The cell membrane controls what enters and leaves the cell, while the cytoplasm is where many chemical reactions take place. The nucleus contains genetic material and controls cell activities. Mitochondria release energy through aerobic respiration, while ribosomes make proteins. Plant cells also have a cellulose cell wall for support, a large permanent vacuole containing cell sap, and chloroplasts for photosynthesis. Remember: the nucleus controls, the membrane regulates, mitochondria release energy, and ribosomes build proteins.',illustration:'animal-cell',handwritingFont:'caveat',durationSeconds:40}],
 };
 const choices=[['explainer','Educational explainer'],['whiteboard','Whiteboard lesson'],['question','JAMB question'],['story','Story / reel'],['tegaki','Tegaki handwriting']];
 const totalFrames=s=>s.reduce((n,x)=>n+Math.max(60,Math.round((Number(x.durationSeconds)||5)*30)),0);
@@ -116,11 +116,23 @@ export default function VideoStudio(){
        <textarea rows={3} value={scene.narration || scene.text || ''} onChange={e => edit(sceneIndex, kind === 'whiteboard' ? 'narration' : 'text', e.target.value)} placeholder={kind === 'story' ? 'Write your story here…' : 'Scene text / narration'} className="w-full rounded-lg border bg-white p-2.5" />
        {kind === 'tegaki' ? (
         <div className="space-y-2 rounded-lg border border-violet-200 bg-white p-3">
+         <label className="block text-xs font-bold text-violet-950">Handwriting style
+          <select value={scene.handwritingFont||'caveat'} onChange={e=>edit(sceneIndex,'handwritingFont',e.target.value)} className="mt-1 w-full rounded-lg border bg-white p-2.5 text-sm">
+           <option value="caveat">Caveat — natural classroom handwriting</option>
+           <option value="italianno">Italianno — elegant cursive</option>
+           <option value="tangerine">Tangerine — flowing script</option>
+           <option value="parisienne">Parisienne — decorative cursive</option>
+          </select>
+         </label>
          <div className="flex items-center justify-between">
           <b className="text-xs text-violet-900">Illustration timeline</b>
           <button type="button" onClick={() => setScenes(oldScenes => oldScenes.map((item, n) => n === sceneIndex ? { ...item, illustrationCues: [...(item.illustrationCues || [{ at: 0, illustration: item.illustration || 'animal-cell', label: 'Introduction' }]), { at: Math.min(95, Math.max(10, (item.illustrationCues || []).length * 25)), illustration: 'plant-cell', label: 'New concept' }] } : item))} className="rounded-lg border px-2 py-1 text-xs font-bold text-violet-800">+ Add illustration</button>
          </div>
-         <p className="text-[11px] text-slate-500">The notebook page and handwriting stay continuous. The picture changes at the selected point in the narration timeline.</p>
+         <p className="text-[11px] text-slate-500">The notebook page and handwriting stay continuous. The picture changes at the selected point in the narration timeline. Use an SBA SVG illustration or choose a prepared stock image below.</p>
+         {scene.image?.url&&<div className="flex items-center gap-3 rounded-lg border bg-white p-2"><img src={scene.image.url} alt={scene.image.alt||'Selected educational visual'} className="h-16 w-24 rounded object-contain"/><div className="min-w-0 flex-1"><p className="text-xs font-bold">Stock / uploaded image selected</p><p className="truncate text-[10px] text-slate-500">{scene.image.source||'Uploaded image'} · {scene.image.license||'Source details unavailable'}</p></div><button type="button" onClick={()=>edit(sceneIndex,'image',null)} className="text-xs font-bold text-red-600">Remove</button></div>}
+         <div className="flex gap-2"><input value={imageQueries[sceneIndex]??scene.visualQuery??scene.heading??''} onChange={e=>setImageQueries(old=>({...old,[sceneIndex]:e.target.value}))} placeholder="Search stock: labelled human heart diagram" className="min-w-0 flex-1 rounded-lg border bg-white p-2 text-sm"/><button type="button" onClick={()=>searchSceneImages(sceneIndex)} disabled={!!imageSearching[sceneIndex]} className="rounded-lg bg-violet-700 px-3 py-2 text-xs font-bold text-white disabled:opacity-50">{imageSearching[sceneIndex]?'Searching…':'Search images'}</button></div>
+         <label className="inline-flex cursor-pointer items-center rounded-lg border px-3 py-2 text-xs font-bold text-violet-800">{imageUploading[sceneIndex]?'Uploading…':'Upload image'}<input type="file" accept="image/*" className="hidden" disabled={!!imageUploading[sceneIndex]} onChange={e=>uploadSceneImage(sceneIndex,e.target.files?.[0])}/></label>
+         {(imageResults[sceneIndex]||[]).length>0&&<div className="grid grid-cols-2 gap-2 sm:grid-cols-3">{imageResults[sceneIndex].map((im,j)=><button type="button" key={im.url+j} onClick={()=>selectSearchImage(sceneIndex,im)} className="overflow-hidden rounded-lg border bg-white text-left"><img src={im.url} alt="" className="h-20 w-full object-contain"/><span className="block truncate px-2 py-1 text-[10px] font-bold">{im.source} · {im.photographer||'Unknown creator'}</span></button>)}</div>}
          {(scene.illustrationCues || [{ at: 0, illustration: scene.illustration || 'animal-cell', label: 'Introduction' }]).map((cue, cueIndex) => (
           <div key={cueIndex} className="grid grid-cols-[1fr_86px] gap-2 rounded-lg bg-violet-50 p-2">
            <label className="block text-[11px] font-semibold">Concept / cue

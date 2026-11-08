@@ -95,10 +95,15 @@ export default function BoldTextVideoPage() {
       lastProgress = p;
       setProgress(p);
       // Deep, lively gradient with animated light bands.
-      const g = ctx.createLinearGradient(0, 0, W, H);
-      const hue = (220 + elapsed * 13) % 360;
-      g.addColorStop(0, '#071329'); g.addColorStop(.55, '#102f67'); g.addColorStop(1, `hsl(${hue}, 82%, 35%)`);
-      ctx.fillStyle = g; ctx.fillRect(0, 0, W, H);
+      if (style === 'kinetic') {
+        ctx.fillStyle = '#050505';
+        ctx.fillRect(0, 0, W, H);
+      } else {
+        const g = ctx.createLinearGradient(0, 0, W, H);
+        const hue = (220 + elapsed * 13) % 360;
+        g.addColorStop(0, '#071329'); g.addColorStop(.55, '#102f67'); g.addColorStop(1, `hsl(${hue}, 82%, 35%)`);
+        ctx.fillStyle = g; ctx.fillRect(0, 0, W, H);
+      }
       ctx.save();
       ctx.globalAlpha = .13;
       ctx.translate(W * (.5 + Math.sin(elapsed * .8) * .18), H * .4);
@@ -129,13 +134,43 @@ export default function BoldTextVideoPage() {
       const y0 = H*.51 - blockH/2 + Math.sin(local*Math.PI)*H*.012;
       lines.forEach((ln,i) => {
         const y = y0+i*lineH;
-        const pop = style === 'pop' ? 1 + Math.sin(local*Math.PI)*.045 : 1;
-        ctx.save(); ctx.translate(W/2,y); ctx.scale(pop,pop);
-        ctx.font = `1000 ${fontSize}px Impact, Arial Black, Arial`;
-        ctx.lineWidth = Math.max(6,fontSize*.13); ctx.strokeStyle = '#07101f'; ctx.strokeText(ln,W*0,H*0);
-        ctx.fillStyle = (i === Math.floor(lines.length/2) || /\b(ANSWER|WHY|STOP|NEVER|JAMB|SECRET|WRONG|RIGHT)\b/i.test(ln)) ? '#ffcc00' : '#ffffff';
-        ctx.fillText(ln,0,0);
-        ctx.restore();
+        if (style === 'kinetic') {
+          const tokens = ln.split(/\s+/).filter(Boolean);
+          const widths = tokens.map(word => {
+            ctx.font = `1000 ${fontSize}px Impact, Arial Black, Arial`;
+            return ctx.measureText(word).width;
+          });
+          const gap = Math.max(5, fontSize * .08);
+          let x = -(widths.reduce((sum, value) => sum + value, 0) + gap * Math.max(0, tokens.length - 1)) / 2;
+          tokens.forEach((word,j) => {
+            const wordWidth = widths[j];
+            const tilt = ((j + i) % 2 ? -1 : 1) * (0.035 + ((j * 7 + i * 3) % 5) * 0.012);
+            const scale = 0.94 + ((j * 3 + i) % 4) * 0.045 + Math.sin(local * Math.PI) * 0.025;
+            ctx.save();
+            ctx.translate(x + wordWidth / 2, y + Math.sin(j * 1.7 + i) * fontSize * 0.08);
+            ctx.rotate(tilt);
+            ctx.scale(scale, scale);
+            ctx.font = `1000 ${fontSize}px Impact, Arial Black, Arial`;
+            ctx.lineJoin = 'round';
+            ctx.lineWidth = Math.max(4, fontSize * .055);
+            ctx.strokeStyle = '#050505';
+            ctx.shadowColor = 'rgba(255,255,255,.12)';
+            ctx.shadowBlur = 8;
+            ctx.strokeText(word, 0, 0);
+            ctx.fillStyle = (j + i) % 4 === 0 ? '#ffcc00' : '#ffffff';
+            ctx.fillText(word, 0, 0);
+            ctx.restore();
+            x += wordWidth + gap;
+          });
+        } else {
+          const pop = style === 'pop' ? 1 + Math.sin(local*Math.PI)*.045 : 1;
+          ctx.save(); ctx.translate(W/2,y); ctx.scale(pop,pop);
+          ctx.font = `1000 ${fontSize}px Impact, Arial Black, Arial`;
+          ctx.lineWidth = Math.max(6,fontSize*.13); ctx.strokeStyle = '#07101f'; ctx.strokeText(ln,W*0,H*0);
+          ctx.fillStyle = (i === Math.floor(lines.length/2) || /\b(ANSWER|WHY|STOP|NEVER|JAMB|SECRET|WRONG|RIGHT)\b/i.test(ln)) ? '#ffcc00' : '#ffffff';
+          ctx.fillText(ln,0,0);
+          ctx.restore();
+        }
       });
       ctx.fillStyle = 'rgba(0,0,0,.48)'; ctx.fillRect(W*.08,H*.82,W*.84,H*.085);
       ctx.fillStyle = '#fff'; ctx.font = `800 ${Math.round(W*.027)}px Arial`;
@@ -147,6 +182,20 @@ export default function BoldTextVideoPage() {
     rafRef.current = requestAnimationFrame(draw);
     return () => { if (rafRef.current) cancelAnimationFrame(rafRef.current); };
   }, [script, ratio, seconds, style]);
+
+  const downloadImage = () => {
+    const canvas = canvasRef.current;
+    if (!canvas || !script) return;
+    canvas.toBlob(blob => {
+      if (!blob) { setError('Could not export this frame as an image.'); return; }
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = 'shiney-brain-poster-' + Date.now() + '.png';
+      document.body.appendChild(a); a.click(); a.remove();
+      window.setTimeout(() => URL.revokeObjectURL(url), 30000);
+    }, 'image/png');
+  };
 
   const recordVideo = async () => {
     const canvas = canvasRef.current;
@@ -239,11 +288,11 @@ export default function BoldTextVideoPage() {
           <select value={musicTrack} onChange={e=>setMusicTrack(e.target.value)} className="mt-2 w-full rounded-xl border px-3 py-3 text-base"><option value="">No music track selected</option>{musicTracks.map((t,i)=><option key={t.url || t.path || i} value={t.url || t.path}>{t.title || t.name || ('Track '+(i+1))}</option>)}</select>
         </label>}
         <label className="block text-sm font-bold">Caption animation
-          <select value={style} onChange={e=>setStyle(e.target.value)} className="mt-2 w-full rounded-xl border px-3 py-3 text-base"><option value="pop">Bold pop-in</option><option value="clean">Clean kinetic text</option></select>
+          <select value={style} onChange={e=>setStyle(e.target.value)} className="mt-2 w-full rounded-xl border px-3 py-3 text-base"><option value="pop">Bold pop-in</option><option value="clean">Clean kinetic text</option><option value="kinetic">Kinetic collage — oversized tilted words</option></select>
         </label>
         <button onClick={generate} disabled={busy} className="w-full rounded-xl bg-blue-700 px-4 py-3 font-black text-white disabled:opacity-50">{busy ? 'AI IS WRITING…' : '✨ Generate script'}</button>
         {error && <p role="alert" className="text-sm font-semibold text-red-600">{error}</p>}
-        {script && <div className="rounded-xl bg-blue-50 p-3"><p className="font-bold">{script.title}</p><p className="mt-1 text-sm text-gray-600">{script.scenes.length} caption scenes · {seconds}s · {ratio}</p><button onClick={recordVideo} disabled={recording} className="mt-3 w-full rounded-xl bg-yellow-400 px-4 py-3 font-black text-slate-950 disabled:opacity-60">{recording ? 'Recording… please keep this tab open' : '⬇ Record & download video'}</button>{recording&&<p className="mt-2 text-sm">Recording video for {seconds} seconds…</p>}</div>}
+        {script && <div className="rounded-xl bg-blue-50 p-3"><p className="font-bold">{script.title}</p><p className="mt-1 text-sm text-gray-600">{script.scenes.length} caption scenes · {seconds}s · {ratio}</p><div className="mt-3 grid grid-cols-1 gap-2 sm:grid-cols-2"><button onClick={recordVideo} disabled={recording} className="rounded-xl bg-yellow-400 px-4 py-3 font-black text-slate-950 disabled:opacity-60">{recording ? 'Recording… please keep this tab open' : '⬇ Record & download video'}</button><button onClick={downloadImage} disabled={recording} className="rounded-xl border border-slate-300 bg-white px-4 py-3 font-bold text-slate-900 disabled:opacity-60">Download current frame PNG</button></div>{recording&&<p className="mt-2 text-sm">Recording video for {seconds} seconds…</p>}</div>}
       </div>
       <div className="space-y-3">
         <div className="overflow-hidden rounded-2xl bg-slate-950 p-3">
