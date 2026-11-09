@@ -1,7 +1,9 @@
 import { NextResponse } from 'next/server';
 import { createClient } from '@supabase/supabase-js';
+import { getProduct, priceWithCoupon } from '@/lib/landingProducts';
 
-// Initialize Supabase admin client
+// Coupon validation is public, but the product price is always resolved
+// from the server-side catalogue. A client-supplied basePrice is ignored.
 const supabaseAdmin = createClient(
   process.env.NEXT_PUBLIC_SUPABASE_URL,
   process.env.SUPABASE_SERVICE_ROLE_KEY
@@ -9,9 +11,13 @@ const supabaseAdmin = createClient(
 
 export async function GET(req) {
   const { searchParams } = new URL(req.url);
-  const code = searchParams.get('code')?.toUpperCase();
-  const product = searchParams.get('product') || 'jamb-playbook';
-  const basePrice = Number(searchParams.get('basePrice')) || 0;
+  const code = searchParams.get('code')?.trim().toUpperCase();
+  const productSlug = searchParams.get('product') || 'jamb-playbook';
+  const product = getProduct(productSlug);
+
+  if (!product) {
+    return NextResponse.json({ valid: false, error: 'Unknown product' }, { status: 400 });
+  }
 
   if (!code) {
     return NextResponse.json(
@@ -21,51 +27,39 @@ export async function GET(req) {
   }
 
   try {
-    // Query the coupon
     const { data: coupon, error } = await supabaseAdmin
       .from('landing_coupons')
       .select('*')
       .eq('code', code)
-      .eq('product_slug', product)
+      .eq('product_slug', productSlug)
       .eq('active', true)
-      .single();
+      .maybeSingle();
 
     if (error || !coupon) {
       return NextResponse.json({
         valid: false,
-        error: 'Invalid or expired coupon code'
+        error: 'Invalid or expired coupon code',
       });
     }
 
-    // Check if coupon has reached max uses
     if (coupon.max_uses && coupon.used_count >= coupon.max_uses) {
       return NextResponse.json({
         valid: false,
-        error: 'This coupon has reached its maximum uses'
+        error: 'This coupon has reached its maximum uses',
       });
     }
 
-    if (coupon.expires_at && new Date(coupon.expires_at) < new Date()) {
+    if (coupon.expires_at && new Date(coupon.expires_at) <= new Date()) {
       return NextResponse.json({
         valid: false,
-        error: 'This coupon has expired'
+        error: 'This coupon has expired',
       });
     }
 
-    // The table stores discount_type ('fixed_price' | 'amount_off') and
-    // discount_value — NOT a discount_percent field. Compute the actual
-    // final price here, server-side, so the client never has to (and
-    // can't) fudge the math.
-    let finalPrice = basePrice;
-    if (coupon.discount_type === 'fixed_price') {
-      finalPrice = coupon.discount_value;
-    } else if (coupon.discount_type === 'amount_off') {
-      finalPrice = basePrice - coupon.discount_value;
-    }
-    finalPrice = Math.max(0, Math.round(finalPrice));
+    const basePrice = Number(product.price);
+    const finalPrice = priceWithCoupon(basePrice, coupon);
     const discountAmount = Math.max(0, basePrice - finalPrice);
 
-    // Coupon is valid
     return NextResponse.json({
       valid: true,
       code: coupon.code,
@@ -76,7 +70,6 @@ export async function GET(req) {
       maxUses: coupon.max_uses,
       usedCount: coupon.used_count,
     });
-
   } catch (error) {
     console.error('Coupon validation error:', error);
     return NextResponse.json(
@@ -85,4 +78,3 @@ export async function GET(req) {
     );
   }
 }
-
