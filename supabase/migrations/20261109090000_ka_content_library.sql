@@ -18,6 +18,7 @@ create table if not exists public.ka_components (
   attempts integer not null default 0,
   last_error text,
   locked_until timestamptz,
+  claim_token uuid,
   created_by uuid,
   created_at timestamptz not null default now(),
   updated_at timestamptz not null default now()
@@ -48,12 +49,14 @@ create policy "service role full access" on public.ka_components for all to serv
 drop policy if exists "service role full access" on public.ka_component_uses;
 create policy "service role full access" on public.ka_component_uses for all to service_role using (true) with check (true);
 
--- Serialize claims per Knowledge Asset/component/variant. No duplicate concurrent LLM spend.
+-- Serialize claims per Knowledge Asset/component/variant and issue a lease token.
+-- The lease token prevents a worker whose five-minute lease expired from saving
+-- over a newer worker that reclaimed the component.
 create or replace function public.claim_ka_component(
   p_asset_id uuid, p_component_type text, p_variant text,
   p_source_hash text, p_prompt_version text, p_created_by uuid, p_force boolean
 )
-returns table(component_id uuid, should_generate boolean, component_status text, component_body jsonb, component_version integer)
+returns table(component_id uuid, should_generate boolean, component_status text, component_body jsonb, component_version integer, claim_token uuid)
 language plpgsql security invoker set search_path = public
 as $$
 declare
@@ -76,11 +79,11 @@ begin
     if existing.status = 'ready'
        and existing.source_hash = p_source_hash
        and existing.prompt_version = p_prompt_version then
-      return query select existing.id, false, existing.status, existing.body, existing.version;
+      return query select existing.id, false, existing.status, existing.body, existing.version, existing.claim_token;
       return;
     end if;
     if existing.status = 'generating' and existing.locked_until > now() then
-      return query select existing.id, false, existing.status, existing.body, existing.version;
+      return query select existing.id, false, existing.status, existing.body, existing.version, existing.claim_token;
       return;
     end if;
     if existing.status in ('generating','failed')
@@ -88,15 +91,17 @@ begin
        and existing.prompt_version = p_prompt_version
        and existing.attempts < 3 then
       update public.ka_components set status='generating', attempts=attempts+1,
-        locked_until=now()+interval '5 minutes', last_error=null, updated_at=now()
-      where id=existing.id;
-      return query select existing.id, true, 'generating'::text, existing.body, existing.version;
+        claim_token=gen_random_uuid(), locked_until=now()+interval '5 minutes',
+        last_error=null, updated_at=now()
+      where id=existing.id
+      returning * into existing;
+      return query select existing.id, true, 'generating'::text, existing.body, existing.version, existing.claim_token;
       return;
     end if;
   end if;
 
   if found then
-    update public.ka_components set status='superseded', locked_until=null, updated_at=now()
+    update public.ka_components set status='superseded', locked_until=null, claim_token=null, updated_at=now()
     where id=existing.id;
   end if;
 
@@ -107,13 +112,13 @@ begin
 
   insert into public.ka_components (
     knowledge_asset_id, component_type, variant, version, status,
-    source_hash, prompt_version, created_by, attempts, locked_until
+    source_hash, prompt_version, created_by, attempts, locked_until, claim_token
   ) values (
     p_asset_id, p_component_type, coalesce(p_variant,''), next_version, 'generating',
-    p_source_hash, p_prompt_version, p_created_by, 1, now()+interval '5 minutes'
-  ) returning id into component_id;
+    p_source_hash, p_prompt_version, p_created_by, 1, now()+interval '5 minutes', gen_random_uuid()
+  ) returning * into existing;
 
-  return query select component_id, true, 'generating'::text, null::jsonb, next_version;
+  return query select existing.id, true, 'generating'::text, null::jsonb, existing.version, existing.claim_token;
 end;
 $$;
 
