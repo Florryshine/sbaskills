@@ -237,6 +237,12 @@ export default function KnowledgeAssetsPage() {
                   >
                     Generate Content
                   </Link>
+                  <Link
+                    href={`/admin/ka-package/${asset.id}`}
+                    className="bg-emerald-100 text-emerald-800 px-4 py-2 rounded-xl text-sm font-bold hover:bg-emerald-200"
+                  >
+                    Content Package
+                  </Link>
                   <button
                     onClick={() => publishToGames(asset.id)}
                     disabled={publishingId === asset.id}
