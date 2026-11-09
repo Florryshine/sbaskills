@@ -1,12 +1,16 @@
 import { createRouteHandlerClient } from '@supabase/auth-helpers-nextjs';
 import { cookies } from 'next/headers';
 import { NextResponse } from 'next/server';
+import { authorizeCronRequest } from '@/lib/cronAuth';
 
 export const dynamic = 'force-dynamic';
 export const runtime = 'nodejs';
 import { publishToPlatform } from '@/lib/services/social-publisher';
 
-export async function GET() {
+export async function GET(request) {
+  const cronError = authorizeCronRequest(request, 'authorization');
+  if (cronError) return cronError;
+
   const supabase = createRouteHandlerClient({ cookies });
   const now = new Date().toISOString();
 
@@ -33,7 +37,7 @@ export async function GET() {
         .single();
 
       if (chanErr || !channel) {
-        throw new Error(`No channel for ${platform}`);
+        throw new Error('No channel for ' + platform);
       }
 
       const mediaUrls = post.image_urls || null;
