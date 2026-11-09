@@ -14,7 +14,10 @@ function isAdminApiRequest(pathname) {
   if (pathname === '/api/admin/landing/is-admin') return false;
 
   // Cron endpoints authenticate with CRON_SECRET in their route handlers.
-  if (pathname === '/api/publish/cron-worker' || pathname === '/api/social/cron-worker') {
+  if (
+    pathname === '/api/publish/cron-worker' ||
+    pathname === '/api/social/cron-worker'
+  ) {
     return false;
   }
 
@@ -26,6 +29,8 @@ function isAdminApiRequest(pathname) {
     '/api/publish/',
     '/api/asset-images/',
     '/api/boss-battles/',
+    '/api/social/',
+    '/api/study-notes/',
     '/api/auth/facebook/',
     '/api/auth/linkedin/',
     '/api/auth/tiktok/',
@@ -109,6 +114,8 @@ export const config = {
     '/api/publish/:path*',
     '/api/asset-images/:path*',
     '/api/boss-battles/:path*',
+    '/api/social/:path*',
+    '/api/study-notes/:path*',
     '/api/learning-core/generate',
     '/api/debug',
     '/api/auth/facebook/:path*',
