@@ -48,6 +48,8 @@ drop policy if exists "service role full access" on public.ka_components;
 create policy "service role full access" on public.ka_components for all to service_role using (true) with check (true);
 drop policy if exists "service role full access" on public.ka_component_uses;
 create policy "service role full access" on public.ka_component_uses for all to service_role using (true) with check (true);
+revoke all on table public.ka_components, public.ka_component_uses from anon, authenticated;
+grant all on table public.ka_components, public.ka_component_uses to service_role;
 
 -- Serialize claims per Knowledge Asset/component/variant and issue a lease token.
 -- The lease token prevents a worker whose five-minute lease expired from saving
