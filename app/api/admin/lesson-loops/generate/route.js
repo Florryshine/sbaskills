@@ -303,10 +303,13 @@ async function runLessonLoopPipeline(contentAssetId, asset) {
         tiktok: script.tiktok,
         segments: segmentsWithMedia,
         totalDurationSeconds: totalDuration,
-        narrationWarnings: narrationFailures,\n        ka_component_id: masterComponentId,
+        narrationWarnings: narrationFailures,
+        ka_component_id: masterComponentId,
       },
     })
     .eq('id', contentAssetId);
+
+  if (masterComponentId) await recordComponentUse(masterComponentId, 'lesson_loop', contentAssetId);
 }
 
 export async function POST(request) {
