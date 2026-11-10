@@ -122,7 +122,8 @@ export async function POST(request) {
         segments: segmentsWithTiming,
         background,
         backgroundQuery: script.visualQuery,
-        estimated_seconds: estimatedSeconds,\n        ka_component_id: script.componentId,\n        ka_component_reused: script.componentReused,
+        estimated_seconds: estimatedSeconds,
+        ka_component_id: script.componentId,\n        ka_component_reused: script.componentReused,
       },
     })
     .select()
