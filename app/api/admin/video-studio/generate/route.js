@@ -1,5 +1,6 @@
 import { NextResponse } from 'next/server';
 import { generateJson } from '@/lib/content-factory/generators/_shared';
+import { getKnowledgeAsset, getMasterScript, masterScriptToVideoScenes } from '@/lib/ka-package/video-adapters';
 
 export const runtime = 'nodejs';
 export const maxDuration = 60;
@@ -16,6 +17,21 @@ export async function POST(request) {
 
     if (topic.length < 3) {
       return NextResponse.json({ error: 'Enter a lesson topic first.' }, { status: 400 });
+    }
+
+    // When a Knowledge Asset is selected, reuse its shared teaching script.
+    // Freeform topic generation remains available for topics outside the KA library.
+    if (body.knowledgeAssetId) {
+      const asset = await getKnowledgeAsset(body.knowledgeAssetId);
+      const { component, reused } = await getMasterScript(asset);
+      const scenes = masterScriptToVideoScenes(component.body);
+      if (scenes.length < 2) throw new Error('The shared teaching script did not produce enough usable scenes.');
+      return NextResponse.json({
+        success: true,
+        plan: { title: clean(component.body.title || asset.keyword, 120), subject: subjectName, scenes },
+        reuse: { componentId: component.id, reused, componentType: 'master_script' },
+        nextStep: 'Choose or upload an image for each scene, then generate narration when ready.',
+      });
     }
 
     const prompt = `You are the instructional designer for Shiney Brain Academy. Create a scientifically accurate, teacher-friendly whiteboard video lesson about "${topic}" (subject: ${subjectName}).
