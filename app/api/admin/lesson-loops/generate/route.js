@@ -356,7 +356,7 @@ export async function POST(request) {
     return NextResponse.json({ error: insertError?.message || 'Failed to create draft' }, { status: 500 });
   }
 
-  const response = NextResponse.json({ success: true, contentAssetId: contentAsset.id, status: 'generating' });\n\n  // The pipeline records the component against the completed draft after it is created.
+  const response = NextResponse.json({ success: true, contentAssetId: contentAsset.id, status: 'generating' });
 
   runInBackground(() => runLessonLoopPipeline(contentAsset.id, asset));
 
