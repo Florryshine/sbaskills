@@ -77,7 +77,24 @@ export async function POST(request) {
 
   let script;
   try {
-    const { component, reused } = await getMasterScript(asset);\n    const source = component.body || {};\n    const beats = Array.isArray(source.beats) ? source.beats : [];\n    const segments = [\n      ...(source.hook ? [{ text: source.hook, label: 'THE HOOK' }] : []),\n      ...beats.map((beat, index) => ({ text: String(beat.narration || '').trim(), label: String(beat.on_screen_text || ('KEY IDEA ' + (index + 1))).slice(0, 40) })),\n      ...(source.recap ? [{ text: source.recap, label: 'REMEMBER THIS' }] : []),\n      ...(source.cta ? [{ text: source.cta, label: 'NEXT STEP' }] : []),\n    ].filter(item => item.text);\n    if (segments.length < 4) throw new Error('The shared master script has too few teaching beats.');\n    script = {\n      segments, title: source.title || asset.keyword,\n      description: source.recap || asset.summary || '',\n      tags: [asset.subject, asset.keyword, 'jamb preparation'].filter(Boolean),\n      hashtags: ['#JAMB', '#ShineyBrainAcademy'],\n      visualQuery: beats.find(beat => beat.stock_search)?.stock_search || [asset.subject, asset.keyword].filter(Boolean).join(' '),\n      componentId: component.id, componentReused: reused,\n    };
+    const { component, reused } = await getMasterScript(asset);
+    const source = component.body || {};
+    const beats = Array.isArray(source.beats) ? source.beats : [];
+    const segments = [
+      ...(source.hook ? [{ text: source.hook, label: 'THE HOOK' }] : []),
+      ...beats.map((beat, index) => ({ text: String(beat.narration || '').trim(), label: String(beat.on_screen_text || ('KEY IDEA ' + (index + 1))).slice(0, 40) })),
+      ...(source.recap ? [{ text: source.recap, label: 'REMEMBER THIS' }] : []),
+      ...(source.cta ? [{ text: source.cta, label: 'NEXT STEP' }] : []),
+    ].filter(item => item.text);
+    if (segments.length < 4) throw new Error('The shared master script has too few teaching beats.');
+    script = {
+      segments, title: source.title || asset.keyword,
+      description: source.recap || asset.summary || '',
+      tags: [asset.subject, asset.keyword, 'jamb preparation'].filter(Boolean),
+      hashtags: ['#JAMB', '#ShineyBrainAcademy'],
+      visualQuery: beats.find(beat => beat.stock_search)?.stock_search || [asset.subject, asset.keyword].filter(Boolean).join(' '),
+      componentId: component.id, componentReused: reused,
+    };
   } catch (err) {
     return NextResponse.json({ error: err.message }, { status: 500 });
   }
