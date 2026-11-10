@@ -123,7 +123,8 @@ export async function POST(request) {
         background,
         backgroundQuery: script.visualQuery,
         estimated_seconds: estimatedSeconds,
-        ka_component_id: script.componentId,\n        ka_component_reused: script.componentReused,
+        ka_component_id: script.componentId,
+        ka_component_reused: script.componentReused,
       },
     })
     .select()
