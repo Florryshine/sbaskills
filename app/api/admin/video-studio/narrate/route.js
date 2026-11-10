@@ -1,5 +1,6 @@
 import { NextResponse } from 'next/server';
 import { synthesizeLine, estimateDurationSeconds } from '@/lib/podcastTTS';
+import { getKnowledgeAsset, getOrCreateNarration } from '@/lib/ka-package/video-adapters';
 
 export const runtime = 'nodejs';
 export const maxDuration = 60;
@@ -22,7 +23,7 @@ export async function POST(request) {
         durationSeconds: Math.min(8, Math.max(5, estimateDurationSeconds(text) + 1))
       };
     }));
-    return NextResponse.json({ success: true, audio });
+    return NextResponse.json({ success: true, audio, narrationCached: Boolean(asset) });
   } catch (error) {
     console.error('Video Studio narration failed:', error);
     return NextResponse.json({ error: error.message || 'Could not generate narration.' }, { status: 500 });
