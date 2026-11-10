@@ -1,4 +1,5 @@
 import { NextResponse } from 'next/server';
+import { requireAdminApi } from '@/lib/require-admin-api';
 import { synthesizeLine, estimateDurationSeconds } from '@/lib/podcastTTS';
 import { getKnowledgeAsset, getOrCreateNarration } from '@/lib/ka-package/video-adapters';
 
@@ -6,6 +7,8 @@ export const runtime = 'nodejs';
 export const maxDuration = 60;
 
 export async function POST(request) {
+  const auth = await requireAdminApi();
+  if (auth.response) return auth.response;
   try {
     const body = await request.json();
     if (!Array.isArray(body.scenes) || body.scenes.length < 1 || body.scenes.length > 12) {
