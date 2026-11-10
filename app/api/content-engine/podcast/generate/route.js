@@ -4,7 +4,8 @@ import { createAdminClient } from '@/lib/supabase-admin';
 import { createPodcastEpisodeRow, runPodcastEpisodePipeline } from '@/lib/podcastGenerate';
 import { DEFAULT_PODCAST_STYLE } from '@/lib/podcastStyles';
 import { runInBackground } from '@/lib/backgroundTask';
-import { getMasterScript, recordComponentUse } from '@/lib/ka-package';
+import { getMasterScript } from '@/lib/ka-package/video-adapters';
+import { recordComponentUse } from '@/lib/ka-package';
 
 // Same background pattern as generate-from-text/route.js — see the
 // comment there for why. This route was just as exposed to the same 60s
