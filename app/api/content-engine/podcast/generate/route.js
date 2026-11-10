@@ -62,7 +62,9 @@ Common Mistakes:
 ${(asset.common_mistakes || []).map((m) => `- ${m}`).join('\n')}
       `.trim();
 
-    const content = `${baseContent}\n\n${sharedOutline}`.slice(0, 20000);\n\n    const resolvedStyle =
+    const content = `${baseContent}\n\n${sharedOutline}`.slice(0, 20000);
+
+    const resolvedStyle =
       style ||
       (format && format !== 'teacher_examiner' ? format : null) ||
       asset.default_podcast_style ||
