@@ -1,4 +1,5 @@
 import { NextResponse } from 'next/server';
+import { requireAdminApi } from '@/lib/require-admin-api';
 import { generateJson } from '@/lib/content-factory/generators/_shared';
 import { getKnowledgeAsset, getShortScript } from '@/lib/ka-package/video-adapters';
 
@@ -14,6 +15,8 @@ const TYPES = {
 };
 
 export async function POST(request) {
+  const auth = await requireAdminApi();
+  if (auth.response) return auth.response;
   try {
     const body = await request.json();
     const type = TYPES[body.type] ? body.type : 'question';
