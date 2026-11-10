@@ -16,11 +16,24 @@ export async function POST(request) {
       if (!text) throw new Error('Scene ' + (index + 1) + ' has no narration text.');
       return text;
     });
+    const asset = body.knowledgeAssetId ? await getKnowledgeAsset(body.knowledgeAssetId) : null;
     const audio = await Promise.all(scenes.map(async (text) => {
+      if (asset) {
+        const cached = await getOrCreateNarration(asset, text, {
+          voice: body.voice || 'host_a',
+          emotion: body.emotion || 'neutral',
+        });
+        return {
+          audioSrc: cached.audioSrc,
+          durationSeconds: Math.min(8, Math.max(5, estimateDurationSeconds(text) + 1)),
+          reused: cached.reused,
+        };
+      }
       const buffer = await synthesizeLine(text, 'host_a', 'neutral');
       return {
         audioSrc: 'data:audio/mpeg;base64,' + buffer.toString('base64'),
-        durationSeconds: Math.min(8, Math.max(5, estimateDurationSeconds(text) + 1))
+        durationSeconds: Math.min(8, Math.max(5, estimateDurationSeconds(text) + 1)),
+        reused: false,
       };
     }));
     return NextResponse.json({ success: true, audio, narrationCached: Boolean(asset) });
