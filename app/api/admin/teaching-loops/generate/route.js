@@ -13,6 +13,7 @@
 // worker, no video_scripts row).
 
 import { NextResponse } from 'next/server';
+import { requireAdminApi } from '@/lib/require-admin-api';
 import { createAdminClient } from '@/lib/supabase-admin';
 import { estimateSegmentTimings } from '@/lib/content-factory/generators/teaching-loop';
 import { getMasterScript, recordComponentUse } from '@/lib/ka-package';
@@ -52,6 +53,8 @@ async function findBackgroundCandidate(query) {
 }
 
 export async function POST(request) {
+  const auth = await requireAdminApi();
+  if (auth.response) return auth.response;
   let body;
   try {
     body = await request.json();
