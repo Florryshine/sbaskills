@@ -31,7 +31,8 @@ import { parseJsonFromText } from '@/lib/robustJsonParse';
 import { synthesizeLine, estimateDurationSeconds } from '@/lib/podcastTTS';
 import { PLATFORM_LIMITS } from '@/lib/content-factory/generators/_shared';
 import { runInBackground } from '@/lib/backgroundTask';
-import { getMasterScript, recordComponentUse } from '@/lib/ka-package';
+import { getMasterScript } from '@/lib/ka-package/video-adapters';
+import { recordComponentUse } from '@/lib/ka-package';
 import {
   searchPexelsVideoMulti,
   searchPixabayVideoMulti,
