@@ -1,8 +1,11 @@
 import { NextResponse } from 'next/server';
+import { requireAdminApi } from '@/lib/require-admin-api';
 import { createClient } from '@supabase/supabase-js';
 import { createRouteHandlerClient } from '@/lib/supabase-server';
 
 export async function POST(request) {
+  const auth = await requireAdminApi();
+  if (auth.response) return auth.response;
   try {
     // `styles` is new: an optional { podcast: 'deep_dive', study_note: 'mcq_practice' }
     // map, keyed by the same engine ids used in `engines`. Any engine not
