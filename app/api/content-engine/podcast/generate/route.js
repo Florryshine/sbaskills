@@ -3,6 +3,7 @@ import { createAdminClient } from '@/lib/supabase-admin';
 import { createPodcastEpisodeRow, runPodcastEpisodePipeline } from '@/lib/podcastGenerate';
 import { DEFAULT_PODCAST_STYLE } from '@/lib/podcastStyles';
 import { runInBackground } from '@/lib/backgroundTask';
+import { getMasterScript, recordComponentUse } from '@/lib/ka-package';
 
 // Same background pattern as generate-from-text/route.js — see the
 // comment there for why. This route was just as exposed to the same 60s
@@ -30,7 +31,17 @@ export async function POST(request) {
       return NextResponse.json({ error: 'Knowledge asset not found' }, { status: 404 });
     }
 
-    const content = asset.raw_content
+    const { component: masterComponent } = await getMasterScript(asset);
+    const outline = masterComponent.body || {};
+    const sharedOutline = [
+      'Reusable teaching outline:',
+      outline.hook || '',
+      ...(outline.beats || []).map((beat, index) => `${index + 1}. ${beat.narration || ''}`),
+      outline.recap || '',
+      outline.cta || '',
+    ].filter(Boolean).join('\n');
+
+    const baseContent = asset.raw_content
       ? asset.raw_content
       : `
 Summary: ${asset.summary || ''}
@@ -51,7 +62,7 @@ Common Mistakes:
 ${(asset.common_mistakes || []).map((m) => `- ${m}`).join('\n')}
       `.trim();
 
-    const resolvedStyle =
+    const content = `${baseContent}\n\n${sharedOutline}`.slice(0, 20000);\n\n    const resolvedStyle =
       style ||
       (format && format !== 'teacher_examiner' ? format : null) ||
       asset.default_podcast_style ||
@@ -63,7 +74,7 @@ ${(asset.common_mistakes || []).map((m) => `- ${m}`).join('\n')}
       extra: { knowledgeAssetId: asset.id },
     });
 
-    runInBackground(() =>
+    await recordComponentUse(masterComponent.id, 'podcast_episode', episode.id);\n\n    runInBackground(() =>
       runPodcastEpisodePipeline({
         episodeId: episode.id,
         title: asset.keyword,
