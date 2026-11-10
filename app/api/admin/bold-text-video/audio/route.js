@@ -1,5 +1,6 @@
 import { NextResponse } from 'next/server';
 import { synthesizeLine } from '@/lib/podcastTTS';
+import { getKnowledgeAsset, getOrCreateNarration } from '@/lib/ka-package/video-adapters';
 
 export const maxDuration = 45;
 
@@ -10,6 +11,16 @@ export async function POST(request) {
     if (!text) return NextResponse.json({ error: 'Narration text is required.' }, { status: 400 });
     const speaker = body.voice === 'host_b' ? 'host_b' : 'host_a';
     const emotion = ['neutral','excited','curious','serious','calm','playful','dramatic'].includes(body.emotion) ? body.emotion : 'neutral';
+    if (body.knowledgeAssetId) {
+      const asset = await getKnowledgeAsset(body.knowledgeAssetId);
+      const cached = await getOrCreateNarration(asset, text, { voice: speaker, emotion });
+      return NextResponse.json({
+        audioBase64: cached.audioBase64,
+        mimeType: 'audio/mpeg',
+        reused: cached.reused,
+        componentId: cached.componentId,
+      });
+    }
     const audio = await synthesizeLine(text, speaker, emotion);
     return NextResponse.json({ audioBase64: audio.toString('base64'), mimeType: 'audio/mpeg' });
   } catch (error) {
