@@ -1,4 +1,5 @@
 import { NextResponse } from 'next/server';
+import { requireAdminApi } from '@/lib/require-admin-api';
 import { generateJson } from '@/lib/content-factory/generators/_shared';
 import { getKnowledgeAsset, getMasterScript, masterScriptToVideoScenes } from '@/lib/ka-package/video-adapters';
 
@@ -9,6 +10,8 @@ const clean = (value, max = 240) => String(value ?? '').trim().slice(0, max);
 const SUBJECTS = ['biology', 'chemistry', 'physics', 'mathematics', 'general'];
 
 export async function POST(request) {
+  const auth = await requireAdminApi();
+  if (auth.response) return auth.response;
   try {
     const body = await request.json();
     const topic = clean(body.topic, 240);
