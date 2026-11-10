@@ -24,6 +24,7 @@
 // same technique as AudiogramRecorder.
 
 import { NextResponse } from 'next/server';
+import { requireAdminApi } from '@/lib/require-admin-api';
 import { createAdminClient } from '@/lib/supabase-admin';
 import { generateWithFallback } from '@/lib/llmFallbackChain';
 import { parseJsonFromText } from '@/lib/robustJsonParse';
@@ -313,6 +314,8 @@ async function runLessonLoopPipeline(contentAssetId, asset) {
 }
 
 export async function POST(request) {
+  const auth = await requireAdminApi();
+  if (auth.response) return auth.response;
   let body;
   try {
     body = await request.json();
