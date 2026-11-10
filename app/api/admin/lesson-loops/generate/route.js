@@ -30,6 +30,7 @@ import { parseJsonFromText } from '@/lib/robustJsonParse';
 import { synthesizeLine, estimateDurationSeconds } from '@/lib/podcastTTS';
 import { PLATFORM_LIMITS } from '@/lib/content-factory/generators/_shared';
 import { runInBackground } from '@/lib/backgroundTask';
+import { getMasterScript, recordComponentUse } from '@/lib/ka-package';
 import {
   searchPexelsVideoMulti,
   searchPixabayVideoMulti,
@@ -190,8 +191,35 @@ async function runLessonLoopPipeline(contentAssetId, asset) {
   const supabase = createAdminClient();
 
   let script;
+  let masterComponentId = null;
   try {
-    script = await generateLessonScript(asset);
+    const shared = await getMasterScript(asset);
+    const master = shared.component.body || {};
+    masterComponentId = shared.component.id;
+    const beats = Array.isArray(master.beats) ? master.beats : [];
+    if (beats.length < 3) throw new Error('The shared master script has too few teaching beats.');
+    const segments = [
+      ...(master.hook ? [{ type: 'hook', text: master.hook, onScreenText: 'THE HOOK', visualHint: beats[0]?.stock_search || asset.keyword }] : []),
+      ...beats.map((beat, index) => ({
+        type: 'teach',
+        text: String(beat.narration || '').trim(),
+        onScreenText: String(beat.on_screen_text || ('KEY IDEA ' + (index + 1))).slice(0, 80),
+        visualHint: String(beat.stock_search || beat.visual_intent || asset.keyword).slice(0, 120),
+      })).filter(segment => segment.text),
+      ...(master.recap ? [{ type: 'answer', text: master.recap, onScreenText: 'REMEMBER THIS', visualHint: asset.keyword }] : []),
+      ...(master.cta ? [{ type: 'cta', text: master.cta, onScreenText: 'NEXT STEP', visualHint: 'students studying together' }] : []),
+    ];
+    const caption = [master.hook, master.recap, master.cta].filter(Boolean).join(' ');
+    script = {
+      segments,
+      youtube: {
+        title: String(master.title || asset.keyword).slice(0, 100),
+        description: String(asset.summary || caption).slice(0, 4500),
+        tags: [asset.keyword, asset.subject, 'jamb preparation', 'exam revision'].filter(Boolean).map(x => String(x).toLowerCase()),
+      },
+      facebook: { caption },
+      tiktok: { caption: String(master.hook || asset.keyword).slice(0, 150), hashtags: ['#JAMB', '#WAEC', '#ShineyBrainAcademy'] },
+    };
   } catch (err) {
     await supabase
       .from('content_assets')
@@ -275,7 +303,7 @@ async function runLessonLoopPipeline(contentAssetId, asset) {
         tiktok: script.tiktok,
         segments: segmentsWithMedia,
         totalDurationSeconds: totalDuration,
-        narrationWarnings: narrationFailures,
+        narrationWarnings: narrationFailures,\n        ka_component_id: masterComponentId,
       },
     })
     .eq('id', contentAssetId);
@@ -325,7 +353,7 @@ export async function POST(request) {
     return NextResponse.json({ error: insertError?.message || 'Failed to create draft' }, { status: 500 });
   }
 
-  const response = NextResponse.json({ success: true, contentAssetId: contentAsset.id, status: 'generating' });
+  const response = NextResponse.json({ success: true, contentAssetId: contentAsset.id, status: 'generating' });\n\n  // The pipeline records the component against the completed draft after it is created.
 
   runInBackground(() => runLessonLoopPipeline(contentAsset.id, asset));
 
