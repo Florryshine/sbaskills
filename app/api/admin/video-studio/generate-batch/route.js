@@ -1,8 +1,11 @@
 import { NextResponse } from 'next/server';
+import { requireAdminApi } from '@/lib/require-admin-api';
 import { createAdminClient } from '@/lib/supabase-admin';
 import { generateJson } from '@/lib/content-factory/generators/_shared';
 
 export async function GET() {
+  const auth = await requireAdminApi();
+  if (auth.response) return auth.response;
   try {
     const supabase = createAdminClient();
     const [{ data, error }, { data: knowledgeAssets, error: knowledgeError }] = await Promise.all([
@@ -25,6 +28,8 @@ const ILLUSTRATIONS = ['animal-cell','plant-cell','chloroplast','mitochondrion',
 const clean = (value, max = 500) => String(value ?? '').trim().slice(0, max);
 
 export async function POST(request) {
+  const auth = await requireAdminApi();
+  if (auth.response) return auth.response;
   try {
     const body = await request.json();
     const knowledgeAssetId = clean(body.knowledgeAssetId, 80);
