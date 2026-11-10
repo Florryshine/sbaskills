@@ -14,7 +14,8 @@
 
 import { NextResponse } from 'next/server';
 import { createAdminClient } from '@/lib/supabase-admin';
-import { generateTeachingScript, estimateSegmentTimings } from '@/lib/content-factory/generators/teaching-loop';
+import { estimateSegmentTimings } from '@/lib/content-factory/generators/teaching-loop';
+import { getMasterScript, recordComponentUse } from '@/lib/ka-package';
 import {
   searchPexelsVideoMulti,
   searchPixabayVideoMulti,
@@ -76,7 +77,7 @@ export async function POST(request) {
 
   let script;
   try {
-    script = await generateTeachingScript(asset);
+    const { component, reused } = await getMasterScript(asset);\n    const source = component.body || {};\n    const beats = Array.isArray(source.beats) ? source.beats : [];\n    const segments = [\n      ...(source.hook ? [{ text: source.hook, label: 'THE HOOK' }] : []),\n      ...beats.map((beat, index) => ({ text: String(beat.narration || '').trim(), label: String(beat.on_screen_text || ('KEY IDEA ' + (index + 1))).slice(0, 40) })),\n      ...(source.recap ? [{ text: source.recap, label: 'REMEMBER THIS' }] : []),\n      ...(source.cta ? [{ text: source.cta, label: 'NEXT STEP' }] : []),\n    ].filter(item => item.text);\n    if (segments.length < 4) throw new Error('The shared master script has too few teaching beats.');\n    script = {\n      segments, title: source.title || asset.keyword,\n      description: source.recap || asset.summary || '',\n      tags: [asset.subject, asset.keyword, 'jamb preparation'].filter(Boolean),\n      hashtags: ['#JAMB', '#ShineyBrainAcademy'],\n      visualQuery: beats.find(beat => beat.stock_search)?.stock_search || [asset.subject, asset.keyword].filter(Boolean).join(' '),\n      componentId: component.id, componentReused: reused,\n    };
   } catch (err) {
     return NextResponse.json({ error: err.message }, { status: 500 });
   }
@@ -104,7 +105,7 @@ export async function POST(request) {
         segments: segmentsWithTiming,
         background,
         backgroundQuery: script.visualQuery,
-        estimated_seconds: estimatedSeconds,
+        estimated_seconds: estimatedSeconds,\n        ka_component_id: script.componentId,\n        ka_component_reused: script.componentReused,
       },
     })
     .select()
