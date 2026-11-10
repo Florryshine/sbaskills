@@ -76,7 +76,9 @@ ${(asset.common_mistakes || []).map((m) => `- ${m}`).join('\n')}
       extra: { knowledgeAssetId: asset.id },
     });
 
-    await recordComponentUse(masterComponent.id, 'podcast_episode', episode.id);\n\n    runInBackground(() =>
+    await recordComponentUse(masterComponent.id, 'podcast_episode', episode.id);
+
+    runInBackground(() =>
       runPodcastEpisodePipeline({
         episodeId: episode.id,
         title: asset.keyword,
