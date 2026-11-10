@@ -1,5 +1,6 @@
 import { NextResponse } from 'next/server';
 import { generateJson } from '@/lib/content-factory/generators/_shared';
+import { getKnowledgeAsset, getShortScript } from '@/lib/ka-package/video-adapters';
 
 const TYPES = {
   question: 'Create a tricky JAMB-style multiple-choice question with four options, reveal the correct answer and a short explanation. Make the hook strong.',
@@ -18,6 +19,21 @@ export async function POST(request) {
     const type = TYPES[body.type] ? body.type : 'question';
     const seconds = Math.max(10, Math.min(120, Number(body.seconds) || 20));
     const topic = String(body.topic || '').trim().slice(0, 500) || 'choose an engaging topic suitable for Shiney Brain Academy and Nigerian social media';
+    if (body.knowledgeAssetId && type === 'lesson') {
+      const asset = await getKnowledgeAsset(body.knowledgeAssetId);
+      const { component, reused } = await getShortScript(asset);
+      const segments = (component.body.segments || []).slice(0, 10)
+        .filter(segment => String(segment.text || '').trim())
+        .map((segment, index) => ({
+          label: String(segment.on_screen_text || (index === 0 ? 'THE HOOK' : 'KEY IDEA')).slice(0, 40),
+          text: String(segment.text).trim().slice(0, 180),
+        }));
+      if (segments.length < 3) throw new Error('The shared short script has too few usable scenes.');
+      return NextResponse.json({
+        script: { title: String(component.body.title || asset.keyword).slice(0, 120), scenes: segments },
+        reuse: { componentId: component.id, reused, componentType: 'short_script' },
+      });
+    }
     const prompt = `You write highly engaging short-video scripts. Create a ${seconds}-second video in the category: ${type}.
 CATEGORY REQUIREMENTS: ${TYPES[type]}
 TOPIC: ${topic}
