@@ -1,4 +1,5 @@
 import { NextResponse } from 'next/server';
+import { requireAdminApi } from '@/lib/require-admin-api';
 import { createAdminClient } from '@/lib/supabase-admin';
 import { createPodcastEpisodeRow, runPodcastEpisodePipeline } from '@/lib/podcastGenerate';
 import { DEFAULT_PODCAST_STYLE } from '@/lib/podcastStyles';
@@ -13,6 +14,8 @@ import { getMasterScript, recordComponentUse } from '@/lib/ka-package';
 export const maxDuration = 60;
 
 export async function POST(request) {
+  const auth = await requireAdminApi();
+  if (auth.response) return auth.response;
   try {
     const { knowledgeAssetId, style, format } = await request.json();
     if (!knowledgeAssetId) {
