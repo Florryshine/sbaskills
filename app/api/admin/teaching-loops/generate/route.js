@@ -16,7 +16,8 @@ import { NextResponse } from 'next/server';
 import { requireAdminApi } from '@/lib/require-admin-api';
 import { createAdminClient } from '@/lib/supabase-admin';
 import { estimateSegmentTimings } from '@/lib/content-factory/generators/teaching-loop';
-import { getMasterScript, recordComponentUse } from '@/lib/ka-package';
+import { getMasterScript } from '@/lib/ka-package/video-adapters';
+import { recordComponentUse } from '@/lib/ka-package';
 import {
   searchPexelsVideoMulti,
   searchPixabayVideoMulti,
