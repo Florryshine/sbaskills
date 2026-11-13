@@ -1,8 +1,11 @@
 import { NextResponse } from 'next/server';
+import { requireAdminApi } from '@/lib/require-admin-api';
 import { createAdminClient } from '@/lib/supabase-admin';
 import { createPodcastEpisodeRow, runPodcastEpisodePipeline } from '@/lib/podcastGenerate';
 import { DEFAULT_PODCAST_STYLE } from '@/lib/podcastStyles';
 import { runInBackground } from '@/lib/backgroundTask';
+import { getMasterScript } from '@/lib/ka-package/video-adapters';
+import { recordComponentUse } from '@/lib/ka-package';
 
 // Same background pattern as generate-from-text/route.js — see the
 // comment there for why. This route was just as exposed to the same 60s
@@ -12,6 +15,8 @@ import { runInBackground } from '@/lib/backgroundTask';
 export const maxDuration = 60;
 
 export async function POST(request) {
+  const auth = await requireAdminApi();
+  if (auth.response) return auth.response;
   try {
     const { knowledgeAssetId, style, format } = await request.json();
     if (!knowledgeAssetId) {
@@ -30,7 +35,17 @@ export async function POST(request) {
       return NextResponse.json({ error: 'Knowledge asset not found' }, { status: 404 });
     }
 
-    const content = asset.raw_content
+    const { component: masterComponent } = await getMasterScript(asset);
+    const outline = masterComponent.body || {};
+    const sharedOutline = [
+      'Reusable teaching outline:',
+      outline.hook || '',
+      ...(outline.beats || []).map((beat, index) => `${index + 1}. ${beat.narration || ''}`),
+      outline.recap || '',
+      outline.cta || '',
+    ].filter(Boolean).join('\n');
+
+    const baseContent = asset.raw_content
       ? asset.raw_content
       : `
 Summary: ${asset.summary || ''}
@@ -51,6 +66,8 @@ Common Mistakes:
 ${(asset.common_mistakes || []).map((m) => `- ${m}`).join('\n')}
       `.trim();
 
+    const content = `${baseContent}\n\n${sharedOutline}`.slice(0, 20000);
+
     const resolvedStyle =
       style ||
       (format && format !== 'teacher_examiner' ? format : null) ||
@@ -62,6 +79,8 @@ ${(asset.common_mistakes || []).map((m) => `- ${m}`).join('\n')}
       style: resolvedStyle,
       extra: { knowledgeAssetId: asset.id },
     });
+
+    await recordComponentUse(masterComponent.id, 'podcast_episode', episode.id);
 
     runInBackground(() =>
       runPodcastEpisodePipeline({

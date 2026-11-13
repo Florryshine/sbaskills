@@ -13,8 +13,11 @@
 // worker, no video_scripts row).
 
 import { NextResponse } from 'next/server';
+import { requireAdminApi } from '@/lib/require-admin-api';
 import { createAdminClient } from '@/lib/supabase-admin';
-import { generateTeachingScript, estimateSegmentTimings } from '@/lib/content-factory/generators/teaching-loop';
+import { estimateSegmentTimings } from '@/lib/content-factory/generators/teaching-loop';
+import { getMasterScript } from '@/lib/ka-package/video-adapters';
+import { recordComponentUse } from '@/lib/ka-package';
 import {
   searchPexelsVideoMulti,
   searchPixabayVideoMulti,
@@ -51,6 +54,8 @@ async function findBackgroundCandidate(query) {
 }
 
 export async function POST(request) {
+  const auth = await requireAdminApi();
+  if (auth.response) return auth.response;
   let body;
   try {
     body = await request.json();
@@ -76,7 +81,24 @@ export async function POST(request) {
 
   let script;
   try {
-    script = await generateTeachingScript(asset);
+    const { component, reused } = await getMasterScript(asset);
+    const source = component.body || {};
+    const beats = Array.isArray(source.beats) ? source.beats : [];
+    const segments = [
+      ...(source.hook ? [{ text: source.hook, label: 'THE HOOK' }] : []),
+      ...beats.map((beat, index) => ({ text: String(beat.narration || '').trim(), label: String(beat.on_screen_text || ('KEY IDEA ' + (index + 1))).slice(0, 40) })),
+      ...(source.recap ? [{ text: source.recap, label: 'REMEMBER THIS' }] : []),
+      ...(source.cta ? [{ text: source.cta, label: 'NEXT STEP' }] : []),
+    ].filter(item => item.text);
+    if (segments.length < 4) throw new Error('The shared master script has too few teaching beats.');
+    script = {
+      segments, title: source.title || asset.keyword,
+      description: source.recap || asset.summary || '',
+      tags: [asset.subject, asset.keyword, 'jamb preparation'].filter(Boolean),
+      hashtags: ['#JAMB', '#ShineyBrainAcademy'],
+      visualQuery: beats.find(beat => beat.stock_search)?.stock_search || [asset.subject, asset.keyword].filter(Boolean).join(' '),
+      componentId: component.id, componentReused: reused,
+    };
   } catch (err) {
     return NextResponse.json({ error: err.message }, { status: 500 });
   }
@@ -105,6 +127,8 @@ export async function POST(request) {
         background,
         backgroundQuery: script.visualQuery,
         estimated_seconds: estimatedSeconds,
+        ka_component_id: script.componentId,
+        ka_component_reused: script.componentReused,
       },
     })
     .select()

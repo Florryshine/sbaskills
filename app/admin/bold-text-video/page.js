@@ -20,6 +20,8 @@ const TYPES = [
 
 export default function BoldTextVideoPage() {
   const [topic, setTopic] = useState('');
+  const [knowledgeAssets, setKnowledgeAssets] = useState([]);
+  const [knowledgeAssetId, setKnowledgeAssetId] = useState('');
   const [type, setType] = useState('question');
   const [seconds, setSeconds] = useState(20);
   const [ratio, setRatio] = useState('9:16');
@@ -43,6 +45,7 @@ export default function BoldTextVideoPage() {
   const chunksRef = useRef([]);
 
   useEffect(() => {
+    fetch('/api/admin/video-studio/generate-batch').then(r => r.json()).then(d => setKnowledgeAssets(d.knowledgeAssets || [])).catch(() => setKnowledgeAssets([]));
     fetch('/api/admin/quote-loops/audio-list').then(r => r.json())
       .then(d => setMusicTracks(d.tracks || [])).catch(() => setMusicTracks([]));
   }, []);
@@ -53,7 +56,7 @@ export default function BoldTextVideoPage() {
     try {
       const res = await fetch('/api/admin/bold-text-video/audio', {
         method: 'POST', headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ text: script.scenes.map(s => s.text).join('. '), voice, emotion })
+        body: JSON.stringify({ text: script.scenes.map(s => s.text).join('. '), voice, emotion, knowledgeAssetId: type === 'lesson' ? knowledgeAssetId || null : null })
       });
       const data = await res.json();
       if (!res.ok) throw new Error(data.error || 'Narration generation failed');
@@ -67,7 +70,7 @@ export default function BoldTextVideoPage() {
     try {
       const res = await fetch('/api/admin/bold-text-video/generate', {
         method: 'POST', headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ topic: topic.trim(), type, seconds: Number(seconds) }),
+        body: JSON.stringify({ topic: topic.trim(), type, seconds: Number(seconds), knowledgeAssetId: type === 'lesson' ? knowledgeAssetId || null : null }),
       });
       const data = await res.json();
       if (!res.ok) throw new Error(data.error || 'Script generation failed');
@@ -210,6 +213,13 @@ export default function BoldTextVideoPage() {
       <div className="space-y-4 rounded-2xl border bg-white p-4">
         <label className="block text-sm font-bold">What is the video about? <span className="font-normal text-gray-500">(optional for random ideas)</span>
           <input value={topic} onChange={e=>setTopic(e.target.value)} placeholder="e.g. tricky JAMB Chemistry questions" className="mt-2 w-full rounded-xl border px-3 py-3 text-base" />
+        </label>
+        <label className="block text-sm font-bold">Knowledge Asset (optional for Quick Lesson)
+          <select value={knowledgeAssetId} onChange={e=>setKnowledgeAssetId(e.target.value)} className="mt-2 w-full rounded-xl border px-3 py-3 text-base">
+            <option value="">Generate from topic only</option>
+            {knowledgeAssets.map(asset=><option key={asset.id} value={asset.id}>{asset.keyword}{asset.subject ? ' · '+asset.subject : ''}</option>)}
+          </select>
+          <span className="mt-1 block text-xs font-normal text-slate-500">When a Knowledge Asset is selected for Quick Lesson, its reusable script and narration are loaded instead of generated again.</span>
         </label>
         <label className="block text-sm font-bold">Video type
           <select value={type} onChange={e=>setType(e.target.value)} className="mt-2 w-full rounded-xl border px-3 py-3 text-base">{TYPES.map(([v,l])=><option key={v} value={v}>{l}</option>)}</select>
