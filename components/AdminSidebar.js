@@ -71,6 +71,7 @@ const sections = [
     items: [
       { href: '/admin/question-of-day', label: 'Question of the Day' },
       { href: '/admin/social-engine', label: 'Social Engine' },
+      { href: '/admin/notebook-studio', label: 'Notebook Studio' },
       { href: '/admin/channels', label: 'Channels' },
       { href: '/admin/content-engine/queue', label: 'Content Queue' },
       { href: '/admin/content-engine/drafts', label: 'Content Drafts' },
