@@ -1,6 +1,6 @@
 import { NextResponse } from 'next/server';
 import { requireAdminApi } from '@/lib/require-admin-api';
-import { synthesizeLine } from '@/lib/podcastTTS';
+import { synthesizeLine, getAudioMimeType } from '@/lib/podcastTTS';
 import { getKnowledgeAsset, getOrCreateNarration } from '@/lib/ka-package/video-adapters';
 
 export const maxDuration = 45;
@@ -19,13 +19,13 @@ export async function POST(request) {
       const cached = await getOrCreateNarration(asset, text, { voice: speaker, emotion });
       return NextResponse.json({
         audioBase64: cached.audioBase64,
-        mimeType: 'audio/mpeg',
+        mimeType: cached.mimeType,
         reused: cached.reused,
         componentId: cached.componentId,
       });
     }
     const audio = await synthesizeLine(text, speaker, emotion);
-    return NextResponse.json({ audioBase64: audio.toString('base64'), mimeType: 'audio/mpeg' });
+    return NextResponse.json({ audioBase64: audio.toString('base64'), mimeType: getAudioMimeType(audio) });
   } catch (error) {
     console.error('Bold video narration failed:', error);
     return NextResponse.json({ error: error.message || 'Narration generation failed.' }, { status: 502 });
