@@ -1,6 +1,7 @@
 'use client';
 
 import { useEffect, useRef, useState } from 'react';
+import { saveGeneratedVideo } from '@/lib/client/save-generated-video';
 
 const WIDTH = 720;
 const HEIGHT = 1280;
@@ -104,11 +105,21 @@ export default function DanceContentStudio() {
     return () => cancelAnimationFrame(frame);
   }, [headline, overlayText, textColor, textSize, headlineSize, position, showBrand, videoUrl]);
 
+  useEffect(() => {
+    return () => {
+      if (videoUrl.startsWith('blob:')) URL.revokeObjectURL(videoUrl);
+    };
+  }, [videoUrl]);
+
+  useEffect(() => {
+    return () => {
+      if (musicUrl.startsWith('blob:')) URL.revokeObjectURL(musicUrl);
+    };
+  }, [musicUrl]);
+
   useEffect(() => () => {
-    if (videoUrl.startsWith('blob:')) URL.revokeObjectURL(videoUrl);
-    if (musicUrl.startsWith('blob:')) URL.revokeObjectURL(musicUrl);
     audioContextRef.current?.close().catch(() => {});
-  }, [videoUrl, musicUrl]);
+  }, []);
 
   function loadVideo(file) {
     if (!file) return;
@@ -235,7 +246,7 @@ export default function DanceContentStudio() {
         setStatus('The browser stopped the recording unexpectedly. Try a shorter clip.');
         audioContext.close().catch(() => {});
       };
-      recorder.onstop = () => {
+      recorder.onstop = async () => {
         const mime = recorder.mimeType || mimeType || 'video/webm';
         const blob = new Blob(chunks, { type: mime });
         const objectUrl = URL.createObjectURL(blob);
@@ -244,9 +255,24 @@ export default function DanceContentStudio() {
         anchor.download = 'shiney-brain-dance-content.' + (mime.includes('mp4') ? 'mp4' : 'webm');
         anchor.click();
         setTimeout(() => URL.revokeObjectURL(objectUrl), 60000);
-        audioContext.close().catch(() => {});
-        setBusy(false);
-        setStatus('Export finished · ' + (blob.size / 1048576).toFixed(1) + ' MB. File downloaded to your device.');
+        try {
+          setStatus('Video downloaded. Saving a copy to Social Engine…');
+          await saveGeneratedVideo({
+            blob,
+            title: 'Dance Content · ' + (headline.trim() || topic.trim() || 'SBA Creator Video'),
+            caption: socialCaption.trim() || overlayText.trim(),
+            topic: topic.trim() || headline.trim() || 'Dance content',
+            source: 'dance-content-studio',
+            durationSeconds: Number.isFinite(video.duration) ? video.duration : null,
+            metadata: { headline, overlayText, tone, videoName, musicName, showBrand },
+          });
+          setStatus('Saved to Social Engine drafts and downloaded · ' + (blob.size / 1048576).toFixed(1) + ' MB. Open Social Engine to review and publish.');
+        } catch (error) {
+          setStatus('Video downloaded, but Social Engine save failed: ' + (error.message || 'Please retry.'));
+        } finally {
+          audioContext.close().catch(() => {});
+          setBusy(false);
+        }
       };
       recorder.start(1000);
       await video.play();
@@ -358,9 +384,9 @@ export default function DanceContentStudio() {
           <video ref={videoRef} src={videoUrl || undefined} playsInline preload="auto" crossOrigin="anonymous" className="fixed -left-[2000px] top-0 h-px w-px opacity-0" />
           <audio ref={audioRef} src={musicUrl || undefined} preload="metadata" onLoadedMetadata={(event) => { setMusicDuration(Number.isFinite(event.currentTarget.duration) ? event.currentTarget.duration : 0); }} className="hidden" />
           <button type="button" onClick={previewPlayback} disabled={!videoUrl || busy} className="w-full rounded-xl border bg-white p-3 font-bold text-blue-800 disabled:opacity-40">▶ Play / pause preview</button>
-          <button type="button" onClick={exportVideo} disabled={!videoUrl || busy} className="w-full rounded-xl bg-yellow-400 p-4 font-extrabold text-blue-950 disabled:opacity-40">{busy ? 'Rendering… keep this page open' : 'Export finished video'}</button>
+          <button type="button" onClick={exportVideo} disabled={!videoUrl || busy} className="w-full rounded-xl bg-yellow-400 p-4 font-extrabold text-blue-950 disabled:opacity-40">{busy ? 'Rendering… keep this page open' : 'Export + save to Social Engine'}</button>
           <div className="rounded-xl bg-white p-4 text-sm"><b>Status</b><p aria-live="polite" className="mt-1 text-slate-600">{status}</p></div>
-          <p className="text-xs leading-5 text-slate-500">Export happens in your browser. Keep this page open until the file downloads. Some Android browsers export WebM rather than MP4; try Chrome or a laptop if export fails.</p>
+          <p className="text-xs leading-5 text-slate-500">The finished video downloads to your device and is also saved as a draft in Social Engine for review. Keep this page open until saving finishes.</p>
         </aside>
       </div>
     </main>
