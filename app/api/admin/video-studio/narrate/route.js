@@ -1,6 +1,6 @@
 import { NextResponse } from 'next/server';
 import { requireAdminApi } from '@/lib/require-admin-api';
-import { synthesizeLine, estimateDurationSeconds } from '@/lib/podcastTTS';
+import { synthesizeLine, estimateDurationSeconds, getAudioMimeType } from '@/lib/podcastTTS';
 import { getKnowledgeAsset, getOrCreateNarration } from '@/lib/ka-package/video-adapters';
 
 export const runtime = 'nodejs';
@@ -32,9 +32,9 @@ export async function POST(request) {
           reused: cached.reused,
         };
       }
-      const buffer = await synthesizeLine(text, 'host_a', 'neutral');
+      const buffer = await synthesizeLine(text, body.voice || 'host_a', body.emotion || 'neutral');
       return {
-        audioSrc: 'data:audio/mpeg;base64,' + buffer.toString('base64'),
+        audioSrc: `data:${getAudioMimeType(buffer)};base64,` + buffer.toString('base64'),
         durationSeconds: Math.min(8, Math.max(5, estimateDurationSeconds(text) + 1)),
         reused: false,
       };
