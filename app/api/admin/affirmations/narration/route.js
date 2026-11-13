@@ -1,5 +1,5 @@
 import { NextResponse } from 'next/server';
-import { synthesizeLine } from '@/lib/podcastTTS';
+import { synthesizeLine, getAudioMimeType } from '@/lib/podcastTTS';
 
 export const maxDuration = 45;
 
@@ -12,7 +12,7 @@ export async function POST(request) {
     const emotion = ['neutral', 'serious', 'calm'].includes(body.emotion) ? body.emotion : 'calm';
     const speed = Math.max(0.6, Math.min(1, Number(body.speed) || 0.8));
     const audio = await synthesizeLine(text, speaker, emotion, speed);
-    return NextResponse.json({ audioBase64: audio.toString('base64'), mimeType: 'audio/mpeg' });
+    return NextResponse.json({ audioBase64: audio.toString('base64'), mimeType: getAudioMimeType(audio) });
   } catch (error) {
     console.error('Affirmation narration failed:', error);
     return NextResponse.json({ error: error.message || 'Narration generation failed.' }, { status: 502 });
