@@ -145,6 +145,7 @@ export default function NotebookStudioPage() {
               <div><h2 className="text-xl font-black text-slate-900">Generation results</h2><p className="mt-1 text-sm text-slate-500">Batch {batch.batchId}</p></div>
               <div className="flex gap-4 text-sm"><span className="font-bold text-emerald-700">{batch.generated} saved</span><span className="font-bold text-red-600">{batch.failed} failed</span></div>
             </div>
+            <div className="mt-4 flex flex-wrap items-center gap-3 rounded-xl bg-blue-50 p-4 text-sm text-blue-900"><span>These drafts are saved in the existing Social Engine. Review, edit, and approve them there before publishing.</span><a href="/admin/social-engine" className="rounded-lg bg-blue-700 px-4 py-2 font-bold text-white hover:bg-blue-800">Open Social Engine →</a></div>
             <div className="mt-5 grid gap-5 sm:grid-cols-2 lg:grid-cols-3">
               {batch.results.map((item) => (
                 <article key={item.id} className="overflow-hidden rounded-xl border border-slate-200">
