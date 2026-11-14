@@ -58,8 +58,20 @@ export default function AffirmationStudioPage() {
         method: 'POST', headers: {'Content-Type':'application/json'},
         body: JSON.stringify({topic: scriptTopic, count: Number(scriptCount)})
       });
-      const data = await res.json();
+      const responseText = await res.text();
+      let data;
+      try {
+        data = JSON.parse(responseText);
+      } catch {
+        const detail = responseText.trim().slice(0, 240);
+        throw new Error(detail
+          ? `Script service returned a non-JSON response: ${detail}`
+          : 'Script service returned an empty response. Please try again.');
+      }
       if (!res.ok) throw new Error(data.error || 'Could not generate affirmation script.');
+      if (!data.script || !Array.isArray(data.script.affirmations)) {
+        throw new Error('The AI response did not contain a valid affirmation script. Please try again.');
+      }
       setIntro(data.script.intro);
       setText(data.script.affirmations.join('\n'));
       setAudioUrl('');
