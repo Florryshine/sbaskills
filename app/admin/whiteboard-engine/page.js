@@ -27,6 +27,19 @@ highlight: Three Ingredients style:underline
 
 const STATUS_STEPS = ['narrating', 'rendering', 'ready'];
 
+async function readApiJson(response) {
+  const raw = await response.text();
+  if (!raw) return {};
+  try {
+    return JSON.parse(raw);
+  } catch {
+    const excerpt = raw.replace(/\\s+/g, ' ').slice(0, 500);
+    return {
+      error: `Server returned a non-JSON response (HTTP ${response.status}). ${excerpt || 'Empty response body.'}`,
+    };
+  }
+}
+
 export default function WhiteboardEnginePage() {
   const [topic, setTopic] = useState('');
   const [subject, setSubject] = useState('biology');
@@ -41,16 +54,16 @@ export default function WhiteboardEnginePage() {
 
   const refreshJob = useCallback(async (id) => {
     const res = await fetch(`/api/admin/whiteboard-engine?id=${encodeURIComponent(id)}`);
-    const data = await res.json();
-    if (!res.ok) throw new Error(data.error || 'Could not refresh whiteboard job.');
+    const data = await readApiJson(res);
+    if (!res.ok || data.error) throw new Error(data.error || `Could not refresh whiteboard job (HTTP ${res.status}).`);
     if (data.job) setJob(data.job);
     return data.job;
   }, []);
 
   const loadJobs = useCallback(async () => {
     const res = await fetch('/api/admin/whiteboard-engine');
-    const data = await res.json();
-    if (!res.ok) throw new Error(data.error || 'Could not load whiteboard jobs.');
+    const data = await readApiJson(res);
+    if (!res.ok || data.error) throw new Error(data.error || `Could not load whiteboard jobs (HTTP ${res.status}).`);
     if (data.jobs) setJobs(data.jobs);
   }, []);
 
@@ -94,7 +107,7 @@ export default function WhiteboardEnginePage() {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ topic, subject, script, useAI }),
       });
-      const data = await res.json();
+      const data = await readApiJson(res);
       if (!res.ok) {
         setError(data.error || 'Failed to create job');
       } else {

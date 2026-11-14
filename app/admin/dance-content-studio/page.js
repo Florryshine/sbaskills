@@ -1,4 +1,5 @@
 'use client';
+import { readApiResponse } from '@/lib/client/read-api-response';
 
 import { useEffect, useRef, useState } from 'react';
 import { saveGeneratedVideo } from '@/lib/client/save-generated-video';
@@ -150,7 +151,7 @@ export default function DanceContentStudio() {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ query: stockQuery.trim(), kind: 'video' }),
       });
-      const data = await response.json();
+      const data = await readApiResponse(response);
       if (!response.ok) throw new Error(data.error || 'Stock search failed.');
       setStockResults(data.results || []);
       setStatus(data.results?.length ? 'Choose a dancing clip from the results.' : (data.warning || 'No stock clips found. Try another search.'));
@@ -171,7 +172,7 @@ export default function DanceContentStudio() {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ topic, tone }),
       });
-      const data = await response.json();
+      const data = await readApiResponse(response);
       if (!response.ok) throw new Error(data.error || 'Copy generation failed.');
       setHeadline(data.headline || '');
       setOverlayText(data.overlayText || '');

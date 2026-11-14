@@ -1,4 +1,5 @@
 'use client';
+import { readApiResponse } from '@/lib/client/read-api-response';
 
 import { useEffect, useMemo, useState } from 'react';
 import { createBrowserClient } from '@/lib/supabase';
@@ -64,7 +65,7 @@ export default function NotebookStudioPage() {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ subjects: selected, template, perCategory: 5 }),
       });
-      const data = await response.json();
+      const data = await readApiResponse(response);
       if (!response.ok) throw new Error(data.error || 'Notebook generation failed.');
       setBatch(data);
       setProgress('');

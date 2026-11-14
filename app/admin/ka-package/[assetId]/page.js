@@ -1,4 +1,5 @@
 'use client';
+import { readApiResponse } from '@/lib/client/read-api-response';
 
 import { useCallback, useEffect, useState } from 'react';
 import { useParams } from 'next/navigation';
@@ -30,7 +31,7 @@ export default function KnowledgeAssetPackagePage() {
     setLoading(true);
     try {
       const response = await fetch('/api/admin/ka-package?assetId=' + encodeURIComponent(assetId));
-      const data = await response.json();
+      const data = await readApiResponse(response);
       if (!response.ok) throw new Error(data.error || 'Unable to load content package');
       setAsset(data.asset);
       setComponents(data.components || []);
@@ -53,7 +54,7 @@ export default function KnowledgeAssetPackagePage() {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ assetId, componentTypes: selected, force }),
       });
-      const data = await response.json();
+      const data = await readApiResponse(response);
       if (!response.ok) throw new Error(data.error || 'Generation failed');
       const failed = (data.results || []).filter((item) => item.status !== 'ready');
       setMessage(failed.length

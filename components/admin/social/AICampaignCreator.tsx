@@ -1,4 +1,5 @@
 'use client';
+import { readApiResponse } from '@/lib/client/read-api-response';
 import React, { useState } from "react";
 import { 
   Sparkles, BookOpen, Layers, MessageSquare, Send, Calendar, CheckCircle, 
@@ -94,7 +95,7 @@ export function AICampaignCreator({ onCampaignGenerated }: AICampaignCreatorProp
         }),
       });
 
-      const data = await response.json();
+      const data = await readApiResponse(response);
       if (!response.ok) {
         throw new Error(data.error || "Generation request failed");
       }
