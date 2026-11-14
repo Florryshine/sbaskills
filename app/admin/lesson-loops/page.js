@@ -1,4 +1,5 @@
 'use client';
+import { readApiResponse } from '@/lib/client/read-api-response';
 
 // app/admin/lesson-loops/page.js
 //
@@ -104,7 +105,7 @@ export default function LessonLoopsPage() {
   const loadExistingDrafts = async (assetId) => {
     try {
       const res = await fetch(`/api/admin/lesson-loops/list?knowledgeAssetId=${assetId}`);
-      const data = await res.json();
+      const data = await readApiResponse(res);
       if (!res.ok) throw new Error(data.error || 'Failed to load drafts');
       setDrafts(data.contentAssets || []);
       return data.contentAssets || [];
@@ -126,7 +127,7 @@ export default function LessonLoopsPage() {
     const poll = async () => {
       try {
         const res = await fetch(`/api/admin/lesson-loops/status?contentAssetId=${contentAssetId}`);
-        const data = await res.json();
+        const data = await readApiResponse(res);
         if (!res.ok) throw new Error(data.error || 'Status check failed');
 
         if (data.status === 'generating') {
@@ -161,7 +162,7 @@ export default function LessonLoopsPage() {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ knowledgeAssetId: selectedAssetId }),
       });
-      const data = await res.json();
+      const data = await readApiResponse(res);
       if (!res.ok) throw new Error(data.error || 'Generation failed to start');
       await loadExistingDrafts(selectedAssetId);
       pollUntilReady(data.contentAssetId);
