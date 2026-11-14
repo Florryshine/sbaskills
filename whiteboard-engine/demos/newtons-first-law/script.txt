@@ -1,0 +1,44 @@
+@title Newton's First Law
+@subject physics
+
+scene title
+heading: Newton's First Law
+sub: The law of inertia
+narration: Welcome to Shiney Brain Academy physics. Today we meet Newton's First Law of Motion, the law that explains why objects keep doing what they are doing.
+draw: physics.cradle scale:0.95
+highlight: Newton's First Law style:underline
+
+scene concept
+heading: The Law
+narration: Here is the law. An object at rest stays at rest, and an object in motion stays in motion, unless acted on by an unbalanced force.
+text: At rest, stays at rest sync:rest
+text: In motion, stays in motion sync:motion
+text: Unless an unbalanced force acts sync:unless
+draw: physics.crate scale:0.85
+highlight: unbalanced force style:circle
+
+scene diagram
+heading: Objects at Rest
+narration: Look at this box resting on a table. Gravity pulls it down, and the table pushes back up with exactly the same force. The forces are balanced, so the box does not move.
+draw: physics.block-table scale:1.05
+arrow: style:straight from:1330,400 to:1330,590 label:W (gravity) sync:Gravity pulls
+arrow: style:straight from:640,590 to:640,400 label:N (table) sync:pushes back
+text: Balanced forces sync:forces are balanced
+highlight: balanced style:circle
+
+scene diagram
+heading: Objects in Motion
+narration: Now imagine a puck sliding on frictionless ice. With no friction and no air resistance, there is no unbalanced force. So the puck keeps moving at the same velocity, forever.
+draw: physics.ice-puck scale:1.05
+arrow: style:straight from:980,360 to:1330,360 label:velocity sync:keeps moving
+callout: No friction at:top-left sync:friction
+text: Same velocity, forever sync:forever
+highlight: Same velocity style:circle
+
+scene summary
+heading: Inertia All Around You
+narration: Inertia is why you lurch forward when a car stops suddenly, and why you need a seatbelt. The car stops, but your body keeps moving. Keep exploring, keep shining.
+tick: The car stops suddenly
+tick: Your body keeps moving forward
+tick: The seatbelt provides the stopping force
+draw: physics.car-braking scale:0.95

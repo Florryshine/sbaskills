@@ -1,0 +1,43 @@
+@title Photosynthesis
+@subject biology
+
+scene title
+heading: Photosynthesis
+sub: How green plants make their own food
+narration: Welcome to Shiney Brain Academy. Today we explore photosynthesis, the remarkable process green plants use to manufacture their own food.
+draw: biology.plant scale:1.0
+draw: biology.sun scale:0.72
+highlight: Photosynthesis style:underline
+
+scene concept
+heading: The Three Ingredients
+narration: Photosynthesis needs three key ingredients. First, sunlight provides the energy. Second, water is absorbed from the soil through the roots. Third, carbon dioxide enters the leaf through tiny pores.
+draw: biology.sun scale:0.95 sync:sunlight
+draw: biology.water-drop scale:0.95 sync:water
+draw: biology.co2-cloud scale:0.95 sync:carbon dioxide
+text: Light + Water + Carbon Dioxide
+highlight: Three Ingredients style:underline
+
+scene diagram
+heading: Inside the Leaf
+narration: Inside every leaf are tiny green factories called chloroplasts. They contain chlorophyll, the green pigment that captures light energy.
+draw: biology.leaf
+draw: biology.chloroplast scale:0.95
+arrow: style:curved from:600,610 to:760,600 label:found inside sync:chloroplasts
+text: Chlorophyll captures light sync:chlorophyll
+highlight: Chlorophyll style:circle
+
+scene equation
+heading: The Recipe
+narration: The recipe combines six molecules of carbon dioxide with six molecules of water. Using light energy and chlorophyll, the leaf produces glucose and releases oxygen.
+equation: 6CO2 + 6H2O ->[light] C6H12O6 + 6O2
+callout: Glucose stores the energy for the plant style:accent at:bottom-left sync:glucose
+draw: biology.sun scale:0.8
+
+scene summary
+heading: Why It Matters
+narration: Photosynthesis feeds almost every living thing on Earth. Plants make food, animals eat plants, and the oxygen in every breath you take comes from this amazing process.
+tick: Plants manufacture their own food
+tick: Animals depend on plants for food
+tick: Oxygen comes from photosynthesis
+draw: biology.tree scale:0.85

@@ -1,0 +1,42 @@
+@title Atomic Structure
+@subject chemistry
+
+scene title
+heading: Atomic Structure
+sub: What everything is made of
+narration: Welcome to another Shiney Brain Academy lesson. Today we shrink down, smaller than small, to explore the structure of the atom.
+draw: chemistry.atom scale:1.0
+highlight: Atomic Structure style:underline
+
+scene concept
+heading: Three Tiny Particles
+narration: Every atom contains three main particles. Protons carry a positive charge. Neutrons have no charge at all. Electrons are negative and they zoom around the outside.
+draw: chemistry.proton scale:0.8 sync:Protons
+draw: chemistry.neutron scale:0.8 sync:Neutrons
+draw: chemistry.electron scale:0.8 sync:Electrons
+text: Positive, neutral, negative
+highlight: Three Tiny Particles style:underline
+
+scene diagram
+heading: The Nucleus
+narration: At the center of every atom sits the nucleus. It packs protons and neutrons tightly together. The nucleus is incredibly small, but it holds almost all of the mass.
+draw: chemistry.nucleus
+callout: Protons are positive style:accent at:bottom-left sync:protons
+callout: Neutrons are neutral at:bottom-right sync:neutrons
+text: Tiny but heavy sync:holds almost all
+
+scene diagram
+heading: Electron Shells
+narration: Electrons live in energy levels called shells. The first shell holds two electrons. The second shell holds eight. Sodium has eleven electrons, so two shells are filled and one electron is left outside.
+draw: chemistry.bohr-sodium
+callout: First shell: 2 electrons at:top-left sync:first shell
+callout: Second shell: 8 electrons at:bottom-left sync:second shell
+text: Sodium: 2 + 8 + 1 = 11 sync:eleven
+highlight: 11 sync:eleven style:underline
+
+scene equation
+heading: Neutral Atoms
+narration: In a neutral atom, the number of protons equals the number of electrons. Carbon has six protons, six neutrons and six electrons, so the charges cancel perfectly.
+equation: protons = electrons
+text: Carbon: 6p + 6n + 6e sync:Carbon
+draw: chemistry.bohr-carbon scale:0.9

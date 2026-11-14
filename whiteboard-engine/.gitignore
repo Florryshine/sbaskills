@@ -1,0 +1,7 @@
+node_modules/
+public/narration/
+public/timeline.json
+.job-*/
+*.log
+tts-test*.wav
+demos/output/*.mp4
