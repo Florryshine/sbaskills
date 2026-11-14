@@ -1,4 +1,5 @@
 'use client';
+import { readApiResponse } from '@/lib/client/read-api-response';
 import { useEffect, useRef, useState } from 'react';
 import { saveGeneratedVideo } from '@/lib/client/save-generated-video';
 
@@ -50,7 +51,7 @@ export default function OverlayVideoStudio() {
     e.preventDefault(); if (!query.trim()) return; setSearching(true);
     try {
       const r=await fetch('/api/admin/bold-text-video/backgrounds',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({query,kind:'video'})});
-      const d=await r.json(); if(!r.ok) throw new Error(d.error||'Search failed');
+      const d=await readApiResponse(r); if(!r.ok) throw new Error(d.error||'Search failed');
       setResults(d.results||[]); setStatus(d.results?.length?'Choose a stock clip below.':(d.warning||'No clips found.'));
     } catch(err) { setStatus(err.message||'Stock search failed.'); } finally { setSearching(false); }
   }
@@ -60,7 +61,7 @@ export default function OverlayVideoStudio() {
     setGeneratingAudio(true); setStatus('Generating teaching audio…');
     try {
       const response = await fetch('/api/admin/bold-text-video/audio', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ text: narrationText.trim(), voice, emotion: 'neutral' }) });
-      const data = await response.json();
+      const data = await readApiResponse(response);
       if (!response.ok) throw new Error(data.error || 'Audio generation failed.');
       setNarrationUrl('data:' + data.mimeType + ';base64,' + data.audioBase64);
       setStatus('Teaching narration generated. Preview it before exporting.');
