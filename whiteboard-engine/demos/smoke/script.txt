@@ -1,0 +1,9 @@
+@title Smoke Test
+@subject general
+
+scene title
+heading: Smoke Test
+sub: Engine validation render
+narration: This is a short smoke test of the whiteboard engine. The pen should be writing this heading and drawing a lightbulb while the narrator speaks.
+draw: general.lightbulb sync:lightbulb
+highlight: Smoke Test style:underline
