@@ -1,4 +1,5 @@
 'use client';
+import { readApiResponse } from '@/lib/client/read-api-response';
 
 // app/admin/meme-loops/page.js
 //
@@ -82,7 +83,7 @@ export default function MemeLoopsPage() {
   const loadExistingDrafts = async (assetId) => {
     try {
       const res = await fetch(`/api/admin/meme-loops/list?knowledgeAssetId=${assetId}`);
-      const data = await res.json();
+      const data = await readApiResponse(res);
       if (!res.ok) throw new Error(data.error || 'Failed to load drafts');
       setDrafts(data.contentAssets || []);
     } catch (err) {
@@ -107,7 +108,7 @@ export default function MemeLoopsPage() {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ knowledgeAssetId: selectedAssetId, count }),
       });
-      const data = await res.json();
+      const data = await readApiResponse(res);
       if (!res.ok) throw new Error(data.error || 'Generation failed');
       setWarnings(data.warnings || []);
       await loadExistingDrafts(selectedAssetId);
