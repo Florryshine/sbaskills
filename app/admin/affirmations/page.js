@@ -1,4 +1,5 @@
 'use client';
+import { readApiResponse } from '@/lib/client/read-api-response';
 
 import { useEffect, useRef, useState } from 'react';
 
@@ -41,7 +42,7 @@ export default function AffirmationStudioPage() {
   const duration = Math.max(12, lines.length * 4.5 + 3);
 
   useEffect(() => {
-    fetch('/api/admin/quote-loops/audio-list').then(r=>r.json()).then(d=>setTracks(d.tracks||[])).catch(()=>{});
+    fetch('/api/admin/quote-loops/audio-list').then(r => readApiResponse(r)).then(d=>setTracks(d.tracks||[])).catch(()=>{});
   }, []);
 
   useEffect(() => {
@@ -83,7 +84,7 @@ export default function AffirmationStudioPage() {
     setBusy(true); setError('');
     try {
       const res = await fetch('/api/admin/affirmations/background', {method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({query})});
-      const data = await res.json(); if (!res.ok) throw new Error(data.error || 'Could not find stock footage');
+      const data = await readApiResponse(res); if (!res.ok) throw new Error(data.error || 'Could not find stock footage');
       setBackground(data.background);
     } catch(e) { setError(e.message); } finally { setBusy(false); }
   };
@@ -93,7 +94,7 @@ export default function AffirmationStudioPage() {
     setBusy(true); setError('');
     try {
       const res = await fetch('/api/admin/affirmations/narration',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({text:[intro,...lines].join('. '),voice,speed:Number(speed),emotion})});
-      const data=await res.json(); if(!res.ok) throw new Error(data.error||'Narration failed');
+      const data=await readApiResponse(res); if(!res.ok) throw new Error(data.error||'Narration failed');
       setAudioUrl('data:'+data.mimeType+';base64,'+data.audioBase64);
     } catch(e) { setError(e.message); } finally { setBusy(false); }
   };
