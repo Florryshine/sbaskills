@@ -591,14 +591,15 @@ function layoutSceneElements(
         if (heading && phraseBBox(heading, phrase)) bbox = phraseBBox(heading, phrase);
         else if (sub && phraseBBox(sub, phrase)) bbox = phraseBBox(sub, phrase);
         else {
-          for (const [id, text] of laidOut) {
-            if (id.startsWith('__')) continue;
+          let matched = false;
+          laidOut.forEach((text, id) => {
+            if (matched || id.startsWith('__')) return;
             const b = phraseBBox(text, phrase);
             if (b) {
               bbox = b;
-              break;
+              matched = true;
             }
-          }
+          });
         }
         if (!bbox) {
           warnings.push(`Scene "${scene.id}": highlight "${phrase}" matched no text — highlighting the heading instead.`);
