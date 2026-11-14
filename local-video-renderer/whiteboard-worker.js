@@ -68,6 +68,9 @@ async function tick() {
     await fail(job, err?.message || String(err));
   } finally {
     clearInterval(heartbeatTimer);
+    // Remove per-job render files on both success and failure. The MP4 has
+    // already been uploaded before the successful path reaches this cleanup.
+    await rm(path.join(ENGINE_DIR, '.job-' + job.id), { recursive: true, force: true }).catch(() => {});
   }
 }
 
@@ -163,6 +166,9 @@ async function renderJob(job) {
     await writeFile(localAudioPath, Buffer.from(await data.arrayBuffer()));
   }
 
+  // The Remotion CLI copies its bundled handwriting fonts into this
+  // directory when they are not already present.
+  await mkdir(path.join(workDir, 'fonts'), { recursive: true });
   await writeFile(path.join(workDir, 'timeline.json'), JSON.stringify(timeline));
   const slug = slugify(job.title);
   const outPath = path.join(workDir, `${slug}.mp4`);
