@@ -55,7 +55,9 @@
     "@remotion/web-renderer": "4.0.541",
     "@remotion/player": "4.0.541",
     "tegaki": "^1.1.0",
-    "@remotion/media": "4.0.541"
+    "@remotion/media": "4.0.541",
+    "@remotion/fonts": "4.0.541",
+    "point-at-length": "^1.1.0"
   },
   "devDependencies": {
     "@marp-team/marp-cli": "^4.4.1",
