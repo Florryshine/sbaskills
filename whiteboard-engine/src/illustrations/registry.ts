@@ -43,6 +43,11 @@ const ALIASES: Record<string, string> = {
   'math.triangle': 'math.right-triangle',
 };
 
+/** Register an illustration at runtime (used by the image tracer). */
+export function registerIllustration(spec: IllustrationSpec): void {
+  BY_ID.set(spec.id, spec);
+}
+
 /** Look up an illustration by id (alias-tolerant). Returns null when unknown. */
 export function getIllustration(id: string): IllustrationSpec | null {
   const resolved = ALIASES[id] ?? id;

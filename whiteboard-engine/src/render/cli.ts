@@ -57,6 +57,12 @@ async function main() {
   const spec = parseScript(source);
   console.log(`[1/5] parsed ${spec.scenes.length} scenes for "${spec.title}" (subject: ${spec.subject})`);
 
+  // 1b. Trace any `image:` elements into pen strokes + colour layers
+  const { prepareImages } = await import('../imagery/prepare');
+  const prep = await prepareImages(spec);
+  for (const w of prep.warnings) console.warn(`[1b/5] warning: ${w}`);
+  for (const c of prep.credits) console.log(`[1b/5] image credit — ${c}`);
+
   // 2. Narration per scene
   const provider: NarrationProvider = getProvider(providerName);
   const slug = spec.title.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '') || 'lesson';

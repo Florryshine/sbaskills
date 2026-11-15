@@ -29,6 +29,7 @@ import type {
 import { getTheme, resolveColor, FONT_WIDTH_FACTOR } from '../themes';
 import { getIllustration } from '../illustrations/registry';
 import { sampleIllustration, scheduleStrokes } from '../geometry/path-sample';
+import { buildWashPath } from '../geometry/wash';
 import { straightArrow, curvedArrow, sketchLine, sketchCircle, sketchEllipse, arrowHead } from '../geometry/paths';
 import { findPhraseWordIndex } from '../script/parser';
 
@@ -451,7 +452,7 @@ function layoutSceneElements(
         if (!illSpec) return 0;
         const zone = illustrationZoneFor(draws.indexOf(el), drawCount);
         const scale = Math.min(zone.maxW / illSpec.box.w, zone.maxH / illSpec.box.h) * (el.scale ?? 1);
-        const estLen = illSpec.strokes.length * 220; // rough per-stroke length
+        const estLen = illSpec.estLength ?? illSpec.strokes.length * 220; // rough per-stroke length
         return Math.max(1.3, Math.min(7.5, estLen * scale * DRAW_RATE));
       }
       case 'arrow':
@@ -544,10 +545,23 @@ function layoutSceneElements(
         // Scale-aware draw duration, clamped to a sensible teaching rhythm.
         const raw = sampled.totalLength * fitted.scale * DRAW_RATE;
         drawDuration = Math.max(1.3, Math.min(7.5, raw));
-        if (start + drawDuration > duration - 0.5) {
-          drawDuration = Math.max(1.0, duration - 0.5 - start);
+        // Traced images: outline first, then a marker sweep paints the colour in.
+        const washBudget = illSpec.colorLayer ? Math.max(1.4, Math.min(3.2, 1.1 + fitted.scale * illSpec.colorLayer.wash.h * 0.006)) : 0;
+        const washGap = illSpec.colorLayer ? 0.2 : 0;
+        if (start + drawDuration + washBudget + washGap > duration - 0.5) {
+          // shrink the line-draw first, keep the colour sweep readable
+          drawDuration = Math.max(1.0, duration - 0.5 - start - washBudget - washGap);
         }
-        scheduleStrokes(sampled.strokes, drawDuration);
+        scheduleStrokes(sampled.strokes, drawDuration, illSpec.colorLayer ? 0.02 : 0.05);
+        if (illSpec.colorLayer) {
+          sampled.colorLayer = {
+            ...illSpec.colorLayer,
+            start: F2(drawDuration + washGap),
+            duration: F2(washBudget),
+            zigzag: buildWashPath(illSpec.colorLayer.wash),
+          };
+          drawDuration += washGap + washBudget;
+        }
         t.illustration = { sampled, x: fitted.x, y: fitted.y, scale: fitted.scale };
         t.bbox = fitted.bbox;
         t.start = F2(start);

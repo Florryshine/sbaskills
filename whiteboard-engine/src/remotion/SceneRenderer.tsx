@@ -177,7 +177,7 @@ export const SceneRenderer: React.FC<{ scene: SceneTimeline; timeline: Timeline 
         return null;
       })}
 
-      <Pen elements={scene.elements} accent={theme.accent} />
+      <Pen elements={scene.elements} accent={theme.accent} ink={theme.ink} texts={[scene.heading, scene.sub]} />
     </AbsoluteFill>
   );
 };

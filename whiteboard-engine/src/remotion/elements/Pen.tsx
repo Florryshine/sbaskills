@@ -1,22 +1,75 @@
-// src/remotion/elements/Pen.tsx — the marker hand that follows drawing tips.
+// src/remotion/elements/Pen.tsx — the marker hand that follows the drawing tip.
 //
-// Position is computed from the same sampled geometry the DrawnStrokes
-// component animates, so the nib sits exactly on the drawing frontier.
+// The tip position is computed from the same build-time geometry the renderers
+// animate, so the nib sits exactly on the drawing frontier. It now follows:
+//   • illustration / arrow / highlight strokes
+//   • the colour-wash marker sweep of traced images
+//   • handwritten text (headings, body, bullets, callouts, ticks)
+//   • equation terms
+//
+// The hand is a flat cartoon sprite (skin, sleeve, cuff, accent-coloured
+// marker) anchored at the pen tip and tilted ~42° so it never hides what is
+// being written.
 
 import React from 'react';
 import { useCurrentFrame, useVideoConfig, interpolate } from 'remotion';
-import type { ElementTimeline } from '../../types';
+import type { ElementTimeline, LaidOutText } from '../../types';
 import { pointOnStroke } from '../../geometry/path-sample';
 
 interface PenProps {
   elements: ElementTimeline[];
   accent: string;
+  /** Scene-level texts (heading / sub) so the hand follows them too. */
+  texts?: Array<LaidOutText | undefined>;
+  /** Ink colour used for sprite outlines. */
+  ink?: string;
 }
 
-/** Board-coordinate tip of whatever is being drawn at sceneSec, or null. */
-export function activeTipAt(elements: ElementTimeline[], sceneSec: number): { x: number; y: number } | null {
-  let latest: { x: number; y: number } | null = null;
+type Tip = { x: number; y: number };
+
+function textTip(t: LaidOutText, sceneSec: number): Tip | null {
+  for (const r of t.wordRects) {
+    const d = r.writeDuration || 0.3;
+    if (sceneSec >= r.writeStart - 0.02 && sceneSec <= r.writeStart + d) {
+      const p = Math.max(0, Math.min(1, (sceneSec - r.writeStart) / d));
+      // nib rides the baseline, slightly above it so the ink looks "just written"
+      return { x: r.x + r.w * p, y: r.y + t.fontSize * 0.82 };
+    }
+  }
+  return null;
+}
+
+/** Board-coordinate tip of whatever is being drawn / written at sceneSec, or null. */
+export function activeTipAt(
+  elements: ElementTimeline[],
+  sceneSec: number,
+  texts: Array<LaidOutText | undefined> = [],
+): Tip | null {
+  let latest: Tip | null = null;
+
+  for (const t of texts) {
+    if (!t) continue;
+    const tip = textTip(t, sceneSec);
+    if (tip) latest = tip;
+  }
+
   for (const el of elements) {
+    if (el.text) {
+      const tip = textTip(el.text, sceneSec);
+      if (tip) latest = tip;
+    }
+
+    if (el.equation) {
+      for (const term of el.equation.terms) {
+        if (term.kind === 'arrow') continue;
+        const du = term.duration || 0.4;
+        if (sceneSec >= term.start && sceneSec <= term.start + du) {
+          const p = (sceneSec - term.start) / du;
+          latest = { x: term.x + term.w * p, y: el.equation.y + el.equation.fontSize * 0.8 };
+        }
+      }
+    }
+
     const ill = el.illustration;
     if (!ill) continue;
     for (const s of ill.sampled.strokes) {
@@ -26,30 +79,76 @@ export function activeTipAt(elements: ElementTimeline[], sceneSec: number): { x:
       if (t >= -0.02 && t <= du) {
         const p = Math.max(0, Math.min(1, t / du));
         const pt = pointOnStroke(s, p * s.length);
-        latest = {
-          x: ill.x + pt.x * ill.scale,
-          y: ill.y + pt.y * ill.scale,
-        };
+        latest = { x: ill.x + pt.x * ill.scale, y: ill.y + pt.y * ill.scale };
+      }
+    }
+    // marker sweep that paints a traced image's colour in
+    const cl = ill.sampled.colorLayer;
+    if (cl) {
+      const t = sceneSec - el.start - cl.start;
+      if (t >= 0 && t <= cl.duration) {
+        const p = Math.max(0, Math.min(1, t / cl.duration));
+        const pt = pointOnStroke(
+          { points: cl.zigzag.points, length: cl.zigzag.length } as never,
+          p * cl.zigzag.length,
+        );
+        latest = { x: ill.x + pt.x * ill.scale, y: ill.y + pt.y * ill.scale };
       }
     }
   }
   return latest;
 }
 
-export const Pen: React.FC<PenProps> = ({ elements, accent }) => {
+const SKIN = '#F2C29B';
+const SKIN_LINE = '#C68D64';
+const SLEEVE = '#17334F';
+const PEN_ANGLE = 42;
+const HAND_SCALE = 0.86;
+
+/**
+ * Pure hand + marker sprite. Local space: pen tip at (0,0), pen axis along +X;
+ * rotated by `angle` so the tip points up-left and the fist trails down-right.
+ */
+export const HandSprite: React.FC<{ accent: string; ink: string; angle?: number }> = ({ accent, ink, angle = PEN_ANGLE }) => (
+  <g transform={`rotate(${angle})`} strokeLinejoin="round">
+    {/* sleeve + cuff */}
+    <rect x={184} y={-42} width={62} height={84} rx={16} fill={SLEEVE} stroke={ink} strokeWidth={2.6} />
+    <rect x={166} y={-36} width={24} height={72} rx={10} fill="#FFFFFF" stroke={ink} strokeWidth={2.6} />
+    {/* marker barrel in the accent colour */}
+    <rect x={26} y={-10.5} width={100} height={21} rx={9} fill={accent} stroke={ink} strokeWidth={2.6} />
+    <rect x={34} y={-6.5} width={78} height={4} fill="#FFFFFF" opacity={0.32} />
+    <rect x={88} y={-10.5} width={18} height={21} rx={6} fill="#000000" opacity={0.28} />
+    <rect x={16} y={-11.5} width={16} height={23} rx={4} fill={ink} stroke={ink} strokeWidth={1.4} />
+    {/* nib */}
+    <polygon points="1.5,0 6,-5 20,-9.5 20,9.5 6,5" fill={ink} />
+    {/* fist */}
+    <ellipse cx={150} cy={2} rx={50} ry={44} fill={SKIN} stroke={ink} strokeWidth={2.6} />
+    {[
+      [132, 8, 26],
+      [148, 12, 30],
+      [164, 14, 28],
+    ].map(([cx, cy, len], i) => (
+      <line key={i} x1={cx - len / 2} y1={cy} x2={cx + len / 2} y2={cy + 3} stroke={SKIN_LINE} strokeWidth={2.4} strokeLinecap="round" />
+    ))}
+    {/* thumb */}
+    <ellipse cx={126} cy={-17} rx={24} ry={14} transform="rotate(-28 126 -17)" fill={SKIN} stroke={ink} strokeWidth={2.4} />
+  </g>
+);
+
+export const Pen: React.FC<PenProps> = ({ elements, accent, texts = [], ink = '#26343C' }) => {
   const frame = useCurrentFrame();
   const { fps } = useVideoConfig();
   const sceneSec = frame / fps;
 
-  const tip = activeTipAt(elements, sceneSec);
+  const tip = activeTipAt(elements, sceneSec, texts);
 
-  // Keep the last known position briefly after a stroke ends so the marker
-  // fades out naturally instead of disappearing on the first idle frame.
+  // Keep the last known position briefly after drawing ends so the hand eases
+  // off instead of vanishing on the first idle frame.
   let visibleTip = tip;
   let lastTipAge = 0;
   if (!visibleTip) {
     for (let back = 1; back <= 15; back++) {
-      const previous = activeTipAt(elements, sceneSec - back / fps);
+      const previous = activeTipAt(elements, sceneSec - back / fps, texts);
       if (previous) {
         visibleTip = previous;
         lastTipAge = back / fps;
@@ -63,64 +162,27 @@ export const Pen: React.FC<PenProps> = ({ elements, accent }) => {
   const opacity = Math.max(0, fadeOut);
   if (opacity <= 0.02) return null;
 
+  // tiny deterministic hand tremor while moving
+  const wobble = tip ? Math.sin(sceneSec * 11) * 1.4 : 0;
+  const drop = (1 - fadeOut) * 26; // slide down-right while leaving
+
   return (
-    <div
-      style={{
-        position: 'absolute',
-        left: visibleTip.x,
-        top: visibleTip.y,
-        opacity,
-        transform: 'translate(-112px, -316px) rotate(2deg)',
-        pointerEvents: 'none',
-      }}
+    <svg
+      style={{ position: 'absolute', left: 0, top: 0, width: '100%', height: '100%', pointerEvents: 'none', overflow: 'visible' }}
+      viewBox="0 0 1920 1080"
     >
-      <svg width={200} height={330} viewBox="0 0 220 340">
-        <defs>
-          <filter id="penShadow" x="-20%" y="-20%" width="140%" height="140%">
-            <feDropShadow dx="3" dy="6" stdDeviation="6" floodColor="#1a1a1a" floodOpacity="0.16" />
-          </filter>
-        </defs>
-        <g filter="url(#penShadow)">
-          {/* marker body */}
-          <path d="M 97 132 L 123 132 L 125 268 L 95 268 Z" fill="#3D4B54" />
-          <path d="M 99 132 L 121 132 L 122 148 L 98 148 Z" fill="#5A6B76" />
-          {/* grip band */}
-          <rect x={95} y={196} width={30} height={22} fill={accent} />
-          {/* taper + nib */}
-          <path d="M 95 268 L 125 268 L 112 306 Z" fill="#2C3740" />
-          <path d="M 106 300 L 112 316 L 115 300 Z" fill="#1F272E" />
-          {/* hand: outline style, white fill covers strokes under it */}
-          <path
-            d="M 60 214
-               C 56 186 66 168 84 160
-               C 96 154 118 152 132 158
-               C 152 166 166 182 168 204
-               C 170 226 162 246 146 258
-               C 130 270 104 272 88 262
-               C 72 252 63 236 60 214 Z"
-            fill="#FFFFFF"
-            stroke="#3D4B54"
-            strokeWidth={5}
-            strokeLinejoin="round"
-          />
-          {/* fingers wrapping the barrel */}
-          <path d="M 88 168 C 100 162 118 162 128 168" fill="none" stroke="#3D4B54" strokeWidth={4.5} strokeLinecap="round" />
-          <path d="M 84 190 C 100 184 122 184 134 190" fill="none" stroke="#3D4B54" strokeWidth={4.5} strokeLinecap="round" />
-          <path d="M 86 212 C 102 206 124 206 136 212" fill="none" stroke="#3D4B54" strokeWidth={4.5} strokeLinecap="round" />
-          <path d="M 90 234 C 104 229 122 229 132 234" fill="none" stroke="#3D4B54" strokeWidth={4.5} strokeLinecap="round" />
-          {/* thumb wrapping from the right, attached to the fist */}
-          <path
-            d="M 128 166
-               C 146 160 160 164 163 174
-               C 166 184 156 190 144 188
-               C 136 187 131 178 128 166 Z"
-            fill="#FFFFFF"
-            stroke="#3D4B54"
-            strokeWidth={5}
-            strokeLinejoin="round"
-          />
-        </g>
-      </svg>
-    </div>
+      <defs>
+        <filter id="handShadow" x="-20%" y="-20%" width="150%" height="150%">
+          <feDropShadow dx="4" dy="7" stdDeviation="6" floodColor="#1a1a1a" floodOpacity="0.18" />
+        </filter>
+      </defs>
+      <g
+        opacity={opacity}
+        filter="url(#handShadow)"
+        transform={`translate(${visibleTip.x + drop} ${visibleTip.y + drop}) scale(${HAND_SCALE})`}
+      >
+        <HandSprite accent={accent} ink={ink} angle={PEN_ANGLE + wobble} />
+      </g>
+    </svg>
   );
 };

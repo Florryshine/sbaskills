@@ -32,6 +32,7 @@ RULES
 - Every element must be synced to narration with sync:<phrase> where <phrase> is an EXACT substring of that scene's narration (e.g. sync:sunlight when the narration says "sunlight").
 - Draw 1-3 illustrations per scene from this list: ${assets}
 - Never invent illustration ids. Never write "draw: text". Words and drawings are separate.
+- When the library has no suitable drawing, you MAY add at most ONE "image: <2-4 search keywords> sync:<phrase>" per scene (e.g. "image: chloroplast cell diagram sync:chloroplasts"). It is fetched from free sources, traced into pen strokes and painted in colour. Use it for real-world objects (a sprinter, a microscope, a Nigerian market), never for equations or text.
 - Use "highlight: <phrase> style:circle|underline" for the ONE key term per scene (phrase must appear in the scene's heading or a text element).
 - Equations use "->[condition]" arrows, e.g. equation: 6CO2 + 6H2O ->[light] C6H12O6 + 6O2
 - For physics scenes use arrows with explicit from:x,y to:x,y in 1920x1080 coordinates.

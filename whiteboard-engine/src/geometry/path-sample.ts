@@ -42,7 +42,7 @@ export function sampleIllustration(
       width: s.width ?? 3.5,
       color: resolveColor(s.color),
       fill: s.fill ? resolveColor(s.fill) : undefined,
-      fillOpacity: s.fillOpacity ?? 0.14,
+      fillOpacity: s.fillOpacity ?? 0.34,
       afterStroke: s.afterStroke,
     };
   });

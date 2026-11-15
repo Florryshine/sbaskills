@@ -64,6 +64,30 @@ export const DrawnStrokes: React.FC<DrawnStrokesProps> = ({ sampled, x, y, scale
         })}
       </defs>
       <g transform={`translate(${x} ${y}) scale(${scale})`}>
+        {/* colour layer: painted in by a zig-zag marker sweep once the outline is done */}
+        {sampled.colorLayer && (() => {
+          const cl = sampled.colorLayer;
+          const p = Math.max(0, Math.min(1, (sceneSec - startSec - cl.start) / cl.duration));
+          if (p <= 0) return null;
+          const z = cl.zigzag;
+          return (
+            <>
+              <mask id={`wash-${uid}`} maskUnits="userSpaceOnUse" x={0} y={0} width={cl.w} height={cl.h}>
+                <path
+                  d={pointsToD(z.points)}
+                  fill="none"
+                  stroke="#fff"
+                  strokeWidth={z.width}
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                  strokeDasharray={z.length}
+                  strokeDashoffset={z.length * (1 - p)}
+                />
+              </mask>
+              <image href={cl.href} x={0} y={0} width={cl.w} height={cl.h} mask={`url(#wash-${uid})`} opacity={0.94} />
+            </>
+          );
+        })()}
         {strokes.map((s, i) => {
           const st = s.start ?? 0;
           const du = s.duration ?? 0.3;
@@ -87,7 +111,7 @@ export const DrawnStrokes: React.FC<DrawnStrokesProps> = ({ sampled, x, y, scale
           }
           const visible = s.length * p;
           const fillP = Math.max(0, Math.min(1, (sceneSec - startSec - st - du) / 0.4));
-          const fillOpacity = s.fill ? (s.fillOpacity ?? 0.14) * fillP : 0;
+          const fillOpacity = s.fill ? (s.fillOpacity ?? 0.34) * fillP : 0;
           return (
             <g key={i}>
               <path

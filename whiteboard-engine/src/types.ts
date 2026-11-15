@@ -34,12 +34,27 @@ export interface LabelSpec {
   font?: FontKind;
 }
 
+/** Posterised colour picture that gets "painted in" after the outline is drawn. */
+export interface ColorLayerSpec {
+  /** PNG data URI (transparent background for clip-art). */
+  href: string;
+  /** Size in asset units (same space as the strokes). */
+  w: number;
+  h: number;
+  /** Region the marker sweep needs to cover (asset units). */
+  wash: { x: number; y: number; w: number; h: number };
+}
+
 export interface IllustrationSpec {
   id: string;
   strokes: StrokeSpec[];
   labels?: LabelSpec[];
   /** Natural size used by the layout engine for fitting. */
   box: { w: number; h: number };
+  /** Set for traced images (see src/imagery): colour revealed after the line draw. */
+  colorLayer?: ColorLayerSpec;
+  /** Total stroke length in asset units, when known (traced images). */
+  estLength?: number;
 }
 
 // ---------------------------------------------------------------------------
@@ -67,12 +82,21 @@ export interface SampledStroke {
   duration?: number;
 }
 
+/** Colour layer with its build-time schedule + marker zig-zag (element-local seconds). */
+export interface SampledColorLayer extends ColorLayerSpec {
+  start: number;
+  duration: number;
+  /** Zig-zag brush path in asset units; the pen follows it while painting. */
+  zigzag: { points: SampledPoint[]; length: number; width: number };
+}
+
 export interface SampledIllustration {
   id: string;
   strokes: SampledStroke[];
   labels: LabelSpec[];
   totalLength: number;
   box: { w: number; h: number };
+  colorLayer?: SampledColorLayer;
 }
 
 // ---------------------------------------------------------------------------
@@ -108,6 +132,10 @@ export interface ElementSpec {
   style?: string;
   /** Words to render in the accent color. */
   emphasis?: string[];
+  /** `image:` directive — a URL, local file, or search keywords. Traced into strokes + colour at build time. */
+  image?: string;
+  /** image: paint the colour layer after the outline (default true). */
+  colorize?: boolean;
   /** Arrow endpoints in board coordinates (1920x1080). */
   from?: { x: number; y: number };
   to?: { x: number; y: number };

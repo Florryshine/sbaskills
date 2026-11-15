@@ -153,7 +153,7 @@ async function generateScriptForJob(job) {
     const parsed = parseScript(text);
     const missing = parsed.scenes
       .flatMap((sc) => sc.elements)
-      .filter((el) => el.type === 'illustration' && !getIllustration(el.asset))
+      .filter((el) => el.type === 'illustration' && !el.image && !getIllustration(el.asset))
       .map((el) => el.asset);
     if (missing.length) throw new Error(`AI script used unknown illustrations: ${missing.join(', ')}`);
     return { text, parsed };
@@ -225,7 +225,7 @@ async function narrateAndBuildJob(job) {
   }
 
   await setStage(job, 'timeline', 'Aligning narration to the drawing timeline');
-  const { timeline, warnings } = buildTimelineForJob(
+  const { timeline, warnings } = await buildTimelineForJob(
     job.script_text,
     narrationResults.map(({ buffer, mimeType, audioFile }) => ({ buffer, mimeType, audioFile })),
   );

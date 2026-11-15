@@ -225,6 +225,24 @@ export function parseScript(source: string): VideoSpec {
           });
           break;
         }
+        case 'image':
+        case 'img': {
+          // image: <url | file | keywords> [scale:.9] [at:left] [sync:phrase] [color:no]
+          // Traced into pen strokes + a colour layer by prepareImages() before the timeline is built.
+          const { primary, opts } = parseInline(value);
+          const ref = primary.trim();
+          if (!ref) throw new ScriptParseError('image: needs a URL, file name or search keywords, e.g. \"image: chloroplast diagram\".', line);
+          spec.elements.push({
+            id: nextId('image'),
+            type: 'illustration',
+            image: ref,
+            colorize: !/^(no|false|off|0)$/i.test(opts.color ?? ''),
+            sync: toSync(opts),
+            at: opts.at,
+            scale: opts.scale ? parseFloat(opts.scale) : undefined,
+          });
+          break;
+        }
         case 'text': {
           const { primary, opts } = parseInline(value);
           spec.elements.push({

@@ -1,0 +1,25 @@
+@title Photosynthesis in Colour
+@subject biology
+
+scene title
+heading: Photosynthesis
+sub: Watch the plant get drawn, then coloured in
+narration: Welcome to Shiney Brain Academy. Today we explore photosynthesis, and this time you will watch every drawing appear in full colour.
+image: seedling-sun.svg scale:1.0 at:right
+
+scene concept
+heading: The Three Ingredients
+narration: Photosynthesis needs three key ingredients. First, sunlight provides the energy. Second, water is absorbed from the soil through the roots. Third, carbon dioxide enters the leaf through tiny pores.
+draw: biology.sun scale:0.9 sync:sunlight
+draw: biology.water-drop scale:0.9 sync:water
+draw: biology.co2-cloud scale:0.9 sync:carbon dioxide
+text: Light + Water + Carbon Dioxide
+highlight: Three Ingredients style:underline
+
+scene summary
+heading: Why It Matters
+narration: Photosynthesis feeds almost every living thing on Earth. Plants make food, animals eat plants, and the oxygen in every breath you take comes from this amazing process.
+tick: Plants manufacture their own food
+tick: Oxygen comes from photosynthesis
+# Any real-world picture works too (needs PIXABAY_API_KEY or uses Wikimedia, no key):
+# image: green leaf close up sync:oxygen scale:0.8

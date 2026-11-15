@@ -200,7 +200,7 @@ async function createJob(req, user) {
   }
   const missingAssets = spec.scenes
     .flatMap((s) => s.elements)
-    .filter((el) => el.type === 'illustration' && !getIllustration(el.asset))
+    .filter((el) => el.type === 'illustration' && !el.image && !getIllustration(el.asset))
     .map((el) => el.asset);
   if (missingAssets.length > 0) {
     return NextResponse.json({ error: `Unknown illustrations: ${missingAssets.join(', ')}` }, { status: 400 });
