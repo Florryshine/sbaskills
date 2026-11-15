@@ -12,6 +12,13 @@ const CATEGORIES = [
   ['exam_tips', 'Exam Tips'],
 ];
 
+const COUNTS = [
+  { value: 1, label: '1 notebook', description: 'Best for testing a design or topic.' },
+  { value: 2, label: '2 notebooks', description: 'A small focused generation run.' },
+  { value: 5, label: '5 notebooks', description: 'Generate a small set at once.' },
+  { value: 30, label: '30 notebooks', description: 'Original bulk mode: 5 posts in each of the 6 categories.' },
+];
+
 const TEMPLATES = [
   { id: 'classic', name: 'Classic Notebook', description: 'Ruled exercise-book paper and blue-ink handwriting.' },
   { id: 'premium', name: 'Premium Blue Notes', description: 'Cleaner paper, soft blue accents and spacious layout.' },
@@ -23,6 +30,8 @@ export default function NotebookStudioPage() {
   const [subjects, setSubjects] = useState([]);
   const [selected, setSelected] = useState([]);
   const [template, setTemplate] = useState('classic');
+  const [totalCount, setTotalCount] = useState(1);
+  const [category, setCategory] = useState('lesson_note');
   const [loadingSubjects, setLoadingSubjects] = useState(true);
   const [generating, setGenerating] = useState(false);
   const [progress, setProgress] = useState('');
@@ -57,12 +66,12 @@ export default function NotebookStudioPage() {
     setGenerating(true);
     setError('');
     setBatch(null);
-    setProgress('Generating 6 content batches, then rendering and saving up to 30 branded notebook images. This may take a few minutes.');
+    setProgress(`Generating ${totalCount === 30 ? 'the full 30-notebook bulk batch' : `${totalCount} ${totalCount === 1 ? 'notebook' : 'notebooks'}`}, then rendering and saving the images. This may take a few minutes.`);
     try {
       const response = await fetch('/api/admin/notebook-studio/generate-batch', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ subjects: selected, template, perCategory: 5 }),
+        body: JSON.stringify({ subjects: selected, template, totalCount, category }),
       });
       const data = await response.json();
       if (!response.ok) throw new Error(data.error || 'Notebook generation failed.');
@@ -122,16 +131,34 @@ export default function NotebookStudioPage() {
             </div>
 
             <div className="rounded-2xl border border-slate-200 bg-white p-6 shadow-sm">
-              <h2 className="text-lg font-bold text-slate-900">3. Generation plan</h2>
-              <div className="mt-4 space-y-2">
-                {CATEGORIES.map(([key, label]) => <div key={key} className="flex items-center justify-between rounded-lg bg-slate-50 px-3 py-2 text-sm"><span className="text-slate-700">{label}</span><strong className="text-blue-800">5 posts</strong></div>)}
+              <h2 className="text-lg font-bold text-slate-900">3. Choose how many notebooks to create</h2>
+              <p className="mt-1 text-sm text-slate-500">Generate a small number while testing, or keep using the original 30-notebook bulk option.</p>
+              <div className="mt-4 grid grid-cols-2 gap-2">
+                {COUNTS.map((item) => (
+                  <button key={item.value} type="button" onClick={() => setTotalCount(item.value)}
+                    className={`rounded-xl border p-3 text-left transition ${totalCount === item.value ? 'border-blue-600 bg-blue-50 ring-2 ring-blue-100' : 'border-slate-200 hover:border-blue-300'}`}>
+                    <span className="block text-lg font-black text-blue-800">{item.label}</span>
+                    <span className="mt-1 block text-xs text-slate-500">{item.description}</span>
+                  </button>
+                ))}
               </div>
+              {totalCount !== 30 && (
+                <div className="mt-4">
+                  <label htmlFor="notebook-category" className="mb-2 block text-sm font-bold text-slate-800">Content category</label>
+                  <select id="notebook-category" value={category} onChange={(event) => setCategory(event.target.value)}
+                    className="w-full rounded-xl border border-slate-300 bg-white px-3 py-3 text-sm text-slate-800 focus:border-blue-600 focus:outline-none focus:ring-2 focus:ring-blue-100">
+                    {CATEGORIES.map(([key, label]) => <option key={key} value={key}>{label}</option>)}
+                  </select>
+                  <p className="mt-2 text-xs text-slate-500">The selected category will be used for all {totalCount} {totalCount === 1 ? 'notebook' : 'notebooks'} in this focused run.</p>
+                </div>
+              )}
               <div className="mt-4 flex items-center justify-between border-t border-slate-100 pt-4">
-                <span className="font-bold text-slate-900">Total batch</span><span className="text-2xl font-black text-blue-800">30</span>
+                <span className="font-bold text-slate-900">Total to generate</span>
+                <span className="text-2xl font-black text-blue-800">{totalCount}</span>
               </div>
               <button type="button" disabled={!selected.length || generating || loadingSubjects} onClick={generate}
                 className="mt-5 w-full rounded-xl bg-blue-700 px-5 py-3 font-bold text-white shadow-sm transition hover:bg-blue-800 disabled:cursor-not-allowed disabled:opacity-50">
-                {generating ? 'Generating 30 posts…' : 'Generate 30 notebook posts'}
+                {generating ? 'Generating notebooks…' : `Generate ${totalCount} ${totalCount === 1 ? 'notebook' : 'notebooks'}`}
               </button>
               {progress && <p className="mt-3 text-sm text-blue-700">{progress}</p>}
               {error && <p role="alert" className="mt-3 rounded-lg bg-red-50 p-3 text-sm text-red-700">{error}</p>}
