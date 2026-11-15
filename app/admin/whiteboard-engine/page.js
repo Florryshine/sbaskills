@@ -319,10 +319,9 @@ export default function WhiteboardEnginePage() {
 
               {active && stage === 'queued' && workerOffline && (
                 <div className="rounded-lg bg-amber-50 border border-amber-200 text-amber-800 text-sm p-3">
-                  Waiting for a renderer. No whiteboard worker has checked in
-                  {worker?.last_seen_at ? ` since ${new Date(worker.last_seen_at).toLocaleString()}` : ' yet'}.
-                  The job is saved and starts automatically once the Render worker
-                  (<code>sba-whiteboard-renderer</code>) is running — check its deploy logs.
+                  Waiting for a renderer. The free GitHub Actions renderer checks for new jobs every ~5 minutes
+                  (it may take up to 10–15 min to start). You can also open GitHub → Actions → "Whiteboard renderer" →
+                  Run workflow to start it now. If it never starts, check that workflow's latest run for errors.
                 </div>
               )}
               {active && stage === 'queued' && worker?.last_error && (

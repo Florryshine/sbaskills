@@ -110,7 +110,9 @@ async function renderTimeline(timeline: import('../types').Timeline, out: string
     inputProps,
     imageFormat: 'jpeg',
     jpegQuality: 92,
-    concurrency: Math.max(1, Math.min(4, (await import('node:os')).cpus().length - 1)),
+    concurrency: Number(process.env.WB_RENDER_CONCURRENCY) > 0
+      ? Number(process.env.WB_RENDER_CONCURRENCY)
+      : Math.max(1, Math.min(4, (await import('node:os')).cpus().length - 1)),
     onProgress: ({ progress }: { progress: number }) => {
       if (progress - lastProgress > 0.1) {
         lastProgress = progress;

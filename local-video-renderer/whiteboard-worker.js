@@ -77,11 +77,11 @@ async function tick() {
   if (error) {
     console.error('[whiteboard-worker] claim error:', error.message);
     lastClaimError = error.message; // surfaced in the admin UI via whiteboard_workers.info
-    return;
+    return 'error';
   }
   lastClaimError = null;
   const job = Array.isArray(data) ? data[0] : data;
-  if (!job) return;
+  if (!job) return 'idle';
 
   console.log(`[whiteboard-worker] claimed ${job.id} "${job.title}" (attempt ${job.attempt_count})`);
   currentJobId = job.id;
@@ -121,6 +121,7 @@ async function tick() {
       console.warn(`[whiteboard-worker] cleanup failed for ${job.id}:`, err.message);
     });
   }
+  return 'processed';
 }
 
 function assertLease(job) {
@@ -508,6 +509,30 @@ async function fail(job, message) {
   if (error) console.error(`[whiteboard-worker] could not record failure for ${job.id}:`, error.message);
 }
 
+// RUN_ONCE mode (GitHub Actions): drain the queue, then exit so no always-on server is needed.
+const RUN_ONCE = process.env.WHITEBOARD_RUN_ONCE === '1';
+const RUN_ONCE_MAX_MS = Number(process.env.WHITEBOARD_RUN_ONCE_MAX_MS || 40 * 60 * 1000);
+
+async function runOnce() {
+  const startedAt = Date.now();
+  let processed = 0;
+  let exitCode = 0;
+  while (!stopping && Date.now() - startedAt < RUN_ONCE_MAX_MS) {
+    let result;
+    try {
+      result = await tick();
+    } catch (err) {
+      console.error('[whiteboard-worker] tick error:', err);
+      result = 'error';
+    }
+    if (result === 'error') { exitCode = 1; break; }
+    if (result === 'idle') break;
+    processed += 1;
+  }
+  console.log(`[whiteboard-worker] run-once finished: ${processed} job(s) processed`);
+  process.exit(exitCode);
+}
+
 async function loop() {
   if (stopping) return;
   try {
@@ -522,4 +547,5 @@ async function loop() {
 process.on('SIGINT', () => { stopping = true; console.log('[whiteboard-worker] stopping after current job'); });
 process.on('SIGTERM', () => { stopping = true; console.log('[whiteboard-worker] stopping after current job'); });
 
-loop();
+if (RUN_ONCE) runOnce();
+else loop();

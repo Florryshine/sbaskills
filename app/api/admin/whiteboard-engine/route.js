@@ -21,6 +21,24 @@ export const maxDuration = 60;
 // A worker that has not polled for this long is treated as offline (poll is 15s).
 const WORKER_ONLINE_MS = 90 * 1000;
 
+// Optional: start the free GitHub Actions renderer immediately instead of waiting for its 5-min timer.
+// Needs GITHUB_DISPATCH_TOKEN (fine-grained token, Contents: read/write on this repo). Best-effort only.
+async function pingRenderer() {
+  const token = process.env.GITHUB_DISPATCH_TOKEN;
+  if (!token) return;
+  const repo = process.env.GITHUB_REPO || 'Florryshine/sbaskills';
+  try {
+    await fetch(`https://api.github.com/repos/${repo}/dispatches`, {
+      method: 'POST',
+      headers: { Authorization: `Bearer ${token}`, Accept: 'application/vnd.github+json', 'Content-Type': 'application/json' },
+      body: JSON.stringify({ event_type: 'whiteboard-job' }),
+      signal: AbortSignal.timeout(5000),
+    });
+  } catch (err) {
+    console.warn('Could not dispatch whiteboard renderer:', err?.message || err);
+  }
+}
+
 async function getWorkerStatus(supabase) {
   const { data, error } = await supabase
     .from('whiteboard_workers')
@@ -167,6 +185,7 @@ async function createJob(req, user) {
         : '';
       return NextResponse.json({ error: `${created.error.message}${hint}` }, { status: 500 });
     }
+    await pingRenderer();
     return NextResponse.json({ success: true, jobId: created.data.id, status: 'narrating', scenes: null });
   }
 
@@ -252,5 +271,6 @@ async function createJob(req, user) {
   }
   const jobId = insert.data.id;
 
+  await pingRenderer();
   return NextResponse.json({ success: true, jobId, status: 'narrating', scenes: spec.scenes.length });
 }

@@ -16,6 +16,18 @@ if (name.startsWith('ai_')) {
   Object.assign(db.whiteboard_jobs[0], { title: 'Cell', topic: 'Cell', script_text: '', knowledge_asset_id: null });
   process.env.SCRIPT_MODE = { ai_ok: 'ok', ai_retry: 'garbage_then_ok', ai_fail: 'fail', ai_garbage: 'garbage' }[name];
 }
+if (name === 'once') {
+  process.env.WHITEBOARD_RUN_ONCE = '1';
+  // run-once mode must exit by itself; report from the exit hook (the harness never calls exit).
+  process.on('exit', (code) => {
+    const j = db.whiteboard_jobs[0];
+    console.log('RESULT ' + JSON.stringify({ scenario: 'once', status: j.status, exit_code: code, content_assets: db.content_assets.length, exited_by_worker: true }));
+  });
+  await import('../whiteboard-worker.js');
+  await new Promise((r) => setTimeout(r, 90000));
+  console.log('RESULT ' + JSON.stringify({ scenario: 'once', exited_by_worker: false }));
+  process.exit(0);
+}
 if (name === 'tts_fail') process.env.TTS_MODE = 'fail';
 if (name === 'tts_flaky') process.env.TTS_MODE = 'flaky';
 if (name === 'pcm') process.env.TTS_MODE = 'pcm';
