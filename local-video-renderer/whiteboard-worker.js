@@ -165,6 +165,9 @@ async function renderJob(job) {
     })),
   };
 
+  // Ensure the local narration destination exists before writing downloaded audio.
+  await mkdir(path.join(workDir, 'narration'), { recursive: true });
+
   for (const [i, audio] of audioList.entries()) {
     const audioPath = audio?.audioFile;
     if (!audioPath) throw new Error(`Narration file ${i + 1} has no storage path.`);
