@@ -125,17 +125,43 @@ export async function POST(request) {
         for (let index = 0; index < result.items.length; index++) {
           const item = result.items[index];
           const asset = categoryAssets[index];
-          let contentAssetId = null;
+          let contentAssetId = crypto.randomUUID();
+          let stage = 'render';
+          const itemStartedAt = Date.now();
+          let storagePath = null;
           try {
-            const { data: inserted, error: insertError } = await supabase
+            // Render before creating the content row. A renderer timeout must not
+            // leave a draft that looks publishable but has no image attached.
+            console.info('[Notebook Studio] item started', {
+              batchId, contentAssetId, category: category.key, topic: asset.keyword,
+            });
+            const image = await renderNotebookImage({
+              title: item.title,
+              content: item.sections.map((section) => section.text.trim()).join('\\n'),
+              sections: item.sections,
+              subject: asset.subject,
+              topic: asset.keyword,
+              template,
+              category: category.label,
+            });
+            if (!Buffer.isBuffer(image) || image.length < 1000) {
+              throw new Error('Notebook renderer returned an empty or invalid PNG.');
+            }
+            console.info('[Notebook Studio] render complete', {
+              batchId, contentAssetId, bytes: image.length, durationMs: Date.now() - itemStartedAt,
+            });
+
+            stage = 'content_asset_insert';
+            const { error: insertError } = await supabase
               .from('content_assets')
               .insert({
+                id: contentAssetId,
                 knowledge_asset_id: asset.id,
                 asset_type: 'notebook_post',
                 platform: null,
                 format: 'image',
                 title: item.title.trim(),
-                body: item.sections.map((section) => section.text.trim()).join('\n'),
+                body: item.sections.map((section) => section.text.trim()).join('\\n'),
                 metadata: {
                   notebookStudio: true,
                   batchId,
@@ -150,28 +176,18 @@ export async function POST(request) {
                 },
                 status: 'draft',
                 generated_by: usedProvider || 'content-engine',
-              })
-              .select('id')
-              .single();
+              });
             if (insertError) throw insertError;
-            contentAssetId = inserted.id;
 
-            const image = await renderNotebookImage({
-              title: item.title,
-              content: item.sections.map((section) => section.text.trim()).join('\n'),
-              sections: item.sections,
-              subject: asset.subject,
-              topic: asset.keyword,
-              template,
-              category: category.label,
-            });
-            const storagePath = `notebook-studio/${batchId}/${contentAssetId}.png`;
+            stage = 'storage_upload';
+            storagePath = `notebook-studio/${batchId}/${contentAssetId}.png`;
             const { error: uploadError } = await supabase.storage
               .from('carousel-slides')
               .upload(storagePath, image, { contentType: 'image/png', upsert: true });
             if (uploadError) throw uploadError;
             const { data: publicUrl } = supabase.storage.from('carousel-slides').getPublicUrl(storagePath);
 
+            stage = 'media_file_insert';
             const { error: mediaError } = await supabase.from('media_files').insert({
               content_asset_id: contentAssetId,
               media_type: 'image',
@@ -187,9 +203,32 @@ export async function POST(request) {
               alt_text: `${category.label}: ${item.title}`,
             });
             if (mediaError) throw mediaError;
+
+            console.info('[Notebook Studio] item complete', {
+              batchId, contentAssetId, bytes: image.length, durationMs: Date.now() - itemStartedAt,
+            });
             results.push({ id: contentAssetId, title: item.title, subject: asset.subject, topic: asset.keyword, category: category.key, imageUrl: publicUrl.publicUrl, status: 'draft' });
           } catch (itemError) {
-            failures.push({ category: category.key, topic: asset.keyword, contentAssetId, error: itemError.message });
+            console.error('[Notebook Studio] item failed', {
+              batchId, contentAssetId, stage, durationMs: Date.now() - itemStartedAt,
+              error: itemError?.message || String(itemError),
+              stack: itemError?.stack,
+            });
+            if (storagePath) {
+              const { error: cleanupError } = await supabase.storage.from('carousel-slides').remove([storagePath]);
+              if (cleanupError) console.error('[Notebook Studio] storage cleanup failed', { batchId, contentAssetId, error: cleanupError.message });
+            }
+            if (contentAssetId) {
+              const { error: cleanupError } = await supabase.from('content_assets').delete().eq('id', contentAssetId);
+              if (cleanupError) console.error('[Notebook Studio] content cleanup failed', { batchId, contentAssetId, error: cleanupError.message });
+            }
+            failures.push({
+              category: category.key,
+              topic: asset.keyword,
+              contentAssetId,
+              stage,
+              error: itemError?.message || 'Notebook image generation failed.',
+            });
           }
         }
       } catch (categoryError) {
