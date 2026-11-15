@@ -43,20 +43,24 @@ ${JSON.stringify(source)}
 Requirements:
 - Every item must be useful on its own and clearly focused on its assigned topic.
 - Avoid repeating the same explanation or question angle.
-- Keep content short enough for one notebook image: title up to 9 words; content 45-100 words; use short lines/bullets.
-- For Question of the Day, include exactly four options and one correct answer with explanation.
+- Keep each note concise enough for one readable notebook page: 45-100 words across 4-8 structured blocks. Never cram text.
+- Return structured sections, not a single paragraph. Allowed section types: heading, subheading, paragraph, bullet, numbered, definition, example, formula, question, answer, note.
+- Use heading for a major section, subheading for a numbered section, bullet for short points, definition for key terms, example for worked examples, formula for equations, question for practice prompts, answer for answers, and note for exam cautions.
+- For Question of the Day, include one question block, exactly four option bullet blocks (prefix each option with A), B), C), D)), one answer block and one explanation paragraph.
 - Use plain text, no markdown tables, no HTML, no emojis, no hashtags.
 - Return exactly ${assets.length} items in the same slot order.
 
 Return ONLY JSON:
-{"items":[{"slot":1,"title":"...","content":"..."}]}`;
+{"items":[{"slot":1,"title":"...","sections":[{"type":"heading","text":"..."}]}]}`;
 }
 
 function validBatch(value, count) {
   return value && Array.isArray(value.items) && value.items.length === count &&
     value.items.every((item, index) => item && item.slot === index + 1 &&
       typeof item.title === 'string' && item.title.trim() &&
-      typeof item.content === 'string' && item.content.trim().length >= 35);
+      Array.isArray(item.sections) && item.sections.length >= 3 &&
+      item.sections.every((section) => section && typeof section.text === 'string' && section.text.trim() &&
+        ['heading', 'subheading', 'paragraph', 'bullet', 'numbered', 'definition', 'example', 'formula', 'question', 'answer', 'note'].includes(section.type)));
 }
 
 export async function POST(request) {
@@ -118,12 +122,13 @@ export async function POST(request) {
                 platform: null,
                 format: 'image',
                 title: item.title.trim(),
-                body: item.content.trim(),
+                body: item.sections.map((section) => section.text.trim()).join('\n'),
                 metadata: {
                   notebookStudio: true,
                   batchId,
                   category: category.key,
                   categoryLabel: category.label,
+                  sections: item.sections,
                   subject: asset.subject,
                   topic: asset.keyword,
                   exam: 'JAMB',
@@ -140,7 +145,8 @@ export async function POST(request) {
 
             const image = await renderNotebookImage({
               title: item.title,
-              content: item.content,
+              content: item.sections.map((section) => section.text.trim()).join('\n'),
+              sections: item.sections,
               subject: asset.subject,
               topic: asset.keyword,
               template,
