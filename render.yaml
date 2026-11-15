@@ -1,0 +1,19 @@
+services:
+  - type: worker
+    name: sba-whiteboard-renderer
+    runtime: docker
+    dockerfilePath: ./local-video-renderer/Dockerfile
+    dockerContext: .
+    plan: 1c-2g
+    region: frankfurt
+    maxShutdownDelaySeconds: 300
+    autoDeployTrigger: commit
+    envVars:
+      - key: NEXT_PUBLIC_SUPABASE_URL
+        sync: false
+      - key: SUPABASE_SERVICE_ROLE_KEY
+        sync: false
+      - key: WHITEBOARD_WORKER_POLL_MS
+        value: "15000"
+      - key: WHITEBOARD_WORKER_HEARTBEAT_MS
+        value: "30000"
