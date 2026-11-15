@@ -30,6 +30,7 @@ export interface NarrationProvider {
 // ---------------------------------------------------------------------------
 
 import { spawnSync } from 'node:child_process';
+import { readFile, stat, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 
@@ -46,7 +47,7 @@ export function probeDurationSeconds(file: string): number | null {
 
 async function writeFileTemp(buffer: Buffer, ext: string): Promise<string> {
   const path = join(tmpdir(), `sba-narr-${Date.now()}-${Math.random().toString(36).slice(2)}.${ext}`);
-  await Bun.write(path, buffer);
+  await writeFile(path, buffer);
   return path;
 }
 
@@ -113,11 +114,16 @@ export class ZaiTTSProvider implements NarrationProvider {
         encoding: 'utf8',
         timeout: 120000,
       });
-      const exists = await Bun.file(outPath).exists();
-      if (res.status === 0 && exists && (await Bun.file(outPath)).size > 1000) {
+      let outputSize = 0;
+      try {
+        outputSize = (await stat(outPath)).size;
+      } catch {
+        // The CLI may fail before creating its output file.
+      }
+      if (res.status === 0 && outputSize > 1000) {
         const duration = probeDurationSeconds(outPath) ?? 5;
         return {
-          audio: Buffer.from(await Bun.file(outPath).arrayBuffer()),
+          audio: await readFile(outPath),
           ext: 'wav',
           duration,
           words: proportionalWords(trimmed, duration),
@@ -149,7 +155,7 @@ export class PreRecordedProvider implements NarrationProvider {
     }
     const file = this.queue.shift();
     if (!file) throw new Error('PreRecordedProvider: no more audio files available');
-    const audio = Buffer.from(await Bun.file(file).arrayBuffer());
+    const audio = await readFile(file);
     const ext = file.toLowerCase().endsWith('.mp3') ? 'mp3' : 'wav';
     const duration = probeDurationSeconds(file) ?? 5;
 
@@ -157,11 +163,8 @@ export class PreRecordedProvider implements NarrationProvider {
     const sidecar = file.replace(/\.(wav|mp3)$/i, '.words.json');
     let words: WordTiming[] | null = null;
     try {
-      const sidecarFile = Bun.file(sidecar);
-      if (await sidecarFile.exists()) {
-        const parsed = JSON.parse(await sidecarFile.text()) as WordTiming[];
-        if (Array.isArray(parsed) && parsed.length > 0) words = parsed;
-      }
+      const parsed = JSON.parse(await readFile(sidecar, 'utf8')) as WordTiming[];
+      if (Array.isArray(parsed) && parsed.length > 0) words = parsed;
     } catch {
       // ignore malformed sidecars
     }

@@ -80,6 +80,7 @@ const sections = [
       { href: '/admin/social-post-drafts', label: 'Legacy Social Dashboard' },
       { href: '/admin/quote-loops', label: 'Quote Loops' },
       { href: '/admin/teaching-loops', label: 'Teaching Loops' },
+      { href: '/admin/whiteboard-engine', label: 'Whiteboard Animation Studio' },
       { href: '/admin/video-studio', label: 'Video Studio' },
       { href: '/admin/text-animations', label: 'Text Animations' },
       { href: '/admin/affirmations', label: 'Affirmation Studio' },
