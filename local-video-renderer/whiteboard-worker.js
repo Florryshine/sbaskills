@@ -165,18 +165,29 @@ async function renderJob(job) {
     })),
   };
 
-  // Ensure the local narration destination exists before writing downloaded audio.
+  // Use fixed, per-scene local names: storage paths never become filesystem paths.
+  // This prevents traversal and basename collisions while retaining each audio format.
   await mkdir(path.join(workDir, 'narration'), { recursive: true });
 
   for (const [i, audio] of audioList.entries()) {
     const audioPath = audio?.audioFile;
-    if (!audioPath) throw new Error(`Narration file ${i + 1} has no storage path.`);
+    if (!audioPath || typeof audioPath !== 'string') {
+      throw new Error(`Narration file ${i + 1} has no valid storage path.`);
+    }
     const { data, error } = await supabase.storage.from(AUDIO_BUCKET).download(audioPath);
     if (error) throw new Error(`Audio download failed (${audioPath}): ${error.message}`);
-    const localName = path.basename(renderTimeline.scenes[i].audioFile);
+    const sourceName = path.basename(audioPath);
+    const extension = path.extname(sourceName).toLowerCase();
+    if (!['.wav', '.mp3', '.m4a', '.ogg'].includes(extension)) {
+      throw new Error(`Unsupported narration audio format for scene ${i + 1}: ${extension || 'unknown'}`);
+    }
+    const localName = `scene-${String(i + 1).padStart(2, '0')}${extension}`;
+    renderTimeline.scenes[i].audioFile = `narration/${localName}`;
     await writeFile(path.join(workDir, 'narration', localName), Buffer.from(await data.arrayBuffer()));
   }
 
+  // Remotion's handwriting renderer expects this workspace directory to exist.
+  await mkdir(path.join(workDir, 'fonts'), { recursive: true });
   await writeFile(path.join(workDir, 'timeline.json'), JSON.stringify(renderTimeline));
   const slug = slugify(job.title);
   const outPath = path.join(workDir, `${slug}.mp4`);
