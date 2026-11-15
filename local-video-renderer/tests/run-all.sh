@@ -30,4 +30,5 @@ check ai_ok        "r['status']=='ready' and r['has_script'] and r['title']=='Ph
 check ai_retry     "r['status']=='ready' and r['has_script']"
 check ai_fail      "r['status']=='failed' and 'AI script generation failed' in r['error'] and r['content_assets']==0"
 check ai_garbage   "r['status']=='failed' and 'AI script generation failed' in r['error']"
+check once         "r['exited_by_worker'] and r['status']=='ready' and r['exit_code']==0 and r['content_assets']==1"
 exit $fail
