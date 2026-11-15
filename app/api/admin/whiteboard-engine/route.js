@@ -13,12 +13,28 @@
 import { NextResponse } from 'next/server';
 import { requireAdminApi } from '@/lib/require-admin-api';
 import { createAdminClient } from '@/lib/supabase-admin';
-import { generateScriptWithAI } from '@/lib/whiteboard/planner';
 import { parseScript } from '../../../../whiteboard-engine/src/script/parser';
 import { getIllustration } from '../../../../whiteboard-engine/src/illustrations/registry';
 
 export const maxDuration = 60;
 
+// A worker that has not polled for this long is treated as offline (poll is 15s).
+const WORKER_ONLINE_MS = 90 * 1000;
+
+async function getWorkerStatus(supabase) {
+  const { data, error } = await supabase
+    .from('whiteboard_workers')
+    .select('worker_id, last_seen_at, current_job_id, info')
+    .order('last_seen_at', { ascending: false })
+    .limit(5);
+  if (error) {
+    // Table missing => migration 20261115 not applied; surface that instead of guessing.
+    return { online: false, last_seen_at: null, unknown: true, reason: error.message };
+  }
+  const latest = data?.[0] || null;
+  const online = !!latest && Date.now() - new Date(latest.last_seen_at).getTime() < WORKER_ONLINE_MS;
+  return { online, last_seen_at: latest?.last_seen_at || null, last_error: latest?.info?.last_error || null, unknown: false };
+}
 
 export async function GET(req) {
   const { response } = await requireAdminApi();
@@ -29,13 +45,16 @@ export async function GET(req) {
   if (!id) {
     // list recent jobs
     const supabase = createAdminClient();
-    const { data, error } = await supabase
-      .from('whiteboard_jobs')
-      .select('id, title, subject, status, video_url, duration_seconds, created_at, error_message')
-      .order('created_at', { ascending: false })
-      .limit(20);
+    const cols = 'id, title, subject, status, video_url, duration_seconds, created_at, error_message';
+    let { data, error } = await supabase.from('whiteboard_jobs').select(`${cols}, stage`)
+      .order('created_at', { ascending: false }).limit(20);
+    if (error && /stage/i.test(error.message)) {
+      // Migration 20261115 not applied yet: keep the page usable.
+      ({ data, error } = await supabase.from('whiteboard_jobs').select(cols)
+        .order('created_at', { ascending: false }).limit(20));
+    }
     if (error) return NextResponse.json({ error: error.message }, { status: 500 });
-    return NextResponse.json({ jobs: data });
+    return NextResponse.json({ jobs: data, worker: await getWorkerStatus(supabase) });
   }
 
   const supabase = createAdminClient();
@@ -45,12 +64,72 @@ export async function GET(req) {
     .eq('id', id)
     .single();
   if (error || !job) return NextResponse.json({ error: 'Job not found' }, { status: 404 });
-  return NextResponse.json({ job });
+  return NextResponse.json({ job, worker: await getWorkerStatus(supabase), serverTime: new Date().toISOString() });
+}
+
+// PATCH { id, action: 'retry' } — re-queue a failed job. Narration/timeline already saved on the
+// job are kept, so a retry resumes at rendering; content_assets/media_files are reused by the
+// worker (idempotent), so retries never create duplicate records.
+export async function PATCH(req) {
+  const { response } = await requireAdminApi();
+  if (response) return response;
+
+  let body;
+  try {
+    body = await req.json();
+  } catch {
+    return NextResponse.json({ error: 'Invalid JSON body' }, { status: 400 });
+  }
+  if (!body?.id || body.action !== 'retry') {
+    return NextResponse.json({ error: 'Provide { id, action: "retry" }.' }, { status: 400 });
+  }
+
+  const supabase = createAdminClient();
+  const { data: job, error } = await supabase
+    .from('whiteboard_jobs')
+    .select('id, status, timeline, audio_files')
+    .eq('id', body.id)
+    .single();
+  if (error || !job) return NextResponse.json({ error: 'Job not found' }, { status: 404 });
+  if (job.status !== 'failed') {
+    return NextResponse.json({ error: `Only failed jobs can be retried (this one is ${job.status}).` }, { status: 409 });
+  }
+
+  const hasNarration = !!job.timeline && Array.isArray(job.audio_files) && job.audio_files.length > 0;
+  const { error: updateError } = await supabase
+    .from('whiteboard_jobs')
+    .update({
+      status: hasNarration ? 'rendering' : 'narrating',
+      stage: 'queued',
+      stage_message: 'Re-queued by admin',
+      stage_updated_at: new Date().toISOString(),
+      error_message: null,
+      attempt_count: 0,
+      claim_token: null,
+      worker_id: null,
+      claimed_at: null,
+      heartbeat_at: null,
+      updated_at: new Date().toISOString(),
+    })
+    .eq('id', job.id)
+    .eq('status', 'failed');
+  if (updateError) return NextResponse.json({ error: updateError.message }, { status: 500 });
+  return NextResponse.json({ success: true, status: hasNarration ? 'rendering' : 'narrating' });
 }
 
 export async function POST(req) {
   const { user, response } = await requireAdminApi();
   if (response) return response;
+  // Never let an unexpected throw become a plain-text 500 page: the admin UI expects JSON.
+  try {
+    return await createJob(req, user);
+  } catch (err) {
+    console.error('Whiteboard job creation failed:', err);
+    return NextResponse.json({ error: `Could not create the job: ${err?.message || err}` }, { status: 500 });
+  }
+}
+
+async function createJob(req, user) {
 
   let body;
   try {
@@ -73,19 +152,25 @@ export async function POST(req) {
     return NextResponse.json({ error: 'AI generation needs a topic.' }, { status: 400 });
   }
 
-  // 1. Resolve the final script (AI path happens inline: the fallback chain
-  //    is fast and the user gets validation errors immediately).
-  let finalScript = scriptText;
+  // AI path: only the topic is stored. The persistent worker writes + validates the script, so the
+  // slow multi-provider LLM call never runs inside this time-limited serverless function.
   if (useAI) {
-    try {
-      finalScript = await generateScriptWithAI(topic, subject);
-    } catch (err) {
-      return NextResponse.json(
-        { error: `AI script generation failed: ${err.message}` },
-        { status: 502 },
-      );
+    const supabaseAI = createAdminClient();
+    const created = await supabaseAI
+      .from('whiteboard_jobs')
+      .insert({ title: topic.slice(0, 200), topic, subject, status: 'narrating', script_text: '', created_by: user.id })
+      .select('id')
+      .single();
+    if (created.error) {
+      const hint = /topic|stage/i.test(created.error.message)
+        ? ' (apply migration 20261115_whiteboard_engine_observability.sql in Supabase)'
+        : '';
+      return NextResponse.json({ error: `${created.error.message}${hint}` }, { status: 500 });
     }
+    return NextResponse.json({ success: true, jobId: created.data.id, status: 'narrating', scenes: null });
   }
+
+  const finalScript = scriptText;
 
   // 2. Validate the script + referenced assets BEFORE creating the row.
   let spec;

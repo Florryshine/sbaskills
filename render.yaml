@@ -15,6 +15,11 @@ services:
         sync: false
       - key: GEMINI_API_KEY
         sync: false
+      # Script generation now runs in the worker (LLM fallback chain). Add any you use; Gemini alone is enough.
+      - key: GROQ_API_KEY
+        sync: false
+      - key: OPENROUTER_API_KEY
+        sync: false
       - key: TTS_ENDPOINT
         value: https://openai-edge-tts-aqq1.onrender.com
       - key: WHITEBOARD_WORKER_POLL_MS

@@ -1,0 +1,39 @@
+name: Whiteboard worker
+
+# Guards the Render worker image: its Dockerfile runs `npm ci`, which hard-fails when
+# package-lock.json drifts from package.json (that silently prevented the worker from ever deploying).
+on:
+  pull_request:
+    paths:
+      - package.json
+      - package-lock.json
+      - local-video-renderer/**
+      - lib/whiteboard/**
+      - lib/podcastTTS.js
+      - whiteboard-engine/**
+      - supabase/migrations/*whiteboard*
+      - .github/workflows/whiteboard-worker.yml
+  push:
+    branches: [master]
+    paths:
+      - package.json
+      - package-lock.json
+      - local-video-renderer/**
+      - whiteboard-engine/**
+
+jobs:
+  worker:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+      - uses: oven-sh/setup-bun@v2
+      - name: Lockfile in sync (same command as local-video-renderer/Dockerfile)
+        run: npm ci --omit=dev
+      - name: Engine deps (same as Dockerfile)
+        working-directory: whiteboard-engine
+        run: bun install --frozen-lockfile --production
+      - name: Worker scenarios (fake Supabase, stub TTS, stub renderer)
+        run: ./local-video-renderer/tests/run-all.sh

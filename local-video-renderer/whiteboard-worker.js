@@ -17,6 +17,9 @@ import { randomUUID } from 'node:crypto';
 // Load these after dotenv so podcastTTS captures the configured keys.
 const { synthesizeLine } = await import('../lib/podcastTTS.js');
 const { buildTimelineForJob } = await import('../lib/whiteboard/timeline.js');
+const { withRetry, normalizeAudio } = await import('../lib/whiteboard/audio.js');
+const { generateScriptWithAI } = await import('../lib/whiteboard/planner.js');
+const { getIllustration } = await import('../whiteboard-engine/src/illustrations/registry.ts');
 const { parseScript } = await import('../whiteboard-engine/src/script/parser.ts');
 
 const SUPABASE_URL = process.env.NEXT_PUBLIC_SUPABASE_URL;
@@ -37,37 +40,80 @@ const AUDIO_BUCKET = 'whiteboard-assets';
 const VIDEO_BUCKET = 'lesson-videos';
 const WORKER_ID = `${hostname()}-${process.pid}-${randomUUID().slice(0, 8)}`;
 let stopping = false;
+let currentJobId = null;
+let registryWarned = false;
+let lastClaimError = null;
+const STARTED_AT = new Date().toISOString();
 
 console.log(`[whiteboard-worker] ${WORKER_ID} polling every ${POLL_MS}ms`);
 
+// Liveness beacon: lets the admin UI tell "no worker online" from "worker busy".
+async function registerWorker() {
+  const { error } = await supabase.from('whiteboard_workers').upsert({
+    worker_id: WORKER_ID,
+    started_at: STARTED_AT,
+    last_seen_at: new Date().toISOString(),
+    current_job_id: currentJobId,
+    info: { node: process.version, bun: typeof Bun !== 'undefined' ? Bun.version : null, last_error: lastClaimError },
+  });
+  if (error && !registryWarned) {
+    registryWarned = true;
+    console.warn('[whiteboard-worker] could not write worker liveness (is migration 20261115 applied?):', error.message);
+  }
+}
+
+// Report real progress. Guarded by claim_token so a worker that lost its lease cannot overwrite state.
+async function setStage(job, stage, message) {
+  const { error } = await supabase.from('whiteboard_jobs')
+    .update({ stage, stage_message: message || null, stage_updated_at: new Date().toISOString(), updated_at: new Date().toISOString() })
+    .eq('id', job.id)
+    .eq('claim_token', job.claim_token);
+  if (error) console.warn(`[whiteboard-worker] stage update (${stage}) failed:`, error.message);
+}
+
 async function tick() {
+  await registerWorker();
   const { data, error } = await supabase.rpc('claim_whiteboard_job', { p_worker_id: WORKER_ID });
   if (error) {
     console.error('[whiteboard-worker] claim error:', error.message);
+    lastClaimError = error.message; // surfaced in the admin UI via whiteboard_workers.info
     return;
   }
+  lastClaimError = null;
   const job = Array.isArray(data) ? data[0] : data;
   if (!job) return;
 
   console.log(`[whiteboard-worker] claimed ${job.id} "${job.title}" (attempt ${job.attempt_count})`);
+  currentJobId = job.id;
+  job.leaseLost = false;
   const heartbeatTimer = setInterval(() => {
     heartbeat(job).catch(err => {
       console.error('[whiteboard-worker] heartbeat error:', err.message);
+      if (/lease was lost/i.test(err.message)) job.leaseLost = true;
     });
+    registerWorker().catch(() => {});
   }, HEARTBEAT_MS);
   heartbeatTimer.unref?.();
   try {
     let preparedJob = job;
-    const sceneCount = parseScript(job.script_text).scenes.length;
-    const hasCompleteNarration = job.timeline && Array.isArray(job.audio_files) && job.audio_files.length === sceneCount;
-    if (!hasCompleteNarration) preparedJob = await narrateAndBuildJob(job);
-    const outPath = await renderJob(preparedJob);
+    // AI jobs arrive without a script: the web route only stores the topic so the slow multi-provider
+    // LLM call never runs inside a time-limited Vercel function.
+    if (!String(job.script_text || '').trim()) preparedJob = await generateScriptForJob(job);
+    job.script_text = preparedJob.script_text;
+    const sceneCount = parseScript(preparedJob.script_text).scenes.length;
+    const hasCompleteNarration = preparedJob.timeline && Array.isArray(preparedJob.audio_files) && preparedJob.audio_files.length === sceneCount;
+    if (!hasCompleteNarration) preparedJob = await narrateAndBuildJob(preparedJob);
+    preparedJob.leaseLost = job.leaseLost;
+    const outPath = await renderJob(preparedJob, job);
+    assertLease(job);
     await saveToInfrastructure(preparedJob, outPath);
   } catch (err) {
     console.error('[whiteboard-worker] job failed:', err);
     await fail(job, err?.message || String(err));
   } finally {
     clearInterval(heartbeatTimer);
+    currentJobId = null;
+    registerWorker().catch(() => {});
 
     // Remove temporary narration, timeline and rendered MP4 after processing.
     const workDir = path.join(ENGINE_DIR, '.job-' + job.id);
@@ -75,6 +121,10 @@ async function tick() {
       console.warn(`[whiteboard-worker] cleanup failed for ${job.id}:`, err.message);
     });
   }
+}
+
+function assertLease(job) {
+  if (job.leaseLost) throw new Error('Job lease was lost while the worker was processing the job.');
 }
 
 async function heartbeat(job) {
@@ -90,14 +140,78 @@ async function heartbeat(job) {
   if (!data) throw new Error('Job lease was lost while the worker was processing the job.');
 }
 
+async function generateScriptForJob(job) {
+  const topic = String(job.topic || job.title || '').trim();
+  if (!topic) throw new Error('Job has neither a script nor a topic to generate one from.');
+  await setStage(job, 'scripting', `Writing lesson script for "${topic}"`);
+
+  // Generate, then validate by really parsing it; the LLM sometimes returns an invalid DSL, so retry.
+  const spec = await withRetry(async () => {
+    assertLease(job);
+    const text = await generateScriptWithAI(topic, job.subject || 'general');
+    const parsed = parseScript(text);
+    const missing = parsed.scenes
+      .flatMap((sc) => sc.elements)
+      .filter((el) => el.type === 'illustration' && !getIllustration(el.asset))
+      .map((el) => el.asset);
+    if (missing.length) throw new Error(`AI script used unknown illustrations: ${missing.join(', ')}`);
+    return { text, parsed };
+  }, {
+    attempts: 3,
+    baseMs: 1500,
+    label: 'AI script generation',
+    onRetry: (err, n) => console.warn(`[whiteboard-worker] script attempt ${n} rejected: ${err.message}`),
+  });
+
+  const title = spec.parsed.title || topic;
+  const subject = /^\s*@subject\b/im.test(spec.text) ? spec.parsed.subject : (job.subject || 'general');
+
+  // Reuse (or create) the shared Knowledge Asset: content_assets requires it.
+  let knowledgeAssetId = job.knowledge_asset_id || null;
+  if (!knowledgeAssetId) {
+    const { data: found, error: findErr } = await supabase.from('knowledge_assets')
+      .select('id').eq('keyword', title).eq('subject', subject).limit(1);
+    if (findErr) throw new Error(`Knowledge Asset lookup failed: ${findErr.message}`);
+    knowledgeAssetId = found?.[0]?.id || null;
+  }
+  if (!knowledgeAssetId) {
+    const { data: created, error: createErr } = await supabase.from('knowledge_assets').insert({
+      keyword: title, topic_type: 'curriculum_topic', subject,
+      summary: `Whiteboard lesson: ${title}`, raw_content: spec.text.slice(0, 12000),
+      learning_objectives: [], key_concepts: [], definitions: [], examples: [], facts: [],
+      common_mistakes: [], sub_topics: [], status: 'draft', source: 'whiteboard_engine_v3',
+    }).select('id').single();
+    if (createErr) throw new Error(`Knowledge Asset creation failed: ${createErr.message}`);
+    knowledgeAssetId = created.id;
+  }
+
+  const { data: saved, error: saveErr } = await supabase.from('whiteboard_jobs').update({
+    title, subject, script_text: spec.text, knowledge_asset_id: knowledgeAssetId,
+    stage_message: `Script ready: ${spec.parsed.scenes.length} scenes`,
+    stage_updated_at: new Date().toISOString(), updated_at: new Date().toISOString(),
+  }).eq('id', job.id).eq('claim_token', job.claim_token).select('*').maybeSingle();
+  if (saveErr) throw new Error(`Could not save generated script: ${saveErr.message}`);
+  if (!saved) throw new Error('Job lease was lost while the script was being generated.');
+  console.log(`[whiteboard-worker] script ready for ${job.id}: "${title}" (${spec.parsed.scenes.length} scenes)`);
+  return saved;
+}
+
 async function narrateAndBuildJob(job) {
   const spec = parseScript(job.script_text);
   const narrationResults = [];
 
   for (let i = 0; i < spec.scenes.length; i++) {
     const scene = spec.scenes[i];
-    const buffer = await synthesizeLine(scene.narration, 'host_a', 'neutral');
-    const mimeType = buffer.mimeType || 'audio/wav';
+    assertLease(job);
+    await setStage(job, 'narrating', `Narrating scene ${i + 1} of ${spec.scenes.length}`);
+    const raw = await withRetry(
+      () => synthesizeLine(scene.narration, 'host_a', 'neutral'),
+      {
+        label: `Narration for scene ${i + 1}`,
+        onRetry: (err, n) => console.warn(`[whiteboard-worker] TTS scene ${i + 1} attempt ${n} failed: ${err.message}`),
+      },
+    );
+    const { buffer, mimeType } = normalizeAudio(raw, raw.mimeType);
     const extension = mimeType.includes('mpeg') ? 'mp3' : 'wav';
     const storagePath = `${job.id}/scene-${String(i + 1).padStart(2, '0')}.${extension}`;
     const { error: uploadError } = await supabase.storage.from(AUDIO_BUCKET).upload(storagePath, buffer, {
@@ -109,6 +223,7 @@ async function narrateAndBuildJob(job) {
     narrationResults.push({ buffer, mimeType, audioFile: storagePath, publicUrl: data?.publicUrl });
   }
 
+  await setStage(job, 'timeline', 'Aligning narration to the drawing timeline');
   const { timeline, warnings } = buildTimelineForJob(
     job.script_text,
     narrationResults.map(({ buffer, mimeType, audioFile }) => ({ buffer, mimeType, audioFile })),
@@ -116,6 +231,9 @@ async function narrateAndBuildJob(job) {
 
   const { data: prepared, error } = await supabase.from('whiteboard_jobs').update({
     status: 'rendering',
+    stage: 'rendering',
+    stage_message: 'Rendering whiteboard animation',
+    stage_updated_at: new Date().toISOString(),
     timeline,
     audio_files: narrationResults.map(({ audioFile, publicUrl }) => ({ audioFile, publicUrl })),
     warnings: warnings.slice(0, 20),
@@ -133,7 +251,7 @@ async function narrateAndBuildJob(job) {
   return prepared;
 }
 
-async function renderJob(job) {
+async function renderJob(job, leaseJob = job) {
   const workDir = path.join(ENGINE_DIR, '.job-' + job.id);
   await rm(workDir, { recursive: true, force: true });
   await mkdir(workDir, { recursive: true });
@@ -191,6 +309,8 @@ async function renderJob(job) {
   await writeFile(path.join(workDir, 'timeline.json'), JSON.stringify(renderTimeline));
   const slug = slugify(job.title);
   const outPath = path.join(workDir, `${slug}.mp4`);
+  assertLease(leaseJob);
+  await setStage(job, 'rendering', 'Rendering whiteboard animation (Chrome + Remotion)');
   await runRenderer(outPath, workDir);
   return outPath;
 }
@@ -234,6 +354,7 @@ async function saveToInfrastructure(job, outPath) {
     throw new Error('Job is missing knowledge_asset_id; refusing to create an orphan Social Engine asset.');
   }
 
+  await setStage(job, 'uploading', 'Uploading video and registering it with the Social Engine');
   const slug = slugify(job.title);
   // Stable path means a retry overwrites the same object instead of leaving
   // timestamped orphan MP4s in Storage.
@@ -343,6 +464,9 @@ async function saveToInfrastructure(job, outPath) {
   const { data: completed, error: completeError } = await supabase.from('whiteboard_jobs')
     .update({
       status: 'ready',
+      stage: 'completed',
+      stage_message: 'Video is ready',
+      stage_updated_at: new Date().toISOString(),
       video_url: videoUrl,
       storage_path: storagePath,
       content_asset_id: assetId,
@@ -369,6 +493,9 @@ async function fail(job, message) {
   const { error } = await supabase.from('whiteboard_jobs')
     .update({
       status: 'failed',
+      stage: 'failed',
+      stage_message: 'Failed',
+      stage_updated_at: new Date().toISOString(),
       error_message: String(message).slice(0, 1000),
       claim_token: null,
       worker_id: null,
