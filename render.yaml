@@ -4,7 +4,7 @@ services:
     runtime: docker
     dockerfilePath: ./local-video-renderer/Dockerfile
     dockerContext: .
-    plan: 1c-2g
+    plan: starter
     region: frankfurt
     maxShutdownDelaySeconds: 300
     autoDeployTrigger: commit
@@ -13,6 +13,10 @@ services:
         sync: false
       - key: SUPABASE_SERVICE_ROLE_KEY
         sync: false
+      - key: GEMINI_API_KEY
+        sync: false
+      - key: TTS_ENDPOINT
+        value: https://openai-edge-tts-aqq1.onrender.com
       - key: WHITEBOARD_WORKER_POLL_MS
         value: "15000"
       - key: WHITEBOARD_WORKER_HEARTBEAT_MS
