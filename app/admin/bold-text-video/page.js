@@ -1,4 +1,5 @@
 'use client';
+import { readApiResponse } from '@/lib/client/read-api-response';
 
 import { useEffect, useRef, useState } from 'react';
 
@@ -45,8 +46,8 @@ export default function BoldTextVideoPage() {
   const chunksRef = useRef([]);
 
   useEffect(() => {
-    fetch('/api/admin/video-studio/generate-batch').then(r => r.json()).then(d => setKnowledgeAssets(d.knowledgeAssets || [])).catch(() => setKnowledgeAssets([]));
-    fetch('/api/admin/quote-loops/audio-list').then(r => r.json())
+    fetch('/api/admin/video-studio/generate-batch').then(r => readApiResponse(r)).then(d => setKnowledgeAssets(d.knowledgeAssets || [])).catch(() => setKnowledgeAssets([]));
+    fetch('/api/admin/quote-loops/audio-list').then(r => readApiResponse(r))
       .then(d => setMusicTracks(d.tracks || [])).catch(() => setMusicTracks([]));
   }, []);
 
@@ -58,7 +59,7 @@ export default function BoldTextVideoPage() {
         method: 'POST', headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ text: script.scenes.map(s => s.text).join('. '), voice, emotion, knowledgeAssetId: type === 'lesson' ? knowledgeAssetId || null : null })
       });
-      const data = await res.json();
+      const data = await readApiResponse(res);
       if (!res.ok) throw new Error(data.error || 'Narration generation failed');
       setAudioUrl('data:' + data.mimeType + ';base64,' + data.audioBase64);
     } catch (e) { setError(e.message || 'Narration failed. The shared TTS service may be unavailable.'); }
@@ -72,7 +73,7 @@ export default function BoldTextVideoPage() {
         method: 'POST', headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ topic: topic.trim(), type, seconds: Number(seconds), knowledgeAssetId: type === 'lesson' ? knowledgeAssetId || null : null }),
       });
-      const data = await res.json();
+      const data = await readApiResponse(res);
       if (!res.ok) throw new Error(data.error || 'Script generation failed');
       setScript(data.script);
     } catch (e) { setError(e.message || 'Could not generate script'); }

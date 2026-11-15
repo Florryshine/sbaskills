@@ -48,7 +48,7 @@ export async function GET(req) {
   return NextResponse.json({ job });
 }
 
-export async function POST(req) {
+async function handlePost(req) {
   const { user, response } = await requireAdminApi();
   if (response) return response;
 
@@ -168,4 +168,21 @@ export async function POST(req) {
   const jobId = insert.data.id;
 
   return NextResponse.json({ success: true, jobId, status: 'narrating', scenes: spec.scenes.length });
+}
+
+
+export async function POST(req) {
+  try {
+    return await handlePost(req);
+  } catch (err) {
+    console.error('[whiteboard-engine] Unhandled POST failure:', err);
+    return NextResponse.json(
+      {
+        error: err?.message
+          ? `Whiteboard request failed: ${err.message}`
+          : 'Whiteboard request failed unexpectedly. Check the server logs for details.',
+      },
+      { status: 500 },
+    );
+  }
 }

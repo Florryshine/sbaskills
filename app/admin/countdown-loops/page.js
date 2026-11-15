@@ -1,4 +1,5 @@
 'use client';
+import { readApiResponse } from '@/lib/client/read-api-response';
 
 // app/admin/countdown-loops/page.js
 //
@@ -96,7 +97,7 @@ export default function CountdownLoopsPage() {
   const loadExistingDrafts = async (assetId) => {
     try {
       const res = await fetch(`/api/admin/countdown-loops/list?knowledgeAssetId=${assetId}`);
-      const data = await res.json();
+      const data = await readApiResponse(res);
       if (!res.ok) throw new Error(data.error || 'Failed to load drafts');
       setDrafts(data.contentAssets || []);
     } catch (err) {
@@ -121,7 +122,7 @@ export default function CountdownLoopsPage() {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ knowledgeAssetId: selectedAssetId, count }),
       });
-      const data = await res.json();
+      const data = await readApiResponse(res);
       if (!res.ok) throw new Error(data.error || 'Generation failed');
       setWarnings(data.warnings || []);
       await loadExistingDrafts(selectedAssetId);
