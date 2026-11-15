@@ -68,7 +68,19 @@ export async function POST(request) {
     const body = await request.json();
     const subjects = Array.isArray(body.subjects) ? [...new Set(body.subjects.map(clean).filter(Boolean))] : [];
     const template = ['classic', 'premium', 'revision'].includes(body.template) ? body.template : 'classic';
-    const perCategory = Math.min(5, Math.max(1, Number(body.perCategory) || 5));
+    // New exact-count mode: 1/2/5 are focused test runs; 30 preserves the
+    // original six-category bulk batch (five posts per category).
+    // Keep perCategory as a backward-compatible fallback for existing callers.
+    const requestedCount = [1, 2, 5, 30].includes(Number(body.totalCount))
+      ? Number(body.totalCount)
+      : null;
+    const selectedCategory = CATEGORIES.find((item) => item.key === body.category);
+    const categoriesToGenerate = requestedCount === 30
+      ? CATEGORIES.map((category) => ({ category, count: 5 }))
+      : requestedCount
+        ? [{ category: selectedCategory || CATEGORIES.find((item) => item.key === 'lesson_note'), count: requestedCount }]
+        : CATEGORIES.map((category) => ({ category, count: Math.min(5, Math.max(1, Number(body.perCategory) || 5)) }));
+    const totalRequested = categoriesToGenerate.reduce((sum, item) => sum + item.count, 0);
     if (!subjects.length) return NextResponse.json({ error: 'Select at least one subject.' }, { status: 400 });
 
     const supabase = createAdminClient();
@@ -84,34 +96,35 @@ export async function POST(request) {
     if (!allAssets?.length) return NextResponse.json({ error: 'No JAMB Knowledge Assets were found for the selected subjects.' }, { status: 404 });
 
     const assetsBySubject = new Map(subjects.map((subject) => [subject, allAssets.filter((asset) => asset.subject === subject)]));
-    const chosenAssets = Array.from({ length: perCategory }, (_, index) => {
+    const chosenAssets = Array.from({ length: Math.max(...categoriesToGenerate.map((item) => item.count)) }, (_, index) => {
       const subject = subjects[index % subjects.length];
       const pool = assetsBySubject.get(subject) || [];
       return pool[index % Math.max(1, pool.length)] || allAssets[index % allAssets.length];
     }).filter(Boolean);
 
-    if (chosenAssets.length < perCategory) {
-      return NextResponse.json({ error: `Only ${chosenAssets.length} suitable topics were found; ${perCategory} are required.` }, { status: 422 });
+    if (chosenAssets.length < Math.max(...categoriesToGenerate.map((item) => item.count))) {
+      return NextResponse.json({ error: `Only ${chosenAssets.length} suitable topics were found; more are required for this request.` }, { status: 422 });
     }
 
     const batchId = crypto.randomUUID();
     const results = [];
     const failures = [];
 
-    for (const category of CATEGORIES) {
+    for (const { category, count } of categoriesToGenerate) {
       try {
-        const prompt = buildPrompt(category, chosenAssets);
+        const categoryAssets = chosenAssets.slice(0, count);
+        const prompt = buildPrompt(category, categoryAssets);
         const { result, usedProvider, errors } = await generateWithFallback(
           prompt,
           (text) => { try { return parseJsonFromText(text, 'object'); } catch { return null; } },
-          (parsed) => validBatch(parsed, perCategory),
+          (parsed) => validBatch(parsed, count),
           4096
         );
         if (!result) throw new Error(errors?.join('; ') || 'Content generation failed.');
 
         for (let index = 0; index < result.items.length; index++) {
           const item = result.items[index];
-          const asset = chosenAssets[index];
+          const asset = categoryAssets[index];
           let contentAssetId = null;
           try {
             const { data: inserted, error: insertError } = await supabase
@@ -187,7 +200,7 @@ export async function POST(request) {
     return NextResponse.json({
       success: results.length > 0,
       batchId,
-      requested: CATEGORIES.length * perCategory,
+      requested: totalRequested,
       generated: results.length,
       failed: failures.length,
       results,
