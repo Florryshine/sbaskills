@@ -52,7 +52,7 @@ export async function prepareImages(spec: VideoSpec): Promise<PrepareResult> {
         const legacyQuery = el.image.replace(/^legacy\\./i, '');
         const legacy = /^legacy\\./i.test(el.image) ? findLegacyAsset(legacyQuery) : findLegacyAsset(el.image);
         if (legacy) {
-          const local = await getLegacyIllustration(`legacy.${legacy.id}`);
+          const local = await getLegacyIllustration(`legacy.${legacy.id}`, colorize);
           if (!local) throw new Error(`legacy SBA illustration not found: ${el.image}`);
           registerIllustration(local);
           el.asset = local.id;
