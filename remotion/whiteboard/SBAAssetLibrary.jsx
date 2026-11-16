@@ -110,6 +110,20 @@ function RenderKind({kind}) {
   }
 }
 
+// Pure artwork component shared by the legacy Remotion renderer and the v3
+// stroke-first engine. It deliberately has no Remotion hooks or animation;
+// the v3 engine rasterises this stable SVG and passes it through its existing
+// image tracing pipeline.
+export function SBAIllustrationArtwork({ type, name, accent = GOLD, showLabel = true, style, className }) {
+  const id = SBA_ASSET_ALIASES[type] || type || name;
+  const asset = SBA_ASSET_CATALOG.find(item => item.id === id);
+  if (!asset) return null;
+  return <svg xmlns="http://www.w3.org/2000/svg" className={className} viewBox="0 0 1000 700" role="img" aria-label={asset.name} style={{width:'100%',height:'100%',overflow:'visible',...style}}>
+    <RenderKind kind={asset.kind}/>
+    {showLabel && <text x="500" y="685" textAnchor="middle" fontSize="20" fontWeight="800" letterSpacing="3" fill={accent}>{asset.category.toUpperCase()} • SBA ILLUSTRATION</text>}
+  </svg>;
+}
+
 export function SBAIllustration({ type, name, accent = GOLD, animated = true, showLabel = true, style, className }) {
   const frame = useCurrentFrame();
   const { fps } = useVideoConfig();
