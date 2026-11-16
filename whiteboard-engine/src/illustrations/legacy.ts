@@ -3,6 +3,7 @@
 // it deliberately uses the exact same traceImage pipeline as external images.
 import React from 'react';
 import { renderToStaticMarkup } from 'react-dom/server';
+// @ts-ignore — legacy Remotion JSX module is intentionally consumed at runtime by the Node bridge.
 import { SBAIllustrationArtwork } from '../../../remotion/whiteboard/SBAAssetLibrary';
 import { traceImage } from '../imagery/trace';
 import type { IllustrationSpec } from '../types';
