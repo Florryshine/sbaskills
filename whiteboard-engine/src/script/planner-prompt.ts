@@ -19,7 +19,7 @@ const SUBJECT_RULES: Record<Subject, string> = {
 export function buildPlannerPrompt(topic: string, subject: Subject): string {
   const assets = listIllustrationIds().join(', ');
   return `You are the script planner for Shiney Brain Academy's whiteboard video engine.
-Write a lesson script in the engine's DSL so it can be rendered as a narrated whiteboard animation where a teacher writes and draws while speaking.
+Act as the senior visual lesson director for Shiney Brain Academy. Write a complete, visually rich lesson in the engine's DSL so it can be rendered as a narrated whiteboard animation where a teacher writes and draws while speaking. Every visual must directly support a spoken teaching point. For anatomy, show accurate structures; for processes, show meaningful stages; for chemistry, distinguish particles, apparatus, reactants and products; for physics, show the actual setup and relevant forces. Do not rely on labels embedded in fetched images. Avoid both under-illustration and clutter.
 
 TOPIC: ${topic}
 SUBJECT: ${subject}
@@ -30,9 +30,9 @@ RULES
 - Middle scenes use "concept", "diagram", "list" or "equation" layouts.
 - Every scene MUST have one "narration:" line of 20-40 words of warm, teacherly Nigerian-English narration. Plain sentences, no stage directions, no emojis.
 - Every element must be synced to narration with sync:<phrase> where <phrase> is an EXACT substring of that scene's narration (e.g. sync:sunlight when the narration says "sunlight").
-- Draw 1-3 illustrations per scene from this list: ${assets}
+- There is NO fixed illustration-count limit per scene. Choose the number of illustrations according to the teaching content: enough to explain all important structures, stages, components, comparisons and examples, without padding or clutter. A complex scene may need several focused visuals; a simple scene may need one. If the visuals cannot fit readably, distribute the explanation across scenes.
 - Never invent illustration ids. Never write "draw: text". Words and drawings are separate.
-- When the library has no suitable drawing, you MAY add at most ONE "image: <2-4 search keywords> sync:<phrase>" per scene (e.g. "image: chloroplast cell diagram sync:chloroplasts"). It is fetched from free sources, traced into pen strokes and painted in colour. Use it for real-world objects (a sprinter, a microscope, a Nigerian market), never for equations or text.
+- Search the local subject-specific illustration library first, then relevant general assets. Choose the most semantically and educationally suitable asset, not merely a vaguely related icon. If no local asset is suitable, OR an external reference would materially teach the concept better, use one or more specific "image: <2-6 search keywords> sync:<phrase>" directives. External images are fetched from free sources, traced into drawable pen strokes and progressively painted in colour. External search is a normal part of visual planning, not a last resort. Prefer clean educational diagrams/illustrations for structures and processes; use photographs when a real-world visual is more useful. Never fetch images for equations or text. Avoid repeating the same image unless repetition serves a teaching purpose.
 - Use "highlight: <phrase> style:circle|underline" for the ONE key term per scene (phrase must appear in the scene's heading or a text element).
 - Equations use "->[condition]" arrows, e.g. equation: 6CO2 + 6H2O ->[light] C6H12O6 + 6O2
 - For physics scenes use arrows with explicit from:x,y to:x,y in 1920x1080 coordinates.
