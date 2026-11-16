@@ -7,7 +7,7 @@
 
 import type { Subject } from '../types';
 import { listIllustrationIds } from '../illustrations/registry';
-import { listLegacyIllustrationIds } from '../illustrations/legacy';
+import { listLegacyIllustrationIds } from '../illustrations/legacy-catalog';
 
 const SUBJECT_RULES: Record<Subject, string> = {
   biology: 'Use biology.* illustrations (plant, leaf, sun, water-drop, co2-cloud, chloroplast, cell, dna, flower, tree, roots, seedling, o2-bubbles). Draw living systems part by part.',
