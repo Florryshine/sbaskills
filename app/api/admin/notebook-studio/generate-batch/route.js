@@ -43,7 +43,7 @@ ${JSON.stringify(source)}
 Requirements:
 - Every item must be useful on its own and clearly focused on its assigned topic.
 - Avoid repeating the same explanation or question angle.
-- Keep each note concise enough for one handwritten notebook page: 70-130 words across 8-16 short structured blocks. Never cram text; every block is one or two lines.
+- Create a genuinely useful, moderately detailed notebook lesson: target 110-160 words across 8-16 short structured blocks. Explain the key idea, how or why it works, important facts and a relevant example; do not reduce the lesson to thin definitions or motivational filler. Never cram text; keep each block to one or two handwritten lines so the complete note remains readable on one page.
 - Organise it like a teacher's board notes: heading blocks written as "PART A: ...", "PART B: ...", "PART C: ..."; under each, subheading blocks that are short numbered labels ending in a colon (for example "1. Definition:", "2. Examples:"); then bullet blocks with the short points. Finish a lesson with a short practice question where it suits the category.
 - Return structured sections, not a single paragraph. Allowed section types: heading, subheading, paragraph, bullet, numbered, definition, example, formula, question, answer, note.
 - Use heading for a major section, subheading for a numbered section, bullet for short points, definition for key terms, example for worked examples, formula for equations, question for practice prompts, answer for answers, and note for exam cautions.
@@ -60,7 +60,7 @@ function validBatch(value, count) {
   return value && Array.isArray(value.items) && value.items.length === count &&
     value.items.every((item, index) => item && item.slot === index + 1 &&
       typeof item.title === 'string' && item.title.trim() &&
-      Array.isArray(item.sections) && item.sections.length >= 3 &&
+      Array.isArray(item.sections) && item.sections.length >= 8 &&
       item.sections.every((section) => section && typeof section.text === 'string' && section.text.trim() &&
         ['heading', 'subheading', 'paragraph', 'bullet', 'numbered', 'definition', 'example', 'formula', 'question', 'answer', 'note'].includes(section.type)));
 }
@@ -70,7 +70,13 @@ export async function POST(request) {
     const body = await request.json();
     const subjects = Array.isArray(body.subjects) ? [...new Set(body.subjects.map(clean).filter(Boolean))] : [];
     const template = ['classic', 'premium', 'revision'].includes(body.template) ? body.template : 'classic';
-    const perCategory = Math.min(5, Math.max(1, Number(body.perCategory) || 5));
+    const requestedCount = Math.min(30, Math.max(1, Number(body.count ?? (Number(body.perCategory) || 5) * (body.category === 'all' || !body.category ? CATEGORIES.length : 1)) || 30));
+    const categoryKey = typeof body.category === 'string' ? body.category : 'all';
+    const selectedCategory = categoryKey === 'all' ? null : CATEGORIES.find((item) => item.key === categoryKey);
+    if (categoryKey !== 'all' && !selectedCategory) return NextResponse.json({ error: 'Choose a valid notebook content type.' }, { status: 400 });
+    if (requestedCount < 30 && !selectedCategory) return NextResponse.json({ error: 'Choose a content type when generating fewer than 30 images.' }, { status: 400 });
+    const categoriesToGenerate = selectedCategory ? [selectedCategory] : CATEGORIES;
+    const perCategory = selectedCategory ? requestedCount : 5;
     if (!subjects.length) return NextResponse.json({ error: 'Select at least one subject.' }, { status: 400 });
 
     const supabase = createAdminClient();
@@ -100,7 +106,7 @@ export async function POST(request) {
     const results = [];
     const failures = [];
 
-    for (const category of CATEGORIES) {
+    for (const category of categoriesToGenerate) {
       try {
         const prompt = buildPrompt(category, chosenAssets);
         const { result, usedProvider, errors } = await generateWithFallback(
@@ -199,7 +205,7 @@ export async function POST(request) {
     return NextResponse.json({
       success: results.length > 0,
       batchId,
-      requested: CATEGORIES.length * perCategory,
+      requested: categoriesToGenerate.length * perCategory,
       generated: results.length,
       failed: failures.length,
       results,
