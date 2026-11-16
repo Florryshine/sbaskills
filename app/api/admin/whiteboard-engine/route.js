@@ -21,22 +21,16 @@ export const maxDuration = 60;
 // A worker that has not polled for this long is treated as offline (poll is 15s).
 const WORKER_ONLINE_MS = 90 * 1000;
 
-// Optional: start the free GitHub Actions renderer immediately instead of waiting for its 5-min timer.
-// Needs GITHUB_DISPATCH_TOKEN (fine-grained token, Contents: read/write on this repo). Best-effort only.
-async function pingRenderer() {
-  const token = process.env.GITHUB_DISPATCH_TOKEN;
-  if (!token) return;
-  const repo = process.env.GITHUB_REPO || 'Florryshine/sbaskills';
-  try {
-    await fetch(`https://api.github.com/repos/${repo}/dispatches`, {
-      method: 'POST',
-      headers: { Authorization: `Bearer ${token}`, Accept: 'application/vnd.github+json', 'Content-Type': 'application/json' },
-      body: JSON.stringify({ event_type: 'whiteboard-job' }),
-      signal: AbortSignal.timeout(5000),
-    });
-  } catch (err) {
-    console.warn('Could not dispatch whiteboard renderer:', err?.message || err);
-  }
+// Supabase owns dispatching. The trigger and minute sweeper write their latest
+// attempt here so the admin UI can distinguish a missing token from a GitHub rejection.
+async function getDispatchStatus(supabase) {
+  const { data, error } = await supabase
+    .from('whiteboard_dispatch_attempts')
+    .select('created_at, source, http_status, error_message, completed_at')
+    .order('created_at', { ascending: false })
+    .limit(1);
+  if (error) return { unknown: true, reason: error.message, latest: null };
+  return { unknown: false, latest: data?.[0] || null };
 }
 
 async function getWorkerStatus(supabase) {
@@ -72,7 +66,8 @@ export async function GET(req) {
         .order('created_at', { ascending: false }).limit(20));
     }
     if (error) return NextResponse.json({ error: error.message }, { status: 500 });
-    return NextResponse.json({ jobs: data, worker: await getWorkerStatus(supabase) });
+    const [worker, dispatch] = await Promise.all([getWorkerStatus(supabase), getDispatchStatus(supabase)]);
+    return NextResponse.json({ jobs: data, worker, dispatch });
   }
 
   const supabase = createAdminClient();
@@ -82,7 +77,8 @@ export async function GET(req) {
     .eq('id', id)
     .single();
   if (error || !job) return NextResponse.json({ error: 'Job not found' }, { status: 404 });
-  return NextResponse.json({ job, worker: await getWorkerStatus(supabase), serverTime: new Date().toISOString() });
+  const [worker, dispatch] = await Promise.all([getWorkerStatus(supabase), getDispatchStatus(supabase)]);
+  return NextResponse.json({ job, worker, dispatch, serverTime: new Date().toISOString() });
 }
 
 // PATCH { id, action: 'retry' } — re-queue a failed job. Narration/timeline already saved on the
@@ -185,7 +181,6 @@ async function createJob(req, user) {
         : '';
       return NextResponse.json({ error: `${created.error.message}${hint}` }, { status: 500 });
     }
-    await pingRenderer();
     return NextResponse.json({ success: true, jobId: created.data.id, status: 'narrating', scenes: null });
   }
 
@@ -271,6 +266,5 @@ async function createJob(req, user) {
   }
   const jobId = insert.data.id;
 
-  await pingRenderer();
   return NextResponse.json({ success: true, jobId, status: 'narrating', scenes: spec.scenes.length });
 }
