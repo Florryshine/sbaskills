@@ -8,7 +8,7 @@ export const maxDuration = 300;
 
 const CATEGORIES = [
   { key: 'topic_of_the_day', label: 'Topic of the Day', instruction: 'Create a clear mini-lesson introducing a JAMB topic, why it matters, and 3 key learning points.' },
-  { key: 'question_of_the_day', label: 'Question of the Day', instruction: 'Create one challenging JAMB-style multiple-choice question with four plausible options A-D, the correct answer, and a concise explanation. Put the answer in a clearly labelled Answer section at the end.' },
+  { key: 'question_of_the_day', label: 'Question of the Day', instruction: 'Create one challenging JAMB-style multiple-choice question with four plausible options A-D. Do not provide the answer, solution, hint that identifies the answer, or explanation.' },
   { key: 'fact_of_the_day', label: 'Fact of the Day', instruction: 'Create one surprising but verifiable subject fact, explain why it is true, and add one useful takeaway.' },
   { key: 'lesson_note', label: 'Lesson Notes', instruction: 'Create concise, well-structured JAMB lesson notes with definitions, key points, examples and a short check-your-understanding question.' },
   { key: 'quick_revision', label: 'Quick Revision', instruction: 'Create a compact last-minute revision sheet with must-know facts, formulas or rules where relevant, and common exam traps.' },
@@ -17,6 +17,25 @@ const CATEGORIES = [
 
 function clean(value) {
   return String(value || '').replace(/<[^>]*>/g, '').trim();
+}
+
+function removeAnswerLeakage(item) {
+  const sections = (item.sections || [])
+    .filter((section) => String(section.type || '').toLowerCase() !== 'answer')
+    .map((section) => {
+      const safeLines = [];
+      for (const line of String(section.text || '').split(/\\r?\\n/)) {
+        if (/^\\s*(answer|correct answer|solution|explanation|reasoning)\\s*[:.-]/i.test(line)) break;
+        if (/^\\s*(the correct option is|the answer is|therefore the answer|so the answer)\\b/i.test(line)) break;
+        safeLines.push(line);
+      }
+      return { ...section, text: safeLines.join('\\n').trim() };
+    })
+    .filter((section) => section.text);
+  if (!sections.some((section) => /comment your answer|drop your answer|share your answer/i.test(section.text))) {
+    sections.push({ type: 'note', text: 'What is your answer? Comment below and explain your reasoning.' });
+  }
+  return { ...item, sections };
 }
 
 function buildPrompt(category, assets) {
@@ -47,7 +66,7 @@ Requirements:
 - Organise it like a teacher's board notes: heading blocks written as "PART A: ...", "PART B: ...", "PART C: ..."; under each, subheading blocks that are short numbered labels ending in a colon (for example "1. Definition:", "2. Examples:"); then bullet blocks with the short points. Finish a lesson with a short practice question where it suits the category.
 - Return structured sections, not a single paragraph. Allowed section types: heading, subheading, paragraph, bullet, numbered, definition, example, formula, question, answer, note.
 - Use heading for a major section, subheading for a numbered section, bullet for short points, definition for key terms, example for worked examples, formula for equations, question for practice prompts, answer for answers, and note for exam cautions.
-- For Question of the Day and every practice/check-your-understanding prompt, NEVER reveal the correct answer, mark an option as correct, or include an answer/explanation block in the generated post. Present the question and its options only, then finish with a friendly engagement call-to-action inviting students to comment their answer, explain their reasoning, ask a question, or discuss the topic. Keep the correct answer private; do not leak it in the title, notes, examples, metadata, or any other text. For non-question lesson notes, you may include explanations of the lesson content, but any practice question at the end must remain unanswered and invite comments.
+- For Question of the Day and every practice/check-your-understanding prompt, NEVER reveal the correct answer, mark an option as correct, or include an answer/explanation block in the generated post. For Question of the Day, output only the question and four unmarked options A-D, followed by a comment CTA. Do not generate an answer key or worked solution. Present the question and its options only, then finish with a friendly engagement call-to-action inviting students to comment their answer, explain their reasoning, ask a question, or discuss the topic. Keep the correct answer private; do not leak it in the title, notes, examples, metadata, or any other text. For non-question lesson notes, you may include explanations of the lesson content, but any practice question at the end must remain unanswered and invite comments.
 - Use plain text, no markdown tables, no HTML, no emojis, no hashtags.
 - The text is drawn by a handwriting engine that only knows ordinary keyboard characters. Write ASCII only: powers with ^ (m/s^2, x^2, 10^-3), subscripts with _ only when needed (chemical formulas such as H2O, CO2 and C6H12O6 are written plainly), arrows as ->, multiplication as x, division as /, "<=" and ">=" for inequalities, "sqrt(x)" for roots, and write degrees as 90^o. Never use Unicode symbols such as superscript digits, subscript digits, arrows, multiplication signs, fractions or Greek letters.
 - Return exactly ${assets.length} items in the same slot order.
