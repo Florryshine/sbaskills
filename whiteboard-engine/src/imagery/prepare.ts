@@ -5,6 +5,8 @@
 
 import type { VideoSpec, IllustrationSpec } from '../types';
 import { registerIllustration } from '../illustrations/registry';
+import { findLegacyAsset } from '../illustrations/legacy-catalog';
+import { getLegacyIllustration } from '../illustrations/legacy';
 import { imageId, loadImage } from './source';
 import { traceImage } from './trace';
 
@@ -44,6 +46,20 @@ export async function prepareImages(spec: VideoSpec): Promise<PrepareResult> {
       const colorize = el.colorize !== false;
       const key = `${el.image}|${colorize}`;
       try {
+        // Resolve the SBA-authored local vector library before attempting any
+        // network image search. Both local legacy SVGs and external images
+        // enter the exact same existing trace + colour + hand-draw pipeline.
+        const legacyQuery = el.image.replace(/^legacy\\./i, '');
+        const legacy = /^legacy\\./i.test(el.image) ? findLegacyAsset(legacyQuery) : findLegacyAsset(el.image);
+        if (legacy) {
+          const local = await getLegacyIllustration(`legacy.${legacy.id}`);
+          if (!local) throw new Error(`legacy SBA illustration not found: ${el.image}`);
+          registerIllustration(local);
+          el.asset = local.id;
+          kept.push(el);
+          continue;
+        }
+
         let p = traceCache.get(key);
         let credit: string | undefined;
         if (!p) {
