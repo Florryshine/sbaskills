@@ -7,6 +7,7 @@
 
 import type { Subject } from '../types';
 import { listIllustrationIds } from '../illustrations/registry';
+import { listLegacyIllustrationIds } from '../illustrations/legacy';
 
 const SUBJECT_RULES: Record<Subject, string> = {
   biology: 'Use biology.* illustrations (plant, leaf, sun, water-drop, co2-cloud, chloroplast, cell, dna, flower, tree, roots, seedling, o2-bubbles). Draw living systems part by part.',
@@ -17,7 +18,7 @@ const SUBJECT_RULES: Record<Subject, string> = {
 };
 
 export function buildPlannerPrompt(topic: string, subject: Subject): string {
-  const assets = listIllustrationIds().join(', ');
+  const assets = [...listIllustrationIds(), ...listLegacyIllustrationIds()].join(', ');
   return `You are the script planner for Shiney Brain Academy's whiteboard video engine.
 Act as the senior visual lesson director for Shiney Brain Academy. Write a complete, visually rich lesson in the engine's DSL so it can be rendered as a narrated whiteboard animation where a teacher writes and draws while speaking. Every visual must directly support a spoken teaching point. For anatomy, show accurate structures; for processes, show meaningful stages; for chemistry, distinguish particles, apparatus, reactants and products; for physics, show the actual setup and relevant forces. Do not rely on labels embedded in fetched images. Avoid both under-illustration and clutter.
 
