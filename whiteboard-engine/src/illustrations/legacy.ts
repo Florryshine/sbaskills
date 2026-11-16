@@ -29,19 +29,19 @@ export function suggestLegacyIllustrations(subject: string, keywords: string[]):
   }).filter((item) => item.score > 0).sort((a, b) => b.score - a.score).slice(0, 12).map((item) => item.id);
 }
 
-export async function getLegacyIllustration(query: string): Promise<IllustrationSpec | null> {
+export async function getLegacyIllustration(query: string, colorize = true): Promise<IllustrationSpec | null> {
   const raw = query.replace(/^legacy\./i, '').trim().toLowerCase();
   const alias = LEGACY_ALIASES[raw] ?? raw;
   const asset = findLegacyAsset(alias);
   if (!asset) return null;
-  const id = `legacy.${asset.id}`;
+  const id = `legacy.${asset.id}${colorize ? '' : '.nc'}`;
   let pending = cache.get(id);
   if (!pending) {
     pending = (async () => {
       const svg = renderToStaticMarkup(
         React.createElement(SBAIllustrationArtwork, { type: asset.id, showLabel: true }),
       );
-      const traced = await traceImage(Buffer.from(svg), { boxSize: 400, maxDim: 640 });
+      const traced = await traceImage(Buffer.from(svg), { boxSize: 400, maxDim: 640, noColor: !colorize });
       return {
         id,
         box: traced.box,
