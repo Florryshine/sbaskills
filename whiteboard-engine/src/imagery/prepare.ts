@@ -14,7 +14,7 @@ export interface PrepareResult {
   credits: string[];
 }
 
-const traceCache = new Map<string, Promise<IllustrationSpec>>();
+const traceCache = new Map<string, Promise<{ spec: IllustrationSpec; credit?: string }>>();
 
 async function buildSpec(ref: string, colorize: boolean): Promise<{ spec: IllustrationSpec; credit?: string }> {
   const loaded = await loadImage(ref);
@@ -48,15 +48,15 @@ export async function prepareImages(spec: VideoSpec): Promise<PrepareResult> {
         let credit: string | undefined;
         if (!p) {
           p = buildSpec(el.image, colorize).then((r) => {
-            credit = r.credit;
             registerIllustration(r.spec);
-            return r.spec;
+            return r;
           });
           traceCache.set(key, p);
         }
-        const ill = await p;
+        const prepared = await p;
+        credit = prepared.credit;
         if (credit) credits.push(`${el.image}: ${credit}`);
-        el.asset = ill.id;
+        el.asset = prepared.spec.id;
         kept.push(el);
       } catch (err) {
         warnings.push(`Scene "${scene.id}": image "${el.image}" skipped — ${(err as Error).message}`);
