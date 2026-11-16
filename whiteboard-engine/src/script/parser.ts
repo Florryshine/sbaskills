@@ -28,6 +28,7 @@ import type {
   VideoSpec,
 } from '../types';
 import { getIllustration, suggestIllustrations } from '../illustrations/registry';
+import { findLegacyAsset } from '../illustrations/legacy-catalog';
 
 const SUBJECTS: Subject[] = ['biology', 'chemistry', 'physics', 'mathematics', 'general'];
 
@@ -209,6 +210,21 @@ export function parseScript(source: string): VideoSpec {
           if (!asset) throw new ScriptParseError('draw: needs an illustration id, e.g. "draw: biology.plant".', line);
           const resolved = getIllustration(asset);
           if (!resolved) {
+            const legacy = asset.toLowerCase().startsWith('legacy.')
+              ? findLegacyAsset(asset.slice('legacy.'.length))
+              : null;
+            if (legacy) {
+              spec.elements.push({
+                id: nextId('draw'),
+                type: 'illustration',
+                image: `legacy.${legacy.id}`,
+                colorize: true,
+                sync: toSync(opts),
+                at: opts.at,
+                scale: opts.scale ? parseFloat(opts.scale) : undefined,
+              });
+              break;
+            }
             const suggestions = suggestIllustrations(subject, asset.split(/[.\-_]/));
             throw new ScriptParseError(
               `Unknown illustration "${asset}". Known ids similar to it: ${suggestions.join(', ') || '(none — see listIllustrationIds())'}`,
