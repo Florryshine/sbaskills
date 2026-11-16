@@ -6,6 +6,7 @@ import { CHEMISTRY_ASSETS, bohrAtom } from './chemistry';
 import { PHYSICS_ASSETS } from './physics';
 import { GENERAL_ASSETS } from './general';
 import { MATHEMATICS_ASSETS } from './mathematics';
+import { suggestLegacyIllustrations } from './legacy';
 
 const BY_ID = new Map<string, IllustrationSpec>();
 
@@ -71,9 +72,11 @@ export function suggestIllustrations(subject: Subject, keywords: string[]): stri
     }
     return { id, score };
   });
-  return scored
+  const native = scored
     .filter((s) => s.score > 0)
     .sort((a, b) => b.score - a.score)
-    .slice(0, 12)
+    .slice(0, 8)
     .map((s) => s.id);
+  const legacy = suggestLegacyIllustrations(subject, keywords);
+  return [...native, ...legacy].slice(0, 12);
 }
