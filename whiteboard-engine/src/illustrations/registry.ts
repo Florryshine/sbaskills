@@ -6,7 +6,7 @@ import { CHEMISTRY_ASSETS, bohrAtom } from './chemistry';
 import { PHYSICS_ASSETS } from './physics';
 import { GENERAL_ASSETS } from './general';
 import { MATHEMATICS_ASSETS } from './mathematics';
-import { suggestLegacyIllustrations } from './legacy';
+import { LEGACY_ASSETS } from './legacy-catalog';
 
 const BY_ID = new Map<string, IllustrationSpec>();
 
@@ -77,6 +77,14 @@ export function suggestIllustrations(subject: Subject, keywords: string[]): stri
     .sort((a, b) => b.score - a.score)
     .slice(0, 8)
     .map((s) => s.id);
-  const legacy = suggestLegacyIllustrations(subject, keywords);
+  const legacy = LEGACY_ASSETS.map((asset) => {
+    const haystack = [asset.id.replace(/-/g, ' '), asset.name.toLowerCase(), ...asset.keywords].join(' ');
+    let score = asset.category === subject ? 4 : 0;
+    for (const keyword of keywords) {
+      const term = keyword.toLowerCase().replace(/[^a-z0-9]+/g, ' ').trim();
+      if (term.length >= 3 && haystack.includes(term)) score += 5;
+    }
+    return { id: 'legacy.' + asset.id, score };
+  }).filter((item) => item.score > 0).sort((a, b) => b.score - a.score).slice(0, 8).map((item) => item.id);
   return [...native, ...legacy].slice(0, 12);
 }
