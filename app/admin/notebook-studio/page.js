@@ -146,10 +146,22 @@ export default function NotebookStudioPage() {
               <div className="flex gap-4 text-sm"><span className="font-bold text-emerald-700">{batch.generated} saved</span><span className="font-bold text-red-600">{batch.failed} failed</span></div>
             </div>
             <div className="mt-4 flex flex-wrap items-center gap-3 rounded-xl bg-blue-50 p-4 text-sm text-blue-900"><span>These drafts are saved in the existing Social Engine. Review, edit, and approve them there before publishing.</span><a href="/admin/social-engine" className="rounded-lg bg-blue-700 px-4 py-2 font-bold text-white hover:bg-blue-800">Open Social Engine →</a></div>
+            {batch.failures?.length > 0 && (
+              <details className="mt-4 rounded-xl bg-red-50 p-4 text-sm text-red-800">
+                <summary className="cursor-pointer font-bold">Why {batch.failures.length} item(s) failed</summary>
+                <ul className="mt-2 list-disc space-y-1 pl-5">
+                  {batch.failures.map((failure, index) => (
+                    <li key={`${failure.category}-${index}`}><span className="font-semibold">{String(failure.category || '').replace(/_/g, ' ')}{failure.topic ? ` · ${failure.topic}` : ''}:</span> {failure.error}</li>
+                  ))}
+                </ul>
+              </details>
+            )}
             <div className="mt-5 grid gap-5 sm:grid-cols-2 lg:grid-cols-3">
               {batch.results.map((item) => (
                 <article key={item.id} className="overflow-hidden rounded-xl border border-slate-200">
-                  <img src={item.imageUrl} alt={item.title} className="aspect-[3/4] w-full bg-slate-50 object-cover" />
+                  <a href={item.imageUrl} target="_blank" rel="noopener noreferrer" title="Open full-size image">
+                    <img src={item.imageUrl} alt={item.title} loading="lazy" className="aspect-[3/4] w-full bg-slate-50 object-contain" />
+                  </a>
                   <div className="p-3"><p className="font-bold text-slate-800">{item.title}</p><p className="mt-1 text-xs text-slate-500">{item.subject} · {item.topic}</p><p className="mt-1 text-xs font-semibold uppercase tracking-wide text-blue-700">{item.category.replace(/_/g, ' ')}</p></div>
                 </article>
               ))}

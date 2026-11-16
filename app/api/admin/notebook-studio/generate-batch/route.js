@@ -43,11 +43,13 @@ ${JSON.stringify(source)}
 Requirements:
 - Every item must be useful on its own and clearly focused on its assigned topic.
 - Avoid repeating the same explanation or question angle.
-- Keep each note concise enough for one readable notebook page: 45-100 words across 4-8 structured blocks. Never cram text.
+- Keep each note concise enough for one handwritten notebook page: 70-130 words across 8-16 short structured blocks. Never cram text; every block is one or two lines.
+- Organise it like a teacher's board notes: heading blocks written as "PART A: ...", "PART B: ...", "PART C: ..."; under each, subheading blocks that are short numbered labels ending in a colon (for example "1. Definition:", "2. Examples:"); then bullet blocks with the short points. Finish a lesson with a short practice question where it suits the category.
 - Return structured sections, not a single paragraph. Allowed section types: heading, subheading, paragraph, bullet, numbered, definition, example, formula, question, answer, note.
 - Use heading for a major section, subheading for a numbered section, bullet for short points, definition for key terms, example for worked examples, formula for equations, question for practice prompts, answer for answers, and note for exam cautions.
 - For Question of the Day, include one question block, exactly four option bullet blocks (prefix each option with A), B), C), D)), one answer block and one explanation paragraph.
 - Use plain text, no markdown tables, no HTML, no emojis, no hashtags.
+- The text is drawn by a handwriting engine that only knows ordinary keyboard characters. Write ASCII only: powers with ^ (m/s^2, x^2, 10^-3), subscripts with _ only when needed (chemical formulas such as H2O, CO2 and C6H12O6 are written plainly), arrows as ->, multiplication as x, division as /, "<=" and ">=" for inequalities, "sqrt(x)" for roots, and write degrees as 90^o. Never use Unicode symbols such as superscript digits, subscript digits, arrows, multiplication signs, fractions or Greek letters.
 - Return exactly ${assets.length} items in the same slot order.
 
 Return ONLY JSON:
@@ -114,6 +116,19 @@ export async function POST(request) {
           const asset = chosenAssets[index];
           let contentAssetId = null;
           try {
+            // Render first: if the content cannot be drawn (e.g. too long to fit a page) nothing has been
+            // written yet, so no orphan draft row is left behind in content_assets.
+            const image = await renderNotebookImage({
+              title: item.title,
+              content: item.sections.map((section) => section.text.trim()).join('\n'),
+              sections: item.sections,
+              subject: asset.subject,
+              topic: asset.keyword,
+              template,
+              category: category.label,
+              exam: 'JAMB',
+            });
+
             const { data: inserted, error: insertError } = await supabase
               .from('content_assets')
               .insert({
@@ -143,15 +158,6 @@ export async function POST(request) {
             if (insertError) throw insertError;
             contentAssetId = inserted.id;
 
-            const image = await renderNotebookImage({
-              title: item.title,
-              content: item.sections.map((section) => section.text.trim()).join('\n'),
-              sections: item.sections,
-              subject: asset.subject,
-              topic: asset.keyword,
-              template,
-              category: category.label,
-            });
             const storagePath = `notebook-studio/${batchId}/${contentAssetId}.png`;
             const { error: uploadError } = await supabase.storage
               .from('carousel-slides')
@@ -176,7 +182,13 @@ export async function POST(request) {
             if (mediaError) throw mediaError;
             results.push({ id: contentAssetId, title: item.title, subject: asset.subject, topic: asset.keyword, category: category.key, imageUrl: publicUrl.publicUrl, status: 'draft' });
           } catch (itemError) {
-            failures.push({ category: category.key, topic: asset.keyword, contentAssetId, error: itemError.message });
+            // Upload or media-row failure after the draft was created: remove the half-saved draft so the
+            // Social Engine never shows a notebook post without an image.
+            if (contentAssetId) {
+              await supabase.from('media_files').delete().eq('content_asset_id', contentAssetId);
+              await supabase.from('content_assets').delete().eq('id', contentAssetId);
+            }
+            failures.push({ category: category.key, topic: asset.keyword, error: itemError.message });
           }
         }
       } catch (categoryError) {
