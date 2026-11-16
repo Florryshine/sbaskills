@@ -437,7 +437,10 @@ export async function traceImage(input: Buffer, opts: TraceOptions = {}): Promis
   // --- colour layer
   let colorLayer: TracedImage['colorLayer'];
   if (!opts.noColor) {
-    const colors = opts.colors ?? 14;
+    // Preserve the source image's full colour information. Palette quantisation
+    // made the paint layer visibly posterised / nearly monochrome on some assets.
+    // This changes only colour-layer encoding; the ink detection and tracing
+    // pipeline above remains untouched.
     const { data: smooth } = await base.clone().median(3).removeAlpha().raw().toBuffer({ resolveWithObject: true });
     const rgba = Buffer.alloc(w * h * 4);
     let minX = w, minY = h, maxX = 0, maxY = 0;
@@ -463,7 +466,7 @@ export async function traceImage(input: Buffer, opts: TraceOptions = {}): Promis
       minX = 0; minY = 0; maxX = w - 1; maxY = h - 1;
     }
     const png = await sharp(rgba, { raw: { width: w, height: h, channels: 4 } })
-      .png({ palette: true, colours: colors, dither: 0, compressionLevel: 9 })
+      .png({ compressionLevel: 9 })
       .toBuffer();
     colorLayer = {
       href: `data:image/png;base64,${png.toString('base64')}`,
