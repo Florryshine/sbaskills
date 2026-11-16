@@ -49,7 +49,7 @@ export async function prepareImages(spec: VideoSpec): Promise<PrepareResult> {
         // Resolve the SBA-authored local vector library before attempting any
         // network image search. Both local legacy SVGs and external images
         // enter the exact same existing trace + colour + hand-draw pipeline.
-        const legacyQuery = el.image.replace(/^legacy\\./i, '');
+        const legacyQuery = el.image.replace(/^legacy\./i, '');
         const legacy = /^legacy\\./i.test(el.image) ? findLegacyAsset(legacyQuery) : findLegacyAsset(el.image);
         if (legacy) {
           const local = await getLegacyIllustration(`legacy.${legacy.id}`, colorize);
