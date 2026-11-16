@@ -715,7 +715,7 @@ export const LEGACY_ALIASES: Record<string,string> = {
   "water": "drinking-water"
 };
 export function findLegacyAsset(query:string): LegacyAssetMeta|null {
- const q=query.toLowerCase().replace(/^legacy\\./,'').replace(/[^a-z0-9]+/g,' ').trim();
+ const q=query.toLowerCase().replace(/^legacy\./,'').replace(/[^a-z0-9]+/g,' ').trim();
  if(!q) return null;
  return LEGACY_ASSETS.find(a=>a.id===q.replace(/ /g,'-') || a.name.toLowerCase()===q)
    ?? LEGACY_ASSETS.map(a=>({a,score:a.keywords.reduce((n,k)=>n+(q.includes(k)||k.includes(q)?1:0),0)})).filter(x=>x.score>0).sort((a,b)=>b.score-a.score)[0]?.a
