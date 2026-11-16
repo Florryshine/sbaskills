@@ -68,6 +68,7 @@ export default function WhiteboardEnginePage() {
   const [submitting, setSubmitting] = useState(false);
   const [jobs, setJobs] = useState([]);
   const [worker, setWorker] = useState(null);
+  const [dispatch, setDispatch] = useState(null);
   const [pollError, setPollError] = useState('');
   const [retrying, setRetrying] = useState(false);
   const [now, setNow] = useState(Date.now());
@@ -83,6 +84,7 @@ export default function WhiteboardEnginePage() {
     if (!res.ok) throw new Error(data.error || 'Could not refresh whiteboard job.');
     setPollError('');
     if (data.worker) setWorker(data.worker);
+    if (data.dispatch) setDispatch(data.dispatch);
     if (data.job) setJob(data.job);
     return data.job;
   }, []);
@@ -93,6 +95,7 @@ export default function WhiteboardEnginePage() {
     if (!res.ok) throw new Error(data.error || 'Could not load whiteboard jobs.');
     if (data.jobs) setJobs(data.jobs);
     if (data.worker) setWorker(data.worker);
+    if (data.dispatch) setDispatch(data.dispatch);
   }, []);
 
   useEffect(() => {
@@ -319,9 +322,17 @@ export default function WhiteboardEnginePage() {
 
               {active && stage === 'queued' && workerOffline && (
                 <div className="rounded-lg bg-amber-50 border border-amber-200 text-amber-800 text-sm p-3">
-                  Waiting for a renderer. The free GitHub Actions renderer checks for new jobs every ~5 minutes
-                  (it may take up to 10–15 min to start). You can also open GitHub → Actions → "Whiteboard renderer" →
-                  Run workflow to start it now. If it never starts, check that workflow's latest run for errors.
+                  {dispatch?.latest?.error_message?.startsWith('missing_token')
+                    ? 'Automatic renderer dispatch is not configured. Add the GitHub dispatch token to Supabase Vault as github_dispatch_token.'
+                    : dispatch?.latest?.http_status === 204
+                      ? 'GitHub accepted the renderer request. The runner is starting and will claim this job automatically.'
+                      : dispatch?.latest?.http_status >= 400
+                        ? `GitHub rejected the renderer request (HTTP ${dispatch.latest.http_status}). Check the dispatch token permissions and repository access.`
+                        : dispatch?.latest && !dispatch.latest.completed_at
+                          ? 'Renderer start request sent. Waiting for GitHub to confirm the dispatch.'
+                          : dispatch?.unknown
+                            ? `Renderer dispatch status is unavailable: ${dispatch.reason}`
+                            : 'Waiting for the automatic renderer dispatch. The database will retry if no worker claims this job.'}
                 </div>
               )}
               {active && stage === 'queued' && worker?.last_error && (
