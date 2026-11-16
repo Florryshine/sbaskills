@@ -23,6 +23,8 @@ export default function NotebookStudioPage() {
   const [subjects, setSubjects] = useState([]);
   const [selected, setSelected] = useState([]);
   const [template, setTemplate] = useState('classic');
+  const [imageCount, setImageCount] = useState(1);
+  const [category, setCategory] = useState('lesson_note');
   const [loadingSubjects, setLoadingSubjects] = useState(true);
   const [generating, setGenerating] = useState(false);
   const [progress, setProgress] = useState('');
@@ -57,12 +59,12 @@ export default function NotebookStudioPage() {
     setGenerating(true);
     setError('');
     setBatch(null);
-    setProgress('Generating 6 content batches, then rendering and saving up to 30 branded notebook images. This may take a few minutes.');
+    setProgress(`Generating ${imageCount === 30 ? 'the full 30-image batch' : `${imageCount} ${category.replace(/_/g, ' ')} image(s)`}. This may take a few minutes.`);
     try {
       const response = await fetch('/api/admin/notebook-studio/generate-batch', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ subjects: selected, template, perCategory: 5 }),
+        body: JSON.stringify({ subjects: selected, template, count: imageCount, category: imageCount === 30 ? 'all' : category }),
       });
       const data = await response.json();
       if (!response.ok) throw new Error(data.error || 'Notebook generation failed.');
@@ -123,15 +125,22 @@ export default function NotebookStudioPage() {
 
             <div className="rounded-2xl border border-slate-200 bg-white p-6 shadow-sm">
               <h2 className="text-lg font-bold text-slate-900">3. Generation plan</h2>
-              <div className="mt-4 space-y-2">
-                {CATEGORIES.map(([key, label]) => <div key={key} className="flex items-center justify-between rounded-lg bg-slate-50 px-3 py-2 text-sm"><span className="text-slate-700">{label}</span><strong className="text-blue-800">5 posts</strong></div>)}
+              <div className="mt-4 grid gap-3 sm:grid-cols-2">
+                <label className="text-sm font-semibold text-slate-700">Number of images
+                  <select value={imageCount} onChange={(event) => { const next = Number(event.target.value); setImageCount(next); if (next === 30) setCategory('all'); else if (category === 'all') setCategory('lesson_note'); }} className="mt-1 w-full rounded-xl border border-slate-300 bg-white px-3 py-3">
+                    <option value={1}>1 image</option><option value={2}>2 images</option><option value={5}>5 images</option><option value={30}>Full batch — 30 images</option>
+                  </select>
+                </label>
+                <label className="text-sm font-semibold text-slate-700">Content type
+                  <select value={imageCount === 30 ? 'all' : category} onChange={(event) => setCategory(event.target.value)} disabled={imageCount === 30} className="mt-1 w-full rounded-xl border border-slate-300 bg-white px-3 py-3 disabled:bg-slate-100 disabled:text-slate-500">
+                    <option value="all">All six categories (batch)</option>{CATEGORIES.map(([key, label]) => <option key={key} value={key}>{label}</option>)}
+                  </select>
+                </label>
               </div>
-              <div className="mt-4 flex items-center justify-between border-t border-slate-100 pt-4">
-                <span className="font-bold text-slate-900">Total batch</span><span className="text-2xl font-black text-blue-800">30</span>
-              </div>
+              <div className="mt-3 rounded-lg bg-blue-50 p-3 text-sm text-blue-900">{imageCount === 30 ? 'Creates the original full batch: 5 posts in each of the 6 categories.' : `Creates exactly ${imageCount} ${category.replace(/_/g, ' ')} image(s). The full 30-image batch remains available.`}</div>
               <button type="button" disabled={!selected.length || generating || loadingSubjects} onClick={generate}
                 className="mt-5 w-full rounded-xl bg-blue-700 px-5 py-3 font-bold text-white shadow-sm transition hover:bg-blue-800 disabled:cursor-not-allowed disabled:opacity-50">
-                {generating ? 'Generating 30 posts…' : 'Generate 30 notebook posts'}
+                {generating ? `Generating ${imageCount} image(s)…` : `Generate ${imageCount === 30 ? '30 notebook posts' : `${imageCount} notebook image(s)`}`}
               </button>
               {progress && <p className="mt-3 text-sm text-blue-700">{progress}</p>}
               {error && <p role="alert" className="mt-3 rounded-lg bg-red-50 p-3 text-sm text-red-700">{error}</p>}
