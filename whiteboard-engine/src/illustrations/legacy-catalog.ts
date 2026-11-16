@@ -721,3 +721,5 @@ export function findLegacyAsset(query:string): LegacyAssetMeta|null {
    ?? LEGACY_ASSETS.map(a=>({a,score:a.keywords.reduce((n,k)=>n+(q.includes(k)||k.includes(q)?1:0),0)})).filter(x=>x.score>0).sort((a,b)=>b.score-a.score)[0]?.a
    ?? null;
 }
+
+export function listLegacyIllustrationIds(): string[] { return LEGACY_ASSETS.map((asset) => `legacy.${asset.id}`); }
