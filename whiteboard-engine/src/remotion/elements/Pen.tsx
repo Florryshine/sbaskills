@@ -12,7 +12,7 @@
 // being written.
 
 import React from 'react';
-import { useCurrentFrame, useVideoConfig, interpolate } from 'remotion';
+import { useCurrentFrame, useVideoConfig, interpolate, staticFile } from 'remotion';
 import type { ElementTimeline, LaidOutText } from '../../types';
 import { pointOnStroke } from '../../geometry/path-sample';
 
@@ -109,7 +109,7 @@ const HAND_SCALE = 0.62;
 export const HandSprite: React.FC<{ accent: string; ink: string; angle?: number }> = ({ angle = PEN_ANGLE }) => (
   <g transform={`rotate(${angle})`}>
     <image
-      href="/whiteboard/marker-hand.svg"
+      href={staticFile('whiteboard/marker-hand.svg')}
       x={10}
       y={-139}
       width={480}
