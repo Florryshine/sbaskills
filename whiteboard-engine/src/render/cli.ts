@@ -30,16 +30,23 @@ async function main() {
     // The job directory acts as the public dir (it contains narration/).
     // Fonts must be present there for staticFile() resolution.
     const pathMod = await import('node:path');
+    const { fileURLToPath } = await import('node:url');
+    const fs = await import('node:fs/promises');
+    const engineRoot = pathMod.resolve(pathMod.dirname(fileURLToPath(import.meta.url)), '../..');
     const jobPublicDir = pathMod.dirname(pathMod.resolve(timelinePath));
     const fontsDir = pathMod.join(jobPublicDir, 'fonts');
-    const fs = await import('node:fs/promises');
     const handAssetDir = pathMod.join(jobPublicDir, 'whiteboard');
+    await fs.mkdir(fontsDir, { recursive: true });
     await fs.mkdir(handAssetDir, { recursive: true });
-    await fs.copyFile('public/whiteboard/marker-hand.svg', pathMod.join(handAssetDir, 'marker-hand.svg'));
-    if (!(await Bun.file(pathMod.join(fontsDir, 'Caveat-Bold.ttf')).exists())) {
-      await Bun.write(Bun.file(pathMod.join(fontsDir, 'Caveat-Bold.ttf')), Bun.file('assets/fonts/Caveat-Bold.ttf'));
-      await Bun.write(Bun.file(pathMod.join(fontsDir, 'PatrickHand-Regular.ttf')), Bun.file('assets/fonts/PatrickHand-Regular.ttf'));
-      await Bun.write(Bun.file(pathMod.join(fontsDir, 'Kalam-Regular.ttf')), Bun.file('assets/fonts/Kalam-Regular.ttf'));
+    // Resolve bundled assets from this engine's location, never from the
+    // worker process cwd. A different cwd previously left the job public dir
+    // without the marker-hand sprite, making the pen disappear in renders.
+    await fs.copyFile(pathMod.join(engineRoot, 'public/whiteboard/marker-hand.svg'), pathMod.join(handAssetDir, 'marker-hand.svg'));
+    for (const font of ['Caveat-Bold.ttf', 'PatrickHand-Regular.ttf', 'Kalam-Regular.ttf']) {
+      const destination = pathMod.join(fontsDir, font);
+      if (!(await Bun.file(destination).exists())) {
+        await fs.copyFile(pathMod.join(engineRoot, 'assets/fonts', font), destination);
+      }
     }
     await renderTimeline(timeline, out, fps, jobPublicDir);
     return;
