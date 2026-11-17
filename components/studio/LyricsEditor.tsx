@@ -43,7 +43,7 @@ export default function LyricsEditor({ spec, provider, factChecked, onChange }: 
         <div className="flex items-center gap-2">
           <span className="font-semibold text-white">Lyrics</span>
           {provider && <Badge variant="outline" className="text-[10px] border-[#FFD60A]/40 text-[#FFD60A]">{provider}</Badge>}
-          {factChecked && <Badge variant="outline" className="text-[10px] border-[#2EC4B6]/50 text-[#2EC4B6]">fact-checked</Badge>}
+          {factChecked && <Badge variant="outline" className="text-[10px] border-[#FFCC00]/50 text-[#FFCC00]">fact-checked</Badge>}
         </div>
         <ChevronDown className={`h-4 w-4 text-white/60 transition-transform ${open ? 'rotate-180' : ''}`} />
       </CollapsibleTrigger>
@@ -54,7 +54,7 @@ export default function LyricsEditor({ spec, provider, factChecked, onChange }: 
               <div key={section.id}>
                 {section.lines.length > 0 && (
                   <div className="flex items-center gap-2 mb-2">
-                    <Badge className="bg-[#7C3AED]/80 text-white text-[10px] hover:bg-[#7C3AED]/80">{sectionLabel(section.name)}</Badge>
+                    <Badge className="bg-[#1A73E8]/80 text-white text-[10px] hover:bg-[#1A73E8]/80">{sectionLabel(section.name)}</Badge>
                     <span className="text-[10px] text-white/40">{section.chords.join(' · ')}</span>
                   </div>
                 )}
