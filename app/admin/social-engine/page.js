@@ -650,7 +650,7 @@ export default function SocialEnginePage() {
 
                 {expandedId === draft.id && (
                   <div className="mt-4 bg-slate-50 p-4 rounded-xl space-y-4">
-                    {Array.isArray(draft.metadata?.lyrics) && draft.metadata.lyrics.length > 0 && (
+                    {typeof draft.metadata?.lyrics === 'string' && draft.metadata.lyrics.length > 0 && (
                       <div className="rounded-lg border border-blue-100 bg-white p-3">
                         <p className="mb-1 text-xs font-bold uppercase tracking-wide text-brand-blue">Saved song lyrics</p>
                         <p className="text-sm whitespace-pre-wrap">{draft.metadata.lyrics}</p>
