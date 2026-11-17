@@ -352,7 +352,7 @@ export default function StudioPage() {
   };
 
   const uploadGeneratedMedia = async (blob: Blob, kind: 'audio' | 'video', durationSeconds: number) => {
-    const id = projectId || await saveProject();
+    const id = await saveProject();
     if (!id) throw new Error('Save the script before uploading generated media.');
     const mimeType = blob.type || (kind === 'video' ? 'video/mp4' : 'audio/wav');
     const signRes = await fetch('/api/admin/music-studio/media', {
