@@ -171,6 +171,7 @@ export async function POST(req: NextRequest) {
     warnings.push(geminiResult.text
       ? 'Gemini answered, but the response was not valid song JSON. Press Regenerate.'
       : `AI lyric generation failed: ${geminiResult.userMessage ?? 'Unknown error.'}`);
+    if (geminiResult.diagnostics) warnings.push(`Diagnostics: ${geminiResult.diagnostics}`);
   }
 
   if (!brain) {
