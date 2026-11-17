@@ -208,7 +208,7 @@ export default function StudioPage() {
       if (result.warnings.length) setWarnings((w) => [...w, ...result.warnings]);
       setProgressMsg('Song ready — press play!');
       setProgressPct(100);
-      toast({ title: 'Song generated', description: `${result.timeline.sections.length} sections · ${result.durationSec.toFixed(0)}s · synthetic vocals + instrumental mixed.` });
+      toast({ title: 'Song generated', description: `${result.timeline.sections.length} sections · ${result.durationSec.toFixed(0)}s · ${result.usedTts ? 'AI voice pitch-mapped to the melody' : 'built-in synthetic vocals'} + instrumental mixed.` });
     } catch (e) {
       setProgressMsg('');
       toast({ title: 'Song generation failed', description: e instanceof Error ? e.message : String(e), variant: 'destructive' });
@@ -399,12 +399,12 @@ export default function StudioPage() {
                 <div className="space-y-3 text-sm text-[#304F73]">
                   <p><b className="text-[#0B5BC1]">1. AI lyric brain</b> — your topic goes through the AI provider (Gemini when configured, offline curriculum brain otherwise) which writes accurate lyrics, facts, chords, genre, tempo and mood. A second AI pass fact-checks the content.</p>
                   <p><b className="text-[#0B5BC1]">2. Melody finalizer</b> — every syllable gets a melody note: chord tones on strong beats, a repeated motif per section for catchiness, and a safe vocal range. This guarantees anything the AI writes can actually be sung.</p>
-                  <p><b className="text-[#0B5BC1]">3. Singing engine</b> — the formant singing synthesizer renders real sung vocals (pitch, vibrato, consonants per syllable), or TTS-Map mode pitch-maps spoken syllables onto the melody. Not narration: every syllable follows the score.</p>
+                  <p><b className="text-[#0B5BC1]">3. Singing engine</b> — Gemini TTS or the configured SBA voice engine speaks each lyric syllable, then the studio pitch-maps it onto the melody so the animated words are heard in tune. If no voice engine is available, the built-in synthetic singer is used as a fallback.</p>
                   <p><b className="text-[#0B5BC1]">4. Composer</b> — a genre template (Afrobeats, Amapiano, Hip-hop, Reggae, Gospel…) synthesizes drums, bass, chords and leads from scratch, with intro, drops, fills and outro.</p>
                   <p><b className="text-[#0B5BC1]">5. Mixer</b> — vocals and instruments render offline through buses, compression, delay and reverb into one finished song, faster than realtime.</p>
                   <p><b className="text-[#0B5BC1]">6. Kinetic typography</b> — the same timeline drives every word, letter, bounce and background transition on canvas, so words land exactly on the beat.</p>
                   <p><b className="text-[#0B5BC1]">7. Export</b> — MP4 (H.264 + AAC) is encoded in your browser via WebCodecs; WebM and WAV are also available. No servers, no uploads.</p>
-                  <p className="text-xs text-[#637B98]">Everything runs client-side after the lyrics request: no per-song third-party fees, no 80GB render farm.</p>
+                  <p className="text-xs text-[#637B98]">The instrumental and video render in your browser. Gemini TTS uses your existing Gemini API key and is subject to its free-tier quotas or account billing; no separate singing server is required.</p>
                 </div>
               </DialogContent>
             </Dialog>
@@ -498,13 +498,13 @@ export default function StudioPage() {
             </div>
             {settings.vocalMode === 'synth' && (
               <p className="text-[11px] text-[#526B89]">
-                Built-in singer is an experimental synthetic voice, not a natural human singer. It follows the lyric melody but may sound robotic. Connect the SBA voice engine to enable pitch-mapped spoken vocals.
+                Built-in singer is an experimental synthetic voice, not a natural human singer. It follows the lyric melody but may sound robotic. Add GEMINI_API_KEY or configure SBA_TTS_URL to enable intelligible pitch-mapped voice vocals.
               </p>
             )}
             {settings.vocalMode === 'tts' && ttsAvailable === false && (
               <p className="text-[11px] text-[#0B5BC1]/80">
                 TTS-Map needs a TTS engine. This host has none, so the built-in synth singer will be used.
-                Configure SBA_TTS_URL to reuse your existing voice-over engine.
+                Add GEMINI_API_KEY or configure SBA_TTS_URL to enable pitch-mapped voice vocals.
               </p>
             )}
 
