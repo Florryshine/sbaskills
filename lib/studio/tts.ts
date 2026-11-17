@@ -64,7 +64,7 @@ export async function fetchSyllables(
   return map;
 }
 
-export const espeakTtsProvider = (): TtsProvider => ({
+export const apiTtsProvider = (): TtsProvider => ({
   async synthesize(items: string[]) {
     const res = await fetch('/api/admin/music-studio/tts', {
       method: 'POST',
