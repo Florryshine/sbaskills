@@ -3,7 +3,7 @@
  *
  * Everything runs in an OfflineAudioContext, so a full 60-90 second song is
  * rendered many times faster than realtime, entirely in the browser, with
- * zero server cost.
+ * client-side instrumental rendering; only optional voice syllables are fetched from the configured TTS API.
  */
 import type { SongSpec, Timeline } from './types';
 import { buildArrangement } from './arranger';
