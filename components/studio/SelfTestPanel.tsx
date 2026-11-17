@@ -5,13 +5,14 @@
  * Runs the five required educational subjects through the full engine and
  * displays pass/fail evidence with rendered frame thumbnails.
  */
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Progress } from '@/components/ui/progress';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { FlaskConical, CheckCircle2, XCircle, Download } from 'lucide-react';
 import { runSelfTest, type SubjectResult } from '@/lib/studio/selftest';
+import { exportMp4, exportWebm, webCodecsAvailable } from '@/lib/studio/exporter';
 
 export default function SelfTestPanel() {
   const [running, setRunning] = useState(false);
@@ -19,6 +20,45 @@ export default function SelfTestPanel() {
   const [message, setMessage] = useState('');
   const [results, setResults] = useState<SubjectResult[] | null>(null);
   const [previewImage, setPreviewImage] = useState<string | null>(null);
+  const [exportingId, setExportingId] = useState<string | null>(null);
+  const [exportMessage, setExportMessage] = useState('');
+  const [videoUrls, setVideoUrls] = useState<Record<string, string>>({});
+
+  useEffect(() => () => {
+    Object.values(videoUrls).forEach((url) => URL.revokeObjectURL(url));
+  }, [videoUrls]);
+
+  const exportTestVideo = async (result: SubjectResult) => {
+    if (!result.timeline || !result.audioBuffer) return;
+    setExportingId(result.id);
+    setExportMessage('Preparing video…');
+    try {
+      const options = {
+        fps: 30,
+        aspect: '9:16' as const,
+        onProgress: (percent: number, stage: string) => setExportMessage(stage + ' · ' + percent + '%'),
+      };
+      const rendered = webCodecsAvailable()
+        ? await exportMp4(result.timeline, result.audioBuffer, { typography: 'bounce', background: 'rays' }, options)
+        : await exportWebm(result.timeline, result.audioBuffer, { typography: 'bounce', background: 'rays' }, options);
+      const url = URL.createObjectURL(rendered.blob);
+      setVideoUrls((current) => {
+        if (current[result.id]) URL.revokeObjectURL(current[result.id]);
+        return { ...current, [result.id]: url };
+      });
+      const link = document.createElement('a');
+      link.href = url;
+      link.download = result.id + '-sba-self-test.' + rendered.format;
+      document.body.appendChild(link);
+      link.click();
+      link.remove();
+      setExportMessage('Video ready and downloaded.');
+    } catch (error) {
+      setExportMessage(error instanceof Error ? error.message : 'Video export failed.');
+    } finally {
+      setExportingId(null);
+    }
+  };
 
   const run = async () => {
     setRunning(true);
@@ -51,6 +91,7 @@ export default function SelfTestPanel() {
           <p className="text-xs text-[#526B89]">{message}</p>
         </div>
       )}
+      {exportMessage && <p className="text-xs text-[#526B89]" role="status">{exportMessage}</p>}
       {results && (
         <ScrollArea className="max-h-[560px] [&>[data-radix-scroll-area-viewport]]:max-h-[560px] rounded-lg border border-[#D8E6F5] bg-[#F8FBFF]">
           <div className="p-3 space-y-3">
@@ -79,6 +120,18 @@ export default function SelfTestPanel() {
                   )}
                 {r.warnings.length > 0 && (
                   <p className="text-[11px] text-[#8A6500]">{r.warnings.join(' · ')}</p>
+                )}
+                {r.timeline && r.audioBuffer && (
+                  <div className="space-y-2">
+                    <Button onClick={() => exportTestVideo(r)} disabled={exportingId !== null}
+                      className="w-full bg-[#1A73E8] text-white hover:bg-[#0B5BC1]">
+                      <Download className="mr-2 h-4 w-4" />
+                      {exportingId === r.id ? 'Rendering video…' : (webCodecsAvailable() ? 'Download test video (MP4)' : 'Download test video (WebM)')}
+                    </Button>
+                    {videoUrls[r.id] && (
+                      <video controls playsInline preload="metadata" src={videoUrls[r.id]} className="w-full rounded-lg border border-[#D8E6F5]" />
+                    )}
+                  </div>
                 )}
                 {r.audioUrl && (
                   <div className="rounded-lg border border-[#D8E6F5] bg-[#F1F7FF] p-3 space-y-2">
