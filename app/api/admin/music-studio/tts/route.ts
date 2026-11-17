@@ -202,17 +202,17 @@ export async function POST(req: NextRequest) {
     process.env.GEMINI_API_KEY_3,
     process.env.GEMINI_API_KEY,
   ].filter((value): value is string => Boolean(value && value.trim()))));
-  if (!apiKeys.length) {
+  const edgeEndpoint = process.env.TTS_ENDPOINT || 'https://openai-edge-tts-aqq1.onrender.com';
+  if (!apiKeys.length && !edgeEndpoint) {
     return NextResponse.json({
       available: false,
-      error: 'No voice engine is configured. Add GEMINI_API_KEY_1, GEMINI_API_KEY_2, or SBA_TTS_URL in the Vercel environment.',
+      error: 'No voice engine is configured. Add TTS_ENDPOINT, GEMINI_API_KEY_1, or GEMINI_API_KEY_2.',
     }, { status: 503 });
   }
 
   const requestedVoice = typeof body.voice === 'string' ? body.voice : 'Kore';
   const allowedVoices = ['Kore', 'Puck', 'Charon', 'Fenrir', 'Leda', 'Aoede', 'Zephyr', 'Orus'];
   const voiceName = allowedVoices.includes(requestedVoice) ? requestedVoice : 'Kore';
-  const edgeEndpoint = process.env.TTS_ENDPOINT || 'https://openai-edge-tts-aqq1.onrender.com';
   const audio: Record<string, string> = {};
   const errors: string[] = [];
   let edgeCount = 0;
