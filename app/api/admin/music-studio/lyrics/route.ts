@@ -123,9 +123,10 @@ async function callGemini(system: string, user: string): Promise<GeminiResult> {
   // Flash-Lite is the latency-first default for short structured lyric drafts.
   // Keep an explicit GEMINI_MODEL override for deployments that have selected one.
   const models = Array.from(new Set([
-    configuredModel || 'gemini-3.5-flash-lite',
+    'gemini-3.5-flash-lite',
+    configuredModel,
     'gemini-3.8-flash',
-  ]));
+  ].filter((model): model is string => Boolean(model && model.trim()))));
   const deadline = Date.now() + 42000;
   let lastError = 'Gemini returned no text.';
 
