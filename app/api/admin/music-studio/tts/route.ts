@@ -34,71 +34,80 @@ function pcm16ToWavBase64(pcm: Buffer, sampleRate = 24000): string {
   return Buffer.concat([header, pcm]).toString('base64');
 }
 
-async function synthesizeWithGemini(item: string, apiKey: string, voiceName: string): Promise<string> {
+async function synthesizeWithGemini(item: string, apiKeys: string[], voiceName: string): Promise<string> {
   const model = process.env.GEMINI_TTS_MODEL || 'gemini-3.8-flash-tts';
-  const controller = new AbortController();
-  const timeout = setTimeout(() => controller.abort(), 20000);
-  try {
-    const response = await fetch('https://generativelanguage.googleapis.com/v1beta/interactions', {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        'x-goog-api-key': apiKey,
-      },
-      body: JSON.stringify({
-        model,
-        input: [{
-          type: 'user_input',
-          content: [{
-            type: 'text',
-            text: `Pronounce only this English syllable clearly and naturally: ${item}. No introduction or extra words.`,
-            annotations: [{
-              type: 'speech_metadata',
-              style: 'Clear, warm, upbeat English pronunciation. Say only the supplied syllable, with a steady sustained vowel.',
+  let lastError = 'Gemini TTS returned no audio.';
+  for (const apiKey of apiKeys) {
+    const controller = new AbortController();
+    const timeout = setTimeout(() => controller.abort(), 20000);
+    try {
+      const response = await fetch('https://generativelanguage.googleapis.com/v1beta/interactions', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'x-goog-api-key': apiKey,
+        },
+        body: JSON.stringify({
+          model,
+          input: [{
+            type: 'user_input',
+            content: [{
+              type: 'text',
+              text: `Pronounce only this English syllable clearly and naturally: ${item}. No introduction or extra words.`,
+              annotations: [{
+                type: 'speech_metadata',
+                style: 'Clear, warm, upbeat Nigerian English pronunciation. Say only the supplied syllable, with a steady sustained vowel.',
+              }],
             }],
           }],
-        }],
-        response_format: {
-          type: 'audio',
-          mime_type: 'audio/wav',
-          sample_rate: 24000,
-        },
-        generation_config: {
-          speech_config: [{ voice: voiceName }],
-        },
-      }),
-      signal: controller.signal,
-      cache: 'no-store',
-    });
+          response_format: {
+            type: 'audio',
+            mime_type: 'audio/wav',
+            sample_rate: 24000,
+          },
+          generation_config: {
+            speech_config: [{ voice: voiceName }],
+          },
+        }),
+        signal: controller.signal,
+        cache: 'no-store',
+      });
 
-    const payload = await response.json().catch(() => null) as {
-      error?: { message?: string };
-      output_audio?: { data?: string; mime_type?: string };
-    } | null;
+      const payload = await response.json().catch(() => null) as {
+        error?: { message?: string };
+        output_audio?: { data?: string; mime_type?: string };
+      } | null;
 
-    if (!response.ok) {
-      throw new Error(payload?.error?.message || `Gemini TTS returned HTTP ${response.status}`);
+      if (!response.ok) {
+        lastError = payload?.error?.message || `Gemini TTS returned HTTP ${response.status}`;
+        if (response.status === 429 || /quota|rate.?limit/i.test(lastError)) continue;
+        throw new Error(lastError);
+      }
+
+      const audioData = payload?.output_audio?.data;
+      if (!audioData) throw new Error('Gemini TTS returned no audio data.');
+
+      const bytes = Buffer.from(audioData, 'base64');
+      // audio/wav is requested; wrap raw 24 kHz mono PCM if the provider omits its WAV header.
+      if (bytes.length >= 44 && bytes.toString('ascii', 0, 4) === 'RIFF') {
+        return bytes.toString('base64');
+      }
+      return pcm16ToWavBase64(bytes, 24000);
+    } catch (error) {
+      lastError = error instanceof Error ? error.message : 'Gemini TTS failed.';
+      if (!/429|quota|rate.?limit/i.test(lastError)) throw error;
+    } finally {
+      clearTimeout(timeout);
     }
-
-    const audioData = payload?.output_audio?.data;
-    if (!audioData) throw new Error('Gemini TTS returned no audio data.');
-
-    const bytes = Buffer.from(audioData, 'base64');
-    // audio/wav is requested; wrap raw 24 kHz mono PCM if the provider omits its WAV header.
-    if (bytes.length >= 44 && bytes.toString('ascii', 0, 4) === 'RIFF') {
-      return bytes.toString('base64');
-    }
-    return pcm16ToWavBase64(bytes, 24000);
-  } finally {
-    clearTimeout(timeout);
   }
+  throw new Error(lastError);
 }
 
 export async function GET() {
   const auth = await requireAdminApi();
   if (auth.response) return auth.response;
   const endpoint = configuredEndpoint();
-  const geminiAvailable = Boolean(process.env.GEMINI_API_KEY);
+  const geminiAvailable = Boolean(process.env.GEMINI_API_KEY_1 || process.env.GEMINI_API_KEY_2 || process.env.GEMINI_API_KEY_3 || process.env.GEMINI_API_KEY);
   return NextResponse.json({
     available: Boolean(endpoint || geminiAvailable),
     provider: endpoint ? 'sba-voice-engine' : geminiAvailable ? 'gemini-tts' : 'unavailable',
@@ -154,11 +163,16 @@ export async function POST(req: NextRequest) {
     }
   }
 
-  const apiKey = process.env.GEMINI_API_KEY;
-  if (!apiKey) {
+  const apiKeys = Array.from(new Set([
+    process.env.GEMINI_API_KEY_1,
+    process.env.GEMINI_API_KEY_2,
+    process.env.GEMINI_API_KEY_3,
+    process.env.GEMINI_API_KEY,
+  ].filter((value): value is string => Boolean(value && value.trim()))));
+  if (!apiKeys.length) {
     return NextResponse.json({
       available: false,
-      error: 'No voice engine is configured. Add GEMINI_API_KEY or SBA_TTS_URL in the Vercel environment.',
+      error: 'No voice engine is configured. Add GEMINI_API_KEY_1, GEMINI_API_KEY_2, or SBA_TTS_URL in the Vercel environment.',
     }, { status: 503 });
   }
 
@@ -176,7 +190,7 @@ export async function POST(req: NextRequest) {
       const index = next++;
       const item = items[index];
       try {
-        audio[item] = await synthesizeWithGemini(item, apiKey, voiceName);
+        audio[item] = await synthesizeWithGemini(item, apiKeys, voiceName);
       } catch (error) {
         errors.push(error instanceof Error ? error.message : 'Gemini TTS failed.');
       }
