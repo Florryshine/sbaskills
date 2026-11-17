@@ -15,6 +15,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import type { GenreId, MoodId, SongSpec, LyricsResponse, SectionSpec, SectionName } from '@/lib/studio/types';
 import { fallbackSongSpec } from '@/lib/studio/lyricist';
 import { listGenres } from '@/lib/studio/genres';
+import { requireAdminApi } from '@/lib/require-admin-api';
 
 export const maxDuration = 60;
 
@@ -127,25 +128,6 @@ async function callGemini(system: string, user: string): Promise<string | null> 
   }
 }
 
-/* ---------------- z-ai (sandbox/preview brain) ---------------- */
-
-async function callZai(system: string, user: string): Promise<string | null> {
-  try {
-    const { default: ZAI } = await import('z-ai-web-dev-sdk');
-    const zai = await ZAI.create();
-    const completion = await zai.chat.completions.create({
-      messages: [
-        { role: 'assistant', content: system },
-        { role: 'user', content: user },
-      ],
-      thinking: { type: 'disabled' },
-    });
-    return completion.choices[0]?.message?.content ?? null;
-  } catch {
-    return null;
-  }
-}
-
 /* ---------------- Validation & fact-check pass ---------------- */
 
 function normalizeBrain(brain: BrainSong, topic: string): BrainSong | null {
@@ -179,18 +161,7 @@ async function factCheckWithAi(system: string, brain: BrainSong): Promise<{ corr
     `You are a strict educational fact-checker for Shiney Brain Academy. Given a JSON song, verify every line against its "fact" and general knowledge. Fix ONLY factual errors (do not change style or structure). If a fact is wrong, correct the lyric text and the fact. Return the full corrected JSON only, no fences.`,
     JSON.stringify(brain),
   ).then((r) => r ?? undefined as unknown as string);
-  if (!content) {
-    // fall back to z-ai
-    const z = await callZai(
-      'You are a strict educational fact-checker. Verify the factual claims in this JSON song, fix factual errors only, and return the corrected JSON only.',
-      JSON.stringify(brain),
-    );
-    if (!z) return null;
-    const parsed = extractJson(z);
-    if (!parsed) return null;
-    const normalized = normalizeBrain(parsed, brain.title ?? '');
-    return normalized ? { corrected: normalized, corrections: ['fact-checked via z-ai'] } : null;
-  }
+  if (!content) return null;
   const parsed = extractJson(content);
   if (!parsed) return null;
   const normalized = normalizeBrain(parsed, brain.title ?? '');
@@ -200,6 +171,8 @@ async function factCheckWithAi(system: string, brain: BrainSong): Promise<{ corr
 /* ---------------- Main handler ---------------- */
 
 export async function POST(req: NextRequest) {
+  const auth = await requireAdminApi();
+  if (auth.response) return auth.response;
   let body: { topic?: string; notes?: string; genre?: string; mood?: string; durationSec?: number; title?: string; settings?: Record<string, unknown> };
   try {
     body = await req.json();
@@ -214,7 +187,7 @@ export async function POST(req: NextRequest) {
   const user = userPrompt(topic, body.notes, body.genre, body.mood, body.title);
 
   const warnings: string[] = [];
-  let provider: 'gemini' | 'zai' | 'fallback' = 'fallback';
+  let provider: 'gemini' | 'fallback' = 'fallback';
   let factCheck: LyricsResponse['factCheck'] = { checked: false };
 
   const settings = body.settings ?? {};
@@ -228,12 +201,6 @@ export async function POST(req: NextRequest) {
   const geminiOut = await callGemini(system, user);
   let brain: BrainSong | null = geminiOut ? extractJson(geminiOut) : null;
   if (brain) provider = 'gemini';
-
-  if (!brain) {
-    const zaiOut = await callZai(system, user);
-    brain = zaiOut ? extractJson(zaiOut) : null;
-    if (brain) provider = 'zai';
-  }
 
   if (!brain) {
     spec = fallbackSongSpec({
