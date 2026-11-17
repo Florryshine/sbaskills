@@ -143,12 +143,26 @@ export const Pen: React.FC<PenProps> = ({ elements, accent, texts = [], ink = '#
 
   if (!visibleTip) return null;
   const fadeOut = interpolate(lastTipAge, [0, 0.5], [1, 0], { extrapolateRight: 'clamp' });
-  const opacity = Math.max(0, fadeOut);
+
+  // Detect the beginning of the current continuous writing/drawing action.
+  // This gives the hand a short natural entrance instead of popping in.
+  let activeAge = 0;
+  if (tip) {
+    for (let back = 1; back <= 12; back++) {
+      if (!activeTipAt(elements, sceneSec - back / fps, texts)) break;
+      activeAge = back / fps;
+    }
+  }
+  const fadeIn = tip
+    ? interpolate(activeAge, [0, 0.18], [0.35, 1], { extrapolateRight: 'clamp' })
+    : 1;
+  const opacity = Math.max(0, fadeOut * fadeIn);
   if (opacity <= 0.02) return null;
 
-  // tiny deterministic hand tremor while moving
-  const wobble = tip ? Math.sin(sceneSec * 11) * 1.4 : 0;
-  const drop = (1 - fadeOut) * 26; // slide down-right while leaving
+  // Small deterministic wrist movement while drawing, with a gentle lift
+  // between strokes. Keep the marker nib anchored to the computed tip.
+  const wobble = tip ? Math.sin(sceneSec * 8.5) * 1.15 : 0;
+  const drop = (1 - fadeOut) * 26; // lift away as the writing action ends
 
   return (
     <svg
