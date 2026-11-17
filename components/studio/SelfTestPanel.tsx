@@ -60,6 +60,9 @@ export default function SelfTestPanel() {
   const run = async () => {
     setRunning(true);
     setResults(null);
+    Object.values(videoUrls).forEach((url) => URL.revokeObjectURL(url));
+    setVideoUrls({});
+    setExportMessage('');
     setProgress(0);
     try {
       const r = await runSelfTest((msg, pct) => { setMessage(msg); setProgress(pct); });
@@ -128,6 +131,18 @@ export default function SelfTestPanel() {
                     {videoUrls[r.id] && (
                       <video controls playsInline preload="metadata" src={videoUrls[r.id]} className="w-full rounded-lg border border-[#D8E6F5]" />
                     )}
+                  </div>
+                )}
+                {r.lyrics.length > 0 && (
+                  <div className="rounded-lg border border-[#D8E6F5] bg-white p-3 space-y-2">
+                    <p className="text-xs font-semibold text-[#12345B]">Generated lyrics</p>
+                    <div className="max-h-40 space-y-1 overflow-y-auto">
+                      {r.lyrics.map((line, index) => (
+                        <p key={index} className="text-xs leading-relaxed text-[#405F82]">{line}</p>
+                      ))}
+                    </div>
+                    <button type="button" onClick={() => navigator.clipboard?.writeText(r.lyrics.join('\n'))}
+                      className="text-xs font-semibold text-[#0B5BC1] hover:underline">Copy lyrics</button>
                   </div>
                 )}
                 {r.audioUrl && (
