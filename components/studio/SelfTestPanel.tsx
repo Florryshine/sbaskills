@@ -5,7 +5,7 @@
  * Runs the five required educational subjects through the full engine and
  * displays pass/fail evidence with rendered frame thumbnails.
  */
-import { useEffect, useState } from 'react';
+import { useState } from 'react';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Progress } from '@/components/ui/progress';
@@ -24,9 +24,6 @@ export default function SelfTestPanel() {
   const [exportMessage, setExportMessage] = useState('');
   const [videoUrls, setVideoUrls] = useState<Record<string, string>>({});
 
-  useEffect(() => () => {
-    Object.values(videoUrls).forEach((url) => URL.revokeObjectURL(url));
-  }, [videoUrls]);
 
   const exportTestVideo = async (result: SubjectResult) => {
     if (!result.timeline || !result.audioBuffer) return;
