@@ -146,7 +146,7 @@ async function callGemini(system: string, user: string): Promise<GeminiResult> {
             generationConfig: {
               responseMimeType: 'application/json',
               maxOutputTokens: 4096,
-              temperature: 0.85,
+              thinkingConfig: { thinkingLevel: 'low' },
             },
           }),
           signal: controller.signal,
