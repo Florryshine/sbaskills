@@ -1,9 +1,8 @@
 /**
  * TTS-Map vocal source — a second, more intelligible singing mode.
  *
- * Each syllable is spoken by a TTS engine (the built-in /api/admin/music-studio/tts endpoint
- * backed by espeak-ng where available, or YOUR existing voice-over engine
- * via the SBA_TTS_URL environment variable), then transformed into a sung
+ * Each syllable is spoken by the existing SBA voice-over engine through the
+ * /api/admin/music-studio/tts endpoint (configured with SBA_TTS_URL), then transformed into a sung
  * note: F0 is detected, the fragment is pitch-shifted to its melody pitch
  * and time-stretched to the exact note duration.
  *
@@ -31,7 +30,8 @@ export async function fetchSyllables(
   provider: TtsProvider,
   onProgress?: (done: number, total: number) => void,
 ): Promise<Map<string, DecodedSyl>> {
-  const unique = [...new Set(items.map((i) => i.toLowerCase()))].filter((i) => i.trim().length > 0);
+  // Array.from avoids Set-iterator downlevel errors with this repo's ES5 TS target.
+  const unique = Array.from(new Set(items.map((i) => i.toLowerCase()))).filter((i) => i.trim().length > 0);
   const map = new Map<string, DecodedSyl>();
   const CHUNK = 48;
   let done = 0;
