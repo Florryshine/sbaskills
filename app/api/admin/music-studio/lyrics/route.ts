@@ -117,26 +117,30 @@ async function callGemini(system: string, user: string): Promise<GeminiResult> {
   ].filter((value): value is string => Boolean(value && value.trim())))).slice(0, 3);
   if (!keys.length) return { text: null, error: 'No Gemini API key is configured. Add GEMINI_API_KEY_1, GEMINI_API_KEY_2, or GEMINI_API_KEY.' };
 
-  // Use a bounded request budget. The previous unbounded sequential retries
-  // could consume Vercel's entire 60-second function window.
   const configuredModel = process.env.GEMINI_MODEL?.trim();
-  // Flash-Lite is the latency-first default for short structured lyric drafts.
-  // Keep an explicit GEMINI_MODEL override for deployments that have selected one.
+  // Use two current, generally available models. A 503 on one model must not
+  // prevent trying the other model.
   const models = Array.from(new Set([
     'gemini-3.5-flash-lite',
-    configuredModel,
     'gemini-3.8-flash',
+    configuredModel,
   ].filter((model): model is string => Boolean(model && model.trim()))));
   const deadline = Date.now() + 42000;
   let lastError = 'Gemini returned no text.';
 
   for (const model of models) {
-    for (const key of keys) {
+    // Capacity errors are model/service-side, not API-key errors. Retry the
+    // same model briefly, then move to the next model instead of cycling keys.
+    let keyIndex = 0;
+    let modelUnavailable = false;
+    for (let attempt = 0; attempt < 2; attempt++) {
       const remaining = deadline - Date.now();
-      if (remaining <= 1000) return { text: null, error: lastError };
+      if (remaining <= 1500) return { text: null, error: lastError };
+      const key = keys[keyIndex];
       const controller = new AbortController();
-      const attemptTimeout = Math.min(35000, remaining - 500);
+      const attemptTimeout = Math.min(12000, remaining - 500);
       const timeout = setTimeout(() => controller.abort(), attemptTimeout);
+      let retryCapacity = false;
       try {
         const res = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent`, {
           method: 'POST',
@@ -162,24 +166,50 @@ async function callGemini(system: string, user: string): Promise<GeminiResult> {
         } | null;
         if (!res.ok) {
           lastError = `${model} returned HTTP ${res.status}: ${json?.error?.message || 'Unknown Gemini API error'}`;
-          if ([401, 403, 429].includes(res.status) || /quota|rate.?limit/i.test(lastError)) continue;
-          if (res.status === 404 && configuredModel && model === configuredModel) break;
-          return { text: null, error: lastError };
+          if (res.status === 401 || res.status === 403) {
+            // Only authentication/permission failures justify trying another key.
+            if (keyIndex + 1 < keys.length) {
+              keyIndex++;
+              attempt--;
+              continue;
+            }
+            modelUnavailable = true;
+            break;
+          }
+          if (res.status === 404) {
+            modelUnavailable = true;
+            break;
+          }
+          if (res.status === 429 || res.status === 500 || res.status === 502 || res.status === 503 || res.status === 504) {
+            retryCapacity = attempt === 0;
+            if (!retryCapacity) modelUnavailable = true;
+          } else {
+            return { text: null, error: lastError };
+          }
+        } else {
+          const text = json?.candidates?.[0]?.content?.parts?.map((p) => p.text ?? '').join('').trim() ?? '';
+          if (text) return { text, model };
+          lastError = `${model} returned an empty response.`;
+          modelUnavailable = true;
+          break;
         }
-        const text = json?.candidates?.[0]?.content?.parts?.map((p) => p.text ?? '').join('').trim() ?? '';
-        if (text) return { text, model };
-        lastError = `${model} returned an empty response.`;
       } catch (error) {
         lastError = error instanceof Error
           ? (error.name === 'AbortError' ? `Gemini request timed out after ${attemptTimeout}ms on ${model}.` : error.message)
           : 'Gemini request failed unexpectedly.';
-        // A network timeout is not fixed by trying every key/model. Stop and
-        // return the offline lyricist before the Vercel function deadline.
-        return { text: null, error: lastError };
+        // A network timeout is unlikely to improve by rotating API keys.
+        modelUnavailable = true;
+        break;
       } finally {
         clearTimeout(timeout);
       }
+
+      if (retryCapacity && Date.now() < deadline - 1500) {
+        // Google recommends exponential backoff for transient 5xx/429 responses.
+        await new Promise((resolve) => setTimeout(resolve, attempt === 0 ? 1000 : 2000));
+      }
     }
+    if (!modelUnavailable && Date.now() >= deadline - 1500) break;
   }
 
   return { text: null, error: lastError };
