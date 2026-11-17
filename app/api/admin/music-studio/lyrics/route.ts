@@ -122,6 +122,7 @@ async function callGemini(system: string, user: string): Promise<GeminiResult> {
   // prevent trying the other model.
   const models = Array.from(new Set([
     'gemini-3.5-flash-lite',
+    'gemini-3.7-flash',
     'gemini-3.8-flash',
     configuredModel,
   ].filter((model): model is string => Boolean(model && model.trim()))));
