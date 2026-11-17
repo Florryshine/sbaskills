@@ -22,6 +22,9 @@ const { generateScriptWithAI } = await import('../lib/whiteboard/planner.js');
 const { getIllustration } = await import('../whiteboard-engine/src/illustrations/registry.ts');
 const { parseScript } = await import('../whiteboard-engine/src/script/parser.ts');
 
+/** Image attributions + provider diagnostics per job (job id -> string[]). */
+const jobImageCredits = new Map();
+
 const SUPABASE_URL = process.env.NEXT_PUBLIC_SUPABASE_URL;
 const SERVICE_ROLE_KEY = process.env.SUPABASE_SERVICE_ROLE_KEY;
 if (!SUPABASE_URL || !SERVICE_ROLE_KEY) {
@@ -146,55 +149,68 @@ async function generateScriptForJob(job) {
   if (!topic) throw new Error('Job has neither a script nor a topic to generate one from.');
   await setStage(job, 'scripting', `Writing lesson script for "${topic}"`);
 
-  // Generate, then validate by really parsing it; the LLM sometimes returns an invalid DSL, so retry.
-  const spec = await withRetry(async () => {
+  // Generate, then validate by really parsing it. Validation failures are fed
+  // BACK into the next prompt (reflect loop) instead of blind retries — the
+  // model learns exactly which asset ids it hallucinated.
+  let feedback = '';
+  let lastErr = null;
+  for (let attempt = 1; attempt <= 3; attempt++) {
     assertLease(job);
-    const text = await generateScriptWithAI(topic, job.subject || 'general');
-    const parsed = parseScript(text);
-    const missing = parsed.scenes
-      .flatMap((sc) => sc.elements)
-      .filter((el) => el.type === 'illustration' && !el.image && !getIllustration(el.asset))
-      .map((el) => el.asset);
-    if (missing.length) throw new Error(`AI script used unknown illustrations: ${missing.join(', ')}`);
-    return { text, parsed };
-  }, {
-    attempts: 3,
-    baseMs: 1500,
-    label: 'AI script generation',
-    onRetry: (err, n) => console.warn(`[whiteboard-worker] script attempt ${n} rejected: ${err.message}`),
-  });
+    try {
+      const text = await generateScriptWithAI(topic, job.subject || 'general', feedback);
+      const parsed = parseScript(text);
+      const missing = parsed.scenes
+        .flatMap((sc) => sc.elements)
+        .filter((el) => el.type === 'illustration' && !el.image && !getIllustration(el.asset))
+        .map((el) => el.asset);
+      if (missing.length) {
+        throw new Error(
+          `AI script used unknown illustrations: ${missing.join(', ')}`,
+        );
+      }
+      const withSpec = { text, parsed };
+      const title = withSpec.parsed.title || topic;
+      const subject = /^\s*@subject\b/im.test(withSpec.text) ? withSpec.parsed.subject : (job.subject || 'general');
 
-  const title = spec.parsed.title || topic;
-  const subject = /^\s*@subject\b/im.test(spec.text) ? spec.parsed.subject : (job.subject || 'general');
+      // Reuse (or create) the shared Knowledge Asset: content_assets requires it.
+      let knowledgeAssetId = job.knowledge_asset_id || null;
+      if (!knowledgeAssetId) {
+        const { data: found, error: findErr } = await supabase.from('knowledge_assets')
+          .select('id').eq('keyword', title).eq('subject', subject).limit(1);
+        if (findErr) throw new Error(`Knowledge Asset lookup failed: ${findErr.message}`);
+        knowledgeAssetId = found?.[0]?.id || null;
+      }
+      if (!knowledgeAssetId) {
+        const { data: created, error: createErr } = await supabase.from('knowledge_assets').insert({
+          keyword: title, topic_type: 'curriculum_topic', subject,
+          summary: `Whiteboard lesson: ${title}`, raw_content: withSpec.text.slice(0, 12000),
+          learning_objectives: [], key_concepts: [], definitions: [], examples: [], facts: [],
+          common_mistakes: [], sub_topics: [], status: 'draft', source: 'whiteboard_engine_v3',
+        }).select('id').single();
+        if (createErr) throw new Error(`Knowledge Asset creation failed: ${createErr.message}`);
+        knowledgeAssetId = created.id;
+      }
 
-  // Reuse (or create) the shared Knowledge Asset: content_assets requires it.
-  let knowledgeAssetId = job.knowledge_asset_id || null;
-  if (!knowledgeAssetId) {
-    const { data: found, error: findErr } = await supabase.from('knowledge_assets')
-      .select('id').eq('keyword', title).eq('subject', subject).limit(1);
-    if (findErr) throw new Error(`Knowledge Asset lookup failed: ${findErr.message}`);
-    knowledgeAssetId = found?.[0]?.id || null;
+      const { data: saved, error: saveErr } = await supabase.from('whiteboard_jobs').update({
+        title, subject, script_text: withSpec.text, knowledge_asset_id: knowledgeAssetId,
+        stage_message: `Script ready: ${withSpec.parsed.scenes.length} scenes`,
+        stage_updated_at: new Date().toISOString(), updated_at: new Date().toISOString(),
+      }).eq('id', job.id).eq('claim_token', job.claim_token).select('*').maybeSingle();
+      if (saveErr) throw new Error(`Could not save generated script: ${saveErr.message}`);
+      if (!saved) throw new Error('Job lease was lost while the script was being generated.');
+      console.log(`[whiteboard-worker] script ready for ${job.id}: "${title}" (${withSpec.parsed.scenes.length} scenes)`);
+      return saved;
+    } catch (err) {
+      lastErr = err;
+      console.warn(`[whiteboard-worker] script attempt ${attempt} rejected: ${err.message}`);
+      feedback =
+        `IMPORTANT — your previous script was REJECTED by the validator with this error:\n"${err.message}"\n` +
+        'Fix exactly this problem and return the full corrected script. ' +
+        'Only use draw: ids that appear verbatim in the COMPLETE ASSET CATALOG above.';
+      await new Promise((r) => setTimeout(r, 1500 * attempt));
+    }
   }
-  if (!knowledgeAssetId) {
-    const { data: created, error: createErr } = await supabase.from('knowledge_assets').insert({
-      keyword: title, topic_type: 'curriculum_topic', subject,
-      summary: `Whiteboard lesson: ${title}`, raw_content: spec.text.slice(0, 12000),
-      learning_objectives: [], key_concepts: [], definitions: [], examples: [], facts: [],
-      common_mistakes: [], sub_topics: [], status: 'draft', source: 'whiteboard_engine_v3',
-    }).select('id').single();
-    if (createErr) throw new Error(`Knowledge Asset creation failed: ${createErr.message}`);
-    knowledgeAssetId = created.id;
-  }
-
-  const { data: saved, error: saveErr } = await supabase.from('whiteboard_jobs').update({
-    title, subject, script_text: spec.text, knowledge_asset_id: knowledgeAssetId,
-    stage_message: `Script ready: ${spec.parsed.scenes.length} scenes`,
-    stage_updated_at: new Date().toISOString(), updated_at: new Date().toISOString(),
-  }).eq('id', job.id).eq('claim_token', job.claim_token).select('*').maybeSingle();
-  if (saveErr) throw new Error(`Could not save generated script: ${saveErr.message}`);
-  if (!saved) throw new Error('Job lease was lost while the script was being generated.');
-  console.log(`[whiteboard-worker] script ready for ${job.id}: "${title}" (${spec.parsed.scenes.length} scenes)`);
-  return saved;
+  throw lastErr;
 }
 
 async function narrateAndBuildJob(job) {
@@ -225,10 +241,12 @@ async function narrateAndBuildJob(job) {
   }
 
   await setStage(job, 'timeline', 'Aligning narration to the drawing timeline');
-  const { timeline, warnings } = await buildTimelineForJob(
+  const { timeline, warnings, credits, notes } = await buildTimelineForJob(
     job.script_text,
     narrationResults.map(({ buffer, mimeType, audioFile }) => ({ buffer, mimeType, audioFile })),
   );
+  // Keep image attributions + provider diagnostics for the save step.
+  jobImageCredits.set(job.id, [...(credits ?? []), ...(notes ?? [])]);
 
   const { data: prepared, error } = await supabase.from('whiteboard_jobs').update({
     status: 'rendering',
@@ -237,7 +255,7 @@ async function narrateAndBuildJob(job) {
     stage_updated_at: new Date().toISOString(),
     timeline,
     audio_files: narrationResults.map(({ audioFile, publicUrl }) => ({ audioFile, publicUrl })),
-    warnings: warnings.slice(0, 20),
+    warnings: [...(credits ?? []).map((c) => `credit: ${c}`), ...(notes ?? []), ...warnings].slice(0, 30),
     duration_seconds: timeline.totalDuration,
     updated_at: new Date().toISOString(),
   })
@@ -382,6 +400,15 @@ async function saveToInfrastructure(job, outPath) {
     rendered_at: new Date().toISOString(),
     engine: 'whiteboard-v3',
   };
+
+  // Attribution for externally sourced images — required for CC-BY style
+  // licences, stored in metadata and appended to the asset body.
+  const imageCredits = jobImageCredits.get(job.id) ?? [];
+  const creditLines = imageCredits.filter((l) => l.startsWith('credit: ')).map((l) => l.slice(8));
+  if (creditLines.length) {
+    metadata.image_credits = creditLines;
+    metadata.caption = `${metadata.caption}\n\nImage credits: ${creditLines.join(' | ')}`;
+  }
 
   // metadata.whiteboard_job_id is the recovery key if the worker dies after
   // inserting an asset but before saving its id on whiteboard_jobs.

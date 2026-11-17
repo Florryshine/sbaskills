@@ -7,3 +7,8 @@ and are fetched from Google Fonts:
 
 They may be used, redistributed and bundled freely under the OFL 1.1 terms:
 https://openfontlicense.org/
+
+## PermanentMarker-Regular.ttf
+- Font: Permanent Marker by Font Diner
+- License: Apache License 2.0 (via Google Fonts, OFL-style free use)
+- Source: https://github.com/google/fonts/tree/main/apache/permanentmarker

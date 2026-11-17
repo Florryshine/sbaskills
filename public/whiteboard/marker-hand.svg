@@ -1,0 +1,42 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="700" height="406" viewBox="-20 0 720 406">
+<defs>
+ <linearGradient id="skin" x1="0" y1="0" x2=".7" y2="1"><stop stop-color="#8b4b2f"/><stop offset=".25" stop-color="#b96f4b"/><stop offset=".58" stop-color="#985536"/><stop offset="1" stop-color="#63351f"/></linearGradient>
+ <linearGradient id="skinHi" x1="0" y1="0" x2="0" y2="1"><stop stop-color="#d18a65"/><stop offset="1" stop-color="#8b4a30"/></linearGradient>
+ <linearGradient id="sleeve" x1="0" y1="0" x2="1" y2="1"><stop stop-color="#274c83"/><stop offset=".55" stop-color="#102c59"/><stop offset="1" stop-color="#081b3b"/></linearGradient>
+ <linearGradient id="marker" x1="0" y1="0" x2="0" y2="1"><stop stop-color="#fff"/><stop offset=".45" stop-color="#f1f3f5"/><stop offset="1" stop-color="#b9c1ca"/></linearGradient>
+ <filter id="shadow" x="-20%" y="-20%" width="140%" height="150%"><feGaussianBlur stdDeviation="9"/></filter>
+</defs>
+<!-- soft grounding shadow -->
+<path d="M22 286 Q180 350 410 345 T690 375 L690 405 L20 405Z" fill="#111" opacity=".14" filter="url(#shadow)"/>
+<!-- forearm and cuff -->
+<path d="M480 277 Q550 258 604 284 L700 315 L700 406 L489 406 Q458 365 455 324Z" fill="url(#sleeve)"/>
+<path d="M481 278 Q540 255 604 283 L624 295 Q557 281 492 315 L470 344 Q458 308 481 278Z" fill="#355d96" opacity=".75"/>
+<path d="M476 300 Q528 278 594 301" fill="none" stroke="#6c8bb8" stroke-width="4" opacity=".45"/>
+<path d="M490 318 Q548 298 613 325" fill="none" stroke="#071a39" stroke-width="3" opacity=".6"/>
+<!-- hand silhouette, wrist through palm -->
+<path d="M470 300 Q423 282 385 268 Q348 255 324 230 L281 187 Q256 159 244 128 Q235 105 251 91 Q268 78 285 95 L342 144 Q326 119 320 91 Q315 64 337 56 Q359 49 375 76 L414 131 Q403 99 407 75 Q411 52 433 51 Q455 50 466 76 L497 137 Q497 106 514 99 Q535 91 550 113 Q566 137 560 173 Q555 210 583 255 L607 291 Q553 330 470 300Z" fill="url(#skin)" stroke="#5d321f" stroke-width="3"/>
+<!-- upper index finger resting over marker -->
+<path d="M251 111 Q237 87 253 69 Q268 53 289 69 Q315 91 338 131 L369 174 Q376 188 362 199 Q347 210 333 196 L286 151Z" fill="url(#skinHi)" stroke="#6a3926" stroke-width="2"/>
+<path d="M257 83 Q274 70 289 88 L321 127" fill="none" stroke="#e2a080" stroke-width="5" opacity=".55" stroke-linecap="round"/>
+<!-- thumb wrapping over marker -->
+<path d="M331 192 Q347 165 377 164 Q407 164 430 181 Q447 194 439 214 Q431 232 408 230 L360 222 Q335 219 331 192Z" fill="url(#skinHi)" stroke="#6a3926" stroke-width="3"/>
+<path d="M360 181 Q385 173 410 190" fill="none" stroke="#e7a17d" stroke-width="5" opacity=".5" stroke-linecap="round"/>
+<!-- curled lower fingers -->
+<path d="M326 223 Q305 211 292 226 Q280 242 299 260 L344 298 Q361 311 376 295 Q389 280 373 264Z" fill="#8d4a2e" stroke="#63351f" stroke-width="3"/>
+<path d="M356 247 Q339 236 325 250 Q312 265 329 280 L366 309 Q385 320 399 301 Q409 285 392 269Z" fill="#a75e3c" stroke="#63351f" stroke-width="3"/>
+<path d="M386 263 Q370 252 357 267 Q345 282 361 298 L394 326 Q414 337 428 317 Q437 300 420 285Z" fill="#8e4c31" stroke="#63351f" stroke-width="3"/>
+<!-- marker body across the grip, tip at x=5 y=202 -->
+<path d="M12 177 L330 177 Q345 177 345 192 L345 219 Q345 234 330 234 L12 234 Q2 234 2 222 L2 189 Q2 177 12 177Z" fill="url(#marker)" stroke="#66717d" stroke-width="3"/>
+<path d="M22 185 L318 185" stroke="#fff" stroke-width="5" opacity=".9"/>
+<path d="M22 226 L326 226" stroke="#87929e" stroke-width="3" opacity=".5"/>
+<rect x="286" y="177" width="20" height="57" rx="5" fill="#1d58ad"/>
+<rect x="306" y="177" width="12" height="57" fill="#e9f0f8"/>
+<path d="M2 189 L-4 194 L-4 217 L2 222Z" fill="#242a31"/>
+<path d="M-4 194 L-15 202 L-4 217Z" fill="#15191f"/>
+<!-- nail and crease details -->
+<path d="M270 82 Q281 69 294 83 Q304 94 300 106 Q288 113 277 102Z" fill="#d99a7c" stroke="#7c4630" stroke-width="2"/>
+<path d="M278 84 Q289 78 296 89" fill="none" stroke="#f1c0a5" stroke-width="3" stroke-linecap="round"/>
+<path d="M434 72 Q448 67 457 81" fill="none" stroke="#e2a080" stroke-width="4" stroke-linecap="round"/>
+<path d="M460 112 Q472 126 476 145 M489 152 Q499 168 495 183 M523 163 Q530 184 522 203" fill="none" stroke="#63351f" stroke-width="3" opacity=".55" stroke-linecap="round"/>
+<path d="M470 294 Q521 307 566 285" fill="none" stroke="#d18a65" stroke-width="5" opacity=".5" stroke-linecap="round"/>
+</svg>

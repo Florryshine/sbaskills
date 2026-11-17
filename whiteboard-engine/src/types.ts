@@ -211,6 +211,8 @@ export interface ElementTimeline {
   drawDuration: number;
   /** laid-out text (text / bullet / callout / tick / heading-ish elements) */
   text?: LaidOutText;
+  /** Auto-caption written under an illustration so no diagram is ever textless. */
+  caption?: LaidOutText;
   /** bounding box (arrows, highlights target, illustrations display box) */
   bbox?: BBox;
   illustration?: {
@@ -264,6 +266,23 @@ export interface ResolvedTheme {
   highlight: string;
 }
 
+/**
+ * Photographic marker-hand sprite carried inside the timeline JSON.
+ * Embedding the PNG as a data URI makes the hand render deterministically in
+ * every context (engine CLI, worker job dir, Studio preview) — a missing
+ * asset can never silence the pen again.
+ */
+export interface HandSprite {
+  /** Base64 PNG data URI of the photo hand (transparent background). */
+  dataUri: string;
+  /** Marker nib (pen tip) position in sprite pixels. */
+  tipX: number;
+  tipY: number;
+  /** Natural sprite pixel size. */
+  width: number;
+  height: number;
+}
+
 export interface Timeline {
   fps: number;
   width: number;
@@ -273,4 +292,6 @@ export interface Timeline {
   theme: ResolvedTheme;
   scenes: SceneTimeline[];
   totalDuration: number;
+  /** Optional photo hand overlaid on every drawing action. */
+  handSprite?: HandSprite;
 }

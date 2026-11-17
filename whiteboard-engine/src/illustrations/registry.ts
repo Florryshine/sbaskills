@@ -6,6 +6,8 @@ import { CHEMISTRY_ASSETS, bohrAtom } from './chemistry';
 import { PHYSICS_ASSETS } from './physics';
 import { GENERAL_ASSETS } from './general';
 import { MATHEMATICS_ASSETS } from './mathematics';
+import { ANATOMY_ASSETS } from './anatomy';
+import { HUMANS_ASSETS } from './humans';
 import { LEGACY_ASSETS } from './legacy-catalog';
 
 const BY_ID = new Map<string, IllustrationSpec>();
@@ -19,6 +21,8 @@ register(CHEMISTRY_ASSETS);
 register(PHYSICS_ASSETS);
 register(GENERAL_ASSETS);
 register(MATHEMATICS_ASSETS);
+register(ANATOMY_ASSETS);
+register(HUMANS_ASSETS);
 
 // Parametrized extras
 BY_ID.set('chemistry.bohr-2-8-8', bohrAtom([2, 8, 8], 'chemistry.bohr-2-8-8', 404));

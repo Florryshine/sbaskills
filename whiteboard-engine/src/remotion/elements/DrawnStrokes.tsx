@@ -111,7 +111,11 @@ export const DrawnStrokes: React.FC<DrawnStrokesProps> = ({ sampled, x, y, scale
           }
           const visible = s.length * p;
           const fillP = Math.max(0, Math.min(1, (sceneSec - startSec - st - du) / 0.4));
-          const fillOpacity = s.fill ? (s.fillOpacity ?? 0.34) * fillP : 0;
+          // Vivid-marker boost: authored fills below 0.4 get lifted (capped) so the
+// board reads bright and colourful instead of washed out.
+const authored = s.fillOpacity ?? 0.34;
+const boosted = Math.min(0.85, authored < 0.4 ? authored * 2.2 : authored * 1.12);
+const fillOpacity = s.fill ? boosted * fillP : 0;
           return (
             <g key={i}>
               <path

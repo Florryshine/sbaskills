@@ -104,7 +104,7 @@ export const HandwrittenText: React.FC<HandwrittenTextProps> = ({ text, theme })
                 lineHeight: `${lineHeight}px`,
                 color: wordColor,
                 whiteSpace: 'pre',
-                width: r.w + 12,
+                width: r.w + 24,
                 display: 'inline-block',
               }}
             >

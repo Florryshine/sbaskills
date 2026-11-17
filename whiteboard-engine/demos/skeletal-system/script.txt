@@ -1,0 +1,43 @@
+@title The Human Skeletal System
+@subject biology
+
+scene title
+heading: The Human Skeletal System
+sub: The living frame that holds you up
+narration: Welcome back to Shiney Brain Academy. Today we meet the human skeletal system, the strong living frame that holds your whole body together.
+draw: general.teacher sync:Welcome back scale:0.78
+draw: biology.skeleton sync:skeletal system scale:0.8
+highlight: skeletal system style:underline
+
+scene concept
+heading: The Axial Skeleton
+narration: The axial skeleton forms the central column of the body. Look at the skull guarding the brain, the ribcage shielding the heart and lungs, and the spine holding everything upright.
+draw: biology.skull sync:skull scale:0.68
+draw: biology.ribcage sync:ribcage scale:0.68
+draw: biology.spine sync:spine scale:0.68
+highlight: central column style:circle
+
+scene diagram
+heading: The Appendicular Skeleton
+narration: Hanging from that centre are the limbs. The pelvis anchors each femur, the longest bone in your body, and together with the shoulder girdle it lets you move freely.
+draw: biology.pelvis sync:pelvis scale:0.62
+draw: biology.femur sync:femur scale:0.64
+arrow: style:straight from:560,430 to:830,560 label:hip joint sync:anchors
+highlight: longest bone style:underline
+
+scene concept
+heading: Joints Make Us Move
+narration: Where two bones meet, a joint lets the body bend. Your knee joint glides smoothly, while strong muscles pull on the bones to make every step possible.
+draw: biology.knee-joint sync:knee joint scale:0.62
+draw: biology.muscle-arm sync:muscles scale:0.62
+draw: general.person-running sync:every step scale:0.45
+highlight: Joints Make Us Move style:underline
+
+scene summary
+heading: Bones to Remember
+narration: So remember the skeleton. It supports your body, protects your organs, and works with muscles to move you through the world. Two hundred and six bones, one amazing frame.
+tick: Supports your body sync:supports
+tick: Protects your organs sync:protects
+tick: Moves with muscles sync:muscles
+draw: general.student-raising-hand sync:remember scale:0.52
+highlight: Bones to Remember style:underline

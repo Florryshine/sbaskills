@@ -34,11 +34,28 @@ import { straightArrow, curvedArrow, sketchLine, sketchCircle, sketchEllipse, ar
 import { findPhraseWordIndex } from '../script/parser';
 
 export const BOARD = { w: 1920, h: 1080, margin: 110 };
-export const LEAD_IN = 0.5;
-export const TAIL_PAD = 1.0;
+/**
+ * Scene lead-in. Kept tight so a new slide starts writing almost instantly —
+ * longer 0.5-0.7s dead openings read as "blank slides" when scrubbing.
+ */
+export const LEAD_IN = 0.2;
+export const TAIL_PAD = 0.7;
 const ELEMENT_GAP = 0.35;
 /** Seconds of drawing per unit of stroke length (at scale 1). */
 const DRAW_RATE = 0.0021;
+
+/**
+ * Script `scale:` values used to MULTIPLY the fitted zone size, which shrank
+ * diagrams to half their zone (a `scale:0.62` skull rendered ~20% of the
+ * board). Scales are now treated as RELATIVE weight: the planner's typical
+ * 0.6-0.8 range maps to ~0.95-1.1 (i.e. "fill the zone"), small props still
+ * render smaller than heroes, and nothing collapses below 82% of its zone.
+ */
+export function effectiveUserScale(userScale?: number): number {
+  if (userScale == null || !isFinite(userScale) || userScale <= 0) return 1;
+  const mapped = 0.55 + 0.45 * (userScale / 0.7);
+  return Math.max(0.82, Math.min(1.15, mapped));
+}
 
 export interface BuildOptions {
   fps?: number;
@@ -209,7 +226,7 @@ function fitIllustration(
   zone: { cx: number; cy: number; maxW: number; maxH: number },
   userScale?: number,
 ): { sampled: SampledIllustration; x: number; y: number; scale: number; bbox: BBox } {
-  const scale = Math.min(zone.maxW / spec.box.w, zone.maxH / spec.box.h) * (userScale ?? 1);
+  const scale = Math.min(zone.maxW / spec.box.w, zone.maxH / spec.box.h) * effectiveUserScale(userScale);
   const w = spec.box.w * scale;
   const h = spec.box.h * scale;
   const x = zone.cx - w / 2;
@@ -290,6 +307,40 @@ function arrowStrokes(
 }
 
 // ---------------------------------------------------------------------------
+// Auto-captions: every diagram gets a written label so no slide is textless.
+// ---------------------------------------------------------------------------
+
+/** Words that identify a human/character asset — characters never get captions. */
+const CHARACTER_WORDS = new Set([
+  'teacher', 'student', 'person', 'child', 'kid', 'kids', 'boy', 'girl',
+  'man', 'woman', 'men', 'women', 'crowd', 'people', 'family', 'audience',
+  'presenter', 'speaker', 'classroom', 'scientist', 'doctor', 'patient',
+]);
+
+function isCharacterAsset(assetId: string): boolean {
+  const words = assetId.toLowerCase().split(/[^a-z]+/).filter(Boolean);
+  return words.some((w) => CHARACTER_WORDS.has(w));
+}
+
+function titleCase(text: string): string {
+  return text
+    .trim()
+    .split(/\s+/)
+    .map((w) => w.charAt(0).toUpperCase() + w.slice(1))
+    .join(' ');
+}
+
+/** Caption text for an illustration: sync phrase first, readable asset name second. */
+function captionFor(el: ElementSpec, ill: IllustrationSpec): string | null {
+  if (isCharacterAsset(ill.id)) return null;
+  if (el.sync?.kind === 'phrase' && el.sync.phrase.trim().length > 0 && el.sync.phrase.length <= 30) {
+    return titleCase(el.sync.phrase);
+  }
+  const raw = ill.id.includes('.') ? ill.id.split('.').slice(1).join(' ') : ill.id;
+  return titleCase(raw.split(/[-_]+/).filter(Boolean).join(' '));
+}
+
+// ---------------------------------------------------------------------------
 // Layout zones per scene layout
 // ---------------------------------------------------------------------------
 
@@ -311,7 +362,7 @@ function layoutSceneElements(
   const layout = scene.layout;
 
   // ---- zone setup -------------------------------------------------------
-  const headingSize = layout === 'title' ? 108 : 76;
+  const headingSize = layout === 'title' ? 128 : 92;
   const bodyStartY = { concept: 330, list: 330, diagram: 250, equation: 300, title: 480, summary: 290 }[layout];
 
   let body: BodyCursor = {
@@ -328,46 +379,48 @@ function layoutSceneElements(
 
   const illustrationZoneFor = (index: number, count: number) => {
     if (layout === 'title') {
-      if (count === 1) return { cx: 960, cy: 700, maxW: 760, maxH: 430 };
+      if (count === 1) return { cx: 960, cy: 810, maxW: 920, maxH: 470 };
       return {
-        cx: count === 2 ? 960 + (index === 0 ? -280 : 280) : 960 + (index - (count - 1) / 2) * 420,
-        cy: 700,
-        maxW: 480,
-        maxH: 430,
+        cx: count === 2 ? 960 + (index === 0 ? -330 : 330) : 960 + (index - (count - 1) / 2) * 500,
+        cy: 810,
+        maxW: count === 2 ? 660 : 520,
+        maxH: 460,
       };
     }
     if (layout === 'diagram') {
-      // first draw is the main diagram (right-of-center), later draws sit small on the left
+      // first draw is the main diagram (right-of-center), later draws sit smaller on the left
       if (index === 0) {
         return count === 1
-          ? { cx: 1000, cy: 600, maxW: 960, maxH: 600 }
-          : { cx: 1120, cy: 620, maxW: 720, maxH: 540 };
+          ? { cx: 1020, cy: 640, maxW: 1240, maxH: 800 }
+          : { cx: 1180, cy: 640, maxW: 1060, maxH: 760 };
       }
-      if (index === 1) return { cx: 370, cy: 560, maxW: 400, maxH: 330 };
-      return { cx: 370, cy: index === 2 ? 860 : 240, maxW: 360, maxH: 260 };
+      if (index === 1) return { cx: 350, cy: 570, maxW: 560, maxH: 500 };
+      return { cx: 350, cy: index === 2 ? 880 : 250, maxW: 470, maxH: 380 };
     }
     if (layout === 'equation') {
-      return { cx: 1560, cy: 830, maxW: 480, maxH: 400 };
+      return { cx: 1560, cy: 830, maxW: 620, maxH: 500 };
     }
     if (layout === 'summary') {
-      return { cx: 1560, cy: 800, maxW: 460, maxH: 380 };
+      return { cx: 1550, cy: 770, maxW: 700, maxH: 600 };
     }
     if (layout === 'list') {
-      return { cx: 1430, cy: 640, maxW: 640, maxH: 560 };
+      return { cx: 1440, cy: 650, maxW: 760, maxH: 660 };
     }
     // concept
-    if (count === 1) return { cx: 1400, cy: 620, maxW: 740, maxH: 620 };
+    if (count === 1) return { cx: 1410, cy: 630, maxW: 900, maxH: 780 };
     if (count === 2) {
       return index === 0
-        ? { cx: 1400, cy: 420, maxW: 620, maxH: 420 }
-        : { cx: 1400, cy: 830, maxW: 620, maxH: 420 };
+        ? { cx: 1410, cy: 420, maxW: 780, maxH: 520 }
+        : { cx: 1410, cy: 860, maxW: 780, maxH: 520 };
     }
     if (conceptRowMode) {
-      const xs = [420, 960, 1500].slice(0, count);
-      const cx = count === 3 ? xs[index] : 480 + index * 400;
-      return { cx, cy: 820, maxW: 470, maxH: 380 };
+      // Full-width row: every drawing gets an equal, generous share of the board.
+      const usable = BOARD.w - BOARD.margin * 2;
+      const step = usable / count;
+      const cx = BOARD.margin + step * (index + 0.5);
+      return { cx, cy: 790, maxW: step - 90, maxH: 560 };
     }
-    return { cx: 1400, cy: 620, maxW: 600, maxH: 520 };
+    return { cx: 1410, cy: 630, maxW: 760, maxH: 660 };
   };
 
   // ---- scheduling pass --------------------------------------------------
@@ -400,6 +453,7 @@ function layoutSceneElements(
   const laidOut = new Map<string, LaidOutText>();
 
   // Heading
+  let headingBottom = layout === 'title' ? 250 + headingSize * 1.2 : 110 + headingSize * 1.2;
   if (scene.heading) {
     const headingAlign = layout === 'title' || layout === 'summary' || layout === 'diagram' ? 'center' : 'left';
     const hx = headingAlign === 'center' ? (BOARD.w - 1400) / 2 : BOARD.margin;
@@ -415,16 +469,21 @@ function layoutSceneElements(
       writeRate: 1.3,
     });
     laidOut.set('__heading', text);
+    // real bottom (may wrap to several lines with the wide marker font)
+    for (const r of text.wordRects) {
+      headingBottom = Math.max(headingBottom, r.y + headingSize * 1.15);
+    }
   }
   if (scene.sub) {
     const align = layout === 'title' || layout === 'diagram' ? 'center' : 'left';
     const sx = align === 'center' ? (BOARD.w - 1300) / 2 : BOARD.margin;
-    const sy = layout === 'title' ? 430 : scene.heading ? 210 : 120;
+    // never overlap a multi-line heading
+    const sy = layout === 'title' ? Math.max(430, headingBottom + 22) : scene.heading ? Math.max(210, headingBottom + 12) : 120;
     const text = layoutText(scene.sub, {
       x: sx,
       y: sy,
       width: 1300,
-      fontSize: 44,
+      fontSize: 48,
       font: 'body',
       align,
       color: 'inkSoft',
@@ -451,7 +510,7 @@ function layoutSceneElements(
         const illSpec = el.asset ? getIllustration(el.asset) : null;
         if (!illSpec) return 0;
         const zone = illustrationZoneFor(draws.indexOf(el), drawCount);
-        const scale = Math.min(zone.maxW / illSpec.box.w, zone.maxH / illSpec.box.h) * (el.scale ?? 1);
+        const scale = Math.min(zone.maxW / illSpec.box.w, zone.maxH / illSpec.box.h) * effectiveUserScale(el.scale);
         const estLen = illSpec.estLength ?? illSpec.strokes.length * 220; // rough per-stroke length
         return Math.max(1.3, Math.min(7.5, estLen * scale * DRAW_RATE));
       }
@@ -566,6 +625,25 @@ function layoutSceneElements(
         t.bbox = fitted.bbox;
         t.start = F2(start);
         t.drawDuration = F2(drawDuration);
+        // Auto-caption under the diagram (never for human characters).
+        // The scene duration is extended afterwards to cover caption writing.
+        const captionText = captionFor(el, illSpec);
+        if (captionText && t.bbox) {
+          const capStart = start + drawDuration + 0.15;
+          const capW = 640;
+          const capX = Math.max(BOARD.margin, Math.min(BOARD.w - BOARD.margin - capW, t.bbox.x + t.bbox.w / 2 - capW / 2));
+          const capY = Math.min(t.bbox.y + t.bbox.h + 18, 980);
+          t.caption = layoutText(captionText, {
+            x: capX,
+            y: capY,
+            width: capW,
+            fontSize: 38,
+            font: 'label',
+            align: 'center',
+            color: 'accent2',
+            writeStart: capStart,
+          });
+        }
         prevEnd = start + drawDuration;
         break;
       }
@@ -712,7 +790,7 @@ function layoutSceneElements(
           x: pos.x,
           y: pos.y,
           width: 620,
-          fontSize: 36,
+          fontSize: 40,
           font: 'label',
           align: 'left',
           color: el.style === 'accent' ? theme.accent : 'inkSoft',
@@ -798,7 +876,17 @@ export function buildTimeline(spec: VideoSpec, narration: BuildOptions['narratio
     const elements = layoutSceneElements(scene, nar.words, theme, duration, warnings);
 
     // make sure the last element fits
-    const lastEnd = elements.reduce((acc, e) => Math.max(acc, e.start + e.drawDuration), 0);
+    // Auto-captions finish writing ~1s after their illustration — count them,
+    // otherwise the caption's last word gets cut at the scene cut.
+    const lastEnd = elements.reduce(
+      (acc, e) => {
+        const capEnd = e.caption?.wordRects.length
+          ? Math.max(...e.caption.wordRects.map((r) => r.writeStart + r.writeDuration))
+          : 0;
+        return Math.max(acc, e.start + e.drawDuration, capEnd);
+      },
+      0,
+    );
     if (lastEnd + 0.5 > duration) duration = lastEnd + 0.8;
 
     const seed = hash(`${spec.title}:${scene.id}`);
@@ -825,9 +913,10 @@ export function buildTimeline(spec: VideoSpec, narration: BuildOptions['narratio
     };
 
     // Heading/sub timelines live on the scene (drawn before elements).
+    let renderHeadingBottom = 0;
     if (scene.heading) {
       const headingAlign = scene.layout === 'title' || scene.layout === 'summary' || scene.layout === 'diagram' ? 'center' : 'left';
-      const headingSize = scene.layout === 'title' ? 108 : 76;
+      const headingSize = scene.layout === 'title' ? 128 : 92;
       const hx = headingAlign === 'center' ? (BOARD.w - 1400) / 2 : BOARD.margin;
       built.heading = layoutText(scene.heading, {
         x: hx,
@@ -838,15 +927,24 @@ export function buildTimeline(spec: VideoSpec, narration: BuildOptions['narratio
         align: headingAlign,
         writeStart: LEAD_IN,
       });
+      // lowest wrapped line (wordRect y is absolute board coordinate)
+      for (const r of built.heading.wordRects) {
+        renderHeadingBottom = Math.max(renderHeadingBottom, r.y + headingSize * 1.12);
+      }
       // pace heading words onto the narration if the heading appears verbatim
     }
     if (scene.sub) {
       const align = scene.layout === 'title' || scene.layout === 'diagram' ? 'center' : 'left';
       built.sub = layoutText(scene.sub, {
         x: align === 'center' ? (BOARD.w - 1300) / 2 : BOARD.margin,
-        y: scene.layout === 'title' ? 430 : scene.heading ? 210 : 120,
+        y:
+          scene.layout === 'title'
+            ? Math.max(430, renderHeadingBottom + 22)
+            : scene.heading
+              ? Math.max(210, renderHeadingBottom + 14)
+              : 120,
         width: 1300,
-        fontSize: 44,
+        fontSize: 48,
         font: 'body',
         align,
         color: 'inkSoft',

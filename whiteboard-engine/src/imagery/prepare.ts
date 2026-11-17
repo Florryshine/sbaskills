@@ -2,6 +2,14 @@
 // registered illustration (strokes + colour layer) BEFORE the sync timeline
 // builder runs. Failures never abort the render: the element is dropped and a
 // warning is returned.
+//
+// Routing rules:
+//   • "legacy.<id>" refs go straight to the local SBA artwork library.
+//   • Plain keyword refs search EXTERNAL free sources first (the planner was
+//     promised external images) and fall back to a local legacy match when the
+//     network fails — a local drawing beats a dropped scene.
+//   • Every image used in the job is hashed; later lookups exclude repeats so
+//     scenes never show the same stock photo twice.
 
 import type { VideoSpec, IllustrationSpec } from '../types';
 import { registerIllustration } from '../illustrations/registry';
@@ -14,12 +22,19 @@ export interface PrepareResult {
   warnings: string[];
   /** Attribution lines for sourced images (put them in the video description). */
   credits: string[];
+  /** Key/provider diagnostics (missing API keys, fallbacks used). */
+  notes: string[];
 }
 
 const traceCache = new Map<string, Promise<{ spec: IllustrationSpec; credit?: string }>>();
 
-async function buildSpec(ref: string, colorize: boolean): Promise<{ spec: IllustrationSpec; credit?: string }> {
-  const loaded = await loadImage(ref);
+async function buildSpec(
+  ref: string,
+  colorize: boolean,
+  avoid?: Set<string>,
+  notes?: string[],
+): Promise<{ spec: IllustrationSpec; credit?: string }> {
+  const loaded = await loadImage(ref, { intent: 'diagram', avoid, notes });
   const traced = await traceImage(loaded.buffer, { noColor: !colorize });
   const id = imageId(ref) + (colorize ? '' : '.nc');
   const spec: IllustrationSpec = {
@@ -35,6 +50,9 @@ async function buildSpec(ref: string, colorize: boolean): Promise<{ spec: Illust
 export async function prepareImages(spec: VideoSpec): Promise<PrepareResult> {
   const warnings: string[] = [];
   const credits: string[] = [];
+  const notes: string[] = [];
+  // content hashes of every image used in this job → later lookups avoid them
+  const usedHashes = new Set<string>();
 
   for (const scene of spec.scenes) {
     const kept = [];
@@ -46,13 +64,9 @@ export async function prepareImages(spec: VideoSpec): Promise<PrepareResult> {
       const colorize = el.colorize !== false;
       const key = `${el.image}|${colorize}`;
       try {
-        // Resolve the SBA-authored local vector library before attempting any
-        // network image search. Both local legacy SVGs and external images
-        // enter the exact same existing trace + colour + hand-draw pipeline.
-        const legacyQuery = el.image.replace(/^legacy\./i, '');
-        const legacy = /^legacy\./i.test(el.image) ? findLegacyAsset(legacyQuery) : findLegacyAsset(el.image);
-        if (legacy) {
-          const local = await getLegacyIllustration(`legacy.${legacy.id}`, colorize);
+        // 1. explicit legacy refs resolve locally
+        if (/^legacy\./i.test(el.image)) {
+          const local = await getLegacyIllustration(el.image, colorize);
           if (!local) throw new Error(`legacy SBA illustration not found: ${el.image}`);
           registerIllustration(local);
           el.asset = local.id;
@@ -60,25 +74,40 @@ export async function prepareImages(spec: VideoSpec): Promise<PrepareResult> {
           continue;
         }
 
-        let p = traceCache.get(key);
-        let credit: string | undefined;
-        if (!p) {
-          p = buildSpec(el.image, colorize).then((r) => {
-            registerIllustration(r.spec);
-            return r;
-          });
-          traceCache.set(key, p);
+        // 2. everything else: external free sources first
+        try {
+          let p = traceCache.get(key);
+          let credit: string | undefined;
+          if (!p) {
+            p = buildSpec(el.image, colorize, usedHashes, notes).then((r) => {
+              registerIllustration(r.spec);
+              return r;
+            });
+            traceCache.set(key, p);
+          }
+          const prepared = await p;
+          credit = prepared.credit;
+          if (credit) credits.push(`${el.image}: ${credit}`);
+          el.asset = prepared.spec.id;
+          kept.push(el);
+          continue;
+        } catch (extErr) {
+          // 3. fallback: a matching local legacy drawing beats a dropped scene
+          const legacy = findLegacyAsset(el.image);
+          if (!legacy) throw extErr;
+          notes.push(`Scene "${scene.id}": external image "${el.image}" failed — using local legacy.${legacy.id}`);
+          const local = await getLegacyIllustration(`legacy.${legacy.id}`, colorize);
+          if (!local) throw extErr;
+          registerIllustration(local);
+          el.asset = local.id;
+          kept.push(el);
+          continue;
         }
-        const prepared = await p;
-        credit = prepared.credit;
-        if (credit) credits.push(`${el.image}: ${credit}`);
-        el.asset = prepared.spec.id;
-        kept.push(el);
       } catch (err) {
         warnings.push(`Scene "${scene.id}": image "${el.image}" skipped — ${(err as Error).message}`);
       }
     }
     scene.elements = kept;
   }
-  return { warnings, credits };
+  return { warnings, credits, notes };
 }

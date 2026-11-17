@@ -1,53 +1,56 @@
 // src/themes.ts — subject-aware visual themes.
-// Palette: professional desaturated marker colors on a warm white board.
+// Palette: vivid marker colours on a warm white board — bright enough for
+// small screens, still professional. Accent pairs stay distinguishable for
+// scientific structures (arteries/veins use dedicated hex colours in the
+// anatomy library, e.g. #E03131 / #1971C2).
 
 import type { ResolvedTheme, Subject } from './types';
 
 export const THEMES: Record<Subject, ResolvedTheme> = {
   biology: {
-    board: '#FDFDFB',
-    boardEdge: '#E8E6E0',
-    ink: '#26343C',
+    board: '#FEFEFC',
+    boardEdge: '#EDEAE2',
+    ink: '#21313B',
     inkSoft: '#5D6E78',
-    accent: '#2E7D4F', // leaf green
-    accent2: '#C25B34', // terracotta
-    highlight: '#F7C948', // marker yellow
+    accent: '#1EA55C', // vivid leaf green
+    accent2: '#E8590C', // vivid orange
+    highlight: '#FFD43B', // bright marker yellow
   },
   chemistry: {
-    board: '#FDFCFA',
-    boardEdge: '#E9E5DE',
-    ink: '#2A2830',
+    board: '#FEFEFC',
+    boardEdge: '#ECE8E1',
+    ink: '#262433',
     inkSoft: '#635D6E',
-    accent: '#B4552D', // burnt orange
-    accent2: '#3B7A8C', // teal
-    highlight: '#F2B33D',
+    accent: '#E8590C', // vivid orange
+    accent2: '#1971C2', // strong blue
+    highlight: '#FFD43B',
   },
   physics: {
-    board: '#FBFBFD',
-    boardEdge: '#E6E6E9',
-    ink: '#1F2A33',
+    board: '#FDFDFE',
+    boardEdge: '#E7E7EC',
+    ink: '#1C2B35',
     inkSoft: '#586873',
-    accent: '#20647A', // deep teal
-    accent2: '#B0503C', // brick
-    highlight: '#E8B84B',
+    accent: '#0C8599', // strong cyan-teal
+    accent2: '#E03131', // strong red
+    highlight: '#FFD43B',
   },
   mathematics: {
-    board: '#FDFDFB',
-    boardEdge: '#E8E6E0',
-    ink: '#282B33',
+    board: '#FEFEFC',
+    boardEdge: '#EDEAE2',
+    ink: '#262A36',
     inkSoft: '#5E6470',
-    accent: '#7A4A9E', // muted violet
-    accent2: '#2E7D6B', // viridian
-    highlight: '#F2C14E',
+    accent: '#7048E8', // vivid violet
+    accent2: '#0CA678', // emerald
+    highlight: '#FFD43B',
   },
   general: {
-    board: '#FDFDFB',
-    boardEdge: '#E8E6E0',
-    ink: '#26303A',
+    board: '#FEFEFC',
+    boardEdge: '#EDEAE2',
+    ink: '#242F3A',
     inkSoft: '#5C6B75',
-    accent: '#2E6E5E',
-    accent2: '#B3583C',
-    highlight: '#F5C34B',
+    accent: '#2F9E44', // vivid green
+    accent2: '#E8590C', // vivid orange
+    highlight: '#FFD43B',
   },
 };
 
@@ -74,15 +77,17 @@ export function getTheme(subject: Subject): ResolvedTheme {
 }
 
 // Font stack CSS families — loaded via @font-face in the composition.
+// Headings use Permanent Marker: a genuine chunky marker hand — bold and
+// readable even on phone screens. Caveat remains available for script accents.
 export const FONT_FAMILY = {
-  heading: "'Caveat', 'Comic Sans MS', cursive",
+  heading: "'Permanent Marker', 'Caveat', 'Comic Sans MS', cursive",
   body: "'Patrick Hand', 'Comic Sans MS', cursive",
   label: "'Kalam', 'Comic Sans MS', cursive",
 } as const;
 
 /** Approximate average glyph width as a fraction of font-size (build-time layout). */
 export const FONT_WIDTH_FACTOR = {
-  heading: 0.47,
-  body: 0.48,
-  label: 0.48,
+  heading: 0.62, // Permanent Marker is much wider than Caveat
+  body: 0.5,
+  label: 0.5,
 } as const;

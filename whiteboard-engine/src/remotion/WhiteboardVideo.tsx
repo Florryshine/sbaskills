@@ -14,8 +14,16 @@ import { loadFont } from '@remotion/fonts';
 import type { Timeline } from '../types';
 import { SceneRenderer } from './SceneRenderer';
 
-// Local OFL-licensed handwriting fonts, loaded with proper delayRender
-// semantics so no frame is captured before the typefaces are ready.
+// Local handwriting fonts, loaded with proper delayRender semantics so no
+// frame is captured before the typefaces are ready. Permanent Marker (Apache
+// 2.0) gives headings a genuine chunky marker hand; Caveat remains for script
+// accents.
+loadFont({
+  family: 'Permanent Marker',
+  url: staticFile('fonts/PermanentMarker-Regular.ttf'),
+  weight: '400',
+  format: 'truetype',
+});
 loadFont({
   family: 'Caveat',
   url: staticFile('fonts/Caveat-Bold.ttf'),

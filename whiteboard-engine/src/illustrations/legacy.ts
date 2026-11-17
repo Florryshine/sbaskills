@@ -1,3 +1,5 @@
+// @ts-ignore — react-dom/server types are not installed in the engine workspace
+
 // Converts an original SBA-authored SVG illustration into the v3 engine's
 // existing traced-stroke + colour-layer representation. No new reveal mode:
 // it deliberately uses the exact same traceImage pipeline as external images.

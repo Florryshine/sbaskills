@@ -58,6 +58,7 @@ export const SceneRenderer: React.FC<{ scene: SceneTimeline; timeline: Timeline 
                   {el.spec.label}
                 </div>
               )}
+              {el.caption && <HandwrittenText text={el.caption} theme={theme} />}
             </React.Fragment>
           );
         }
@@ -177,7 +178,13 @@ export const SceneRenderer: React.FC<{ scene: SceneTimeline; timeline: Timeline 
         return null;
       })}
 
-      <Pen elements={scene.elements} accent={theme.accent} ink={theme.ink} texts={[scene.heading, scene.sub]} />
+      <Pen
+        elements={scene.elements}
+        accent={theme.accent}
+        ink={theme.ink}
+        texts={[scene.heading, scene.sub]}
+        hand={timeline.handSprite ?? null}
+      />
     </AbsoluteFill>
   );
 };

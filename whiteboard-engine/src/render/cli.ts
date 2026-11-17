@@ -42,12 +42,14 @@ async function main() {
     // worker process cwd. A different cwd previously left the job public dir
     // without the marker-hand sprite, making the pen disappear in renders.
     await fs.copyFile(pathMod.join(engineRoot, 'public/whiteboard/marker-hand.svg'), pathMod.join(handAssetDir, 'marker-hand.svg'));
-    for (const font of ['Caveat-Bold.ttf', 'PatrickHand-Regular.ttf', 'Kalam-Regular.ttf']) {
+    await fs.copyFile(pathMod.join(engineRoot, 'public/whiteboard/marker-hand.png'), pathMod.join(handAssetDir, 'marker-hand.png'));
+    for (const font of ['Caveat-Bold.ttf', 'PatrickHand-Regular.ttf', 'Kalam-Regular.ttf', 'PermanentMarker-Regular.ttf']) {
       const destination = pathMod.join(fontsDir, font);
       if (!(await Bun.file(destination).exists())) {
         await fs.copyFile(pathMod.join(engineRoot, 'assets/fonts', font), destination);
       }
     }
+    await injectHandSprite(timeline, engineRoot);
     await renderTimeline(timeline, out, fps, jobPublicDir);
     return;
   }
@@ -91,12 +93,37 @@ async function main() {
   const { timeline, warnings } = buildTimeline(spec, narration, { fps });
   for (const w of warnings) console.warn(`[3/5] warning: ${w}`);
   console.log(`[3/5] timeline: ${timeline.scenes.length} scenes, total ${timeline.totalDuration.toFixed(1)}s`);
+  const engineRoot = (await import('node:path')).resolve((await import('node:path')).dirname(Bun.main), '../..');
+  await injectHandSprite(timeline, engineRoot);
   await Bun.write('public/timeline.json', JSON.stringify(timeline));
 
   // 4-5. Bundle + render
   await renderTimeline(timeline, out, fps);
   const secs = ((Date.now() - t0) / 1000).toFixed(1);
   console.log(`[whiteboard-engine] done in ${secs}s → ${out}`);
+}
+
+/**
+ * Embed the photographic marker hand into the timeline as a data URI.
+ * The sprite then travels with the timeline JSON itself — worker job dirs,
+ * Studio previews and CLI renders all show the same photo hand with zero
+ * asset-path risk (a missing file previously silenced the pen entirely).
+ */
+async function injectHandSprite(timeline: import('../types').Timeline, engineRoot: string): Promise<void> {
+  try {
+    const pathMod = await import('node:path');
+    const png = await Bun.file(pathMod.join(engineRoot, 'public/whiteboard/marker-hand.png')).arrayBuffer();
+    const meta = JSON.parse(await Bun.file(pathMod.join(engineRoot, 'public/whiteboard/marker-hand.meta.json')).text());
+    timeline.handSprite = {
+      dataUri: `data:image/png;base64,${Buffer.from(png).toString('base64')}`,
+      tipX: meta.tip[0],
+      tipY: meta.tip[1],
+      width: meta.size[0],
+      height: meta.size[1],
+    };
+  } catch (err) {
+    console.warn(`[whiteboard-engine] photo hand not embedded (${(err as Error).message}) — falling back to static sprite`);
+  }
 }
 
 async function renderTimeline(timeline: import('../types').Timeline, out: string, fps: number, publicDir = 'public'): Promise<void> {

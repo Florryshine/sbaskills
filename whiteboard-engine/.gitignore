@@ -5,3 +5,4 @@ public/timeline.json
 *.log
 tts-test*.wav
 demos/output/*.mp4
+demos/output/
