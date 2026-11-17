@@ -24,6 +24,7 @@ import { Separator } from '@/components/ui/separator';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Toaster } from '@/components/ui/toaster';
 import { useToast } from '@/hooks/use-toast';
+import { createBrowserClient } from '@/lib/supabase';
 import {
   Sparkles, Music, Download, Film, Save, FolderOpen, Trash2,
   Wand2, Brain, RefreshCw, BookOpenText, AudioLines,
@@ -71,6 +72,7 @@ interface SavedProject {
   savedAt: number;
   spec: SongSpec;
   settings: StudioSettings;
+  media_files?: Array<{ id: string; media_type: string; url: string; role: string }>;
 }
 
 export default function StudioPage() {
@@ -102,6 +104,8 @@ export default function StudioPage() {
   const [ttsAvailable, setTtsAvailable] = useState<boolean | null>(null);
 
   const [projects, setProjects] = useState<SavedProject[]>([]);
+  const [projectId, setProjectId] = useState<string | null>(null);
+  const [mediaBusy, setMediaBusy] = useState(false);
   const [projectsOpen, setProjectsOpen] = useState(false);
   const [mp4Ready, setMp4Ready] = useState(false);
 
@@ -133,14 +137,17 @@ export default function StudioPage() {
       })
       .catch(() => setTtsAvailable(false));
     setMp4Ready(webCodecsAvailable());
-    try {
-      const raw = localStorage.getItem('sba-studio-projects');
-      if (raw) setProjects(JSON.parse(raw) as SavedProject[]);
-    } catch { /* ignore */ }
+    fetch('/api/admin/music-studio/projects')
+      .then(async (r) => { const j = await r.json(); if (!r.ok) throw new Error(j.error || 'Could not load saved scripts'); return j.data || []; })
+      .then((rows) => setProjects(rows.filter((p: any) => p.metadata?.spec).map((p: any) => ({
+        id: p.id, title: p.title, savedAt: new Date(p.updated_at || p.created_at).getTime(),
+        spec: p.metadata.spec, settings: p.metadata.settings || DEFAULT_SETTINGS, media_files: p.media_files || [],
+      }))))
+      .catch((e) => toast({ title: 'Could not load saved scripts', description: e.message, variant: 'destructive' }));
     return () => {
       if (audioUrlRef.current) URL.revokeObjectURL(audioUrlRef.current);
     };
-  }, []);
+  }, [toast]);
 
   const setSetting = <K extends keyof StudioSettings>(key: K, value: StudioSettings[K]) =>
     setSettings((s) => ({ ...s, [key]: value }));
@@ -172,6 +179,7 @@ export default function StudioPage() {
       }
       const j = await res.json() as { spec: SongSpec; provider: string; lyricSource?: 'ai' | 'template'; factCheck?: { checked: boolean }; warnings?: string[] };
       setRawSpec(j.spec);
+      setProjectId(null);
       setProvider(j.lyricSource === 'template' || j.provider === 'fallback' ? 'template lyrics (not AI)' : 'AI-generated');
       setFactChecked(Boolean(j.factCheck?.checked));
       setWarnings(j.warnings ?? []);
@@ -264,8 +272,11 @@ export default function StudioPage() {
         fps: 30, aspect: settings.aspect,
         onProgress: (p, s) => { setExportPct(p); setExportMsg(s); },
       });
+      setMediaBusy(true);
+      try { await uploadGeneratedMedia(blob, 'video', timeline.durationSec); }
+      finally { setMediaBusy(false); }
       downloadBlob(blob, `${slug}.mp4`);
-      toast({ title: 'MP4 exported', description: 'Synchronized music video downloaded.' });
+      toast({ title: 'MP4 exported and saved', description: 'The video is now available in Social Engine and your saved script.' });
     } catch (e) {
       toast({ title: 'MP4 export failed', description: e instanceof Error ? e.message : String(e), variant: 'destructive' });
     } finally {
@@ -283,8 +294,11 @@ export default function StudioPage() {
         fps: 30, aspect: settings.aspect,
         onProgress: (p, s) => { setExportPct(p); setExportMsg(s); },
       });
+      setMediaBusy(true);
+      try { await uploadGeneratedMedia(blob, 'video', timeline.durationSec); }
+      finally { setMediaBusy(false); }
       downloadBlob(blob, `${slug}.webm`);
-      toast({ title: 'WebM exported', description: 'Recorded in realtime — keep this tab visible while recording.' });
+      toast({ title: 'WebM exported and saved', description: 'The video is now available in Social Engine.' });
     } catch (e) {
       toast({ title: 'WebM export failed', description: e instanceof Error ? e.message : String(e), variant: 'destructive' });
     } finally {
@@ -295,32 +309,105 @@ export default function StudioPage() {
 
   const doExportWav = () => {
     if (!audioBufferRef.current) return;
-    downloadBlob(exportWav(audioBufferRef.current), `${slug}.wav`);
+    const blob = exportWav(audioBufferRef.current);
+    setMediaBusy(true);
+    void uploadGeneratedMedia(blob, 'audio', timeline?.durationSec || 0)
+      .then(() => { downloadBlob(blob, `${slug}.wav`); toast({ title: 'WAV exported and saved' }); })
+      .catch((e) => toast({ title: 'Audio upload failed', description: e.message, variant: 'destructive' }))
+      .finally(() => setMediaBusy(false));
   };
 
-  /* ---------------- Projects ---------------- */
-  const persistProjects = (list: SavedProject[]) => {
-    setProjects(list);
-    localStorage.setItem('sba-studio-projects', JSON.stringify(list));
+  /* ---------------- Persistent scripts and media ---------------- */
+  const lyricsText = (spec: SongSpec) => spec.sections
+    .map((section) => section.lines.map((line) => line.text).filter(Boolean).join('\n'))
+    .filter(Boolean).join('\n\n');
+
+  const saveProject = async (): Promise<string | null> => {
+    if (!rawSpec) return null;
+    try {
+      const res = await fetch('/api/admin/music-studio/projects', {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          ...(projectId ? { id: projectId } : {}),
+          title: rawSpec.title, topic: rawSpec.topic, spec: rawSpec, settings,
+          lyrics: lyricsText(rawSpec),
+          caption: `${rawSpec.title}\n\n${rawSpec.topic} — a Shiney Brain Academy learning song.`,
+        }),
+      });
+      const json = await res.json();
+      if (!res.ok) throw new Error(json.error || 'Could not save script');
+      const id = json.project.id as string;
+      setProjectId(id);
+      setProjects((current) => {
+        const previous = current.find((p) => p.id === id);
+        const next = [{ id, title: rawSpec.title, savedAt: Date.now(), spec: rawSpec, settings, media_files: previous?.media_files || [] }, ...current.filter((p) => p.id !== id)];
+        return next;
+      });
+      toast({ title: 'Script saved to SBA library', description: 'Your lyrics and song settings are stored independently of generated media.' });
+      return id;
+    } catch (e) {
+      toast({ title: 'Script save failed', description: e instanceof Error ? e.message : String(e), variant: 'destructive' });
+      return null;
+    }
   };
 
-  const saveProject = () => {
-    if (!rawSpec) return;
-    const p: SavedProject = {
-      id: `${Date.now()}`, title: rawSpec.title, savedAt: Date.now(),
-      spec: rawSpec, settings,
-    };
-    persistProjects([p, ...projects.filter((x) => x.id !== p.id)].slice(0, 30));
-    toast({ title: 'Project saved', description: p.title });
+  const uploadGeneratedMedia = async (blob: Blob, kind: 'audio' | 'video', durationSeconds: number) => {
+    const id = await saveProject();
+    if (!id) throw new Error('Save the script before uploading generated media.');
+    const mimeType = blob.type || (kind === 'video' ? 'video/mp4' : 'audio/wav');
+    const signRes = await fetch('/api/admin/music-studio/media', {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ action: 'sign', projectId: id, kind, mimeType }),
+    });
+    const signed = await signRes.json();
+    if (!signRes.ok) throw new Error(signed.error || 'Could not prepare media upload');
+    const supabase = createBrowserClient();
+    const { error: uploadError } = await supabase.storage.from('music-studio-media')
+      .uploadToSignedUrl(signed.path, signed.token, blob, { contentType: mimeType, upsert: false });
+    if (uploadError) throw uploadError;
+    const finalizeRes = await fetch('/api/admin/music-studio/media', {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        action: 'finalize', projectId: id, path: signed.path, kind, mimeType,
+        durationSeconds, fileSizeBytes: blob.size,
+      }),
+    });
+    const finalized = await finalizeRes.json();
+    if (!finalizeRes.ok) throw new Error(finalized.error || 'Could not save media record');
+    setProjects((current) => current.map((p) => p.id === id
+      ? { ...p, media_files: [...(p.media_files || []), finalized.media] } : p));
+    return finalized.media;
+  };
+
+  const deleteGeneratedMedia = async (mediaId: string) => {
+    const res = await fetch(`/api/admin/music-studio/media?id=${encodeURIComponent(mediaId)}`, { method: 'DELETE' });
+    const json = await res.json();
+    if (!res.ok) throw new Error(json.error || 'Could not delete media');
+    setProjects((current) => current.map((p) => ({
+      ...p, media_files: (p.media_files || []).filter((m) => m.id !== mediaId),
+    })));
   };
 
   const loadProject = (p: SavedProject) => {
+    setProjectId(p.id);
     setRawSpec(p.spec);
     setSettings(p.settings);
     setTopic(p.spec.topic);
-    setProvider('saved project');
+    setProvider('saved script');
     setProjectsOpen(false);
-    void renderCurrentSpec(p.spec, p.settings, 'Loading project…');
+    setAudioUrl(null);
+    setTimeline(null);
+    audioBufferRef.current = null;
+    void renderCurrentSpec(p.spec, p.settings, 'Regenerating song from saved script…');
+  };
+
+  const removeProject = async (id: string) => {
+    if (!confirm('Delete this script and all its generated media? This cannot be undone.')) return;
+    const res = await fetch(`/api/admin/music-studio/projects?id=${encodeURIComponent(id)}`, { method: 'DELETE' });
+    const json = await res.json();
+    if (!res.ok) { toast({ title: 'Delete failed', description: json.error, variant: 'destructive' }); return; }
+    setProjects((current) => current.filter((p) => p.id !== id));
+    if (projectId === id) setProjectId(null);
   };
 
   /* ---------------- render ---------------- */
@@ -360,7 +447,7 @@ export default function StudioPage() {
               </DialogTrigger>
               <DialogContent className="bg-white border-[#C8DDF5] text-[#12345B]">
                 <DialogHeader><DialogTitle>Saved projects</DialogTitle>
-                  <DialogDescription className="text-[#526B89]">Stored in this browser. Loading a project re-renders its song.</DialogDescription>
+                  <DialogDescription className="text-[#526B89]">Scripts are saved to the SBA database. Generated audio and video are separate files, so deleting media never deletes the lyrics.</DialogDescription>
                 </DialogHeader>
                 <ScrollArea className="max-h-[340px] [&>[data-radix-scroll-area-viewport]]:max-h-[340px]">
                   {projects.length === 0 && <p className="text-sm text-[#637B98]">No saved projects yet.</p>}
@@ -373,10 +460,19 @@ export default function StudioPage() {
                         </div>
                         <div className="flex gap-1.5">
                           <Button size="sm" variant="secondary" onClick={() => loadProject(p)}>Open</Button>
-                          <Button size="icon" variant="ghost" aria-label="Delete project" onClick={() => persistProjects(projects.filter((x) => x.id !== p.id))}>
+                          <Button size="icon" variant="ghost" aria-label="Delete project" onClick={() => removeProject(p.id)}>
                             <Trash2 className="h-4 w-4" />
                           </Button>
                         </div>
+                        {(p.media_files || []).map((media) => (
+                          <div key={media.id} className="mt-2 flex items-center justify-between gap-2 text-xs">
+                            <span>{media.media_type === 'video' ? '🎬 Video' : '🎵 Audio'} saved</span>
+                            <Button size="sm" variant="ghost" onClick={async () => {
+                              try { await deleteGeneratedMedia(media.id); toast({ title: 'Media deleted', description: 'The script remains saved and can be regenerated.' }); }
+                              catch (e) { toast({ title: 'Could not delete media', description: e instanceof Error ? e.message : String(e), variant: 'destructive' }); }
+                            }}>Delete media</Button>
+                          </div>
+                        ))}
                       </div>
                     ))}
                   </div>
@@ -384,7 +480,7 @@ export default function StudioPage() {
               </DialogContent>
             </Dialog>
 
-            <Button variant="outline" size="sm" onClick={saveProject} disabled={!lyricsReady} className="border-[#B8D1EF] bg-white">
+            <Button variant="outline" size="sm" onClick={() => void saveProject()} disabled={!lyricsReady} className="border-[#B8D1EF] bg-white">
               <Save className="h-4 w-4 mr-1.5" /> Save
             </Button>
 
@@ -605,12 +701,14 @@ export default function StudioPage() {
                 </span>
               </div>
               <div className="flex flex-wrap gap-2">
-                <Button size="sm" onClick={doExportMp4} disabled={!songReady || exporting} className="bg-[#FFCC00] text-[#062B59] font-semibold hover:bg-[#FFE066]">
+                <Button size="sm" onClick={doExportMp4} disabled={!songReady || exporting || mediaBusy} className="bg-[#FFCC00] text-[#062B59] font-semibold hover:bg-[#FFE066]">
                   <Download className="h-4 w-4 mr-1.5" /> Video MP4
                 </Button>
-                <Button size="sm" variant="secondary" onClick={doExportWebm} disabled={!songReady || exporting}>Video WebM</Button>
-                <Button size="sm" variant="secondary" onClick={doExportWav} disabled={!songReady || exporting}>Audio WAV</Button>
+                <Button size="sm" variant="secondary" onClick={doExportWebm} disabled={!songReady || exporting || mediaBusy}>Video WebM</Button>
+                <Button size="sm" variant="secondary" onClick={doExportWav} disabled={!songReady || exporting || mediaBusy}>Audio WAV</Button>
               </div>
+              {mediaBusy && <p className="mt-2 text-xs text-[#0B5BC1]">Uploading your media to the SBA library…</p>}
+              {songReady && rawSpec && <p className="mt-3 text-xs text-[#526B89]">Exported files are saved to this script and appear in <a className="font-semibold underline" href="/admin/social-engine" target="_blank" rel="noreferrer">Social Engine</a> for preview and publishing approval.</p>}
               {exporting && (
                 <div className="mt-3 space-y-1.5">
                   <Progress value={exportPct} className="h-2" />
