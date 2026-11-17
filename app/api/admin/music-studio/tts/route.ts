@@ -3,7 +3,7 @@ import { requireAdminApi } from '@/lib/require-admin-api';
 
 export const maxDuration = 60;
 
-function configuredEndpoint() {
+function configuredBatchEndpoint() {
   const value = process.env.SBA_TTS_URL;
   if (!value) return null;
   try {
@@ -32,6 +32,38 @@ function pcm16ToWavBase64(pcm: Buffer, sampleRate = 24000): string {
   header.write('data', 36);
   header.writeUInt32LE(pcm.length, 40);
   return Buffer.concat([header, pcm]).toString('base64');
+}
+
+async function synthesizeWithEdge(item: string): Promise<string> {
+  const endpoint = (process.env.TTS_ENDPOINT || 'https://openai-edge-tts-aqq1.onrender.com').replace(/\\/+$/, '');
+  const controller = new AbortController();
+  const timeout = setTimeout(() => controller.abort(), 20000);
+  try {
+    const response = await fetch(`${endpoint}/v1/audio/speech`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        model: 'tts-1',
+        input: item,
+        voice: 'en-NG-EzinneNeural',
+        speed: 1,
+        response_format: 'wav',
+      }),
+      signal: controller.signal,
+      cache: 'no-store',
+    });
+    if (!response.ok) {
+      const detail = await response.text().catch(() => '');
+      throw new Error(`SBA Edge TTS returned HTTP ${response.status}: ${detail.slice(0, 180)}`);
+    }
+    const bytes = Buffer.from(await response.arrayBuffer());
+    if (bytes.length < 512 || bytes.toString('ascii', 0, 4) !== 'RIFF') {
+      throw new Error('SBA Edge TTS did not return a valid WAV audio file.');
+    }
+    return bytes.toString('base64');
+  } finally {
+    clearTimeout(timeout);
+  }
 }
 
 async function synthesizeWithGemini(item: string, apiKeys: string[], voiceName: string): Promise<string> {
@@ -106,11 +138,12 @@ async function synthesizeWithGemini(item: string, apiKeys: string[], voiceName: 
 export async function GET() {
   const auth = await requireAdminApi();
   if (auth.response) return auth.response;
-  const endpoint = configuredEndpoint();
+  const endpoint = configuredBatchEndpoint();
+  const edgeAvailable = Boolean(process.env.TTS_ENDPOINT || 'https://openai-edge-tts-aqq1.onrender.com');
   const geminiAvailable = Boolean(process.env.GEMINI_API_KEY_1 || process.env.GEMINI_API_KEY_2 || process.env.GEMINI_API_KEY_3 || process.env.GEMINI_API_KEY);
   return NextResponse.json({
-    available: Boolean(endpoint || geminiAvailable),
-    provider: endpoint ? 'sba-voice-engine' : geminiAvailable ? 'gemini-tts' : 'unavailable',
+    available: Boolean(endpoint || edgeAvailable || geminiAvailable),
+    provider: endpoint ? 'sba-voice-engine' : edgeAvailable ? 'edge-tts' : geminiAvailable ? 'gemini-tts' : 'unavailable',
   });
 }
 
@@ -136,7 +169,7 @@ export async function POST(req: NextRequest) {
   )).slice(0, 48);
   if (!items.length) return NextResponse.json({ error: 'No valid syllables supplied' }, { status: 400 });
 
-  const endpoint = configuredEndpoint();
+  const endpoint = configuredBatchEndpoint();
   if (endpoint) {
     const controller = new AbortController();
     const timeout = setTimeout(() => controller.abort(), 50000);
@@ -179,20 +212,33 @@ export async function POST(req: NextRequest) {
   const requestedVoice = typeof body.voice === 'string' ? body.voice : 'Kore';
   const allowedVoices = ['Kore', 'Puck', 'Charon', 'Fenrir', 'Leda', 'Aoede', 'Zephyr', 'Orus'];
   const voiceName = allowedVoices.includes(requestedVoice) ? requestedVoice : 'Kore';
+  const edgeEndpoint = process.env.TTS_ENDPOINT || 'https://openai-edge-tts-aqq1.onrender.com';
   const audio: Record<string, string> = {};
   const errors: string[] = [];
+  let edgeCount = 0;
+  let geminiCount = 0;
   let next = 0;
 
-  // Small bounded concurrency avoids burst rate-limit errors and keeps the
-  // serverless request within its 60-second execution budget.
+  // Prefer the existing Nigerian Edge TTS service (no additional Gemini
+  // calls); fall back to Gemini 3.8 Flash TTS if the Edge service is down.
   const workers = Array.from({ length: Math.min(4, items.length) }, async () => {
     while (next < items.length) {
       const index = next++;
       const item = items[index];
       try {
-        audio[item] = await synthesizeWithGemini(item, apiKeys, voiceName);
-      } catch (error) {
-        errors.push(error instanceof Error ? error.message : 'Gemini TTS failed.');
+        audio[item] = await synthesizeWithEdge(item);
+        edgeCount++;
+      } catch (edgeError) {
+        if (!apiKeys.length) {
+          errors.push(edgeError instanceof Error ? edgeError.message : 'SBA Edge TTS failed.');
+          continue;
+        }
+        try {
+          audio[item] = await synthesizeWithGemini(item, apiKeys, voiceName);
+          geminiCount++;
+        } catch (geminiError) {
+          errors.push(geminiError instanceof Error ? geminiError.message : 'Gemini TTS failed.');
+        }
       }
     }
   });
@@ -201,14 +247,14 @@ export async function POST(req: NextRequest) {
   if (Object.keys(audio).length === 0) {
     return NextResponse.json({
       available: false,
-      error: errors[0] || 'Gemini TTS did not return usable audio.',
+      error: errors[0] || 'No configured voice engine returned usable audio.',
     }, { status: 502 });
   }
 
   return NextResponse.json({
     audio,
     available: true,
-    provider: 'gemini-tts',
+    provider: edgeCount && geminiCount ? 'edge-tts+gemini-tts' : edgeCount ? 'edge-tts' : 'gemini-tts',
     missing: errors.length,
   });
 }
