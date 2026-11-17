@@ -1,4 +1,4 @@
-<svg xmlns="http://www.w3.org/2000/svg" width="700" height="406" viewBox="0 0 700 406">
+<svg xmlns="http://www.w3.org/2000/svg" width="700" height="406" viewBox="-20 0 720 406">
 <defs>
  <linearGradient id="skin" x1="0" y1="0" x2=".7" y2="1"><stop stop-color="#8b4b2f"/><stop offset=".25" stop-color="#b96f4b"/><stop offset=".58" stop-color="#985536"/><stop offset="1" stop-color="#63351f"/></linearGradient>
  <linearGradient id="skinHi" x1="0" y1="0" x2="0" y2="1"><stop stop-color="#d18a65"/><stop offset="1" stop-color="#8b4a30"/></linearGradient>
