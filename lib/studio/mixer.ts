@@ -9,7 +9,7 @@ import type { SongSpec, Timeline } from './types';
 import { buildArrangement } from './arranger';
 import { playInstrumentEvent } from './instruments';
 import { singTimeline } from './singer';
-import { singViaTts, espeakTtsProvider, remoteTtsProvider } from './tts';
+import { singViaTts, apiTtsProvider, remoteTtsProvider } from './tts';
 import { makeImpulseResponse } from './dsp';
 
 export interface MixOptions {
@@ -115,7 +115,7 @@ export async function renderSong(
   let ttsError: string | undefined;
   if (spec.vocal.mode === 'tts') {
     try {
-      const provider = opts.ttsUrl ? remoteTtsProvider(opts.ttsUrl) : espeakTtsProvider();
+      const provider = opts.ttsUrl ? remoteTtsProvider(opts.ttsUrl) : apiTtsProvider();
       usedTts = await singViaTts(ctx, vocalOut, timeline, provider, opts.onProgress);
       if (!usedTts) ttsError = 'TTS engine returned no usable audio';
     } catch (e) {
