@@ -109,31 +109,32 @@ interface GeminiResult {
 }
 
 async function callGemini(system: string, user: string): Promise<GeminiResult> {
-  // SBA stores rotated Gemini credentials under numbered keys; retain the
-  // unsuffixed name for compatibility with local/dev deployments.
   const keys = Array.from(new Set([
     process.env.GEMINI_API_KEY_1,
     process.env.GEMINI_API_KEY_2,
     process.env.GEMINI_API_KEY_3,
     process.env.GEMINI_API_KEY,
-  ].filter((value): value is string => Boolean(value && value.trim()))));
+  ].filter((value): value is string => Boolean(value && value.trim())))).slice(0, 3);
   if (!keys.length) return { text: null, error: 'No Gemini API key is configured. Add GEMINI_API_KEY_1, GEMINI_API_KEY_2, or GEMINI_API_KEY.' };
 
-  // GEMINI_MODEL remains an override, but an obsolete override must not disable the studio.
+  // Use a bounded request budget. The previous unbounded sequential retries
+  // could consume Vercel's entire 60-second function window.
   const configuredModel = process.env.GEMINI_MODEL?.trim();
   const models = Array.from(new Set([
-    ...(configuredModel ? [configuredModel] : []),
+    configuredModel || 'gemini-3.8-flash',
     'gemini-3.8-flash',
-    'gemini-3.6-flash',
   ]));
+  const deadline = Date.now() + 18000;
   let lastError = 'Gemini returned no text.';
 
-  for (const key of keys) {
-    let moveToNextKey = false;
-    for (const model of models) {
-      const url = `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent`;
+  for (const model of models) {
+    for (const key of keys) {
+      const remaining = deadline - Date.now();
+      if (remaining <= 500) return { text: null, error: lastError };
+      const controller = new AbortController();
+      const timeout = setTimeout(() => controller.abort(), Math.min(7500, remaining));
       try {
-        const res = await fetch(url, {
+        const res = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent`, {
           method: 'POST',
           headers: {
             'Content-Type': 'application/json',
@@ -142,8 +143,13 @@ async function callGemini(system: string, user: string): Promise<GeminiResult> {
           body: JSON.stringify({
             system_instruction: { parts: [{ text: system }] },
             contents: [{ role: 'user', parts: [{ text: user }] }],
-            generationConfig: { responseMimeType: 'application/json' },
+            generationConfig: {
+              responseMimeType: 'application/json',
+              maxOutputTokens: 4096,
+              temperature: 0.85,
+            },
           }),
+          signal: controller.signal,
           cache: 'no-store',
         });
         const json = await res.json().catch(() => null) as {
@@ -152,20 +158,24 @@ async function callGemini(system: string, user: string): Promise<GeminiResult> {
         } | null;
         if (!res.ok) {
           lastError = `${model} returned HTTP ${res.status}: ${json?.error?.message || 'Unknown Gemini API error'}`;
-          if ([401, 403, 429].includes(res.status) || /quota|rate.?limit/i.test(lastError)) {
-            moveToNextKey = true;
-            break;
-          }
-          continue;
+          if ([401, 403, 429].includes(res.status) || /quota|rate.?limit/i.test(lastError)) continue;
+          if (res.status === 404 && configuredModel && model === configuredModel) break;
+          return { text: null, error: lastError };
         }
         const text = json?.candidates?.[0]?.content?.parts?.map((p) => p.text ?? '').join('').trim() ?? '';
         if (text) return { text, model };
         lastError = `${model} returned an empty response.`;
       } catch (error) {
-        lastError = error instanceof Error ? error.message : 'Gemini request failed unexpectedly.';
+        lastError = error instanceof Error
+          ? (error.name === 'AbortError' ? `Gemini request timed out after ${Math.min(7500, Math.max(0, remaining))}ms.` : error.message)
+          : 'Gemini request failed unexpectedly.';
+        // A network timeout is not fixed by trying every key/model. Stop and
+        // return the offline lyricist before the Vercel function deadline.
+        return { text: null, error: lastError };
+      } finally {
+        clearTimeout(timeout);
       }
     }
-    if (moveToNextKey) continue;
   }
 
   return { text: null, error: lastError };
@@ -197,19 +207,6 @@ function normalizeBrain(brain: BrainSong, topic: string): BrainSong | null {
     creativeNotes: brain.creativeNotes,
     sections,
   };
-}
-
-async function factCheckWithAi(system: string, brain: BrainSong): Promise<{ corrected: BrainSong; corrections: string[] } | null> {
-  const result = await callGemini(
-    `You are a strict educational fact-checker for Shiney Brain Academy. Given a JSON song, verify every line against its "fact" and general knowledge. Fix ONLY factual errors (do not change style or structure). If a fact is wrong, correct the lyric text and the fact. Return the full corrected JSON only, no fences.`,
-    JSON.stringify(brain),
-  );
-  if (!result.text) return null;
-  const content = result.text;
-  const parsed = extractJson(content);
-  if (!parsed) return null;
-  const normalized = normalizeBrain(parsed, brain.title ?? '');
-  return normalized ? { corrected: normalized, corrections: ['verified by AI fact-check pass'] } : null;
 }
 
 /* ---------------- Main handler ---------------- */
@@ -274,14 +271,9 @@ export async function POST(req: NextRequest) {
   } else {
     const normalized = normalizeBrain(brain, topic);
     brain = normalized ?? brain;
-    // fact-check pass (best effort)
-    try {
-      const fc = await factCheckWithAi(system, brain);
-      if (fc) {
-        brain = fc.corrected;
-        factCheck = { checked: true, corrections: fc.corrections };
-      }
-    } catch { factCheck = { checked: false }; }
+    // Keep the lyric endpoint to one bounded model pass. A second synchronous
+    // fact-check request previously caused otherwise successful requests to time out.
+    warnings.push('AI lyric generated. Independent second-pass fact-check is not run in this request; review lesson facts before publishing.');
 
     spec = brainToSpec(brain, topic, {
       durationSec, seedMelody, vocalMode, vocalStyle: vocalStyle as 'bright' | 'warm' | 'choir', seedArrangement,
