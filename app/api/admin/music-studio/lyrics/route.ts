@@ -77,12 +77,13 @@ OUTPUT: valid JSON only, no markdown fences, matching this schema:
 Sections "intro" and "outro" must have empty lines arrays [].`;
 }
 
-function userPrompt(topic: string, notes?: string, genre?: string, mood?: string, title?: string): string {
+function userPrompt(topic: string, notes?: string, genre?: string, mood?: string, title?: string, variationSeed?: number): string {
   const parts = [`Educational topic: "${topic}"`];
   if (notes && notes.trim()) parts.push(`Lesson notes that MUST be covered accurately:\n${notes.trim()}`);
   if (genre && genre !== 'auto') parts.push(`Use the "${genre}" music style.`);
   if (mood) parts.push(`Target mood: ${mood}.`);
   if (title) parts.push(`Use this song title: "${title}".`);
+  if (variationSeed !== undefined) parts.push(`Creative variation seed: ${variationSeed}. Create a genuinely fresh lyric concept, hook, rhyme pattern and phrasing; do not recycle generic template lines.`);
   parts.push('Remember: JSON only, no markdown fences.');
   return parts.join('\n\n');
 }
@@ -129,7 +130,7 @@ async function callGemini(system: string, user: string): Promise<GeminiResult> {
         body: JSON.stringify({
           system_instruction: { parts: [{ text: system }] },
           contents: [{ role: 'user', parts: [{ text: user }] }],
-          generationConfig: { temperature: 0.9, responseMimeType: 'application/json' },
+          generationConfig: { responseMimeType: 'application/json' },
         }),
         cache: 'no-store',
       });
@@ -212,7 +213,8 @@ export async function POST(req: NextRequest) {
   const durationSec = [30, 45, 60, 90].includes(Number(body.durationSec)) ? Number(body.durationSec) : 60;
 
   const system = systemPrompt(durationSec);
-  const user = userPrompt(topic, body.notes, body.genre, body.mood, body.title);
+  const variationSeed = Number(body.settings?.seedMelody) || Date.now();
+  const user = userPrompt(topic, body.notes, body.genre, body.mood, body.title, variationSeed);
 
   const warnings: string[] = [];
   let provider: 'gemini' | 'fallback' = 'fallback';
