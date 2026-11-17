@@ -55,6 +55,7 @@ const sections = [
       { href: '/admin/blog-drafts', label: 'Blog Drafts' },
       { href: '/admin/podcasts', label: 'Podcasts' },
       { href: '/admin/audio', label: 'Audio' },
+      { href: '/admin/music-studio', label: 'Musical Learning Studio' },
       { href: '/admin/asset-images', label: 'Image Engine' },
       { href: '/admin/content-engine/upload', label: 'Content Upload' },
     ],
