@@ -1,4 +1,4 @@
-import { NextResponse } from 'next/server';
+import { NextRequest, NextResponse } from 'next/server';
 import { requireAdminApi } from '@/lib/require-admin-api';
 import { createAdminClient } from '@/lib/supabase-admin';
 
@@ -17,7 +17,7 @@ export async function GET() {
   return NextResponse.json({ data: data || [] });
 }
 
-export async function POST(request) {
+export async function POST(request: NextRequest) {
   const auth = await requireAdminApi();
   if (auth.response) return auth.response;
   let body;
@@ -56,7 +56,7 @@ export async function POST(request) {
   return NextResponse.json({ success: true, project: data });
 }
 
-export async function DELETE(request) {
+export async function DELETE(request: NextRequest) {
   const auth = await requireAdminApi();
   if (auth.response) return auth.response;
   const id = request.nextUrl.searchParams.get('id');
