@@ -3,6 +3,9 @@ import { cookies } from 'next/headers';
 import { NextResponse } from 'next/server';
 import { publishToPlatform } from '@/lib/services/social-publisher';
 
+// This route reads request cookies and must never be statically rendered.
+export const dynamic = 'force-dynamic';
+
 export async function GET() {
   const supabase = createRouteHandlerClient({ cookies });
   const now = new Date().toISOString();
