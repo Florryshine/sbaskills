@@ -39,7 +39,13 @@ export async function getLegacyIllustration(query: string, colorize = true): Pro
   if (!pending) {
     pending = (async () => {
       const svg = renderToStaticMarkup(
-        React.createElement(SBAIllustrationArtwork, { type: asset.id, showLabel: false }),
+        React.createElement(SBAIllustrationArtwork, {
+          type: asset.id,
+          name: asset.name,
+          showLabel: false,
+          style: {},
+          className: undefined,
+        }),
       );
       const traced = await traceImage(Buffer.from(svg), { boxSize: 400, maxDim: 640, noColor: !colorize });
       return {
