@@ -186,7 +186,7 @@ function drawWord(
       break;
     }
     case 'letters': {
-      const chars = [...w.text];
+      const chars = Array.from(w.text);
       const perLetter = 1 / Math.max(1, chars.length);
       c.translate(baseX + wWidth / 2, baseY);
       let cx = -(wWidth / 2);
@@ -409,7 +409,7 @@ function drawTitleCard(c: CanvasRenderingContext2D, W: number, H: number, timeli
 
   // title with letter pop
   const titleSize = Math.round(H * 0.085);
-  const chars = [...timeline.spec.title];
+  const chars = Array.from(timeline.spec.title);
   c.font = displayFont(titleSize);
   const totalW = chars.reduce((a, ch) => a + c.measureText(ch).width + titleSize * 0.06, 0);
   let x = W / 2 - totalW / 2;
