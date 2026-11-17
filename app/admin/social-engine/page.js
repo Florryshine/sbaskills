@@ -650,6 +650,19 @@ export default function SocialEnginePage() {
 
                 {expandedId === draft.id && (
                   <div className="mt-4 bg-slate-50 p-4 rounded-xl space-y-4">
+                    {Array.isArray(draft.metadata?.lyrics) && draft.metadata.lyrics.length > 0 && (
+                      <div className="rounded-lg border border-blue-100 bg-white p-3">
+                        <p className="mb-1 text-xs font-bold uppercase tracking-wide text-brand-blue">Saved song lyrics</p>
+                        <p className="text-sm whitespace-pre-wrap">{draft.metadata.lyrics}</p>
+                      </div>
+                    )}
+                    {(draft.media_files || []).filter((m) => m.media_type === 'audio').map((audio) => (
+                      <div key={audio.id} className="rounded-lg border border-blue-100 bg-white p-3">
+                        <p className="mb-2 text-xs font-bold uppercase tracking-wide text-brand-blue">Audio preview</p>
+                        <audio src={audio.url} controls className="w-full" />
+                        <a href={audio.url} target="_blank" rel="noreferrer" className="mt-2 inline-block text-xs text-brand-blue underline">Open audio file</a>
+                      </div>
+                    ))}
                     {editingId === draft.id ? (
                       <div>
                         <textarea
