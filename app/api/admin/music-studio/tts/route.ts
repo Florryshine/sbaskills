@@ -39,54 +39,52 @@ async function synthesizeWithGemini(item: string, apiKey: string, voiceName: str
   const controller = new AbortController();
   const timeout = setTimeout(() => controller.abort(), 20000);
   try {
-    const response = await fetch(
-      `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent`,
-      {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'x-goog-api-key': apiKey,
-        },
-        body: JSON.stringify({
-          contents: [{
-            parts: [{
-              text: `Pronounce only this English syllable clearly and naturally: ${item}. No introduction or extra words.`,
+    const response = await fetch('https://generativelanguage.googleapis.com/v1beta/interactions', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'x-goog-api-key': apiKey,
+      },
+      body: JSON.stringify({
+        model,
+        input: [{
+          type: 'user_input',
+          content: [{
+            type: 'text',
+            text: `Pronounce only this English syllable clearly and naturally: ${item}. No introduction or extra words.`,
+            annotations: [{
+              type: 'speech_metadata',
+              style: 'Clear, warm, upbeat English pronunciation. Say only the supplied syllable, with a steady sustained vowel.',
             }],
           }],
-          generationConfig: {
-            responseModalities: ['AUDIO'],
-            speechConfig: {
-              voiceConfig: {
-                prebuiltVoiceConfig: { voiceName },
-              },
-            },
-          },
-        }),
-        signal: controller.signal,
-        cache: 'no-store',
-      },
-    );
+        }],
+        response_format: {
+          type: 'audio',
+          mime_type: 'audio/wav',
+          sample_rate: 24000,
+        },
+        generation_config: {
+          speech_config: [{ voice: voiceName }],
+        },
+      }),
+      signal: controller.signal,
+      cache: 'no-store',
+    });
 
     const payload = await response.json().catch(() => null) as {
       error?: { message?: string };
-      candidates?: Array<{
-        content?: {
-          parts?: Array<{
-            inlineData?: { data?: string; mimeType?: string };
-          }>;
-        };
-      }>;
+      output_audio?: { data?: string; mime_type?: string };
     } | null;
 
     if (!response.ok) {
       throw new Error(payload?.error?.message || `Gemini TTS returned HTTP ${response.status}`);
     }
 
-    const audioPart = payload?.candidates?.[0]?.content?.parts?.find((part) => part.inlineData?.data)?.inlineData;
-    if (!audioPart?.data) throw new Error('Gemini TTS returned no audio data.');
+    const audioData = payload?.output_audio?.data;
+    if (!audioData) throw new Error('Gemini TTS returned no audio data.');
 
-    const bytes = Buffer.from(audioPart.data, 'base64');
-    // Gemini TTS may return a WAV container or raw 24 kHz, mono, 16-bit PCM.
+    const bytes = Buffer.from(audioData, 'base64');
+    // audio/wav is requested; wrap raw 24 kHz mono PCM if the provider omits its WAV header.
     if (bytes.length >= 44 && bytes.toString('ascii', 0, 4) === 'RIFF') {
       return bytes.toString('base64');
     }
