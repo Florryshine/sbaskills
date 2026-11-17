@@ -117,7 +117,7 @@ export async function renderSong(
     try {
       const provider = opts.ttsUrl ? remoteTtsProvider(opts.ttsUrl) : apiTtsProvider();
       usedTts = await singViaTts(ctx, vocalOut, timeline, provider, opts.onProgress);
-      if (!usedTts) ttsError = 'TTS engine returned no usable audio';
+      if (!usedTts) ttsError = 'TTS engine returned incomplete syllable audio; using the built-in synth fallback';
     } catch (e) {
       ttsError = e instanceof Error ? e.message : 'TTS engine failed';
       opts.onProgress?.(`TTS unavailable (${ttsError}). Falling back to the built-in synth singer.`, 55);
