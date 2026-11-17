@@ -32,6 +32,10 @@ async function main() {
     const pathMod = await import('node:path');
     const jobPublicDir = pathMod.dirname(pathMod.resolve(timelinePath));
     const fontsDir = pathMod.join(jobPublicDir, 'fonts');
+    const fs = await import('node:fs/promises');
+    const handAssetDir = pathMod.join(jobPublicDir, 'whiteboard');
+    await fs.mkdir(handAssetDir, { recursive: true });
+    await fs.copyFile('public/whiteboard/marker-hand.svg', pathMod.join(handAssetDir, 'marker-hand.svg'));
     if (!(await Bun.file(pathMod.join(fontsDir, 'Caveat-Bold.ttf')).exists())) {
       await Bun.write(Bun.file(pathMod.join(fontsDir, 'Caveat-Bold.ttf')), Bun.file('assets/fonts/Caveat-Bold.ttf'));
       await Bun.write(Bun.file(pathMod.join(fontsDir, 'PatrickHand-Regular.ttf')), Bun.file('assets/fonts/PatrickHand-Regular.ttf'));
