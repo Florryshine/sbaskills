@@ -80,7 +80,7 @@ async function synthesizeWithGemini(item: string, apiKeys: string[], voiceName: 
 
       if (!response.ok) {
         lastError = payload?.error?.message || `Gemini TTS returned HTTP ${response.status}`;
-        if (response.status === 429 || /quota|rate.?limit/i.test(lastError)) continue;
+        if ([401, 403, 429].includes(response.status) || /quota|rate.?limit/i.test(lastError)) continue;
         throw new Error(lastError);
       }
 
