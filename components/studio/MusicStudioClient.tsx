@@ -498,7 +498,7 @@ export default function StudioPage() {
             </div>
             {settings.vocalMode === 'tts' && ttsAvailable === true && (
               <p className="text-[11px] text-[#526B89]">
-                AI voice is connected. Lyric syllables are spoken by Gemini TTS or your SBA voice engine, then pitch-mapped to the melody. Gemini usage follows your account's free-tier quota or billing.
+                SBA's existing Nigerian Edge TTS voice is used first; Gemini 3.8 TTS is the fallback. The spoken lyric syllables are pitch-mapped to the melody. Gemini fallback usage follows your account's free-tier quota or billing.
               </p>
             )}
             {settings.vocalMode === 'synth' && (
