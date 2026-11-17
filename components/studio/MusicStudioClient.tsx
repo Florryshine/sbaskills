@@ -179,6 +179,7 @@ export default function StudioPage() {
       }
       const j = await res.json() as { spec: SongSpec; provider: string; lyricSource?: 'ai' | 'template'; factCheck?: { checked: boolean }; warnings?: string[] };
       setRawSpec(j.spec);
+      setProjectId(null);
       setProvider(j.lyricSource === 'template' || j.provider === 'fallback' ? 'template lyrics (not AI)' : 'AI-generated');
       setFactChecked(Boolean(j.factCheck?.checked));
       setWarnings(j.warnings ?? []);
@@ -338,7 +339,8 @@ export default function StudioPage() {
       const id = json.project.id as string;
       setProjectId(id);
       setProjects((current) => {
-        const next = [{ id, title: rawSpec.title, savedAt: Date.now(), spec: rawSpec, settings }, ...current.filter((p) => p.id !== id)];
+        const previous = current.find((p) => p.id === id);
+        const next = [{ id, title: rawSpec.title, savedAt: Date.now(), spec: rawSpec, settings, media_files: previous?.media_files || [] }, ...current.filter((p) => p.id !== id)];
         return next;
       });
       toast({ title: 'Script saved to SBA library', description: 'Your lyrics and song settings are stored independently of generated media.' });
