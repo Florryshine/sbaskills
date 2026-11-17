@@ -120,19 +120,22 @@ async function callGemini(system: string, user: string): Promise<GeminiResult> {
   // Use a bounded request budget. The previous unbounded sequential retries
   // could consume Vercel's entire 60-second function window.
   const configuredModel = process.env.GEMINI_MODEL?.trim();
+  // Flash-Lite is the latency-first default for short structured lyric drafts.
+  // Keep an explicit GEMINI_MODEL override for deployments that have selected one.
   const models = Array.from(new Set([
-    configuredModel || 'gemini-3.8-flash',
+    configuredModel || 'gemini-3.5-flash-lite',
     'gemini-3.8-flash',
   ]));
-  const deadline = Date.now() + 18000;
+  const deadline = Date.now() + 42000;
   let lastError = 'Gemini returned no text.';
 
   for (const model of models) {
     for (const key of keys) {
       const remaining = deadline - Date.now();
-      if (remaining <= 500) return { text: null, error: lastError };
+      if (remaining <= 1000) return { text: null, error: lastError };
       const controller = new AbortController();
-      const timeout = setTimeout(() => controller.abort(), Math.min(7500, remaining));
+      const attemptTimeout = Math.min(35000, remaining - 500);
+      const timeout = setTimeout(() => controller.abort(), attemptTimeout);
       try {
         const res = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent`, {
           method: 'POST',
@@ -145,7 +148,7 @@ async function callGemini(system: string, user: string): Promise<GeminiResult> {
             contents: [{ role: 'user', parts: [{ text: user }] }],
             generationConfig: {
               responseMimeType: 'application/json',
-              maxOutputTokens: 4096,
+              maxOutputTokens: 1800,
               thinkingConfig: { thinkingLevel: 'low' },
             },
           }),
@@ -167,7 +170,7 @@ async function callGemini(system: string, user: string): Promise<GeminiResult> {
         lastError = `${model} returned an empty response.`;
       } catch (error) {
         lastError = error instanceof Error
-          ? (error.name === 'AbortError' ? `Gemini request timed out after ${Math.min(7500, Math.max(0, remaining))}ms.` : error.message)
+          ? (error.name === 'AbortError' ? `Gemini request timed out after ${attemptTimeout}ms on ${model}.` : error.message)
           : 'Gemini request failed unexpectedly.';
         // A network timeout is not fixed by trying every key/model. Stop and
         // return the offline lyricist before the Vercel function deadline.
