@@ -101,29 +101,55 @@ function extractJson(content: string): BrainSong | null {
 
 /* ---------------- Gemini (existing integration) ---------------- */
 
-async function callGemini(system: string, user: string): Promise<string | null> {
+interface GeminiResult {
+  text: string | null;
+  model?: string;
+  error?: string;
+}
+
+async function callGemini(system: string, user: string): Promise<GeminiResult> {
   const key = process.env.GEMINI_API_KEY;
-  if (!key) return null;
-  const model = process.env.GEMINI_MODEL || 'gemini-2.0-flash';
-  const url = `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${key}`;
-  try {
-    const res = await fetch(url, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        system_instruction: { parts: [{ text: system }] },
-        contents: [{ role: 'user', parts: [{ text: user }] }],
-        generationConfig: { temperature: 0.8, responseMimeType: 'application/json' },
-      }),
-    });
-    if (!res.ok) return null;
-    const json = await res.json() as {
-      candidates?: Array<{ content?: { parts?: Array<{ text?: string }> } }>;
-    };
-    return json.candidates?.[0]?.content?.parts?.map((p) => p.text ?? '').join('') ?? null;
-  } catch {
-    return null;
+  if (!key) return { text: null, error: 'GEMINI_API_KEY is not configured in the deployment environment.' };
+
+  // GEMINI_MODEL remains an override, but an obsolete override must not disable the studio.
+  const configuredModel = process.env.GEMINI_MODEL?.trim();
+  const models = Array.from(new Set([
+    ...(configuredModel ? [configuredModel] : []),
+    'gemini-3.8-flash',
+    'gemini-3.6-flash',
+  ]));
+  let lastError = 'Gemini returned no text.';
+
+  for (const model of models) {
+    const url = `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${key}`;
+    try {
+      const res = await fetch(url, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          system_instruction: { parts: [{ text: system }] },
+          contents: [{ role: 'user', parts: [{ text: user }] }],
+          generationConfig: { temperature: 0.9, responseMimeType: 'application/json' },
+        }),
+        cache: 'no-store',
+      });
+      const json = await res.json().catch(() => null) as {
+        error?: { message?: string };
+        candidates?: Array<{ content?: { parts?: Array<{ text?: string }> } }>;
+      } | null;
+      if (!res.ok) {
+        lastError = `${model} returned HTTP ${res.status}: ${json?.error?.message || 'Unknown Gemini API error'}`;
+        continue;
+      }
+      const text = json?.candidates?.[0]?.content?.parts?.map((p) => p.text ?? '').join('').trim() ?? '';
+      if (text) return { text, model };
+      lastError = `${model} returned an empty response.`;
+    } catch (error) {
+      lastError = error instanceof Error ? error.message : 'Gemini request failed unexpectedly.';
+    }
   }
+
+  return { text: null, error: lastError };
 }
 
 /* ---------------- Validation & fact-check pass ---------------- */
@@ -155,11 +181,12 @@ function normalizeBrain(brain: BrainSong, topic: string): BrainSong | null {
 }
 
 async function factCheckWithAi(system: string, brain: BrainSong): Promise<{ corrected: BrainSong; corrections: string[] } | null> {
-  const content = await callGemini(
+  const result = await callGemini(
     `You are a strict educational fact-checker for Shiney Brain Academy. Given a JSON song, verify every line against its "fact" and general knowledge. Fix ONLY factual errors (do not change style or structure). If a fact is wrong, correct the lyric text and the fact. Return the full corrected JSON only, no fences.`,
     JSON.stringify(brain),
-  ).then((r) => r ?? undefined as unknown as string);
-  if (!content) return null;
+  );
+  if (!result.text) return null;
+  const content = result.text;
   const parsed = extractJson(content);
   if (!parsed) return null;
   const normalized = normalizeBrain(parsed, brain.title ?? '');
@@ -199,9 +226,15 @@ export async function POST(req: NextRequest) {
 
   let spec: SongSpec;
 
-  const geminiOut = await callGemini(system, user);
-  let brain: BrainSong | null = geminiOut ? extractJson(geminiOut) : null;
-  if (brain) provider = 'gemini';
+  const geminiResult = await callGemini(system, user);
+  let brain: BrainSong | null = geminiResult.text ? extractJson(geminiResult.text) : null;
+  if (brain) {
+    provider = 'gemini';
+  } else {
+    warnings.push(geminiResult.error
+      ? `Gemini lyric generation failed: ${geminiResult.error}`
+      : 'Gemini returned a response that was not valid song JSON.');
+  }
 
   if (!brain) {
     spec = fallbackSongSpec({
@@ -217,7 +250,7 @@ export async function POST(req: NextRequest) {
         seedArrangement,
       },
     });
-    warnings.push('No AI provider available — used the offline curriculum lyricist. Connect GEMINI_API_KEY for full creative power.');
+    warnings.push('Used the offline curriculum lyricist. Check the Gemini warning above: this fallback uses templates and cannot create fully original lyrics for every topic.');
   } else {
     const normalized = normalizeBrain(brain, topic);
     brain = normalized ?? brain;
