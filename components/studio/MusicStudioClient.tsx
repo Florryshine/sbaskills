@@ -496,6 +496,11 @@ export default function StudioPage() {
               <Slider min={0.1} max={1} step={0.05} value={[settings.musicIntensity]}
                 onValueChange={(v) => setSetting('musicIntensity', v[0])} />
             </div>
+            {settings.vocalMode === 'tts' && ttsAvailable === true && (
+              <p className="text-[11px] text-[#526B89]">
+                AI voice is connected. Lyric syllables are spoken by Gemini TTS or your SBA voice engine, then pitch-mapped to the melody. Gemini usage follows your account's free-tier quota or billing.
+              </p>
+            )}
             {settings.vocalMode === 'synth' && (
               <p className="text-[11px] text-[#526B89]">
                 Built-in singer is an experimental synthetic voice, not a natural human singer. It follows the lyric melody but may sound robotic. Add GEMINI_API_KEY or configure SBA_TTS_URL to enable intelligible pitch-mapped voice vocals.
