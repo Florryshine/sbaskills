@@ -109,8 +109,15 @@ interface GeminiResult {
 }
 
 async function callGemini(system: string, user: string): Promise<GeminiResult> {
-  const key = process.env.GEMINI_API_KEY;
-  if (!key) return { text: null, error: 'GEMINI_API_KEY is not configured in the deployment environment.' };
+  // SBA stores rotated Gemini credentials under numbered keys; retain the
+  // unsuffixed name for compatibility with local/dev deployments.
+  const keys = Array.from(new Set([
+    process.env.GEMINI_API_KEY_1,
+    process.env.GEMINI_API_KEY_2,
+    process.env.GEMINI_API_KEY_3,
+    process.env.GEMINI_API_KEY,
+  ].filter((value): value is string => Boolean(value && value.trim()))));
+  if (!keys.length) return { text: null, error: 'No Gemini API key is configured. Add GEMINI_API_KEY_1, GEMINI_API_KEY_2, or GEMINI_API_KEY.' };
 
   // GEMINI_MODEL remains an override, but an obsolete override must not disable the studio.
   const configuredModel = process.env.GEMINI_MODEL?.trim();
@@ -121,33 +128,44 @@ async function callGemini(system: string, user: string): Promise<GeminiResult> {
   ]));
   let lastError = 'Gemini returned no text.';
 
-  for (const model of models) {
-    const url = `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${key}`;
-    try {
-      const res = await fetch(url, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          system_instruction: { parts: [{ text: system }] },
-          contents: [{ role: 'user', parts: [{ text: user }] }],
-          generationConfig: { responseMimeType: 'application/json' },
-        }),
-        cache: 'no-store',
-      });
-      const json = await res.json().catch(() => null) as {
-        error?: { message?: string };
-        candidates?: Array<{ content?: { parts?: Array<{ text?: string }> } }>;
-      } | null;
-      if (!res.ok) {
-        lastError = `${model} returned HTTP ${res.status}: ${json?.error?.message || 'Unknown Gemini API error'}`;
-        continue;
+  for (const key of keys) {
+    let moveToNextKey = false;
+    for (const model of models) {
+      const url = `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent`;
+      try {
+        const res = await fetch(url, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'x-goog-api-key': key,
+          },
+          body: JSON.stringify({
+            system_instruction: { parts: [{ text: system }] },
+            contents: [{ role: 'user', parts: [{ text: user }] }],
+            generationConfig: { responseMimeType: 'application/json' },
+          }),
+          cache: 'no-store',
+        });
+        const json = await res.json().catch(() => null) as {
+          error?: { message?: string };
+          candidates?: Array<{ content?: { parts?: Array<{ text?: string }> } }>;
+        } | null;
+        if (!res.ok) {
+          lastError = `${model} returned HTTP ${res.status}: ${json?.error?.message || 'Unknown Gemini API error'}`;
+          if (res.status === 429 || /quota|rate.?limit/i.test(lastError)) {
+            moveToNextKey = true;
+            break;
+          }
+          continue;
+        }
+        const text = json?.candidates?.[0]?.content?.parts?.map((p) => p.text ?? '').join('').trim() ?? '';
+        if (text) return { text, model };
+        lastError = `${model} returned an empty response.`;
+      } catch (error) {
+        lastError = error instanceof Error ? error.message : 'Gemini request failed unexpectedly.';
       }
-      const text = json?.candidates?.[0]?.content?.parts?.map((p) => p.text ?? '').join('').trim() ?? '';
-      if (text) return { text, model };
-      lastError = `${model} returned an empty response.`;
-    } catch (error) {
-      lastError = error instanceof Error ? error.message : 'Gemini request failed unexpectedly.';
     }
+    if (moveToNextKey) continue;
   }
 
   return { text: null, error: lastError };
