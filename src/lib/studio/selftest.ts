@@ -1,0 +1,131 @@
+/**
+ * Phase 4 test harness — runs the five required educational subjects through
+ * the complete engine (lyricist -> melody -> timeline -> offline audio mix ->
+ * typography frames) and reports pass/fail evidence. Executed in the browser
+ * from the studio UI (Self-Test panel) or via /?selftest=1.
+ */
+import type { SongSpec } from './types';
+import { fallbackSongSpec } from './lyricist';
+import { finalizeMelody, validateSpec } from './melody';
+import { buildTimeline } from './arranger';
+import { renderSong } from './mixer';
+import { drawFrame } from './typography';
+
+export const TEST_SUBJECTS = [
+  { id: 'mitosis', label: 'Biology — The stages of mitosis', topic: 'The stages of mitosis', genre: 'afrobeats' as const, mood: 'upbeat' as const, durationSec: 45 as const },
+  { id: 'chemistry', label: 'Chemistry — Periodic table and chemical bonding', topic: 'Periodic table and chemical bonding', genre: 'hiphop' as const, mood: 'groovy' as const, durationSec: 45 as const },
+  { id: 'physics', label: "Physics — Newton's laws of motion", topic: "Newton's laws of motion", genre: 'dance' as const, mood: 'epic' as const, durationSec: 30 as const },
+  { id: 'anatomy', label: 'Anatomy — The human heart and blood circulation', topic: 'The human heart and blood circulation', genre: 'rnb' as const, mood: 'groovy' as const, durationSec: 45 as const },
+  { id: 'mnemonic', label: 'Mnemonic — Biological classification', topic: 'Biological classification mnemonic', genre: 'kids' as const, mood: 'happy' as const, durationSec: 45 as const },
+];
+
+export interface SubjectResult {
+  id: string;
+  label: string;
+  pass: boolean;
+  title: string;
+  provider: string;
+  durationSec: number;
+  audioPeak: number;
+  audioRms: number;
+  sections: number;
+  sungSyllables: number;
+  warnings: string[];
+  frameThumbs: string[];
+  error?: string;
+}
+
+function audioStats(buffer: AudioBuffer): { peak: number; rms: number } {
+  let peak = 0;
+  let sumSq = 0;
+  let n = 0;
+  for (let c = 0; c < buffer.numberOfChannels; c++) {
+    const d = buffer.getChannelData(c);
+    for (let i = 0; i < d.length; i++) {
+      const a = Math.abs(d[i]);
+      if (a > peak) peak = a;
+      sumSq += d[i] * d[i];
+      n++;
+    }
+  }
+  return { peak, rms: Math.sqrt(sumSq / Math.max(1, n)) };
+}
+
+async function renderThumbs(timeline: Parameters<typeof drawFrame>[4], W: number, H: number): Promise<string[]> {
+  const times = [
+    timeline.durationSec * 0.02,
+    timeline.durationSec * 0.25,
+    timeline.durationSec * 0.55,
+    timeline.durationSec * 0.9,
+  ];
+  const thumbs: string[] = [];
+  const canvas = document.createElement('canvas');
+  canvas.width = W; canvas.height = H;
+  const c = canvas.getContext('2d', { alpha: false })!;
+  for (const t of times) {
+    drawFrame(c, W, H, t, timeline, { typography: 'bounce', background: 'rays' });
+    thumbs.push(canvas.toDataURL('image/jpeg', 0.55));
+  }
+  return thumbs;
+}
+
+export async function runSelfTest(
+  onProgress?: (msg: string, percent: number) => void,
+): Promise<SubjectResult[]> {
+  const results: SubjectResult[] = [];
+  const W = 405, H = 720; // half-res 9:16 for thumbnails
+
+  for (let i = 0; i < TEST_SUBJECTS.length; i++) {
+    const subject = TEST_SUBJECTS[i];
+    onProgress?.(`Testing "${subject.label}"…`, Math.round((i / TEST_SUBJECTS.length) * 100));
+    try {
+      const raw: SongSpec = fallbackSongSpec({
+        topic: subject.topic,
+        settings: {
+          genre: subject.genre,
+          mood: subject.mood,
+          durationSec: subject.durationSec,
+          seedMelody: 1000 + i * 77,
+          vocalMode: 'synth',
+          vocalStyle: 'bright',
+          seedArrangement: 5000 + i * 31,
+        },
+      });
+      const finalized = finalizeMelody(raw);
+      const warnings = validateSpec(finalized);
+      const timeline = buildTimeline(finalized);
+      const { buffer } = await renderSong(finalized, timeline, { intensity: 0.7 });
+      const stats = audioStats(buffer);
+      const sung = timeline.sections.reduce((a, s) => a + s.lines.reduce((b, l) => b + l.words.reduce((x, w) => x + w.syllables.length, 0), 0), 0);
+      const thumbs = await renderThumbs(timeline, W, H);
+      const pass =
+        timeline.durationSec > subject.durationSec * 0.5 &&
+        buffer.duration > 5 &&
+        stats.peak > 0.3 &&
+        sung > 20 &&
+        thumbs.length === 4;
+      results.push({
+        id: subject.id,
+        label: subject.label,
+        pass,
+        title: finalized.title,
+        provider: 'offline fallback (engine test)',
+        durationSec: Math.round(buffer.duration * 10) / 10,
+        audioPeak: Math.round(stats.peak * 100) / 100,
+        audioRms: Math.round(stats.rms * 100) / 100,
+        sections: timeline.sections.length,
+        sungSyllables: sung,
+        warnings,
+        frameThumbs: thumbs,
+      });
+    } catch (e) {
+      results.push({
+        id: subject.id, label: subject.label, pass: false, title: '', provider: '', durationSec: 0,
+        audioPeak: 0, audioRms: 0, sections: 0, sungSyllables: 0, warnings: [], frameThumbs: [],
+        error: e instanceof Error ? e.message : String(e),
+      });
+    }
+  }
+  onProgress?.('Self-test complete.', 100);
+  return results;
+}
