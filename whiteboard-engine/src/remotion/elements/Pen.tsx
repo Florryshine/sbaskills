@@ -99,39 +99,23 @@ export function activeTipAt(
   return latest;
 }
 
-const SKIN = '#F2C29B';
-const SKIN_LINE = '#C68D64';
-const SLEEVE = '#17334F';
 const PEN_ANGLE = 42;
-const HAND_SCALE = 0.86;
+const HAND_SCALE = 0.62;
 
 /**
- * Pure hand + marker sprite. Local space: pen tip at (0,0), pen axis along +X;
- * rotated by `angle` so the tip points up-left and the fist trails down-right.
+ * Transparent hand-and-marker artwork. Its marker nib is aligned to local
+ * origin (0, 0), preserving the existing active-tip tracking coordinates.
  */
-export const HandSprite: React.FC<{ accent: string; ink: string; angle?: number }> = ({ accent, ink, angle = PEN_ANGLE }) => (
-  <g transform={`rotate(${angle})`} strokeLinejoin="round">
-    {/* sleeve + cuff */}
-    <rect x={184} y={-42} width={62} height={84} rx={16} fill={SLEEVE} stroke={ink} strokeWidth={2.6} />
-    <rect x={166} y={-36} width={24} height={72} rx={10} fill="#FFFFFF" stroke={ink} strokeWidth={2.6} />
-    {/* marker barrel in the accent colour */}
-    <rect x={26} y={-10.5} width={100} height={21} rx={9} fill={accent} stroke={ink} strokeWidth={2.6} />
-    <rect x={34} y={-6.5} width={78} height={4} fill="#FFFFFF" opacity={0.32} />
-    <rect x={88} y={-10.5} width={18} height={21} rx={6} fill="#000000" opacity={0.28} />
-    <rect x={16} y={-11.5} width={16} height={23} rx={4} fill={ink} stroke={ink} strokeWidth={1.4} />
-    {/* nib */}
-    <polygon points="1.5,0 6,-5 20,-9.5 20,9.5 6,5" fill={ink} />
-    {/* fist */}
-    <ellipse cx={150} cy={2} rx={50} ry={44} fill={SKIN} stroke={ink} strokeWidth={2.6} />
-    {[
-      [132, 8, 26],
-      [148, 12, 30],
-      [164, 14, 28],
-    ].map(([cx, cy, len], i) => (
-      <line key={i} x1={cx - len / 2} y1={cy} x2={cx + len / 2} y2={cy + 3} stroke={SKIN_LINE} strokeWidth={2.4} strokeLinecap="round" />
-    ))}
-    {/* thumb */}
-    <ellipse cx={126} cy={-17} rx={24} ry={14} transform="rotate(-28 126 -17)" fill={SKIN} stroke={ink} strokeWidth={2.4} />
+export const HandSprite: React.FC<{ accent: string; ink: string; angle?: number }> = ({ angle = PEN_ANGLE }) => (
+  <g transform={`rotate(${angle})`}>
+    <image
+      href="/whiteboard/marker-hand.svg"
+      x={10}
+      y={-139}
+      width={480}
+      height={279}
+      preserveAspectRatio="none"
+    />
   </g>
 );
 
