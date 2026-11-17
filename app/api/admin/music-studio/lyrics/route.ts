@@ -14,6 +14,7 @@ import type { GenreId, MoodId, SongSpec, LyricsResponse, SectionSpec, SectionNam
 import { fallbackSongSpec } from '@/lib/studio/lyricist';
 import { listGenres } from '@/lib/studio/genres';
 import { requireAdminApi } from '@/lib/require-admin-api';
+import { generateJsonText } from '@/lib/studio/geminiClient';
 
 export const maxDuration = 60;
 
@@ -100,122 +101,6 @@ function extractJson(content: string): BrainSong | null {
   }
 }
 
-/* ---------------- Gemini (existing integration) ---------------- */
-
-interface GeminiResult {
-  text: string | null;
-  model?: string;
-  error?: string;
-}
-
-async function callGemini(system: string, user: string): Promise<GeminiResult> {
-  const keys = Array.from(new Set([
-    process.env.GEMINI_API_KEY_1,
-    process.env.GEMINI_API_KEY_2,
-    process.env.GEMINI_API_KEY_3,
-    process.env.GEMINI_API_KEY,
-  ].filter((value): value is string => Boolean(value && value.trim())))).slice(0, 3);
-  if (!keys.length) return { text: null, error: 'No Gemini API key is configured. Add GEMINI_API_KEY_1, GEMINI_API_KEY_2, or GEMINI_API_KEY.' };
-
-  const configuredModel = process.env.GEMINI_MODEL?.trim();
-  // Use two current, generally available models. A 503 on one model must not
-  // prevent trying the other model.
-  const models = Array.from(new Set([
-    'gemini-3.5-flash-lite',
-    'gemini-3.7-flash',
-    'gemini-3.8-flash',
-    configuredModel,
-  ].filter((model): model is string => Boolean(model && model.trim()))));
-  const deadline = Date.now() + 42000;
-  let lastError = 'Gemini returned no text.';
-
-  for (const model of models) {
-    // Capacity errors are model/service-side, not API-key errors. Retry the
-    // same model briefly, then move to the next model instead of cycling keys.
-    let keyIndex = 0;
-    let modelUnavailable = false;
-    for (let attempt = 0; attempt < 2; attempt++) {
-      const remaining = deadline - Date.now();
-      if (remaining <= 1500) return { text: null, error: lastError };
-      const key = keys[keyIndex];
-      const controller = new AbortController();
-      const attemptTimeout = Math.min(12000, remaining - 500);
-      const timeout = setTimeout(() => controller.abort(), attemptTimeout);
-      let retryCapacity = false;
-      try {
-        const res = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent`, {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-            'x-goog-api-key': key,
-          },
-          body: JSON.stringify({
-            systemInstruction: { parts: [{ text: system }] },
-            contents: [{ role: 'user', parts: [{ text: user }] }],
-            generationConfig: {
-              responseMimeType: 'application/json',
-              maxOutputTokens: 1800,
-              thinkingConfig: { thinkingLevel: 'low' },
-            },
-          }),
-          signal: controller.signal,
-          cache: 'no-store',
-        });
-        const json = await res.json().catch(() => null) as {
-          error?: { message?: string };
-          candidates?: Array<{ content?: { parts?: Array<{ text?: string }> } }>;
-        } | null;
-        if (!res.ok) {
-          lastError = `${model} returned HTTP ${res.status}: ${json?.error?.message || 'Unknown Gemini API error'}`;
-          if (res.status === 401 || res.status === 403) {
-            // Only authentication/permission failures justify trying another key.
-            if (keyIndex + 1 < keys.length) {
-              keyIndex++;
-              attempt--;
-              continue;
-            }
-            modelUnavailable = true;
-            break;
-          }
-          if (res.status === 404) {
-            modelUnavailable = true;
-            break;
-          }
-          if (res.status === 429 || res.status === 500 || res.status === 502 || res.status === 503 || res.status === 504) {
-            retryCapacity = attempt === 0;
-            if (!retryCapacity) modelUnavailable = true;
-          } else {
-            return { text: null, error: lastError };
-          }
-        } else {
-          const text = json?.candidates?.[0]?.content?.parts?.map((p) => p.text ?? '').join('').trim() ?? '';
-          if (text) return { text, model };
-          lastError = `${model} returned an empty response.`;
-          modelUnavailable = true;
-          break;
-        }
-      } catch (error) {
-        lastError = error instanceof Error
-          ? (error.name === 'AbortError' ? `Gemini request timed out after ${attemptTimeout}ms on ${model}.` : error.message)
-          : 'Gemini request failed unexpectedly.';
-        // A network timeout is unlikely to improve by rotating API keys.
-        modelUnavailable = true;
-        break;
-      } finally {
-        clearTimeout(timeout);
-      }
-
-      if (retryCapacity && Date.now() < deadline - 1500) {
-        // Google recommends exponential backoff for transient 5xx/429 responses.
-        await new Promise((resolve) => setTimeout(resolve, attempt === 0 ? 1000 : 2000));
-      }
-    }
-    if (!modelUnavailable && Date.now() >= deadline - 1500) break;
-  }
-
-  return { text: null, error: lastError };
-}
-
 /* ---------------- Validation & fact-check pass ---------------- */
 
 function normalizeBrain(brain: BrainSong, topic: string): BrainSong | null {
@@ -278,14 +163,14 @@ export async function POST(req: NextRequest) {
 
   let spec: SongSpec;
 
-  const geminiResult = await callGemini(system, user);
+  const geminiResult = await generateJsonText(system, user);
   let brain: BrainSong | null = geminiResult.text ? extractJson(geminiResult.text) : null;
   if (brain) {
     provider = 'gemini';
   } else {
-    warnings.push(geminiResult.error
-      ? `Gemini lyric generation failed: ${geminiResult.error}`
-      : 'Gemini returned a response that was not valid song JSON.');
+    warnings.push(geminiResult.text
+      ? 'Gemini answered, but the response was not valid song JSON. Press Regenerate.'
+      : `AI lyric generation failed: ${geminiResult.userMessage ?? 'Unknown error.'}`);
   }
 
   if (!brain) {
@@ -302,7 +187,7 @@ export async function POST(req: NextRequest) {
         seedArrangement,
       },
     });
-    warnings.push('Used the offline curriculum lyricist. Check the Gemini warning above: this fallback uses templates and cannot create fully original lyrics for every topic.');
+    warnings.push('These are TEMPLATE lyrics from the offline curriculum lyricist, not original AI lyrics. Press Regenerate once the AI warning above clears.');
   } else {
     const normalized = normalizeBrain(brain, topic);
     brain = normalized ?? brain;
@@ -317,7 +202,14 @@ export async function POST(req: NextRequest) {
     if (!normalized) warnings.push('AI output was partially repaired by the validator.');
   }
 
-  const response: LyricsResponse = { spec, provider, factCheck, warnings };
+  const response: LyricsResponse & { lyricSource: 'ai' | 'template'; aiModel?: string } = {
+    spec,
+    provider,
+    factCheck,
+    warnings,
+    lyricSource: provider === 'gemini' ? 'ai' : 'template',
+    aiModel: geminiResult.model,
+  };
   return NextResponse.json(response);
 }
 
