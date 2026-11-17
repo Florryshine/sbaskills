@@ -197,7 +197,7 @@ export function validateSpec(spec: SongSpec): string[] {
       }
     }
   }
-  return [...new Set(issues)].slice(0, 20);
+  return Array.from(new Set(issues)).slice(0, 20);
 }
 
 export { clamp };
