@@ -263,6 +263,20 @@ export default function SocialEnginePage() {
     setGenerating(false);
   };
 
+  const deleteMusicMedia = async (contentAssetId, mediaId) => {
+    if (!confirm('Delete this generated audio/video file? The saved lyrics and script will remain available for regeneration.')) return;
+    try {
+      const res = await fetch(`/api/admin/music-studio/media?id=${encodeURIComponent(mediaId)}`, { method: 'DELETE' });
+      const json = await res.json();
+      if (!res.ok) throw new Error(json.error || 'Could not delete media');
+      setDrafts((current) => current.map((draft) => draft.id === contentAssetId
+        ? { ...draft, media_files: (draft.media_files || []).filter((media) => media.id !== mediaId) }
+        : draft));
+    } catch (e) {
+      alert(e.message || 'Could not delete media');
+    }
+  };
+
   const deleteDraft = async (id) => {
     if (!confirm('Delete this social engine draft (and its media)?')) return;
     const res = await fetch(`/api/admin/content-assets?id=${id}`, { method: 'DELETE' });
@@ -660,7 +674,10 @@ export default function SocialEnginePage() {
                       <div key={audio.id} className="rounded-lg border border-blue-100 bg-white p-3">
                         <p className="mb-2 text-xs font-bold uppercase tracking-wide text-brand-blue">Audio preview</p>
                         <audio src={audio.url} controls className="w-full" />
-                        <a href={audio.url} target="_blank" rel="noreferrer" className="mt-2 inline-block text-xs text-brand-blue underline">Open audio file</a>
+                        <div className="mt-2 flex items-center justify-between">
+                          <a href={audio.url} target="_blank" rel="noreferrer" className="text-xs text-brand-blue underline">Open audio file</a>
+                          <button onClick={() => deleteMusicMedia(draft.id, audio.id)} className="text-xs font-semibold text-red-600 hover:underline">Delete audio</button>
+                        </div>
                       </div>
                     ))}
                     {editingId === draft.id ? (
@@ -727,6 +744,12 @@ export default function SocialEnginePage() {
                             className="text-xs font-semibold text-gray-600 border rounded-full px-3 py-1 hover:bg-gray-50"
                           >
                             {copiedId === `hero-url-${draft.id}` ? '✓ Copied' : '🔗 Copy URL'}
+                          </button>
+                          <button
+                            onClick={() => deleteMusicMedia(draft.id, heroImage.id)}
+                            className="text-xs font-semibold text-red-600 border border-red-100 rounded-full px-3 py-1 hover:bg-red-50"
+                          >
+                            Delete video
                           </button>
                         </div>
                       </div>
