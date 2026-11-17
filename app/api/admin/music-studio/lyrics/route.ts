@@ -2,10 +2,8 @@
  * /api/lyrics — the creative & educational brain of the studio.
  *
  * Provider chain (first available wins):
- *   1. Gemini  — the studio's primary AI (reuses the site's existing Gemini
- *      integration; set GEMINI_API_KEY, optionally GEMINI_MODEL).
- *   2. z-ai    — sandbox/preview brain (z-ai-web-dev-sdk, server-side only).
- *   3. fallback— deterministic offline lyricist (always succeeds, zero cost).
+ *   1. Gemini — reuses the site's existing GEMINI_API_KEY integration.
+ *   2. Offline fallback — deterministic curriculum lyricist (no extra service).
  *
  * A second AI pass FACT-CHECKS the lyrics when an AI provider is used.
  * The response is a SongSpec skeleton WITHOUT melody notes — the client-side
@@ -179,8 +177,11 @@ export async function POST(req: NextRequest) {
   } catch {
     return NextResponse.json({ error: 'Invalid JSON body' }, { status: 400 });
   }
-  const topic = (body.topic ?? '').trim();
+  const topic = typeof body.topic === 'string' ? body.topic.trim().slice(0, 240) : '';
   if (!topic) return NextResponse.json({ error: 'A topic is required' }, { status: 400 });
+  if (typeof body.notes === 'string' && body.notes.length > 12000) {
+    return NextResponse.json({ error: 'Lesson notes are too long. Keep them under 12,000 characters.' }, { status: 413 });
+  }
   const durationSec = [30, 45, 60, 90].includes(Number(body.durationSec)) ? Number(body.durationSec) : 60;
 
   const system = systemPrompt(durationSec);
