@@ -195,7 +195,7 @@ export default function StudioPage() {
       if (result.warnings.length) setWarnings((w) => [...w, ...result.warnings]);
       setProgressMsg('Song ready — press play!');
       setProgressPct(100);
-      toast({ title: 'Song generated', description: `${result.timeline.sections.length} sections · ${result.durationSec.toFixed(0)}s · vocals + instrumental mixed.` });
+      toast({ title: 'Song generated', description: `${result.timeline.sections.length} sections · ${result.durationSec.toFixed(0)}s · synthetic vocals + instrumental mixed.` });
     } catch (e) {
       setProgressMsg('');
       toast({ title: 'Song generation failed', description: e instanceof Error ? e.message : String(e), variant: 'destructive' });
@@ -313,17 +313,17 @@ export default function StudioPage() {
   const lyricsReady = Boolean(rawSpec);
 
   return (
-    <main className="min-h-screen bg-[#160B33] text-white">
+    <main className="min-h-screen bg-[#062B59] text-white">
       <Toaster />
       {/* subtle SBA gradient glow */}
       <div className="pointer-events-none fixed inset-0 opacity-60"
-        style={{ background: 'radial-gradient(1200px 500px at 50% -10%, rgba(124,58,237,0.35), transparent), radial-gradient(800px 400px at 90% 20%, rgba(255,159,28,0.18), transparent)' }} />
+        style={{ background: 'radial-gradient(1200px 500px at 50% -10%, rgba(26,115,232,0.28), transparent), radial-gradient(800px 400px at 90% 20%, rgba(255,204,0,0.16), transparent)' }} />
 
       <div className="relative mx-auto max-w-7xl px-4 pb-16 pt-6 sm:px-6">
         {/* ---------------- header ---------------- */}
         <header className="mb-8 flex flex-wrap items-center justify-between gap-4">
           <div className="flex items-center gap-3">
-            <div className="flex h-12 w-12 items-center justify-center rounded-2xl bg-gradient-to-br from-[#FFD60A] to-[#FF9F1C] text-[#2A1A5E] shadow-lg">
+            <div className="flex h-12 w-12 items-center justify-center rounded-2xl bg-gradient-to-br from-[#FFD60A] to-[#FFCC00] text-[#062B59] shadow-lg">
               <Brain className="h-7 w-7" />
             </div>
             <div>
@@ -340,10 +340,10 @@ export default function StudioPage() {
               <DialogTrigger asChild>
                 <Button variant="outline" size="sm" className="border-white/20 bg-white/5">
                   <FolderOpen className="h-4 w-4 mr-1.5" /> Projects
-                  {projects.length > 0 && <Badge className="ml-1.5 bg-[#FFD60A] text-[#2A1A5E]">{projects.length}</Badge>}
+                  {projects.length > 0 && <Badge className="ml-1.5 bg-[#FFD60A] text-[#062B59]">{projects.length}</Badge>}
                 </Button>
               </DialogTrigger>
-              <DialogContent className="bg-[#1E1042] border-white/15 text-white">
+              <DialogContent className="bg-[#0B376D] border-white/15 text-white">
                 <DialogHeader><DialogTitle>Saved projects</DialogTitle>
                   <DialogDescription className="text-white/60">Stored in this browser. Loading a project re-renders its song.</DialogDescription>
                 </DialogHeader>
@@ -379,7 +379,7 @@ export default function StudioPage() {
                   <BookOpenText className="h-4 w-4 mr-1.5" /> How it works
                 </Button>
               </DialogTrigger>
-              <DialogContent className="bg-[#1E1042] border-white/15 text-white max-w-lg">
+              <DialogContent className="bg-[#0B376D] border-white/15 text-white max-w-lg">
                 <DialogHeader><DialogTitle>How the studio works</DialogTitle>
                   <DialogDescription className="text-white/60">The pipeline behind every generated song</DialogDescription>
                 </DialogHeader>
@@ -417,7 +417,7 @@ export default function StudioPage() {
             </div>
 
             <Separator className="bg-white/10" />
-            <h2 className="flex items-center gap-2 text-sm font-bold uppercase tracking-wide text-[#FF9F1C]">
+            <h2 className="flex items-center gap-2 text-sm font-bold uppercase tracking-wide text-[#FFCC00]">
               <AudioLines className="h-4 w-4" /> 2 · The Sound
             </h2>
             <div className="grid grid-cols-2 gap-3">
@@ -425,7 +425,7 @@ export default function StudioPage() {
                 <Label>Genre</Label>
                 <Select value={settings.genre} onValueChange={(v) => setSetting('genre', v as GenreId | 'auto')}>
                   <SelectTrigger className="bg-white/10 border-white/15"><SelectValue /></SelectTrigger>
-                  <SelectContent className="bg-[#1E1042] border-white/15 text-white max-h-72">
+                  <SelectContent className="bg-[#0B376D] border-white/15 text-white max-h-72">
                     <SelectItem value="auto">AI recommends</SelectItem>
                     {GENRES.map((g) => <SelectItem key={g.id} value={g.id}>{g.label}</SelectItem>)}
                   </SelectContent>
@@ -435,7 +435,7 @@ export default function StudioPage() {
                 <Label>Mood</Label>
                 <Select value={settings.mood} onValueChange={(v) => setSetting('mood', v as MoodId)}>
                   <SelectTrigger className="bg-white/10 border-white/15"><SelectValue /></SelectTrigger>
-                  <SelectContent className="bg-[#1E1042] border-white/15 text-white">
+                  <SelectContent className="bg-[#0B376D] border-white/15 text-white">
                     {MOODS.map((m) => <SelectItem key={m.id} value={m.id}>{m.label}</SelectItem>)}
                   </SelectContent>
                 </Select>
@@ -444,7 +444,7 @@ export default function StudioPage() {
                 <Label>Duration</Label>
                 <Select value={String(settings.durationSec)} onValueChange={(v) => setSetting('durationSec', Number(v) as 30 | 45 | 60 | 90)}>
                   <SelectTrigger className="bg-white/10 border-white/15"><SelectValue /></SelectTrigger>
-                  <SelectContent className="bg-[#1E1042] border-white/15 text-white">
+                  <SelectContent className="bg-[#0B376D] border-white/15 text-white">
                     {[30, 45, 60, 90].map((d) => <SelectItem key={d} value={String(d)}>{d} seconds</SelectItem>)}
                   </SelectContent>
                 </Select>
@@ -453,9 +453,9 @@ export default function StudioPage() {
                 <Label>Vocal</Label>
                 <Select value={settings.vocalMode} onValueChange={(v) => setSetting('vocalMode', v as VocalMode)}>
                   <SelectTrigger className="bg-white/10 border-white/15"><SelectValue /></SelectTrigger>
-                  <SelectContent className="bg-[#1E1042] border-white/15 text-white">
-                    <SelectItem value="synth">Synth singer</SelectItem>
-                    <SelectItem value="tts">TTS-Map singer</SelectItem>
+                  <SelectContent className="bg-[#0B376D] border-white/15 text-white">
+                    <SelectItem value="synth">Built-in synthetic singer</SelectItem>
+                    <SelectItem value="tts">Voice-engine pitch-mapped singer</SelectItem>
                   </SelectContent>
                 </Select>
               </div>
@@ -463,7 +463,7 @@ export default function StudioPage() {
                 <Label>Voice style</Label>
                 <Select value={settings.vocalStyle} onValueChange={(v) => setSetting('vocalStyle', v as VocalStyle)}>
                   <SelectTrigger className="bg-white/10 border-white/15"><SelectValue /></SelectTrigger>
-                  <SelectContent className="bg-[#1E1042] border-white/15 text-white">
+                  <SelectContent className="bg-[#0B376D] border-white/15 text-white">
                     <SelectItem value="bright">Bright</SelectItem>
                     <SelectItem value="warm">Warm</SelectItem>
                     <SelectItem value="choir">Choir</SelectItem>
@@ -491,7 +491,7 @@ export default function StudioPage() {
             )}
 
             <Separator className="bg-white/10" />
-            <h2 className="flex items-center gap-2 text-sm font-bold uppercase tracking-wide text-[#FF5D8F]">
+            <h2 className="flex items-center gap-2 text-sm font-bold uppercase tracking-wide text-[#F2C500]">
               <Film className="h-4 w-4" /> 3 · The Video
             </h2>
             <div className="grid grid-cols-2 gap-3">
@@ -499,7 +499,7 @@ export default function StudioPage() {
                 <Label>Typography</Label>
                 <Select value={settings.typography} onValueChange={(v) => setSetting('typography', v as TypographyId)}>
                   <SelectTrigger className="bg-white/10 border-white/15"><SelectValue /></SelectTrigger>
-                  <SelectContent className="bg-[#1E1042] border-white/15 text-white">
+                  <SelectContent className="bg-[#0B376D] border-white/15 text-white">
                     {TYPOGRAPHY.map((t) => <SelectItem key={t.id} value={t.id}>{t.label}</SelectItem>)}
                   </SelectContent>
                 </Select>
@@ -508,7 +508,7 @@ export default function StudioPage() {
                 <Label>Background</Label>
                 <Select value={settings.background} onValueChange={(v) => setSetting('background', v as BackgroundId)}>
                   <SelectTrigger className="bg-white/10 border-white/15"><SelectValue /></SelectTrigger>
-                  <SelectContent className="bg-[#1E1042] border-white/15 text-white">
+                  <SelectContent className="bg-[#0B376D] border-white/15 text-white">
                     {BACKGROUNDS.map((b) => <SelectItem key={b.id} value={b.id}>{b.label}</SelectItem>)}
                   </SelectContent>
                 </Select>
@@ -518,7 +518,7 @@ export default function StudioPage() {
               <Label>Aspect ratio</Label>
               <Select value={settings.aspect} onValueChange={(v) => setSetting('aspect', v as AspectId)}>
                 <SelectTrigger className="bg-white/10 border-white/15"><SelectValue /></SelectTrigger>
-                <SelectContent className="bg-[#1E1042] border-white/15 text-white">
+                <SelectContent className="bg-[#0B376D] border-white/15 text-white">
                   {ASPECTS.map((a) => <SelectItem key={a.id} value={a.id}>{a.label}</SelectItem>)}
                 </SelectContent>
               </Select>
@@ -531,11 +531,11 @@ export default function StudioPage() {
           {/* ============ CENTER: stage ============ */}
           <section aria-label="Stage" className="space-y-4">
             <div className="flex flex-wrap items-center justify-center gap-2.5">
-              <Button onClick={generateLyrics} disabled={lyricsBusy} className="bg-[#7C3AED] hover:bg-[#8B5CF6] font-semibold shadow-lg shadow-purple-900/40">
+              <Button onClick={generateLyrics} disabled={lyricsBusy} className="bg-[#FFCC00] hover:bg-[#FFE066] text-[#062B59] font-semibold shadow-lg shadow-blue-950/20">
                 <Sparkles className="h-4 w-4 mr-1.5" /> {lyricsBusy ? 'Writing…' : 'Generate Lyrics'}
               </Button>
               <Button onClick={generateSongAction} disabled={!lyricsReady || songBusy}
-                className="bg-gradient-to-r from-[#FF9F1C] to-[#FF5D8F] text-white font-semibold shadow-lg shadow-orange-900/40">
+                className="bg-[#1A73E8] hover:bg-[#2B82E8] text-white font-semibold shadow-lg shadow-blue-950/30">
                 <Music className="h-4 w-4 mr-1.5" /> {songBusy ? 'Producing…' : 'Generate Song'}
               </Button>
             </div>
@@ -574,13 +574,13 @@ export default function StudioPage() {
             {/* export */}
             <div className="rounded-2xl border border-white/10 bg-white/[0.04] p-4">
               <div className="mb-3 flex items-center justify-between">
-                <h3 className="text-sm font-bold uppercase tracking-wide text-[#A7F432]">Export</h3>
+                <h3 className="text-sm font-bold uppercase tracking-wide text-[#FFCC00]">Export</h3>
                 <span className="text-[11px] text-white/40">
                   {mp4Ready ? 'MP4 encoder ready in this browser' : 'MP4 needs Chrome/Edge — WebM works everywhere'}
                 </span>
               </div>
               <div className="flex flex-wrap gap-2">
-                <Button size="sm" onClick={doExportMp4} disabled={!songReady || exporting} className="bg-[#2EC4B6] text-[#0E2A28] font-semibold hover:bg-[#3ED9CC]">
+                <Button size="sm" onClick={doExportMp4} disabled={!songReady || exporting} className="bg-[#FFCC00] text-[#062B59] font-semibold hover:bg-[#FFE066]">
                   <Download className="h-4 w-4 mr-1.5" /> Video MP4
                 </Button>
                 <Button size="sm" variant="secondary" onClick={doExportWebm} disabled={!songReady || exporting}>Video WebM</Button>
@@ -606,7 +606,7 @@ export default function StudioPage() {
               onChange={(s) => setRawSpec(s)} />
             {creativeNotes && (
               <div className="rounded-xl border border-white/10 bg-white/5 p-3">
-                <p className="mb-1 text-[11px] font-bold uppercase tracking-wide text-[#2EC4B6]">AI creative notes</p>
+                <p className="mb-1 text-[11px] font-bold uppercase tracking-wide text-[#FFCC00]">AI creative notes</p>
                 <p className="text-xs text-white/70">{creativeNotes}</p>
               </div>
             )}
@@ -636,7 +636,7 @@ export default function StudioPage() {
                   <Sparkles className="h-4 w-4 mr-1.5" /> Run the 5-subject engine self-test
                 </Button>
               </DialogTrigger>
-              <DialogContent className="bg-[#1E1042] border-white/15 text-white max-w-lg">
+              <DialogContent className="bg-[#0B376D] border-white/15 text-white max-w-lg">
                 <DialogHeader>
                   <DialogTitle>Phase 4 — engine self-test</DialogTitle>
                   <DialogDescription className="text-white/60">
