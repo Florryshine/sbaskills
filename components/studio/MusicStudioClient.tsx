@@ -6,7 +6,7 @@
  * Full workflow: topic in -> AI lyrics -> preview & edit -> generate song
  * (singing + instrumental + mix) -> synchronized kinetic typography preview
  * -> export MP4/WebM/WAV. Projects persist in localStorage; no server
- * storage, no database rows, no per-song third-party fees.
+ * storage and no database rows. Gemini TTS and lyrics use the configured Gemini API key.
  */
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { Button } from '@/components/ui/button';
@@ -429,7 +429,7 @@ export default function StudioPage() {
                 onChange={(e) => setNotes(e.target.value)} className="bg-white border-[#C8DDF5] text-sm" />
             </div>
 
-            <Separator className="bg-white" />
+            <Separator className="bg-[#D8E6F5]" />
             <h2 className="flex items-center gap-2 text-sm font-bold uppercase tracking-wide text-[#0B5BC1]">
               <AudioLines className="h-4 w-4" /> 2 · The Sound
             </h2>
