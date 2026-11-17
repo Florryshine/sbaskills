@@ -124,7 +124,14 @@ export default function StudioPage() {
   }, []);
 
   useEffect(() => {
-    fetch('/api/admin/music-studio/tts').then((r) => r.json()).then((j) => setTtsAvailable(Boolean(j.available))).catch(() => setTtsAvailable(false));
+    fetch('/api/admin/music-studio/tts')
+      .then((r) => r.json())
+      .then((j) => {
+        const available = Boolean(j.available);
+        setTtsAvailable(available);
+        if (available) setSettings((current) => ({ ...current, vocalMode: 'tts' }));
+      })
+      .catch(() => setTtsAvailable(false));
     setMp4Ready(webCodecsAvailable());
     try {
       const raw = localStorage.getItem('sba-studio-projects');
@@ -148,10 +155,16 @@ export default function StudioPage() {
     setWarnings([]);
     setProgressMsg('Thinking about your topic…');
     try {
+      const requestSettings = {
+        ...settings,
+        seedMelody: Math.floor(Math.random() * 1000000000),
+        seedArrangement: Math.floor(Math.random() * 1000000000),
+      };
+      setSettings(requestSettings);
       const res = await fetch('/api/admin/music-studio/lyrics', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ topic, notes, genre: settings.genre, mood: settings.mood, durationSec: settings.durationSec, settings }),
+        body: JSON.stringify({ topic, notes, genre: settings.genre, mood: settings.mood, durationSec: settings.durationSec, settings: requestSettings }),
       });
       if (!res.ok) {
         const j = await res.json().catch(() => ({ error: 'Lyrics request failed' }));
@@ -483,6 +496,11 @@ export default function StudioPage() {
               <Slider min={0.1} max={1} step={0.05} value={[settings.musicIntensity]}
                 onValueChange={(v) => setSetting('musicIntensity', v[0])} />
             </div>
+            {settings.vocalMode === 'synth' && (
+              <p className="text-[11px] text-[#526B89]">
+                Built-in singer is an experimental synthetic voice, not a natural human singer. It follows the lyric melody but may sound robotic. Connect the SBA voice engine to enable pitch-mapped spoken vocals.
+              </p>
+            )}
             {settings.vocalMode === 'tts' && ttsAvailable === false && (
               <p className="text-[11px] text-[#0B5BC1]/80">
                 TTS-Map needs a TTS engine. This host has none, so the built-in synth singer will be used.
