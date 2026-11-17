@@ -60,7 +60,7 @@ export async function renderSong(
 
   /* instrumental bus */
   const instBus = ctx.createGain();
-  instBus.gain.value = 0.62 + 0.25 * opts.intensity;
+  instBus.gain.value = 0.48 + 0.18 * opts.intensity;
   const instComp = ctx.createDynamicsCompressor();
   instComp.threshold.value = -16;
   instComp.ratio.value = 4;
@@ -70,7 +70,7 @@ export async function renderSong(
 
   /* vocal bus with EQ, delay and reverb sends */
   const vocalBus = ctx.createGain();
-  vocalBus.gain.value = 1.05;
+  vocalBus.gain.value = 1.4;
   const hpf = ctx.createBiquadFilter();
   hpf.type = 'highpass'; hpf.frequency.value = 100;
   const presence = ctx.createBiquadFilter();
