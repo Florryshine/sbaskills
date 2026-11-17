@@ -35,7 +35,7 @@ function pcm16ToWavBase64(pcm: Buffer, sampleRate = 24000): string {
 }
 
 async function synthesizeWithEdge(item: string): Promise<string> {
-  const endpoint = (process.env.TTS_ENDPOINT || 'https://openai-edge-tts-aqq1.onrender.com').replace(/\\/+$/, '');
+  const endpoint = (process.env.TTS_ENDPOINT || 'https://openai-edge-tts-aqq1.onrender.com').replace(/\/+$/, '');
   const controller = new AbortController();
   const timeout = setTimeout(() => controller.abort(), 20000);
   try {
