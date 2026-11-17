@@ -152,7 +152,7 @@ async function callGemini(system: string, user: string): Promise<GeminiResult> {
         } | null;
         if (!res.ok) {
           lastError = `${model} returned HTTP ${res.status}: ${json?.error?.message || 'Unknown Gemini API error'}`;
-          if (res.status === 429 || /quota|rate.?limit/i.test(lastError)) {
+          if ([401, 403, 429].includes(res.status) || /quota|rate.?limit/i.test(lastError)) {
             moveToNextKey = true;
             break;
           }
