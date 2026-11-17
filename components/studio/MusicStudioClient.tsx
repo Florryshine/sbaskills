@@ -170,15 +170,17 @@ export default function StudioPage() {
         const j = await res.json().catch(() => ({ error: 'Lyrics request failed' }));
         throw new Error(j.error ?? `Request failed (${res.status})`);
       }
-      const j = await res.json() as { spec: SongSpec; provider: string; factCheck?: { checked: boolean }; warnings?: string[] };
+      const j = await res.json() as { spec: SongSpec; provider: string; lyricSource?: 'ai' | 'template'; factCheck?: { checked: boolean }; warnings?: string[] };
       setRawSpec(j.spec);
-      setProvider(j.provider);
+      setProvider(j.lyricSource === 'template' || j.provider === 'fallback' ? 'template lyrics (not AI)' : 'AI-generated');
       setFactChecked(Boolean(j.factCheck?.checked));
       setWarnings(j.warnings ?? []);
       setCreativeNotes(j.spec.creativeNotes ?? '');
       toast({
-        title: 'Lyrics ready',
-        description: `Created by ${j.provider === 'fallback' ? 'the offline curriculum brain' : j.provider}. Edit them below before generating the song.`,
+        title: j.lyricSource === 'template' || j.provider === 'fallback' ? 'Template lyrics (AI unavailable)' : 'AI lyrics ready',
+        description: j.lyricSource === 'template' || j.provider === 'fallback'
+          ? 'Gemini could not be reached, so these are template lyrics, not original AI lyrics. See the warning below, then press Regenerate.'
+          : 'Original AI lyrics. Edit them below before generating the song.',
       });
     } catch (e) {
       toast({ title: 'Could not generate lyrics', description: e instanceof Error ? e.message : String(e), variant: 'destructive' });
