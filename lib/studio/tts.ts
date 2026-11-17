@@ -33,10 +33,16 @@ export async function fetchSyllables(
   // Array.from avoids Set-iterator downlevel errors with this repo's ES5 TS target.
   const unique = Array.from(new Set(items.map((i) => i.toLowerCase()))).filter((i) => i.trim().length > 0);
   const map = new Map<string, DecodedSyl>();
+  const pending = unique.filter((item) => !cache.has(item));
+  for (const item of unique) {
+    const cached = cache.get(item);
+    if (cached) map.set(item, cached);
+  }
   const CHUNK = 48;
-  let done = 0;
-  for (let c = 0; c < unique.length; c += CHUNK) {
-    const chunk = unique.slice(c, c + CHUNK);
+  let done = unique.length - pending.length;
+  onProgress?.(done, unique.length);
+  for (let c = 0; c < pending.length; c += CHUNK) {
+    const chunk = pending.slice(c, c + CHUNK);
     let audio: Record<string, string>;
     try {
       audio = await provider.synthesize(chunk);
@@ -50,7 +56,13 @@ export async function fetchSyllables(
       const trimmed = trimSilence(data);
       const f0 = detectF0(trimmed, rate);
       if (trimmed.length > 64) {
-        map.set(k, { data: trimmed, rate, f0 });
+        const decoded = { data: trimmed, rate, f0 };
+        map.set(k, decoded);
+        cache.set(k, decoded);
+        if (cache.size > 500) {
+          const oldest = cache.keys().next().value;
+          if (oldest) cache.delete(oldest);
+        }
       }
     }
     done += chunk.length;
