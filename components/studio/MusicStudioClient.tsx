@@ -553,7 +553,7 @@ export default function StudioPage() {
                 <Sparkles className="h-4 w-4 mr-1.5" /> {lyricsBusy ? 'Writing…' : 'Generate Lyrics'}
               </Button>
               <Button onClick={generateSongAction} disabled={!lyricsReady || songBusy}
-                className="bg-[#1A73E8] hover:bg-[#2B82E8] text-[#12345B] font-semibold shadow-lg shadow-blue-950/30">
+                className="bg-[#1A73E8] hover:bg-[#2B82E8] text-white font-semibold shadow-lg shadow-blue-950/20">
                 <Music className="h-4 w-4 mr-1.5" /> {songBusy ? 'Producing…' : 'Generate Song'}
               </Button>
             </div>
