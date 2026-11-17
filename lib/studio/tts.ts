@@ -41,14 +41,9 @@ export async function fetchSyllables(
     try {
       audio = await provider.synthesize(chunk);
     } catch {
-      // individual fallback, one at a time (providers may reject large batches)
+      // Do not fan out dozens of single-syllable retries after a failed batch.
+      // The caller will use the complete built-in synth fallback instead.
       audio = {};
-      for (const item of chunk) {
-        try {
-          const r = await provider.synthesize([item]);
-          Object.assign(audio, r);
-        } catch { /* skip unusable fragment */ }
-      }
     }
     for (const [k, b64] of Object.entries(audio)) {
       const { data, rate } = decodeMonoWav(base64ToArrayBuffer(b64));
@@ -111,7 +106,8 @@ export async function singViaTts(
   const bank = await fetchSyllables(items, provider, (done, total) => {
     onProgress?.(`Synthesizing syllables… ${done}/${total}`, 5 + Math.round((done / total) * 40));
   });
-  if (bank.size === 0) return false;
+  const expectedSyllables = Array.from(new Set(items.map((item) => item.toLowerCase()))).length;
+  if (bank.size === 0 || bank.size < expectedSyllables) return false;
 
   onProgress?.('Pitch-mapping vocals…', 50);
   for (const s of timeline.sections) {
