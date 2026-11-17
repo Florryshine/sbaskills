@@ -18,6 +18,7 @@ export interface GenerateOptions {
 
 export interface GenerateResult extends RenderResult {
   warnings: string[];
+  usedTts: boolean;
 }
 
 export function applySettings(spec: SongSpec, settings: StudioSettings): SongSpec {
@@ -59,8 +60,7 @@ export async function generateSong(
     onProgress: (msg, pct) => onProgress?.(msg, 20 + pct * 0.75),
   });
   if (ttsError) warnings.push(`TTS mode problem: ${ttsError}. The built-in synth singer was used.`);
-  void usedTts;
-
+  
   onProgress?.('Song ready.', 100);
-  return { timeline, audio: buffer, durationSec: timeline.durationSec, warnings };
+  return { timeline, audio: buffer, durationSec: timeline.durationSec, warnings, usedTts };
 }

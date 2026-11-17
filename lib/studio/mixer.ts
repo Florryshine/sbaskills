@@ -3,13 +3,13 @@
  *
  * Everything runs in an OfflineAudioContext, so a full 60-90 second song is
  * rendered many times faster than realtime, entirely in the browser, with
- * zero server cost.
+ * client-side instrumental rendering; only optional voice syllables are fetched from the configured TTS API.
  */
 import type { SongSpec, Timeline } from './types';
 import { buildArrangement } from './arranger';
 import { playInstrumentEvent } from './instruments';
 import { singTimeline } from './singer';
-import { singViaTts, espeakTtsProvider, remoteTtsProvider } from './tts';
+import { singViaTts, apiTtsProvider, remoteTtsProvider } from './tts';
 import { makeImpulseResponse } from './dsp';
 
 export interface MixOptions {
@@ -60,7 +60,7 @@ export async function renderSong(
 
   /* instrumental bus */
   const instBus = ctx.createGain();
-  instBus.gain.value = 0.62 + 0.25 * opts.intensity;
+  instBus.gain.value = 0.48 + 0.18 * opts.intensity;
   const instComp = ctx.createDynamicsCompressor();
   instComp.threshold.value = -16;
   instComp.ratio.value = 4;
@@ -70,7 +70,7 @@ export async function renderSong(
 
   /* vocal bus with EQ, delay and reverb sends */
   const vocalBus = ctx.createGain();
-  vocalBus.gain.value = 1.05;
+  vocalBus.gain.value = 1.4;
   const hpf = ctx.createBiquadFilter();
   hpf.type = 'highpass'; hpf.frequency.value = 100;
   const presence = ctx.createBiquadFilter();
@@ -115,9 +115,9 @@ export async function renderSong(
   let ttsError: string | undefined;
   if (spec.vocal.mode === 'tts') {
     try {
-      const provider = opts.ttsUrl ? remoteTtsProvider(opts.ttsUrl) : espeakTtsProvider();
+      const provider = opts.ttsUrl ? remoteTtsProvider(opts.ttsUrl) : apiTtsProvider();
       usedTts = await singViaTts(ctx, vocalOut, timeline, provider, opts.onProgress);
-      if (!usedTts) ttsError = 'TTS engine returned no usable audio';
+      if (!usedTts) ttsError = 'TTS engine returned incomplete syllable audio; using the built-in synth fallback';
     } catch (e) {
       ttsError = e instanceof Error ? e.message : 'TTS engine failed';
       opts.onProgress?.(`TTS unavailable (${ttsError}). Falling back to the built-in synth singer.`, 55);

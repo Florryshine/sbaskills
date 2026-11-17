@@ -1,12 +1,12 @@
 /**
  * TTS-Map vocal source — a second, more intelligible singing mode.
  *
- * Each syllable is spoken by the existing SBA voice-over engine through the
- * /api/admin/music-studio/tts endpoint (configured with SBA_TTS_URL), then transformed into a sung
+ * Each syllable is spoken by the configured SBA voice engine or Gemini TTS through the
+ * /api/admin/music-studio/tts endpoint, then transformed into a sung
  * note: F0 is detected, the fragment is pitch-shifted to its melody pitch
  * and time-stretched to the exact note duration.
  *
- * This reuses an existing TTS capability rather than duplicating it, and
+ * This reuses the existing Gemini API key when no dedicated SBA TTS endpoint is configured, and
  * the result is genuinely melodic singing (pitch + rhythm from the score),
  * not narration over music.
  */
@@ -33,29 +33,36 @@ export async function fetchSyllables(
   // Array.from avoids Set-iterator downlevel errors with this repo's ES5 TS target.
   const unique = Array.from(new Set(items.map((i) => i.toLowerCase()))).filter((i) => i.trim().length > 0);
   const map = new Map<string, DecodedSyl>();
+  const pending = unique.filter((item) => !cache.has(item));
+  for (const item of unique) {
+    const cached = cache.get(item);
+    if (cached) map.set(item, cached);
+  }
   const CHUNK = 48;
-  let done = 0;
-  for (let c = 0; c < unique.length; c += CHUNK) {
-    const chunk = unique.slice(c, c + CHUNK);
+  let done = unique.length - pending.length;
+  onProgress?.(done, unique.length);
+  for (let c = 0; c < pending.length; c += CHUNK) {
+    const chunk = pending.slice(c, c + CHUNK);
     let audio: Record<string, string>;
     try {
       audio = await provider.synthesize(chunk);
     } catch {
-      // individual fallback, one at a time (providers may reject large batches)
+      // Do not fan out dozens of single-syllable retries after a failed batch.
+      // The caller will use the complete built-in synth fallback instead.
       audio = {};
-      for (const item of chunk) {
-        try {
-          const r = await provider.synthesize([item]);
-          Object.assign(audio, r);
-        } catch { /* skip unusable fragment */ }
-      }
     }
     for (const [k, b64] of Object.entries(audio)) {
       const { data, rate } = decodeMonoWav(base64ToArrayBuffer(b64));
       const trimmed = trimSilence(data);
       const f0 = detectF0(trimmed, rate);
       if (trimmed.length > 64) {
-        map.set(k, { data: trimmed, rate, f0 });
+        const decoded = { data: trimmed, rate, f0 };
+        map.set(k, decoded);
+        cache.set(k, decoded);
+        if (cache.size > 500) {
+          const oldest = cache.keys().next().value;
+          if (oldest) cache.delete(oldest);
+        }
       }
     }
     done += chunk.length;
@@ -64,7 +71,7 @@ export async function fetchSyllables(
   return map;
 }
 
-export const espeakTtsProvider = (): TtsProvider => ({
+export const apiTtsProvider = (): TtsProvider => ({
   async synthesize(items: string[]) {
     const res = await fetch('/api/admin/music-studio/tts', {
       method: 'POST',
@@ -111,7 +118,8 @@ export async function singViaTts(
   const bank = await fetchSyllables(items, provider, (done, total) => {
     onProgress?.(`Synthesizing syllables… ${done}/${total}`, 5 + Math.round((done / total) * 40));
   });
-  if (bank.size === 0) return false;
+  const expectedSyllables = Array.from(new Set(items.map((item) => item.toLowerCase()))).length;
+  if (bank.size === 0 || bank.size < expectedSyllables) return false;
 
   onProgress?.('Pitch-mapping vocals…', 50);
   for (const s of timeline.sections) {
