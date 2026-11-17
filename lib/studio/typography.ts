@@ -237,7 +237,7 @@ function drawWord(
     case 'burst': {
       const arrive = easeOutCubic(clamp01(p * 1.6));
       c.translate(baseX + wWidth / 2, baseY);
-      const chars = [...w.text];
+      const chars = Array.from(w.text);
       let cx = -(wWidth / 2);
       chars.forEach((ch, ci) => {
         const seed = hashSeed(idx * 13 + ci);
