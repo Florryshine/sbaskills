@@ -21,6 +21,8 @@ export interface GeminiResult {
   attempts: GeminiAttempt[];
   userMessage?: string;
   category?: GeminiErrorCategory;
+  /** Per-attempt trace (model, error category, status, seconds). Contains no secrets. */
+  diagnostics?: string;
   modelListSource: 'api' | 'configured-default';
 }
 
@@ -52,12 +54,21 @@ export function classify(status: number, message: string): GeminiErrorCategory {
   return 'bad_request';
 }
 
-const TRANSIENT = new Set<GeminiErrorCategory>(['overload', 'rate_limit', 'timeout', 'network']);
+// A timeout is NOT retried on the same model: a model that queues for 18s will
+// usually queue again, and two retries would burn the whole request budget.
+const TRANSIENT = new Set<GeminiErrorCategory>(['overload', 'rate_limit', 'network']);
 
 function rankModels(names: string[]): string[] {
-  const supported = names.filter((name) => /^gemini-\d+(\.\d+)?-(flash|flash-lite)$/.test(name));
-  const version = (name: string) => parseFloat(name.match(/^gemini-(\d+(?:\.\d+)?)/)?.[1] ?? '0');
-  return supported.sort((a, b) => version(b) - version(a) || (a.endsWith('lite') ? 1 : -1));
+  const ok = names.filter((n) => /^gemini-\d+(\.\d+)?-(flash|flash-lite)$/.test(n));
+  const ver = (n: string) => parseFloat(n.match(/^gemini-(\d+(?:\.\d+)?)/)?.[1] ?? '0');
+  const byNewest = (a: string, b: string) => ver(b) - ver(a);
+  const lites = ok.filter((n) => n.endsWith('-lite')).sort(byNewest);
+  const flashes = ok.filter((n) => !n.endsWith('-lite')).sort(byNewest);
+  return [lites[0], flashes[0], flashes[1], lites[1]].filter((v): v is string => Boolean(v));
+}
+
+function summarize(attempts: GeminiAttempt[]): string {
+  return attempts.map((a) => `${a.model}: ${a.category}${a.status ? ` ${a.status}` : ''} (${(a.ms / 1000).toFixed(1)}s)`).join(' | ');
 }
 
 async function listModels(key: string): Promise<string[] | null> {
@@ -136,7 +147,7 @@ export async function generateJsonText(
       if (remaining < 2000) return finish();
       const started = Date.now();
       const controller = new AbortController();
-      const timer = setTimeout(() => controller.abort(), Math.min(25000, remaining - 500));
+      const timer = setTimeout(() => controller.abort(), Math.min(18000, remaining - 500));
       let category: GeminiErrorCategory | 'ok' = 'ok';
       let status: number | undefined;
       let retryAfterMs = 0;
@@ -225,7 +236,7 @@ export async function generateJsonText(
         }
         break;
       }
-      if (category === 'invalid_model' || category === 'empty') break;
+      if (category === 'invalid_model' || category === 'empty' || category === 'timeout') break; // next model
       if (category === 'truncated') continue;
       if (TRANSIENT.has(category as GeminiErrorCategory) && attempt + 1 < maxAttempts) {
         const exponential = Math.min(8000, 1000 * 2 ** attempt);
@@ -244,6 +255,7 @@ export async function generateJsonText(
       modelListSource,
       category: last.category,
       userMessage: describe(last.category, models, attempts),
+      diagnostics: `models from ${modelListSource}; ${summarize(attempts) || 'no attempts made'}`,
     };
   }
 }
