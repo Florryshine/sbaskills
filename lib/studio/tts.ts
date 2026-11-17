@@ -1,12 +1,12 @@
 /**
  * TTS-Map vocal source — a second, more intelligible singing mode.
  *
- * Each syllable is spoken by the existing SBA voice-over engine through the
- * /api/admin/music-studio/tts endpoint (configured with SBA_TTS_URL), then transformed into a sung
+ * Each syllable is spoken by the configured SBA voice engine or Gemini TTS through the
+ * /api/admin/music-studio/tts endpoint, then transformed into a sung
  * note: F0 is detected, the fragment is pitch-shifted to its melody pitch
  * and time-stretched to the exact note duration.
  *
- * This reuses an existing TTS capability rather than duplicating it, and
+ * This reuses the existing Gemini API key when no dedicated SBA TTS endpoint is configured, and
  * the result is genuinely melodic singing (pitch + rhythm from the score),
  * not narration over music.
  */
