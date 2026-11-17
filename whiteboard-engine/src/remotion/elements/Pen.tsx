@@ -110,8 +110,8 @@ export const HandSprite: React.FC<{ accent: string; ink: string; angle?: number 
   <g transform={`rotate(${angle})`}>
     <image
       href={staticFile('whiteboard/marker-hand.svg')}
-      x={10}
-      y={-139}
+      x={0}
+      y={-141}
       width={480}
       height={279}
       preserveAspectRatio="none"
