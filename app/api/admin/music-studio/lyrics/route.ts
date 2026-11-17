@@ -141,7 +141,7 @@ async function callGemini(system: string, user: string): Promise<GeminiResult> {
             'x-goog-api-key': key,
           },
           body: JSON.stringify({
-            system_instruction: { parts: [{ text: system }] },
+            systemInstruction: { parts: [{ text: system }] },
             contents: [{ role: 'user', parts: [{ text: user }] }],
             generationConfig: {
               responseMimeType: 'application/json',
