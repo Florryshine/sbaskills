@@ -87,6 +87,8 @@ export function validateSceneScript(script: any): string[] {
         problems.push(where(`${a.do} needs numeric from and to (world x coordinates)`));
       }
       if (a.do === 'expression' && !['neutral','talk','happy','bigsmile','worried','strain','surprised','proud','sad','crying','angry','fear','confused','wink','focused'].includes(a.emotion)) problems.push(where('expression needs a supported emotion'));
+      if (['pull','pickUp','throw'].includes(a.do) && (!a.prop || !(sc.props ?? []).some((p: any) => p.id === a.prop))) problems.push(where(`${a.do} needs prop referencing an existing scene prop`));
+      if (['carry','drop'].includes(a.do) && a.prop && !(sc.props ?? []).some((p: any) => p.id === a.prop)) problems.push(where(`${a.do} references unknown prop "${a.prop}"`));
       if (a.do === 'face' && a.facing !== 1 && a.facing !== -1) {
         problems.push(where('face needs facing: 1 or -1'));
       }
