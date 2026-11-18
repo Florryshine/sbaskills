@@ -71,6 +71,7 @@ export async function prepareImages(spec: VideoSpec): Promise<PrepareResult> {
       notes.push(`Scene "${scene.id}": added an automatic educational-image search because the script supplied no image: directive.`);
     }
     const kept = [];
+    let fetchedRealImage = false;
     for (const el of scene.elements) {
       if (!el.image) {
         kept.push(el);
@@ -100,6 +101,7 @@ export async function prepareImages(spec: VideoSpec): Promise<PrepareResult> {
           const credit = prepared.credit;
           if (credit) credits.push(`${el.image}: ${credit}`);
           el.asset = prepared.spec.id;
+          fetchedRealImage = true;
           kept.push(el);
           continue;
         } catch (extErr) {
@@ -116,6 +118,30 @@ export async function prepareImages(spec: VideoSpec): Promise<PrepareResult> {
         }
       } catch (err) {
         warnings.push(`Scene "${scene.id}": image "${el.image}" skipped — ${(err as Error).message}`);
+      }
+    }
+
+    // If the requested search/direct image failed, make one independent
+    // educational-image attempt before accepting a scene with no real image.
+    if (!fetchedRealImage) {
+      const fallbackQuery = `${scene.heading || spec.title} ${spec.subject} real educational reference`;
+      try {
+        const fallback = await buildSpec(fallbackQuery, true, usedHashes, notes);
+        registerIllustration(fallback.spec);
+        if (fallback.credit) credits.push(`${fallbackQuery}: ${fallback.credit}`);
+        kept.push({
+          id: `fallback-image-${scene.id}`,
+          type: 'illustration',
+          asset: fallback.spec.id,
+          image: fallbackQuery,
+          colorize: true,
+          sync: { kind: 'fraction', fraction: 0.58 },
+          at: 'right',
+          scale: 0.6,
+        });
+        notes.push(`Scene "${scene.id}": used a fallback educational image search after the requested image was unavailable.`);
+      } catch (err) {
+        warnings.push(`Scene "${scene.id}": no suitable real educational image could be fetched after fallback — ${(err as Error).message}`);
       }
     }
     scene.elements = kept;
