@@ -148,7 +148,7 @@ async function synthesizeTtsBank(job) {
 async function runEngine(job, dir, ttsBank) {
   const bundlePath = path.join(dir, 'music-engine.bundle.js');
   await execFile('bun', ['build', path.join(ROOT, 'lib/studio/background-entry.ts'), '--target=browser', '--outfile', bundlePath, '--format=iife', '--minify']);
-  const browser = await openBrowser('chrome');
+  const browser = await openBrowser('chrome', {});
   try {
     const page = await browser.newPage();
     await page.setViewport({ width: 720, height: 1280, deviceScaleFactor: 1 });
