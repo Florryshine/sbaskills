@@ -449,7 +449,9 @@ function layoutSceneElements(
     return { time: fallbackPrev, wordIndex: null };
   };
 
-  // First pass: assign starts + layout for text-ish elements so highlights can target them.
+  // First pass: lay out ALL text-bearing elements before scheduling/rendering.
+  // Highlights may appear before their text directive in the DSL; resolving only
+  // previously visited elements made valid highlights fall back to the heading.
   const laidOut = new Map<string, LaidOutText>();
 
   // Heading
@@ -490,6 +492,52 @@ function layoutSceneElements(
       writeStart: LEAD_IN + 0.9,
     });
     laidOut.set('__sub', text);
+  }
+
+  // Pre-layout text, bullets, ticks and callouts in their normal board zones.
+  // This map is used only for highlight target lookup; the normal rendering
+  // pass below still owns their actual timeline and pen-writing schedule.
+  let previewY = body.y;
+  const calloutPositions: Record<string, { x: number; y: number }> = {
+    'top-left': { x: BOARD.margin, y: 214 },
+    'top-right': { x: BOARD.w - BOARD.margin - 620, y: 214 },
+    'bottom-left': { x: BOARD.margin, y: BOARD.h - 180 },
+    'bottom-right': { x: BOARD.w - BOARD.margin - 620, y: BOARD.h - 180 },
+    left: { x: BOARD.margin, y: 520 },
+    right: { x: BOARD.w - BOARD.margin - 620, y: 520 },
+  };
+  for (const el of elements) {
+    if ((el.type === 'text' || el.type === 'bullet') && el.text) {
+      const fontSize = 44;
+      const text = layoutText(el.text, {
+        x: el.type === 'bullet' ? body.x + 56 : body.x,
+        y: previewY,
+        width: body.width - (el.type === 'bullet' ? 56 : 0),
+        fontSize,
+        font: 'body',
+        align: 'left',
+        color: 'ink',
+        emphasis: el.emphasis,
+        writeStart: LEAD_IN,
+      });
+      laidOut.set(el.id, text);
+      previewY += text.lines.length * (fontSize * 1.18) + (el.type === 'bullet' ? 34 : 30);
+    } else if (el.type === 'tick' && el.text) {
+      const text = layoutText(el.text, {
+        x: body.x + 76, y: previewY, width: 700, fontSize: 42,
+        font: 'body', align: 'left', color: 'ink', writeStart: LEAD_IN,
+      });
+      laidOut.set(el.id, text);
+      previewY += 118;
+    } else if (el.type === 'callout' && el.text) {
+      const pos = calloutPositions[el.at ?? 'bottom-right'] ?? calloutPositions['bottom-right'];
+      laidOut.set(el.id, layoutText(el.text, {
+        x: pos.x, y: pos.y, width: 620, fontSize: 40,
+        font: 'label', align: 'left',
+        color: el.style === 'accent' ? theme.accent : 'inkSoft',
+        writeStart: LEAD_IN,
+      }));
+    }
   }
 
   // Element starts: computed in DOM order, respecting explicit syncs.
