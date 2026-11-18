@@ -87,7 +87,7 @@ async function synthesizeWithGemini(item, apiKeys) {
       if (!part?.inlineData?.data) { lastError = `Gemini TTS (${model}) returned no audio data.`; continue; }
       const bytes = Buffer.from(part.inlineData.data,'base64');
       if (bytes.length >= 44 && bytes.toString('ascii',0,4)==='RIFF') return bytes.toString('base64');
-      const rateMatch = /rate=(\\d+)/i.exec(part.inlineData.mimeType || '');
+      const rateMatch = /rate=(\d+)/i.exec(part.inlineData.mimeType || '');
       return pcm16ToWavBase64(bytes,rateMatch?Number(rateMatch[1]):24000);
     } catch (error) {
       lastError = error instanceof Error ? error.message : 'Gemini TTS failed.';
@@ -108,7 +108,7 @@ async function synthesizeTtsBank(job) {
     }
   }
   const queue=[...items]; if(!queue.length) return {};
-  const endpoint=(process.env.TTS_ENDPOINT||'https://openai-edge-tts-aqq1.onrender.com').replace(/\\/+$/,'');
+  const endpoint=(process.env.TTS_ENDPOINT||'https://openai-edge-tts-aqq1.onrender.com').replace(/\/+$/,'');
   const apiKeys=[process.env.GEMINI_API_KEY_1,process.env.GEMINI_API_KEY_2,process.env.GEMINI_API_KEY_3,process.env.GEMINI_API_KEY]
     .filter((value)=>Boolean(value&&value.trim()));
   const audio={}; let next=0,edgeFailures=0,completed=0;
