@@ -2,27 +2,44 @@ name: Musical Learning background renderer
 
 on:
   push:
-    branches:
-      - master
+    branches: [master]
     paths:
       - 'local-video-renderer/music-worker.js'
       - 'lib/studio/background-entry.ts'
       - 'lib/studio/tts.ts'
       - '.github/workflows/music-worker.yml'
   repository_dispatch:
-    types:
-      - music-render-job
+    types: [music-render-job]
   workflow_dispatch:
 
 permissions:
   contents: read
 
 concurrency:
-  group: music-render-queue-v2
+  group: ${{ github.event_name == 'push' && format('music-worker-validation-{0}', github.run_id) || 'music-render-queue-v3' }}
   cancel-in-progress: false
 
 jobs:
+  validate:
+    if: github.event_name == 'push'
+    name: Validate background renderer code
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: npm
+      - uses: oven-sh/setup-bun@v2
+      - name: Install production dependencies
+        run: npm ci --omit=dev
+      - name: Validate worker and browser entry
+        run: |
+          node --check local-video-renderer/music-worker.js
+          bun build lib/studio/background-entry.ts --target=browser --format=iife --outdir=/tmp/sba-music-bundle-check
+
   render:
+    if: github.event_name != 'push'
     name: Claim and render a queued learning song
     runs-on: ubuntu-latest
     timeout-minutes: 30
@@ -37,15 +54,12 @@ jobs:
       GEMINI_TTS_MODEL: ${{ secrets.GEMINI_TTS_MODEL }}
       GEMINI_TTS_VOICE_A: ${{ secrets.GEMINI_TTS_VOICE_A }}
     steps:
-      - name: Check out repository
-        uses: actions/checkout@v4
-      - name: Set up Node.js
-        uses: actions/setup-node@v4
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
         with:
           node-version: 24
           cache: npm
-      - name: Set up Bun
-        uses: oven-sh/setup-bun@v2
+      - uses: oven-sh/setup-bun@v2
       - name: Install FFmpeg
         run: |
           sudo apt-get update
