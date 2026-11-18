@@ -51,6 +51,19 @@ function faceGroup(style: CharStyle, head: [number, number], facing: 1 | -1, emo
       mouth = <path d={`M ${hx - facing * 11} ${mouthY} Q ${hx + facing * 2} ${mouthY + 8} ${hx + facing * 13} ${mouthY}`}
         stroke={dark} strokeWidth={3.4} fill="none" strokeLinecap="round" />;
       break;
+    case 'sad':
+    case 'crying':
+      mouth = <path d={`M ${hx - facing * 11} ${mouthY + 5} Q ${hx} ${mouthY - 5} ${hx + facing * 11} ${mouthY + 5}`}
+        stroke={dark} strokeWidth={3.4} fill="none" strokeLinecap="round" />;
+      break;
+    case 'angry':
+      mouth = <path d={`M ${hx - facing * 10} ${mouthY + 4} L ${hx + facing * 10} ${mouthY - 2}`}
+        stroke={dark} strokeWidth={3.6} fill="none" strokeLinecap="round" />;
+      break;
+    case 'confused':
+      mouth = <path d={`M ${hx - facing * 9} ${mouthY + 2} Q ${hx} ${mouthY - 4} ${hx + facing * 10} ${mouthY + 4}`}
+        stroke={dark} strokeWidth={3.2} fill="none" strokeLinecap="round" />;
+      break;
     case 'worried':
       mouth = <path d={`M ${hx - facing * 9} ${mouthY + 3} Q ${hx + facing * 2} ${mouthY - 3} ${hx + facing * 12} ${mouthY + 2}`}
         stroke={dark} strokeWidth={3.2} fill="none" strokeLinecap="round" />;
@@ -71,10 +84,16 @@ function faceGroup(style: CharStyle, head: [number, number], facing: 1 | -1, emo
         stroke={dark} strokeWidth={3.2} fill="none" strokeLinecap="round" />;
   }
 
-  const eyeChoice = (emo === 'surprised') ? eyeWide : (emo === 'bigsmile' || emo === 'proud') ? eyeHappyArc : eyeDot;
-  els.push(eyeChoice(exL), eyeChoice(exR));
+  // A deterministic blink cycle adds life without storing redundant face tracks.
+  const blinkPhase = frame % 101;
+  const blinking = blinkPhase >= 0 && blinkPhase < 4;
+  const eyeChoice = (emo === 'surprised' || emo === 'fear') ? eyeWide : (emo === 'bigsmile' || emo === 'proud' || emo === 'happy') ? eyeHappyArc : eyeDot;
+  const closedEye = (cx: number) => <path d={`M ${cx - 7} ${eyeY} Q ${cx} ${eyeY + 5} ${cx + 7} ${eyeY}`} stroke={dark} strokeWidth={3.4} fill="none" strokeLinecap="round" />;
+  els.push(blinking || emo === 'wink' ? closedEye(exL) : eyeChoice(exL), blinking ? closedEye(exR) : eyeChoice(exR));
 
-  if (emo === 'worried') { els.push(brow(exL, 5), brow(exR, 5)); }
+  if (emo === 'worried' || emo === 'sad' || emo === 'crying' || emo === 'fear') { els.push(brow(exL, 5), brow(exR, 5)); }
+  if (emo === 'angry') { els.push(brow(exL, -8), brow(exR, -8)); }
+  if (emo === 'confused') { els.push(brow(exL, 7), brow(exR, -4)); }
   if (emo === 'strain') { els.push(brow(exL, -5), brow(exR, -5)); }
   if (emo === 'surprised') {
     els.push(
@@ -82,7 +101,7 @@ function faceGroup(style: CharStyle, head: [number, number], facing: 1 | -1, emo
       <path key={`sb2`} d={`M ${exR - 8} ${browY - 5} Q ${exR} ${browY - 9} ${exR + 8} ${browY - 5}`} stroke={dark} strokeWidth={3.2} fill="none" strokeLinecap="round" />,
     );
   }
-  if (emo === 'worried' || emo === 'strain') {
+  if (emo === 'worried' || emo === 'strain' || emo === 'fear' || emo === 'crying') {
     // sweat drop on the far side, gently animated
     const t = (frame % 45) / 45;
     const dy = t * 14;
@@ -93,7 +112,13 @@ function faceGroup(style: CharStyle, head: [number, number], facing: 1 | -1, emo
     );
   }
 
-  return <g key={key}>{els}{mouth}</g>;
+  const tears = (emo === 'crying' || emo === 'sad') ? (
+    <g fill="#62b9ed" opacity={emo === 'crying' ? 0.95 : 0.65}>
+      <ellipse cx={exL} cy={eyeY + 16} rx={3.2} ry={7} />
+      {emo === 'crying' && <ellipse cx={exR} cy={eyeY + 16} rx={3.2} ry={7} />}
+    </g>
+  ) : null;
+  return <g key={key}>{els}{mouth}{tears}</g>;
 }
 
 export function Stickman({
