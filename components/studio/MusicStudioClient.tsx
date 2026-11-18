@@ -5,8 +5,11 @@
  *
  * Full workflow: topic in -> AI lyrics -> preview & edit -> generate song
  * (singing + instrumental + mix) -> synchronized kinetic typography preview
- * -> export MP4/WebM/WAV. Projects persist in localStorage; no server
- * storage and no database rows. Gemini TTS and lyrics use the configured Gemini API key.
+ * -> export MP4/WebM/WAV or send straight to Social Post. Scripts persist on
+ * the server (content_assets with asset_type 'music_video') so they survive
+ * browser clears and can be reviewed/published/deleted per-video in the
+ * Social Engine — deleting a video there keeps the script and the audio.
+ * Gemini TTS and lyrics use the configured Gemini API key.
  */
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { Button } from '@/components/ui/button';
@@ -26,11 +29,12 @@ import { Toaster } from '@/components/ui/toaster';
 import { useToast } from '@/hooks/use-toast';
 import {
   Sparkles, Music, Download, Film, Save, FolderOpen, Trash2,
-  Wand2, Brain, RefreshCw, BookOpenText, AudioLines,
+  Wand2, Brain, RefreshCw, BookOpenText, AudioLines, UploadCloud,
 } from 'lucide-react';
 import StagePlayer from '@/components/studio/StagePlayer';
 import LyricsEditor from '@/components/studio/LyricsEditor';
 import SelfTestPanel from '@/components/studio/SelfTestPanel';
+import { createBrowserClient } from '@/lib/supabase';
 import {
   DEFAULT_SETTINGS, type AspectId, type BackgroundId, type GenreId, type MoodId,
   type SongSpec, type StudioSettings, type TypographyId, type VocalMode, type VocalStyle,
@@ -65,12 +69,21 @@ const ASPECTS: Array<{ id: AspectId; label: string }> = [
   { id: '16:9', label: 'Landscape 16:9' },
 ];
 
-interface SavedProject {
+/** A saved script row from /api/admin/music-studio/scripts (content_assets). */
+interface ScriptRow {
   id: string;
   title: string;
-  savedAt: number;
-  spec: SongSpec;
-  settings: StudioSettings;
+  status: string;
+  created_at: string;
+  updated_at: string;
+  knowledge_assets?: { keyword?: string } | null;
+  media_files?: Array<{ id: string; media_type: string; role: string; url: string; duration_seconds?: number | null }>;
+  metadata?: {
+    topic?: string;
+    notes?: string;
+    spec?: SongSpec;
+    settings?: StudioSettings;
+  };
 }
 
 export default function StudioPage() {
@@ -101,8 +114,13 @@ export default function StudioPage() {
   const [exportPct, setExportPct] = useState(0);
   const [ttsAvailable, setTtsAvailable] = useState<boolean | null>(null);
 
-  const [projects, setProjects] = useState<SavedProject[]>([]);
-  const [projectsOpen, setProjectsOpen] = useState(false);
+  const [scripts, setScripts] = useState<ScriptRow[]>([]);
+  const [scriptsOpen, setScriptsOpen] = useState(false);
+  const [scriptsLoading, setScriptsLoading] = useState(false);
+  const [currentScriptId, setCurrentScriptId] = useState<string | null>(null);
+  const [savingScript, setSavingScript] = useState(false);
+  const [publishing, setPublishing] = useState(false);
+  const [publishMsg, setPublishMsg] = useState('');
   const [mp4Ready, setMp4Ready] = useState(false);
 
   const audioUrlRef = useRef<string | null>(null);
@@ -133,10 +151,7 @@ export default function StudioPage() {
       })
       .catch(() => setTtsAvailable(false));
     setMp4Ready(webCodecsAvailable());
-    try {
-      const raw = localStorage.getItem('sba-studio-projects');
-      if (raw) setProjects(JSON.parse(raw) as SavedProject[]);
-    } catch { /* ignore */ }
+    loadScripts();
     return () => {
       if (audioUrlRef.current) URL.revokeObjectURL(audioUrlRef.current);
     };
@@ -298,29 +313,189 @@ export default function StudioPage() {
     downloadBlob(exportWav(audioBufferRef.current), `${slug}.wav`);
   };
 
-  /* ---------------- Projects ---------------- */
-  const persistProjects = (list: SavedProject[]) => {
-    setProjects(list);
-    localStorage.setItem('sba-studio-projects', JSON.stringify(list));
+  /* ---------------- Scripts (server persistence) ---------------- */
+  const loadScripts = useCallback(async () => {
+    setScriptsLoading(true);
+    try {
+      const res = await fetch('/api/admin/music-studio/scripts');
+      const json = await res.json();
+      if (!res.ok) throw new Error(json.error || 'Could not load saved scripts');
+      setScripts(json.data ?? []);
+    } catch (e) {
+      toast({ title: 'Saved scripts unavailable', description: e instanceof Error ? e.message : String(e), variant: 'destructive' });
+    } finally {
+      setScriptsLoading(false);
+    }
+  }, [toast]);
+
+  /** Save (create or update) the current script on the server. Returns its id. */
+  const saveScript = useCallback(async (): Promise<string | null> => {
+    if (!rawSpec) return null;
+    setSavingScript(true);
+    try {
+      const res = await fetch('/api/admin/music-studio/scripts', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ id: currentScriptId, title: rawSpec.title, topic: topic || rawSpec.topic, notes, spec: rawSpec, settings }),
+      });
+      const json = await res.json();
+      if (!res.ok) throw new Error(json.error || 'Could not save the script');
+      const id = json.script?.id as string;
+      setCurrentScriptId(id);
+      void loadScripts();
+      toast({ title: currentScriptId ? 'Script updated' : 'Script saved', description: `${json.script?.title ?? rawSpec.title} — stored on the server, ready for Social Post.` });
+      return id;
+    } catch (e) {
+      toast({ title: 'Save failed', description: e instanceof Error ? e.message : String(e), variant: 'destructive' });
+      return null;
+    } finally {
+      setSavingScript(false);
+    }
+  }, [rawSpec, currentScriptId, topic, notes, settings, toast, loadScripts]);
+
+  const openScript = (row: ScriptRow) => {
+    const spec = row.metadata?.spec;
+    if (!spec) {
+      toast({ title: 'This script has no song data', description: 'It was saved before the studio stored specs. Re-generate the lyrics and save again.', variant: 'destructive' });
+      return;
+    }
+    setRawSpec(spec);
+    if (row.metadata?.settings) setSettings(row.metadata.settings);
+    setTopic(row.metadata?.topic ?? spec.topic ?? '');
+    setNotes(row.metadata?.notes ?? '');
+    setCurrentScriptId(row.id);
+    setProvider('saved script');
+    setScriptsOpen(false);
+    void renderCurrentSpec(spec, row.metadata?.settings ?? settings, 'Loading saved script…');
   };
 
-  const saveProject = () => {
+  const deleteScript = async (row: ScriptRow) => {
+    if (!confirm(`Delete the script "${row.title}" and its exported video/audio? This cannot be undone.`)) return;
+    try {
+      const res = await fetch(`/api/admin/music-studio/scripts?id=${row.id}`, { method: 'DELETE' });
+      const json = await res.json();
+      if (!res.ok) throw new Error(json.error || 'Delete failed');
+      if (currentScriptId === row.id) setCurrentScriptId(null);
+      void loadScripts();
+      toast({ title: 'Script deleted', description: row.title });
+    } catch (e) {
+      toast({ title: 'Delete failed', description: e instanceof Error ? e.message : String(e), variant: 'destructive' });
+    }
+  };
+
+  /* ---------------- Social Post publishing ---------------- */
+  /** Upload an exported blob to Supabase storage and attach it to the script. */
+  const uploadToSocial = useCallback(async (
+    scriptId: string,
+    blob: Blob,
+    kind: 'video' | 'audio',
+    ext: string,
+    durationSeconds?: number,
+  ): Promise<void> => {
+    const prepare = await fetch('/api/admin/music-studio/publish', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ contentAssetId: scriptId, kind, ext }),
+    });
+    const prepared = await prepare.json();
+    if (!prepare.ok) throw new Error(prepared.error || 'Could not prepare the upload');
+
+    const supabase = createBrowserClient();
+    const { error: uploadError } = await supabase.storage
+      .from(prepared.bucket)
+      .uploadToSignedUrl(prepared.path, prepared.token, blob, { contentType: blob.type || (kind === 'audio' ? 'audio/wav' : 'video/mp4'), upsert: false });
+    if (uploadError) throw new Error(`Storage upload failed: ${uploadError.message}`);
+
+    const complete = await fetch('/api/admin/music-studio/publish-complete', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        contentAssetId: scriptId,
+        kind,
+        path: prepared.path,
+        durationSeconds,
+        fileSizeBytes: blob.size,
+        autoPublish: false, // reviewed by hand in Social Post first
+      }),
+    });
+    const done = await complete.json();
+    if (!complete.ok) throw new Error(done.error || 'Could not attach the file to Social Post');
+    void loadScripts();
+  }, [loadScripts]);
+
+  const sendCurrentToSocial = useCallback(async (blob: Blob | null, ext: string, durationSec?: number) => {
     if (!rawSpec) return;
-    const p: SavedProject = {
-      id: `${Date.now()}`, title: rawSpec.title, savedAt: Date.now(),
-      spec: rawSpec, settings,
-    };
-    persistProjects([p, ...projects.filter((x) => x.id !== p.id)].slice(0, 30));
-    toast({ title: 'Project saved', description: p.title });
+    setPublishing(true);
+    setPublishMsg('Saving the script…');
+    try {
+      const scriptId = currentScriptId ?? await saveScript();
+      if (!scriptId) throw new Error('Save the script first, then try again.');
+
+      if (blob) {
+        setPublishMsg(`Uploading ${ext.toUpperCase()} to Social Post…`);
+        await uploadToSocial(scriptId, blob, 'video', ext, durationSec);
+      }
+      // The mixed audio is stored alongside the video so it survives video
+      // deletion and can be re-listened to or re-mixed later.
+      if (audioBufferRef.current) {
+        setPublishMsg('Uploading the audio mix…');
+        await uploadToSocial(scriptId, exportWav(audioBufferRef.current), 'audio', 'wav', audioBufferRef.current.duration);
+      }
+      setPublishMsg('');
+      toast({
+        title: blob ? 'Sent to Social Post' : 'Script sent to Social Post',
+        description: 'Preview it in Admin → Publishing → Social Engine. Deleting the video there keeps this script and the audio.',
+      });
+    } catch (e) {
+      setPublishMsg('');
+      toast({ title: 'Social Post upload failed', description: e instanceof Error ? e.message : String(e), variant: 'destructive' });
+    } finally {
+      setPublishing(false);
+    }
+  }, [rawSpec, currentScriptId, saveScript, uploadToSocial, toast]);
+
+  const doSendMp4ToSocial = async () => {
+    if (!timeline || !audioBufferRef.current) return;
+    if (!webCodecsAvailable()) {
+      toast({ title: 'MP4 not supported here', description: 'Use Chrome or Edge to export MP4, or send the WebM version instead.' });
+      return;
+    }
+    setPublishing(true);
+    setPublishMsg('Rendering the MP4…');
+    try {
+      const { blob } = await exportMp4(timeline, audioBufferRef.current, { typography: settings.typography, background: settings.background }, {
+        fps: 30, aspect: settings.aspect,
+        onProgress: (p, s) => { setExportPct(p); setExportMsg(s); setPublishMsg(`Rendering the MP4… ${p}%`); },
+      });
+      setExportPct(0);
+      await sendCurrentToSocial(blob, 'mp4', timeline.durationSec + 1.6);
+    } catch (e) {
+      setPublishMsg('');
+      toast({ title: 'Social Post upload failed', description: e instanceof Error ? e.message : String(e), variant: 'destructive' });
+    } finally {
+      setPublishing(false);
+      setExportMsg('');
+    }
   };
 
-  const loadProject = (p: SavedProject) => {
-    setRawSpec(p.spec);
-    setSettings(p.settings);
-    setTopic(p.spec.topic);
-    setProvider('saved project');
-    setProjectsOpen(false);
-    void renderCurrentSpec(p.spec, p.settings, 'Loading project…');
+  const doSendWebmToSocial = async () => {
+    if (!timeline || !audioBufferRef.current) return;
+    setPublishing(true);
+    setPublishMsg('Recording the WebM in realtime…');
+    try {
+      const { blob } = await exportWebm(timeline, audioBufferRef.current, { typography: settings.typography, background: settings.background }, {
+        fps: 30, aspect: settings.aspect,
+        onProgress: (p, s) => { setExportPct(p); setExportMsg(s); setPublishMsg(`Recording the WebM… ${p}%`); },
+      });
+      setExportPct(0);
+      await sendCurrentToSocial(blob, 'webm', timeline.durationSec + 1.6);
+    } catch (e) {
+      setPublishMsg('');
+      toast({ title: 'Social Post upload failed', description: e instanceof Error ? e.message : String(e), variant: 'destructive' });
+    } finally {
+      setPublishing(false);
+      setExportMsg('');
+    }
   };
 
   /* ---------------- render ---------------- */
@@ -351,41 +526,53 @@ export default function StudioPage() {
             </div>
           </div>
           <div className="flex items-center gap-2">
-            <Dialog open={projectsOpen} onOpenChange={setProjectsOpen}>
+            <Dialog open={scriptsOpen} onOpenChange={(open) => { setScriptsOpen(open); if (open) void loadScripts(); }}>
               <DialogTrigger asChild>
                 <Button variant="outline" size="sm" className="border-[#B8D1EF] bg-white">
-                  <FolderOpen className="h-4 w-4 mr-1.5" /> Projects
-                  {projects.length > 0 && <Badge className="ml-1.5 bg-[#FFD60A] text-[#062B59]">{projects.length}</Badge>}
+                  <FolderOpen className="h-4 w-4 mr-1.5" /> Scripts
+                  {scripts.length > 0 && <Badge className="ml-1.5 bg-[#FFD60A] text-[#062B59]">{scripts.length}</Badge>}
                 </Button>
               </DialogTrigger>
               <DialogContent className="bg-white border-[#C8DDF5] text-[#12345B]">
-                <DialogHeader><DialogTitle>Saved projects</DialogTitle>
-                  <DialogDescription className="text-[#526B89]">Stored in this browser. Loading a project re-renders its song.</DialogDescription>
+                <DialogHeader><DialogTitle>Saved scripts</DialogTitle>
+                  <DialogDescription className="text-[#526B89]">
+                    Stored on the server and visible in Social Post. Opening re-renders the song; deleting removes the script and its exported media.
+                  </DialogDescription>
                 </DialogHeader>
                 <ScrollArea className="max-h-[340px] [&>[data-radix-scroll-area-viewport]]:max-h-[340px]">
-                  {projects.length === 0 && <p className="text-sm text-[#637B98]">No saved projects yet.</p>}
+                  {scriptsLoading && <p className="text-sm text-[#637B98]">Loading…</p>}
+                  {!scriptsLoading && scripts.length === 0 && <p className="text-sm text-[#637B98]">No saved scripts yet — press Save to store one.</p>}
                   <div className="space-y-2">
-                    {projects.map((p) => (
-                      <div key={p.id} className="flex items-center justify-between rounded-lg border border-[#D8E6F5] bg-white px-3 py-2">
-                        <div>
-                          <p className="text-sm font-medium">{p.title}</p>
-                          <p className="text-[11px] text-[#637B98]">{new Date(p.savedAt).toLocaleString()} · {p.settings.genre} · {p.settings.durationSec}s</p>
+                    {scripts.map((row) => {
+                      const hasVideo = (row.media_files ?? []).some((m) => m.media_type === 'video');
+                      const hasAudio = (row.media_files ?? []).some((m) => m.media_type === 'audio');
+                      return (
+                        <div key={row.id} className="flex items-center justify-between rounded-lg border border-[#D8E6F5] bg-white px-3 py-2">
+                          <div className="min-w-0">
+                            <p className="truncate text-sm font-medium">{row.title}</p>
+                            <p className="text-[11px] text-[#637B98]">
+                              {new Date(row.updated_at).toLocaleString()} · {row.status}
+                              {hasVideo && ' · video ready'}
+                              {hasAudio && ' · audio saved'}
+                              {!hasVideo && ' · no video yet'}
+                            </p>
+                          </div>
+                          <div className="flex shrink-0 gap-1.5">
+                            <Button size="sm" variant="secondary" onClick={() => openScript(row)} disabled={!row.metadata?.spec}>Open</Button>
+                            <Button size="icon" variant="ghost" aria-label={`Delete script ${row.title}`} onClick={() => void deleteScript(row)}>
+                              <Trash2 className="h-4 w-4" />
+                            </Button>
+                          </div>
                         </div>
-                        <div className="flex gap-1.5">
-                          <Button size="sm" variant="secondary" onClick={() => loadProject(p)}>Open</Button>
-                          <Button size="icon" variant="ghost" aria-label="Delete project" onClick={() => persistProjects(projects.filter((x) => x.id !== p.id))}>
-                            <Trash2 className="h-4 w-4" />
-                          </Button>
-                        </div>
-                      </div>
-                    ))}
+                      );
+                    })}
                   </div>
                 </ScrollArea>
               </DialogContent>
             </Dialog>
 
-            <Button variant="outline" size="sm" onClick={saveProject} disabled={!lyricsReady} className="border-[#B8D1EF] bg-white">
-              <Save className="h-4 w-4 mr-1.5" /> Save
+            <Button variant="outline" size="sm" onClick={() => void saveScript()} disabled={!lyricsReady || savingScript} className="border-[#B8D1EF] bg-white">
+              <Save className="h-4 w-4 mr-1.5" /> {savingScript ? 'Saving…' : 'Save'}
             </Button>
 
             <Dialog>
@@ -405,7 +592,7 @@ export default function StudioPage() {
                   <p><b className="text-[#0B5BC1]">4. Composer</b> — a genre template (Afrobeats, Amapiano, Hip-hop, Reggae, Gospel…) synthesizes drums, bass, chords and leads from scratch, with intro, drops, fills and outro.</p>
                   <p><b className="text-[#0B5BC1]">5. Mixer</b> — vocals and instruments render offline through buses, compression, delay and reverb into one finished song, faster than realtime.</p>
                   <p><b className="text-[#0B5BC1]">6. Kinetic typography</b> — the same timeline drives every word, letter, bounce and background transition on canvas, so words land exactly on the beat.</p>
-                  <p><b className="text-[#0B5BC1]">7. Export</b> — MP4 (H.264 + AAC) is encoded in your browser via WebCodecs; WebM and WAV are also available. No servers, no uploads.</p>
+                  <p><b className="text-[#0B5BC1]">7. Export & Social Post</b> — MP4 (H.264 + AAC) is encoded in your browser via WebCodecs; WebM and WAV are also available for download. "Send to Social Post" stores the script, video and audio on the server for preview and publishing in the Social Engine.</p>
                   <p className="text-xs text-[#637B98]">The instrumental and video render in your browser. Gemini TTS uses your existing Gemini API key and is subject to its free-tier quotas or account billing; no separate singing server is required.</p>
                 </div>
               </DialogContent>
@@ -605,11 +792,11 @@ export default function StudioPage() {
                 </span>
               </div>
               <div className="flex flex-wrap gap-2">
-                <Button size="sm" onClick={doExportMp4} disabled={!songReady || exporting} className="bg-[#FFCC00] text-[#062B59] font-semibold hover:bg-[#FFE066]">
+                <Button size="sm" onClick={doExportMp4} disabled={!songReady || exporting || publishing} className="bg-[#FFCC00] text-[#062B59] font-semibold hover:bg-[#FFE066]">
                   <Download className="h-4 w-4 mr-1.5" /> Video MP4
                 </Button>
-                <Button size="sm" variant="secondary" onClick={doExportWebm} disabled={!songReady || exporting}>Video WebM</Button>
-                <Button size="sm" variant="secondary" onClick={doExportWav} disabled={!songReady || exporting}>Audio WAV</Button>
+                <Button size="sm" variant="secondary" onClick={doExportWebm} disabled={!songReady || exporting || publishing}>Video WebM</Button>
+                <Button size="sm" variant="secondary" onClick={doExportWav} disabled={!songReady || exporting || publishing}>Audio WAV</Button>
               </div>
               {exporting && (
                 <div className="mt-3 space-y-1.5">
@@ -621,6 +808,33 @@ export default function StudioPage() {
                 <p className="mt-2 text-[11px] text-[#7188A4]">
                   The MP4 renders faster than realtime (offline frame-by-frame). WebM records in realtime — keep this tab visible.
                 </p>
+              )}
+
+              <Separator className="my-3 bg-[#D8E6F5]" />
+              <h3 className="text-sm font-bold uppercase tracking-wide text-[#0B5BC1]">Social Post</h3>
+              <p className="mt-1 mb-2 text-[11px] text-[#7188A4]">
+                Saves the script on the server, then uploads the video and the audio mix so you can preview,
+                publish or delete them in the Social Engine. Deleting a video there never deletes the script or the audio.
+              </p>
+              <div className="flex flex-wrap gap-2">
+                <Button size="sm" onClick={doSendMp4ToSocial} disabled={!songReady || exporting || publishing}
+                  className="bg-[#1A73E8] text-white font-semibold hover:bg-[#2B82E8]">
+                  <UploadCloud className="h-4 w-4 mr-1.5" /> Send MP4 to Social Post
+                </Button>
+                <Button size="sm" variant="outline" onClick={doSendWebmToSocial} disabled={!songReady || exporting || publishing}
+                  className="border-[#B8D1EF] bg-white">
+                  <UploadCloud className="h-4 w-4 mr-1.5" /> Send WebM
+                </Button>
+                <Button size="sm" variant="ghost" onClick={() => void sendCurrentToSocial(null, 'wav')} disabled={!lyricsReady || publishing}
+                  className="text-[#0B5BC1]">
+                  <AudioLines className="h-4 w-4 mr-1.5" /> Script + audio only
+                </Button>
+              </div>
+              {publishing && (
+                <div className="mt-3 space-y-1.5">
+                  <Progress value={exportPct} className="h-2" />
+                  <p className="text-xs text-[#526B89]">{publishMsg || 'Working…'}</p>
+                </div>
               )}
             </div>
           </section>

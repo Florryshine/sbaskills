@@ -59,7 +59,7 @@ export async function generateSong(
     ttsUrl: opts.ttsUrl,
     onProgress: (msg, pct) => onProgress?.(msg, 20 + pct * 0.75),
   });
-  if (ttsError) warnings.push(`TTS mode problem: ${ttsError}. The built-in synth singer was used.`);
+  if (ttsError) warnings.push(`Voice engine note: ${ttsError}.`);
   
   onProgress?.('Song ready.', 100);
   return { timeline, audio: buffer, durationSec: timeline.durationSec, warnings, usedTts };

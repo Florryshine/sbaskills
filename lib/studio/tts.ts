@@ -29,46 +29,55 @@ export async function fetchSyllables(
   items: string[],
   provider: TtsProvider,
   onProgress?: (done: number, total: number) => void,
-): Promise<Map<string, DecodedSyl>> {
+): Promise<{ bank: Map<string, DecodedSyl>; missing: string[] }> {
   // Array.from avoids Set-iterator downlevel errors with this repo's ES5 TS target.
   const unique = Array.from(new Set(items.map((i) => i.toLowerCase()))).filter((i) => i.trim().length > 0);
   const map = new Map<string, DecodedSyl>();
+  const missing: string[] = [];
   const pending = unique.filter((item) => !cache.has(item));
   for (const item of unique) {
     const cached = cache.get(item);
     if (cached) map.set(item, cached);
   }
-  const CHUNK = 48;
+  const CHUNK = 24;
   let done = unique.length - pending.length;
   onProgress?.(done, unique.length);
   for (let c = 0; c < pending.length; c += CHUNK) {
     const chunk = pending.slice(c, c + CHUNK);
-    let audio: Record<string, string>;
-    try {
-      audio = await provider.synthesize(chunk);
-    } catch {
-      // Do not fan out dozens of single-syllable retries after a failed batch.
-      // The caller will use the complete built-in synth fallback instead.
-      audio = {};
+    let audio: Record<string, string> | null = null;
+    // One retry per chunk: a blip on the TTS service should not wipe out the
+    // whole batch. If it still fails, the missing syllables are reported to
+    // the caller (they get filled by the synth singer instead of dropping
+    // every vocal in the song).
+    for (let attempt = 0; attempt < 2 && audio === null; attempt++) {
+      try {
+        audio = await provider.synthesize(chunk);
+      } catch {
+        audio = attempt === 0 ? null : {};
+      }
     }
-    for (const [k, b64] of Object.entries(audio)) {
+    for (const item of chunk) {
+      const b64 = audio?.[item];
+      if (!b64) { missing.push(item); continue; }
       const { data, rate } = decodeMonoWav(base64ToArrayBuffer(b64));
       const trimmed = trimSilence(data);
       const f0 = detectF0(trimmed, rate);
       if (trimmed.length > 64) {
         const decoded = { data: trimmed, rate, f0 };
-        map.set(k, decoded);
-        cache.set(k, decoded);
+        map.set(item, decoded);
+        cache.set(item, decoded);
         if (cache.size > 500) {
           const oldest = cache.keys().next().value;
           if (oldest) cache.delete(oldest);
         }
+      } else {
+        missing.push(item);
       }
     }
     done += chunk.length;
     onProgress?.(done, unique.length);
   }
-  return map;
+  return { bank: map, missing };
 }
 
 export const apiTtsProvider = (): TtsProvider => ({
@@ -97,14 +106,29 @@ export const remoteTtsProvider = (url: string): TtsProvider => ({
   },
 });
 
-/** Render sung vocals for the whole timeline using TTS fragments. */
+export interface TtsSingResult {
+  /** How many of the song's syllables got a real TTS voice fragment. */
+  scheduled: number;
+  /** Total syllables in the timeline. */
+  total: number;
+  /** scheduled / total (0..1). */
+  coverage: number;
+  /** Lowercased syllable texts with no TTS audio (the mixer synth-fills these). */
+  missing: string[];
+}
+
+/** Render sung vocals for the timeline using TTS fragments where available.
+ *
+ * Resilient by design: a partial bank no longer kills the whole vocal track.
+ * Available syllables are pitch-mapped from real voice audio; the caller can
+ * fill the gaps with the synth singer (see mixer.renderSong). */
 export async function singViaTts(
   ctx: BaseAudioContext,
   dest: AudioNode,
   timeline: Timeline,
   provider: TtsProvider,
   onProgress?: (msg: string, percent: number) => void,
-): Promise<boolean> {
+): Promise<TtsSingResult> {
   const items: string[] = [];
   for (const s of timeline.sections) {
     for (const l of s.lines) {
@@ -113,21 +137,24 @@ export async function singViaTts(
       }
     }
   }
-  if (!items.length) return false;
+  if (!items.length) return { scheduled: 0, total: 0, coverage: 0, missing: [] };
   onProgress?.('Synthesizing syllables…', 5);
-  const bank = await fetchSyllables(items, provider, (done, total) => {
+  const { bank, missing: neverFetched } = await fetchSyllables(items, provider, (done, total) => {
     onProgress?.(`Synthesizing syllables… ${done}/${total}`, 5 + Math.round((done / total) * 40));
   });
-  const expectedSyllables = Array.from(new Set(items.map((item) => item.toLowerCase()))).length;
-  if (bank.size === 0 || bank.size < expectedSyllables) return false;
 
   onProgress?.('Pitch-mapping vocals…', 50);
+  let scheduled = 0;
+  let total = 0;
+  const missing = new Set(neverFetched);
   for (const s of timeline.sections) {
     for (const l of s.lines) {
       for (const w of l.words) {
         for (const syl of w.syllables) {
+          total++;
           const frag = bank.get(syl.text.toLowerCase());
-          if (!frag) continue;
+          if (!frag) { missing.add(syl.text.toLowerCase()); continue; }
+          scheduled++;
           const dur = Math.max(0.09, syl.endSec - syl.startSec);
           const targetF0 = midiToFreq(syl.midi);
           // Shift detected F0 to the note; fall back to a gentle +7 semitones
@@ -158,7 +185,12 @@ export async function singViaTts(
     }
   }
   onProgress?.('Vocals mapped to melody.', 60);
-  return true;
+  return {
+    scheduled,
+    total,
+    coverage: total > 0 ? scheduled / total : 0,
+    missing: Array.from(missing),
+  };
 }
 
 function stretchTo(data: Float32Array, targetSec: number, rate: number): Float32Array {

@@ -7,3 +7,11 @@ node_modules/
 /fix2/
 /quote-loop-save-fix/
 /tiktok-debug-route/
+tsconfig.tsbuildinfo
+*.tsbuildinfo
+music-studio-fixes.patch
+stickman-studio-fix.patch
+.next/
+.cache/
+.turbo/
+.env*.local
