@@ -1,0 +1,54 @@
+{
+  "1:0": {
+    "file": "narration/1:0.mp3",
+    "dur": 2.16
+  },
+  "7:1": {
+    "file": "narration/7:1.mp3",
+    "dur": 2.28
+  },
+  "3:1": {
+    "file": "narration/3:1.mp3",
+    "dur": 4.224
+  },
+  "3:0": {
+    "file": "narration/3:0.mp3",
+    "dur": 3.288
+  },
+  "6:0": {
+    "file": "narration/6:0.mp3",
+    "dur": 4.512
+  },
+  "4:0": {
+    "file": "narration/4:0.mp3",
+    "dur": 9.024
+  },
+  "5:0": {
+    "file": "narration/5:0.mp3",
+    "dur": 3.456
+  },
+  "6:1": {
+    "file": "narration/6:1.mp3",
+    "dur": 3.888
+  },
+  "2:0": {
+    "file": "narration/2:0.mp3",
+    "dur": 4.92
+  },
+  "5:1": {
+    "file": "narration/5:1.mp3",
+    "dur": 4.368
+  },
+  "1:1": {
+    "file": "narration/1:1.mp3",
+    "dur": 6.768
+  },
+  "0:0": {
+    "file": "narration/0:0.mp3",
+    "dur": 5.976
+  },
+  "7:0": {
+    "file": "narration/7:0.mp3",
+    "dur": 7.944
+  }
+}
