@@ -66,7 +66,7 @@ async function synthesizeTtsBank(job) {
   }
   const queue = [...items];
   if (!queue.length) return {};
-  const endpoint = (process.env.TTS_ENDPOINT || 'https://openai-edge-tts-aqq1.onrender.com').replace(/\\/+$/, '');
+  const endpoint = (process.env.TTS_ENDPOINT || 'https://openai-edge-tts-aqq1.onrender.com').replace(/\/+$/, '');
   const audio = {};
   let next = 0, failures = 0, completed = 0;
   const worker = async () => {
