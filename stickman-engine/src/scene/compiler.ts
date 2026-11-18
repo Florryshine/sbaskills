@@ -392,13 +392,53 @@ export function compile(script: SceneScript, narration: NarrationMap): Timeline 
         const frames = [];
         for (let i = 0; i < sfN - sf0; i++) {
           const t = i / fps;
-          let x = p.x, rot = 0;
+          let x = p.x, y = 0, rot = 0;
           if (p.moving && t >= p.moving.t0) {
             const k = clamp((t - p.moving.t0) / Math.max(0.01, p.moving.t1 - p.moving.t0), 0, 1);
             x = p.moving.from + (p.moving.to - p.moving.from) * easeInOut(k);
             rot = k > 0 && k < 1 ? Math.sin(t * 2 * Math.PI * 5) * 0.8 : 0;
           }
-          frames.push({ frame: sf0 + i, x, y: 0, rot });
+
+          // Object ownership is resolved from the same character hand joints
+          // used by the renderer. Pickup blends from the floor into the grip;
+          // carry remains attached until a throw/drop release event.
+          const objectActions = actions.filter((a: any) => a.prop === p.id && ['pickUp','carry','throw','drop'].includes(a.do));
+          let interaction: any = null;
+          for (const candidate of objectActions) if ((candidate.t0 ?? 0) <= t) interaction = candidate;
+          if (interaction) {
+            const charFrames = streams[interaction.char];
+            const actionStart = interaction.t0 ?? 0;
+            const actionDur = interaction.dur ?? (interaction.do === 'carry' ? 2 : 1.5);
+            const releaseAt = actionStart + actionDur * 0.62;
+            const handAt = (seconds: number) => {
+              const idx = clamp(Math.round(seconds * fps), 0, Math.max(0, (charFrames?.length ?? 1) - 1));
+              const sk = charFrames?.[idx];
+              return sk ? { x: (sk.haL[0] + sk.haR[0]) / 2, y: (sk.haL[1] + sk.haR[1]) / 2 + h } : { x: p.x, y: 0 };
+            };
+            if (interaction.do === 'pickUp') {
+              const grip = handAt(t);
+              const k = easeInOut(clamp((t - actionStart) / Math.max(0.2, actionDur), 0, 1));
+              x = lerp(p.x, grip.x, k); y = lerp(0, grip.y, k);
+            } else if (interaction.do === 'carry') {
+              const grip = handAt(t); x = grip.x; y = grip.y;
+            } else if (t < releaseAt) {
+              const grip = handAt(t); x = grip.x; y = grip.y;
+            } else {
+              const release = handAt(releaseAt);
+              const dt = t - releaseAt;
+              const facing = cast[interaction.char]?.facing ?? 1;
+              if (interaction.do === 'throw') {
+                x = release.x + facing * 250 * dt;
+                y = Math.min(0, release.y - 250 * dt + 260 * dt * dt);
+                rot = facing * dt * 220;
+              } else {
+                x = release.x;
+                y = Math.min(0, release.y + 520 * dt * dt);
+                rot = 0;
+              }
+            }
+          }
+          frames.push({ frame: sf0 + i, x, y, rot });
         }
         props.push({
           id: p.id, type: 'box', w, h, color: '#b9814a', color2: '#8f5f30', z: 1,
