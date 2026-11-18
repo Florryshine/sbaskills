@@ -121,7 +121,7 @@ export default function StudioPage() {
   const [savingScript, setSavingScript] = useState(false);
   const [publishing, setPublishing] = useState(false);
   const [publishMsg, setPublishMsg] = useState('');
-  const [mp4Ready, setMp4Ready] = useState(false);
+  const [mp4Ready, setMp4Ready] = useState(false);\n  const [backgroundJobs, setBackgroundJobs] = useState<Array<{ id: string; title: string; status: string; stage: string; stage_message: string | null; progress: number; video_url: string | null; audio_url: string | null; error_message: string | null; created_at: string }>>([]);\n  const [queueBusy, setQueueBusy] = useState(false);
 
   const audioUrlRef = useRef<string | null>(null);
   const timelineRef = useRef<Parameters<typeof StagePlayer>[0]['timeline']>(null);
@@ -327,6 +327,48 @@ export default function StudioPage() {
       setScriptsLoading(false);
     }
   }, [toast]);
+
+  const loadBackgroundJobs = useCallback(async () => {
+    try {
+      const res = await fetch('/api/admin/music-studio/jobs', { cache: 'no-store' });
+      const json = await res.json();
+      if (res.ok) setBackgroundJobs(json.jobs ?? []);
+    } catch { /* A temporary polling failure must not interrupt studio work. */ }
+  }, []);
+
+  useEffect(() => {
+    void loadBackgroundJobs();
+    const timer = window.setInterval(() => { void loadBackgroundJobs(); }, 8000);
+    return () => window.clearInterval(timer);
+  }, [loadBackgroundJobs]);
+
+  const startBackgroundRender = useCallback(async () => {
+    if (!rawSpec || queueBusy) return;
+    setQueueBusy(true);
+    try {
+      const scriptId = currentScriptId ?? await saveScript();
+      if (!scriptId) throw new Error('Save the song script before starting background rendering.');
+      const res = await fetch('/api/admin/music-studio/jobs', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          contentAssetId: scriptId,
+          title: rawSpec.title || 'SBA learning song',
+          topic: topic || rawSpec.topic || 'Learning song',
+          spec: rawSpec,
+          settings,
+        }),
+      });
+      const json = await res.json();
+      if (!res.ok) throw new Error(json.error || 'Could not queue background rendering.');
+      await loadBackgroundJobs();
+      toast({ title: 'Background render queued', description: 'You can close this page. The song will continue rendering on the server.' });
+    } catch (e) {
+      toast({ title: 'Could not start background render', description: e instanceof Error ? e.message : String(e), variant: 'destructive' });
+    } finally {
+      setQueueBusy(false);
+    }
+  }, [rawSpec, queueBusy, currentScriptId, saveScript, topic, settings, loadBackgroundJobs, toast]);
 
   /** Save (create or update) the current script on the server. Returns its id. */
   const saveScript = useCallback(async (): Promise<string | null> => {
@@ -797,7 +839,32 @@ export default function StudioPage() {
                 </Button>
                 <Button size="sm" variant="secondary" onClick={doExportWebm} disabled={!songReady || exporting || publishing}>Video WebM</Button>
                 <Button size="sm" variant="secondary" onClick={doExportWav} disabled={!songReady || exporting || publishing}>Audio WAV</Button>
+                <Button size="sm" onClick={() => void startBackgroundRender()} disabled={!lyricsReady || queueBusy || savingScript} className="bg-[#0B5BC1] text-white hover:bg-[#084A9E]">
+                  <UploadCloud className="h-4 w-4 mr-1.5" /> {queueBusy ? 'Queueing…' : 'Render in background'}
+                </Button>
               </div>
+              {backgroundJobs.length > 0 && (
+                <div className="mt-3 rounded-xl border border-[#D8E6F5] bg-[#F7FAFE] p-3">
+                  <div className="mb-2 flex items-center justify-between">
+                    <p className="text-xs font-semibold text-[#0B5BC1]">Background renders</p>
+                    <button type="button" onClick={() => void loadBackgroundJobs()} className="text-[11px] text-[#526B89]">Refresh</button>
+                  </div>
+                  <div className="space-y-2">
+                    {backgroundJobs.slice(0, 4).map((job) => (
+                      <div key={job.id} className="rounded-lg bg-white p-2">
+                        <div className="flex items-center justify-between gap-2">
+                          <span className="truncate text-xs font-medium text-[#17365D]">{job.title}</span>
+                          <Badge variant={job.status === 'completed' ? 'default' : job.status === 'failed' ? 'destructive' : 'secondary'}>{job.status}</Badge>
+                        </div>
+                        {job.status !== 'completed' && job.status !== 'failed' && <Progress value={job.progress} className="mt-2 h-1.5" />}
+                        <p className="mt-1 text-[11px] text-[#7188A4]">{job.stage_message || job.stage} · {job.progress}%</p>
+                        {job.status === 'completed' && job.video_url && <a className="mt-1 inline-block text-xs font-semibold text-[#0B5BC1] underline" href={job.video_url} target="_blank" rel="noreferrer">Open rendered video</a>}
+                        {job.status === 'failed' && <p className="mt-1 text-[11px] text-red-600">{job.error_message || 'Render failed'}</p>}
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
               {exporting && (
                 <div className="mt-3 space-y-1.5">
                   <Progress value={exportPct} className="h-2" />
