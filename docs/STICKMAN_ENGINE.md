@@ -13,12 +13,12 @@ AI video APIs anywhere.
 | Reusable characters | One rig per style (`src/rig/character.ts`); style = colors, head size, hoodie. Same cast renders consistently in every scene |
 | Skeletal animation | Jointed 2D figures; FK chains for arms/head, analytic two-bone IK for legs and reaching hands (`src/rig/geometry.ts`, `src/motion/poses.ts`) |
 | Walking / running | Procedural gait with **pinned stance feet** — feet cannot slide (`src/motion/walk.ts`) |
-| Jumping / celebrating | Root-parabola hops with limb anticipation (`cheerStream`) |
+| Jumping / landing / dancing | Root-parabola jumps, clap rhythms, dance bounce and recovery transitions (motion/advanced.ts) |
 | Sitting | Bench seat targeting with leg IK (`sitStream`) |
 | Pointing / presenting | Hand IK to any world point or prop (`aimStream`) |
-| Facial expressions | Emotion presets (talk/happy/worried/strain/surprised/proud) with brows, mouth shapes, sweat drops |
+| Facial expressions | Talk/happy/sad/crying/angry/fear/confused/wink/focused presets, blinking, tears, brows and mouth shapes |
 | Character interaction | Facing, talking, reacting, gesturing on shared word-timed beats |
-| Object manipulation | Props with hand handles; push, walk-while-pushing, sliding physics curves |
+| Object manipulation | IK reaching, pickup-to-grip blending, hand-attached carrying, throw/drop trajectories, pushing and pulling |
 | Environments | Street (buildings, clouds, road), abstract teaching space (floating subject icons), classroom — deterministic seeded vector sets |
 | Camera | Establish / focus / follow / two-shot / shake + zoom-through & wipe transitions, all compiled to eased transforms (zero per-frame cost) |
 | Narration sync | TTS durations + proportional word timings drive gesture beats, captions and scene lengths |
@@ -110,6 +110,12 @@ frictionless world, successful push, formula recap).
 }
 ```
 
+### Expanded action vocabulary
+
+SceneScript actions now include jump, land, clap, dance, pull, pickUp, carry, throw, drop, fall, getUp, stand, turn, and expression. Object actions reference a scene prop by id; use pickUp followed by carry, then throw or drop to release it. Facial cues accept neutral, talk, happy, bigsmile, worried, strain, surprised, proud, sad, crying, angry, fear, confused, wink, and focused.
+
+The compiler resolves prop attachment against character hand joints and emits deterministic keyframes. Multiple characters can run separate actions on the same scene timeline. Dialogue drives rhythmic mouth movement and gesture timing; this is narration-aligned cartoon lip movement, not phoneme-accurate lip-sync.
+
 ### Adding a new action (the extensibility path)
 
 Actions are generators in `src/motion/actions.ts`: a function from
@@ -134,8 +140,7 @@ through `blendInto`, so new actions slot into existing scenes without pops.
 
 ## Known limitations
 
-- Faces are minimal shapes (genre-correct); there is no phoneme lip-sync —
-  speech is carried by gesture beats and captions.
+- Faces are stylised vector shapes; mouth motion is rhythmic and narration-aligned, not phoneme-accurate lip-sync.
 - 720x1280 @ 30fps by default; 1080x1920 works but renders ~2.2x slower on CPU.
 - Two vector environments ship in the sample (street + abstract teaching
   space); classroom kit is stubbed. New environments are seeded vector
