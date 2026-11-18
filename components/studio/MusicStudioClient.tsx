@@ -342,6 +342,31 @@ export default function StudioPage() {
     return () => window.clearInterval(timer);
   }, [loadBackgroundJobs]);
 
+  /** Save (create or update) the current script on the server. Returns its id. */
+  const saveScript = useCallback(async (): Promise<string | null> => {
+    if (!rawSpec) return null;
+    setSavingScript(true);
+    try {
+      const res = await fetch('/api/admin/music-studio/scripts', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ id: currentScriptId, title: rawSpec.title, topic: topic || rawSpec.topic, notes, spec: rawSpec, settings }),
+      });
+      const json = await res.json();
+      if (!res.ok) throw new Error(json.error || 'Could not save the script');
+      const id = json.script?.id as string;
+      setCurrentScriptId(id);
+      void loadScripts();
+      toast({ title: currentScriptId ? 'Script updated' : 'Script saved', description: `${json.script?.title ?? rawSpec.title} — stored on the server, ready for Social Post.` });
+      return id;
+    } catch (e) {
+      toast({ title: 'Save failed', description: e instanceof Error ? e.message : String(e), variant: 'destructive' });
+      return null;
+    } finally {
+      setSavingScript(false);
+    }
+  }, [rawSpec, currentScriptId, topic, notes, settings, toast, loadScripts]);
+
   const startBackgroundRender = useCallback(async () => {
     if (!rawSpec || queueBusy) return;
     setQueueBusy(true);
@@ -369,31 +394,6 @@ export default function StudioPage() {
       setQueueBusy(false);
     }
   }, [rawSpec, queueBusy, currentScriptId, saveScript, topic, settings, loadBackgroundJobs, toast]);
-
-  /** Save (create or update) the current script on the server. Returns its id. */
-  const saveScript = useCallback(async (): Promise<string | null> => {
-    if (!rawSpec) return null;
-    setSavingScript(true);
-    try {
-      const res = await fetch('/api/admin/music-studio/scripts', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ id: currentScriptId, title: rawSpec.title, topic: topic || rawSpec.topic, notes, spec: rawSpec, settings }),
-      });
-      const json = await res.json();
-      if (!res.ok) throw new Error(json.error || 'Could not save the script');
-      const id = json.script?.id as string;
-      setCurrentScriptId(id);
-      void loadScripts();
-      toast({ title: currentScriptId ? 'Script updated' : 'Script saved', description: `${json.script?.title ?? rawSpec.title} — stored on the server, ready for Social Post.` });
-      return id;
-    } catch (e) {
-      toast({ title: 'Save failed', description: e instanceof Error ? e.message : String(e), variant: 'destructive' });
-      return null;
-    } finally {
-      setSavingScript(false);
-    }
-  }, [rawSpec, currentScriptId, topic, notes, settings, toast, loadScripts]);
 
   const openScript = (row: ScriptRow) => {
     const spec = row.metadata?.spec;
