@@ -53,6 +53,16 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: 'Save this song script before starting background rendering.' }, { status: 404 });
   }
 
+  const { data: activeJob, error: activeError } = await supabase.from('music_render_jobs')
+    .select('id,title,status,stage,progress,created_at')
+    .eq('content_asset_id', contentAssetId)
+    .in('status', ['queued', 'processing'])
+    .order('created_at', { ascending: false })
+    .limit(1)
+    .maybeSingle();
+  if (activeError) return NextResponse.json({ error: activeError.message }, { status: 500 });
+  if (activeJob) return NextResponse.json({ success: true, existing: true, job: activeJob }, { status: 202 });
+
   const { data, error } = await supabase.from('music_render_jobs').insert({
     content_asset_id: contentAssetId,
     title,
