@@ -18,6 +18,7 @@ import {
   laughStream, stumbleStream, sitStream, talkStream,
 } from '../motion/actions';
 import { jumpStream, landStream, clapStream, danceStream, pullStream, pickupStream, carryStream, throwStream, fallStream, getUpStream, turnStream } from '../motion/advanced';
+import { reactionsForDialogue } from '../motion/reactions';
 
 export type NarrationMap = Record<string, { file: string; dur: number }>;
 
@@ -377,6 +378,20 @@ export function compile(script: SceneScript, narration: NarrationMap): Timeline 
       const f1 = f0 + Math.round(dur * fps);
       if (line.who !== 'narr' && events[line.who]) {
         events[line.who].push({ frame: f0, emo: 'talk' });
+
+    // ---- dialogue-driven facial reactions ----
+    // Overlay short emotion flashes driven by what is being said, on top of
+    // the base talk/neutral cycle. Fires only for characters actually on
+    // stage; the narrator line (who='narr') never affects a character's face.
+    (sc.dialogue ?? []).forEach((line) => {
+      if (!line.who || line.who === 'narr') return;
+      if (!cast[line.who] || !events[line.who]) return;
+      const startF = sf0 + Math.round(((line as any)._t0 ?? 0) * fps);
+      const durF = Math.round((line.duration ?? 2) * fps);
+      const base = 'talk' as const;
+      const reactions = reactionsForDialogue(line.text, base, startF, durF, fps);
+      if (reactions.length) events[line.who].push(...reactions);
+    });
         events[line.who].push({ frame: f1 + 4, emo: 'neutral' });
       }
       const n = narration[`${si}:${li}`];
