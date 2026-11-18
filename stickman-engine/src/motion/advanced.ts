@@ -66,9 +66,9 @@ export function getUpStream(o:AdvancedOpts):AdvancedResult {
  out.push(pose(s,o.x,y,o.facing,lerp(72,0,t),lerp(-15,0,t),{mode:'fk',sh:lerp(-95,8,t),el:lerp(70,10,t)},{mode:'fk',sh:lerp(110,-8,t),el:lerp(72,10,t)},{mode:'fk',hip:lerp(85,0,t),knee:lerp(82,5,t)},{mode:'fk',hip:lerp(92,0,t),knee:lerp(80,5,t)}));}
  return result(out,[{frame:o.startFrame+1,emo:'sad'},{frame:o.startFrame+Math.floor(o.frames*.8),emo:'neutral'}]);
 }
-export function turnStream(o:AdvancedOpts & {facing:1|-1}):AdvancedResult {
+export function turnStream(o:AdvancedOpts & {fromFacing:1|-1}):AdvancedResult {
  const out:SkeletonFrame[]=[],s=o.style;
- for(let i=0;i<o.frames;i++){const t=easeInOut(clamp(i/Math.max(1,o.frames-1),0,1)),f:1|-1=t<.5?o.facing===1?-1:1:o.facing,twist=Math.sin(Math.PI*t)*12;
+ for(let i=0;i<o.frames;i++){const t=easeInOut(clamp(i/Math.max(1,o.frames-1),0,1)),f:1|-1=t<.5?o.fromFacing:o.facing,twist=Math.sin(Math.PI*t)*12;
  out.push(pose(s,o.x,ground(s),f,twist,twist*.35,{mode:'fk',sh:8,el:8},{mode:'fk',sh:-8,el:8},{mode:'ik',foot:[o.x-11,0]},{mode:'ik',foot:[o.x+11,0]}));}
  return result(out);
 }
