@@ -184,25 +184,53 @@ async function saveToInfrastructure(job, outPath, timeline) {
   const buffer = await readFile(outPath);
   if (!buffer.length) throw new Error('Renderer produced an empty MP4.');
 
-  // content_assets requires a knowledge_assets parent (same as whiteboard).
+  // Reuse/create the shared Knowledge Asset using the real schema.
+  // Keep the asset tied to the lesson content, not to a generic engine record.
+  const assetKeyword = String(script.title || job.title || 'Stickman lesson').trim();
+  const rawTopic = String(script.subject || job.topic || '').trim();
+  const subject = rawTopic && !['story', 'general', 'stickman'].includes(rawTopic.toLowerCase())
+    ? rawTopic
+    : 'General';
+
   let knowledgeAssetId = job.knowledge_asset_id || null;
   if (!knowledgeAssetId) {
     const { data: found, error: findErr } = await supabase.from('knowledge_assets')
-      .select('id').eq('title', 'Stickman Animation Engine').limit(1);
+      .select('id')
+      .ilike('keyword', assetKeyword)
+      .ilike('subject', subject)
+      .limit(1);
     if (findErr) throw new Error(`Knowledge Asset lookup failed: ${findErr.message}`);
     knowledgeAssetId = found?.[0]?.id || null;
-    if (!knowledgeAssetId) {
-      const { data: created, error: createErr } = await supabase.from('knowledge_assets').insert({
-        title: 'Stickman Animation Engine',
-        description: 'Videos produced by the stickman animation engine',
-        subject: 'stickman-animation',
-        source_type: 'generated',
-        body: 'Reusable stickman character cast, environments and motion library.',
-      }).select('id').single();
-      if (createErr) throw new Error(`Knowledge Asset creation failed: ${createErr.message}`);
-      knowledgeAssetId = created.id;
-    }
   }
+
+  if (!knowledgeAssetId) {
+    const isCurriculumLesson = subject.toLowerCase() !== 'general';
+    const { data: created, error: createErr } = await supabase.from('knowledge_assets').insert({
+      keyword: assetKeyword,
+      topic_type: isCurriculumLesson ? 'curriculum_topic' : 'creator_video',
+      subject,
+      summary: `Stickman animation: ${assetKeyword}`,
+      raw_content: JSON.stringify(script).slice(0, 12000),
+      learning_objectives: [],
+      key_concepts: [],
+      definitions: [],
+      examples: [],
+      facts: [],
+      common_mistakes: [],
+      sub_topics: [],
+      status: 'draft',
+      source: 'stickman_animation_engine',
+    }).select('id').single();
+    if (createErr) throw new Error(`Knowledge Asset creation failed: ${createErr.message}`);
+    knowledgeAssetId = created.id;
+  }
+
+  // Persist the relationship immediately so a later retry reuses this asset.
+  const { error: linkErr } = await supabase.from('stickman_jobs').update({
+    knowledge_asset_id: knowledgeAssetId,
+    updated_at: new Date().toISOString(),
+  }).eq('id', job.id).eq('claim_token', job.claim_token);
+  if (linkErr) throw new Error(`Could not link Knowledge Asset to Stickman job: ${linkErr.message}`);
 
   await setStage(job, 'uploading', 'Uploading video and registering it with the Social Engine');
   const slug = (job.title || 'stickman').toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '') || 'stickman';
