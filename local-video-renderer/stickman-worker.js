@@ -44,9 +44,10 @@ const { synthesizeLine } = await import('../lib/podcastTTS.js');
 const { withRetry, normalizeAudio } = await import('../lib/whiteboard/audio.js');
 const { generateScriptWithAI, validateSceneScript } = await import('../lib/stickman/planner.js');
 
-const SUPABASE_URL = process.env.NEXT_PUBLIC_SUPABASE_URL;
+const SUPABASE_URL = process.env.NEXT_PUBLIC_SUPABASE_URL || process.env.SUPABASE_URL;
 const SERVICE_ROLE_KEY = process.env.SUPABASE_SERVICE_ROLE_KEY;
-  console.error('[stickman-worker] NEXT_PUBLIC_SUPABASE_URL / SUPABASE_SERVICE_ROLE_KEY are required');
+if (!SUPABASE_URL || !SERVICE_ROLE_KEY) {
+  console.error('[stickman-worker] NEXT_PUBLIC_SUPABASE_URL/SUPABASE_URL and SUPABASE_SERVICE_ROLE_KEY are required');
   process.exit(1);
 }
 const supabase = createClient(SUPABASE_URL, SERVICE_ROLE_KEY, {
@@ -444,6 +445,8 @@ async function saveToInfrastructure(job, outPath, entries, timeline) {
   const storagePath = `stickman/${job.id}/${slug}.mp4`;
   const { error: upErr } = await supabase.storage.from(VIDEO_BUCKET)
     .upload(storagePath, buffer, { contentType: 'video/mp4', upsert: true });
+  if (upErr) throw new Error(`Video upload failed: ${upErr.message}`);
+  const { data: publicData } = supabase.storage.from(VIDEO_BUCKET).getPublicUrl(storagePath);
   const videoUrl = publicData?.publicUrl;
   if (!videoUrl) throw new Error('Could not resolve the uploaded video URL.');
 
