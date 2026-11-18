@@ -7,6 +7,7 @@ import React from 'react';
 import { AbsoluteFill, Audio, Sequence, staticFile, useCurrentFrame } from 'remotion';
 import { Timeline, Emotion } from '../rig/character';
 import { Stickman, Prop, Environment, OverlayArrows, FormulaCard, TitleCard, Captions, Wipe } from './parts';
+import { visemeAtFrame } from './visemes';
 
 const SPEAKER_COLORS: Record<string, string> = {
   narr: '#8fa4b5',
@@ -54,6 +55,13 @@ export const StickmanComposition: React.FC<{
   const env = (timeline.environmentByScene ?? {})[sceneSpan?.id ?? ''] ?? timeline.environment;
 
   const caption = timeline.captions.find((c) => frame >= c.frameStart && frame <= c.frameEnd) ?? null;
+
+  // Active viseme: if the current caption's speaker is on stage and we're
+  // inside their dialogue, compute the mouth shape for this frame.
+  const activeVisemeFor = (charId: string): ReturnType<typeof visemeAtFrame> | undefined => {
+    if (!caption || caption.who !== charId) return undefined;
+    return visemeAtFrame(caption.words, frame);
+  };
   const wipe = timeline.transitions.find((t) => t.type === 'wipe' && frame >= t.frame && frame < t.frame + t.dur);
   const activeOverlays = timeline.overlays.filter((o) => frame >= o.frame && frame < o.frame + o.dur);
 
@@ -71,7 +79,7 @@ export const StickmanComposition: React.FC<{
     if (kf.pel[0] < -2000) continue;   // parked offscreen
     drawables.push({
       z: c.z + 2,
-      el: <Stickman key={c.id} style={c.style} frame={kf} emotion={emotionAt(c.faceEvents, frame)} frameNo={frame} />,
+      el: <Stickman key={c.id} style={c.style} frame={kf} emotion={emotionAt(c.faceEvents, frame)} frameNo={frame} mouth={activeVisemeFor(c.id)} />,
     });
   }
   drawables.sort((a, b) => a.z - b.z);
