@@ -1,0 +1,30 @@
+name: Stickman Engine Typecheck
+
+on:
+  push:
+    branches:
+      - master
+      - stickman-motion-upgrade
+    paths:
+      - "stickman-engine/**"
+      - ".github/workflows/stickman-engine-typecheck.yml"
+  pull_request:
+    paths:
+      - "stickman-engine/**"
+      - ".github/workflows/stickman-engine-typecheck.yml"
+
+jobs:
+  typecheck:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: stickman-engine
+    steps:
+      - uses: actions/checkout@v4
+      - uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: latest
+      - name: Install engine dependencies
+        run: bun install
+      - name: Typecheck engine
+        run: bun run typecheck
