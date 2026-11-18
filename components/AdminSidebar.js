@@ -81,6 +81,7 @@ const sections = [
       { href: '/admin/quote-loops', label: 'Quote Loops' },
       { href: '/admin/teaching-loops', label: 'Teaching Loops' },
       { href: '/admin/whiteboard-engine', label: 'Whiteboard Animation Studio' },
+      { href: '/admin/stickman-engine', label: 'Stickman Animation Studio' },
       { href: '/admin/video-studio', label: 'Video Studio' },
       { href: '/admin/music-studio', label: 'Music Learning Video' },
       { href: '/admin/text-animations', label: 'Text Animations' },
