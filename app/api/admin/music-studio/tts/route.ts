@@ -37,7 +37,9 @@ function pcm16ToWavBase64(pcm: Buffer, sampleRate = 24000): string {
 async function synthesizeWithEdge(item: string): Promise<string> {
   const endpoint = (process.env.TTS_ENDPOINT || 'https://openai-edge-tts-aqq1.onrender.com').replace(/\/+$/, '');
   const controller = new AbortController();
-  const timeout = setTimeout(() => controller.abort(), 20000);
+  // 12s: a dead endpoint must not eat a fifth of the whole request budget
+  // for every single syllable (20s × 80 syllables was why batches died).
+  const timeout = setTimeout(() => controller.abort(), 12000);
   try {
     const response = await fetch(`${endpoint}/v1/audio/speech`, {
       method: 'POST',
@@ -66,70 +68,87 @@ async function synthesizeWithEdge(item: string): Promise<string> {
   }
 }
 
+// Documented Gemini TTS models (generateContent + responseModalities AUDIO).
+// The previous implementation called a non-existent `v1beta/interactions`
+// endpoint, so every Gemini fallback failed and songs lost their vocals.
+const GEMINI_TTS_MODELS = [
+  process.env.GEMINI_TTS_MODEL || 'gemini-2.5-flash-preview-tts',
+  'gemini-2.5-flash-preview-tts',
+  'gemini-2.5-pro-preview-tts',
+].filter((v, i, a) => Boolean(v) && a.indexOf(v) === i);
+
 async function synthesizeWithGemini(item: string, apiKeys: string[], voiceName: string): Promise<string> {
-  const model = process.env.GEMINI_TTS_MODEL || 'gemini-3.8-flash-tts';
   let lastError = 'Gemini TTS returned no audio.';
-  for (const apiKey of apiKeys) {
-    const controller = new AbortController();
-    const timeout = setTimeout(() => controller.abort(), 20000);
-    try {
-      const response = await fetch('https://generativelanguage.googleapis.com/v1beta/interactions', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'x-goog-api-key': apiKey,
-        },
-        body: JSON.stringify({
-          model,
-          input: [{
-            type: 'user_input',
-            content: [{
-              type: 'text',
-              text: `Pronounce only this English syllable clearly and naturally: ${item}. No introduction or extra words.`,
-              annotations: [{
-                type: 'speech_metadata',
-                style: 'Clear, warm, upbeat Nigerian English pronunciation. Say only the supplied syllable, with a steady sustained vowel.',
+  for (const model of GEMINI_TTS_MODELS) {
+    for (const apiKey of apiKeys) {
+      const controller = new AbortController();
+      const timeout = setTimeout(() => controller.abort(), 15000);
+      try {
+        const response = await fetch(
+          `https://generativelanguage.googleapis.com/v1beta/models/${encodeURIComponent(model)}:generateContent`,
+          {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/json',
+              'x-goog-api-key': apiKey,
+            },
+            body: JSON.stringify({
+              contents: [{
+                role: 'user',
+                parts: [{
+                  text: `Pronounce only this English syllable clearly and naturally, sustained on one steady pitch, with no introduction or extra words: ${item}`,
+                }],
               }],
-            }],
-          }],
-          response_format: {
-            type: 'audio',
-            mime_type: 'audio/wav',
-            sample_rate: 24000,
+              generationConfig: {
+                responseModalities: ['AUDIO'],
+                speechConfig: {
+                  voiceConfig: {
+                    prebuiltVoiceConfig: { voiceName },
+                  },
+                },
+              },
+            }),
+            signal: controller.signal,
+            cache: 'no-store',
           },
-          generation_config: {
-            speech_config: [{ voice: voiceName }],
-          },
-        }),
-        signal: controller.signal,
-        cache: 'no-store',
-      });
+        );
 
-      const payload = await response.json().catch(() => null) as {
-        error?: { message?: string };
-        output_audio?: { data?: string; mime_type?: string };
-      } | null;
+        const payload = await response.json().catch(() => null) as {
+          error?: { message?: string };
+          candidates?: Array<{
+            content?: { parts?: Array<{ inlineData?: { data?: string; mimeType?: string } }> };
+          }>;
+        } | null;
 
-      if (!response.ok) {
-        lastError = payload?.error?.message || `Gemini TTS returned HTTP ${response.status}`;
-        if ([401, 403, 429].includes(response.status) || /quota|rate.?limit/i.test(lastError)) continue;
-        throw new Error(lastError);
+        if (!response.ok) {
+          lastError = payload?.error?.message || `Gemini TTS (${model}) returned HTTP ${response.status}`;
+          // Try the next key/model on quota/permission problems, otherwise fail fast.
+          if ([401, 403, 429].includes(response.status) || /quota|rate.?limit|exhausted/i.test(lastError)) continue;
+          throw new Error(lastError);
+        }
+
+        const part = payload?.candidates?.[0]?.content?.parts?.find((p) => p.inlineData?.data);
+        const audioData = part?.inlineData?.data;
+        if (!audioData) {
+          lastError = `Gemini TTS (${model}) returned no audio data.`;
+          continue;
+        }
+
+        const mime = part?.inlineData?.mimeType ?? '';
+        const bytes = Buffer.from(audioData, 'base64');
+        // The TTS models answer with raw 16-bit PCM (audio/L16;rate=24000);
+        // wrap it in a WAV header unless the provider already sent one.
+        if (bytes.length >= 44 && bytes.toString('ascii', 0, 4) === 'RIFF') {
+          return bytes.toString('base64');
+        }
+        const rateMatch = /rate=(\d+)/i.exec(mime);
+        return pcm16ToWavBase64(bytes, rateMatch ? Number(rateMatch[1]) : 24000);
+      } catch (error) {
+        lastError = error instanceof Error ? error.message : 'Gemini TTS failed.';
+        if (!/429|quota|rate.?limit/i.test(lastError)) throw error;
+      } finally {
+        clearTimeout(timeout);
       }
-
-      const audioData = payload?.output_audio?.data;
-      if (!audioData) throw new Error('Gemini TTS returned no audio data.');
-
-      const bytes = Buffer.from(audioData, 'base64');
-      // audio/wav is requested; wrap raw 24 kHz mono PCM if the provider omits its WAV header.
-      if (bytes.length >= 44 && bytes.toString('ascii', 0, 4) === 'RIFF') {
-        return bytes.toString('base64');
-      }
-      return pcm16ToWavBase64(bytes, 24000);
-    } catch (error) {
-      lastError = error instanceof Error ? error.message : 'Gemini TTS failed.';
-      if (!/429|quota|rate.?limit/i.test(lastError)) throw error;
-    } finally {
-      clearTimeout(timeout);
     }
   }
   throw new Error(lastError);
@@ -218,27 +237,40 @@ export async function POST(req: NextRequest) {
   let edgeCount = 0;
   let geminiCount = 0;
   let next = 0;
+  // Circuit breaker: the shared Edge endpoint is a free public service that is
+  // frequently asleep or unreachable from datacenter IPs. After two failures
+  // in a row, stop trying it for the remaining syllables so the batch can
+  // finish inside the function timeout instead of stalling 12s per item.
+  let edgeBroken = false;
+  let edgeConsecutiveFailures = 0;
 
   // Prefer the existing Nigerian Edge TTS service (no additional Gemini
-  // calls); fall back to Gemini 3.8 Flash TTS if the Edge service is down.
-  const workers = Array.from({ length: Math.min(4, items.length) }, async () => {
+  // calls); fall back to Gemini Flash TTS if the Edge service is down.
+  const workers = Array.from({ length: Math.min(6, items.length) }, async () => {
     while (next < items.length) {
       const index = next++;
       const item = items[index];
-      try {
-        audio[item] = await synthesizeWithEdge(item);
-        edgeCount++;
-      } catch (edgeError) {
-        if (!apiKeys.length) {
-          errors.push(edgeError instanceof Error ? edgeError.message : 'SBA Edge TTS failed.');
-          continue;
-        }
+      if (!edgeBroken) {
         try {
-          audio[item] = await synthesizeWithGemini(item, apiKeys, voiceName);
-          geminiCount++;
-        } catch (geminiError) {
-          errors.push(geminiError instanceof Error ? geminiError.message : 'Gemini TTS failed.');
+          audio[item] = await synthesizeWithEdge(item);
+          edgeCount++;
+          edgeConsecutiveFailures = 0;
+          continue;
+        } catch (edgeError) {
+          edgeConsecutiveFailures++;
+          if (edgeConsecutiveFailures >= 2) edgeBroken = true;
+          if (!apiKeys.length) {
+            errors.push(edgeError instanceof Error ? edgeError.message : 'SBA Edge TTS failed.');
+            continue;
+          }
         }
+      }
+      if (!apiKeys.length) continue;
+      try {
+        audio[item] = await synthesizeWithGemini(item, apiKeys, voiceName);
+        geminiCount++;
+      } catch (geminiError) {
+        errors.push(geminiError instanceof Error ? geminiError.message : 'Gemini TTS failed.');
       }
     }
   });

@@ -60,7 +60,7 @@ export async function renderSong(
 
   /* instrumental bus */
   const instBus = ctx.createGain();
-  instBus.gain.value = 0.48 + 0.18 * opts.intensity;
+  instBus.gain.value = 0.44 + 0.16 * opts.intensity;
   const instComp = ctx.createDynamicsCompressor();
   instComp.threshold.value = -16;
   instComp.ratio.value = 4;
@@ -70,7 +70,7 @@ export async function renderSong(
 
   /* vocal bus with EQ, delay and reverb sends */
   const vocalBus = ctx.createGain();
-  vocalBus.gain.value = 1.4;
+  vocalBus.gain.value = 1.75;
   const hpf = ctx.createBiquadFilter();
   hpf.type = 'highpass'; hpf.frequency.value = 100;
   const presence = ctx.createBiquadFilter();
@@ -116,8 +116,26 @@ export async function renderSong(
   if (spec.vocal.mode === 'tts') {
     try {
       const provider = opts.ttsUrl ? remoteTtsProvider(opts.ttsUrl) : apiTtsProvider();
-      usedTts = await singViaTts(ctx, vocalOut, timeline, provider, opts.onProgress);
-      if (!usedTts) ttsError = 'TTS engine returned incomplete syllable audio; using the built-in synth fallback';
+      const tts = await singViaTts(ctx, vocalOut, timeline, provider, opts.onProgress);
+      // Partial banks are fine: real voice audio carries the syllables it
+      // covers and the synth singer fills only the gaps. The old all-or-
+      // nothing rule dropped EVERY vocal when a single syllable was missing,
+      // which is why songs shipped with instrumental only.
+      if (tts.scheduled > 0 && tts.coverage >= 0.5) {
+        usedTts = true;
+        if (tts.missing.length > 0) {
+          singTimeline(ctx, vocalOut, timeline, {
+            only: (syl) => tts.missing.includes(syl.text.toLowerCase()),
+          });
+        }
+        if (tts.coverage < 0.98) {
+          ttsError = `${Math.round((1 - tts.coverage) * 100)}% of syllables came from the synth fallback voice`;
+        }
+      } else if (tts.scheduled > 0) {
+        ttsError = `The voice engine returned only ${tts.scheduled}/${tts.total} syllables; using the built-in synth singer for consistency`;
+      } else {
+        ttsError = 'TTS engine returned no usable syllable audio; using the built-in synth fallback';
+      }
     } catch (e) {
       ttsError = e instanceof Error ? e.message : 'TTS engine failed';
       opts.onProgress?.(`TTS unavailable (${ttsError}). Falling back to the built-in synth singer.`, 55);

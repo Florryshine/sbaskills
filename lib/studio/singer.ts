@@ -36,9 +36,9 @@ interface StyleConfig {
 }
 
 const STYLES: Record<VocalStyle, StyleConfig> = {
-  bright: { vibratoHz: 5.6, vibratoCents: 24, sourceGain: 0.5, formantQ: 9, octaveLayer: 0, detuneCents: 0 },
-  warm: { vibratoHz: 5.0, vibratoCents: 18, sourceGain: 0.55, formantQ: 6, octaveLayer: 0, detuneCents: 4 },
-  choir: { vibratoHz: 4.8, vibratoCents: 14, sourceGain: 0.42, formantQ: 5, octaveLayer: 0.5, detuneCents: 9 },
+  bright: { vibratoHz: 5.6, vibratoCents: 24, sourceGain: 0.62, formantQ: 9, octaveLayer: 0, detuneCents: 0 },
+  warm: { vibratoHz: 5.0, vibratoCents: 18, sourceGain: 0.66, formantQ: 6, octaveLayer: 0, detuneCents: 4 },
+  choir: { vibratoHz: 4.8, vibratoCents: 14, sourceGain: 0.58, formantQ: 5, octaveLayer: 0.5, detuneCents: 9 },
 };
 
 function noiseBuffer(ctx: BaseAudioContext): AudioBuffer {
@@ -66,10 +66,20 @@ function consonantKind(c: string): ConsonantKind {
   return 'none';
 }
 
-/** Sing the whole timeline into `dest`. */
-export function singTimeline(ctx: BaseAudioContext, dest: AudioNode, timeline: Timeline, opts?: { vibratoScale?: number }) {
+/** Sing the whole timeline into `dest`.
+ *
+ * `opts.only` lets the mixer fill gaps: when the TTS bank covered most
+ * syllables, only the missing ones are scheduled with the synth voice so the
+ * two sources never double up on the same syllable. */
+export function singTimeline(
+  ctx: BaseAudioContext,
+  dest: AudioNode,
+  timeline: Timeline,
+  opts?: { vibratoScale?: number; only?: (syl: { text: string; startSec: number }, word: { text: string }) => boolean },
+) {
   const style = STYLES[timeline.spec.vocal.style] ?? STYLES.bright;
   const vibScale = opts?.vibratoScale ?? timeline.spec.vocal.vibrato;
+  const only = opts?.only;
   const nbuf = noiseBuffer(ctx);
   const center = timeline.spec.vocal.mode === 'tts' ? 55 : 64;
 
@@ -77,6 +87,7 @@ export function singTimeline(ctx: BaseAudioContext, dest: AudioNode, timeline: T
     for (const line of section.lines) {
       for (const word of line.words) {
         for (const syl of word.syllables) {
+          if (only && !only(syl, word)) continue;
           const dur = Math.max(0.08, syl.endSec - syl.startSec);
           // Voice onset sits slightly after the syllable start; consonants live there.
           const onsetKind = consonantKind(syl.onset || syl.text[0] || '');
@@ -181,7 +192,7 @@ export function singTimeline(ctx: BaseAudioContext, dest: AudioNode, timeline: T
           srcGain.connect(env);
 
           // parallel formant bandpass filters
-          const formantGains = [1, 0.55, 0.22];
+          const formantGains = [1.15, 0.6, 0.26];
           vowel.forEach((f, fi) => {
             const bp = ctx.createBiquadFilter();
             bp.type = 'bandpass';
@@ -193,7 +204,7 @@ export function singTimeline(ctx: BaseAudioContext, dest: AudioNode, timeline: T
           });
           // a little raw source for body
           const raw = ctx.createGain();
-          raw.gain.value = 0.12;
+          raw.gain.value = 0.16;
           env.connect(raw).connect(out);
 
           osc.start(voiceStart);

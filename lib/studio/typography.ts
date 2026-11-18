@@ -121,6 +121,16 @@ export function drawFrame(
   rows.forEach((words, ri) => {
     const totalW = words.reduce((a, w) => a + c.measureText(w.text).width + gap, 0) - gap;
     let x = (W - totalW) / 2;
+    // A single word can be wider than the whole frame ("chromosomes" at 9:16).
+    // Shrink such rows horizontally around the screen centre so every word
+    // stays inside the video instead of being clipped off the edges.
+    const rowFit = totalW > maxW ? (W * 0.92) / totalW : 1;
+    if (rowFit < 1) {
+      c.save();
+      c.translate(W / 2, 0);
+      c.scale(rowFit, 1);
+      c.translate(-W / 2, 0);
+    }
     for (const w of words) {
       const wWidth = c.measureText(w.text).width;
       const isActive = active?.text === w.text && tSec >= w.startSec && tSec < w.endSec;
@@ -131,6 +141,7 @@ export function drawFrame(
       drawWord(c, w, x, y, wWidth, wordSize, tSec, beatPhase, style.typography, color, idx, isActive, sung, fadeIn * fadeOut);
       x += wWidth + gap;
     }
+    if (rowFit < 1) c.restore();
     y += lineHeight;
   });
 
@@ -167,7 +178,12 @@ function drawWord(
   const p = clamp01((tSec - w.startSec) / Math.max(0.05, w.endSec - w.startSec));
   c.save();
   c.globalAlpha = masterAlpha;
-  c.textAlign = 'left';
+  // Every effect below translates to the word's centre (or each letter's
+  // centre) and draws at (0,0), so the text MUST be centre-anchored. The old
+  // 'left' alignment made every word start at its centre and extend
+  // rightwards — text drifted half a word-width off every row and long words
+  // ran out of the frame entirely.
+  c.textAlign = 'center';
   c.textBaseline = 'middle';
   const baseX = x;
   const baseY = y;
@@ -293,10 +309,26 @@ function strokeFill(
 /* ------------------------------------------------------------------ */
 
 function drawFactRibbon(c: CanvasRenderingContext2D, W: number, H: number, fact: string, beatPhase: number, alpha: number) {
-  const size = Math.round(H * 0.034);
-  c.font = `700 ${size}px 'Trebuchet MS','DejaVu Sans',sans-serif`;
-  const text = fact.length > 68 ? fact.slice(0, 65) + '…' : fact;
-  const tw = c.measureText(text).width;
+  let size = Math.round(H * 0.034);
+  let text = fact.length > 68 ? fact.slice(0, 65) + '…' : fact;
+  // Shrink the font until the ribbon fits inside the frame — long facts used
+  // to render wider than the video and get clipped at both edges.
+  const maxTextW = W * 0.86;
+  const measure = (s: number) => {
+    c.font = `700 ${s}px 'Trebuchet MS','DejaVu Sans',sans-serif`;
+    return c.measureText(text).width;
+  };
+  let tw = measure(size);
+  while (tw + size * 3.6 > maxTextW && size > 12) {
+    const next = Math.floor(size * 0.9);
+    if (next >= size) { size = size - 1; } else { size = next; }
+    tw = measure(size);
+  }
+  // Last resort: hard-truncate when even the minimum size cannot fit.
+  while (tw + size * 3.6 > maxTextW && text.length > 8) {
+    text = text.slice(0, -4).trimEnd() + '…';
+    tw = measure(size);
+  }
   const padX = size * 1.1;
   const bw = tw + padX * 2 + size * 1.4;
   const bh = size * 2.1;
@@ -408,13 +440,26 @@ function drawTitleCard(c: CanvasRenderingContext2D, W: number, H: number, timeli
   c.fillText(brand, W / 2, H * 0.2 + chipSize * 1.1);
 
   // title with letter pop
-  const titleSize = Math.round(H * 0.085);
+  let titleSize = Math.round(H * 0.085);
+  // Long titles must fit the frame: measure at the base size and shrink
+  // (proportionally, in whole px) until the pop-in row stays inside 92% W.
+  const titleFit = (s: number) => {
+    c.font = displayFont(s);
+    const charsFit = Array.from(timeline.spec.title);
+    return charsFit.reduce((a, ch) => a + c.measureText(ch).width + s * 0.06, 0);
+  };
+  while (titleFit(titleSize) > W * 0.92 && titleSize > 16) {
+    const next = Math.floor(titleSize * 0.9);
+    titleSize = next >= titleSize ? titleSize - 1 : next;
+  }
   const chars = Array.from(timeline.spec.title);
   c.font = displayFont(titleSize);
   const totalW = chars.reduce((a, ch) => a + c.measureText(ch).width + titleSize * 0.06, 0);
   let x = W / 2 - totalW / 2;
   chars.forEach((ch, i) => {
-    const lp = clamp01(grow * 2 - i * 0.06);
+    // Stagger relative to title length so every character eventually pops in
+    // (the old fixed 0.06/char step meant chars past ~33 never appeared).
+    const lp = clamp01((grow - 0.45 * (i / Math.max(1, chars.length - 1))) * 2.2);
     const s = lp > 0 ? easeOutBack(lp) : 0;
     const cw = c.measureText(ch).width;
     if (s > 0.01) {
@@ -428,11 +473,17 @@ function drawTitleCard(c: CanvasRenderingContext2D, W: number, H: number, timeli
   });
 
   // topic line
-  const topicSize = Math.round(H * 0.042);
+  let topicSize = Math.round(H * 0.042);
+  const topicText = timeline.spec.topic.toUpperCase();
   c.font = `700 ${topicSize}px 'Trebuchet MS','DejaVu Sans',sans-serif`;
+  while (c.measureText(topicText).width > W * 0.92 && topicSize > 14) {
+    const next = Math.floor(topicSize * 0.9);
+    topicSize = next >= topicSize ? topicSize - 1 : next;
+    c.font = `700 ${topicSize}px 'Trebuchet MS','DejaVu Sans',sans-serif`;
+  }
   c.fillStyle = 'rgba(255,255,255,0.9)';
   c.globalAlpha = clamp01((tSec - 0.5) / 0.5);
-  c.fillText(timeline.spec.topic.toUpperCase(), W / 2, H * 0.55);
+  c.fillText(topicText, W / 2, H * 0.55);
 
   // "learning song" tag
   c.globalAlpha = clamp01((tSec - 0.9) / 0.5);

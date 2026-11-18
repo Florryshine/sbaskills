@@ -274,6 +274,24 @@ export default function SocialEnginePage() {
     loadDrafts();
   };
 
+  // Music Studio assets can lose just the video: the script (lyrics/spec)
+  // and the mixed audio stay, so the song can be re-exported later. See
+  // /api/admin/music-studio/publish-complete DELETE.
+  const deleteVideoOnly = async (draft) => {
+    if (!confirm(`Delete only the video for "${draft.title || 'this script'}"? The script and the audio stay so you can regenerate the video.`)) return;
+    const video = (draft.media_files || []).find((m) => m.media_type === 'video' && m.role === 'primary');
+    if (!video) return;
+    setBusyId(draft.id);
+    const res = await fetch(`/api/admin/music-studio/publish-complete?mediaId=${video.id}`, { method: 'DELETE' });
+    setBusyId(null);
+    if (!res.ok) {
+      const json = await res.json().catch(() => ({}));
+      alert(json.error || 'Failed to delete the video');
+      return;
+    }
+    loadDrafts();
+  };
+
   const startEdit = (draft) => {
     setEditingId(draft.id);
     setEditDraft(draft.body || '');
@@ -694,7 +712,7 @@ export default function SocialEnginePage() {
                           playsInline
                           className="rounded-lg max-h-[70vh] max-w-xs mx-auto bg-black"
                         />
-                        <div className="flex gap-2 mt-2">
+                        <div className="flex gap-2 mt-2 flex-wrap">
                           <button
                             onClick={() => downloadUrl(heroImage.url, `${(draft.title || 'quote-loop').replace(/[^a-z0-9]+/gi, '-').toLowerCase()}.${(heroImage.url.split('.').pop() || 'mp4').split('?')[0]}`)}
                             className="text-xs font-semibold text-gray-600 border rounded-full px-3 py-1 hover:bg-gray-50"
@@ -715,6 +733,16 @@ export default function SocialEnginePage() {
                           >
                             {copiedId === `hero-url-${draft.id}` ? '✓ Copied' : '🔗 Copy URL'}
                           </button>
+                          {draft.asset_type === 'music_video' && (
+                            <button
+                              onClick={() => deleteVideoOnly(draft)}
+                              disabled={busyId === draft.id}
+                              title="Removes the video but keeps the script and the audio, so the song can be regenerated"
+                              className="text-xs font-semibold text-red-600 border border-red-200 rounded-full px-3 py-1 hover:bg-red-50 disabled:opacity-50"
+                            >
+                              {busyId === draft.id ? 'Deleting…' : '🗑 Delete video (keep script)'}
+                            </button>
+                          )}
                         </div>
                       </div>
                     ) : heroImage && (
