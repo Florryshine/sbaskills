@@ -121,7 +121,9 @@ export default function StudioPage() {
   const [savingScript, setSavingScript] = useState(false);
   const [publishing, setPublishing] = useState(false);
   const [publishMsg, setPublishMsg] = useState('');
-  const [mp4Ready, setMp4Ready] = useState(false);\n  const [backgroundJobs, setBackgroundJobs] = useState<Array<{ id: string; title: string; status: string; stage: string; stage_message: string | null; progress: number; video_url: string | null; audio_url: string | null; error_message: string | null; created_at: string }>>([]);\n  const [queueBusy, setQueueBusy] = useState(false);
+  const [mp4Ready, setMp4Ready] = useState(false);
+  const [backgroundJobs, setBackgroundJobs] = useState<Array<{ id: string; title: string; status: string; stage: string; stage_message: string | null; progress: number; video_url: string | null; audio_url: string | null; error_message: string | null; created_at: string }>>([]);
+  const [queueBusy, setQueueBusy] = useState(false);
 
   const audioUrlRef = useRef<string | null>(null);
   const timelineRef = useRef<Parameters<typeof StagePlayer>[0]['timeline']>(null);
