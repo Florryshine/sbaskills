@@ -7,12 +7,20 @@
 import React from 'react';
 import { CharStyle, SkeletonFrame, Emotion, PropTrack, EnvironmentSpec } from '../rig/character';
 import { rng } from '../rig/geometry';
+import { Viseme, syllableToViseme, visemeAtFrame } from './visemes';
 
 export const INK = '#1c1c1c';
 
+
+function mouthStateForViseme(v: Viseme): { shape: Viseme; open: number; round: number } {
+  const OPEN: Record<Viseme, number> = { closed: 0.02, M: 0.03, FV: 0.15, TH: 0.35, S: 0.20, A: 0.95, E: 0.45, I: 0.25, O: 0.75, U: 0.55 };
+  const ROUND: Record<Viseme, number> = { closed: 0.5, M: 0.5, FV: 0.4, TH: 0.5, S: 0.6, A: 0.3, E: 0.2, I: 0.15, O: 0.9, U: 0.95 };
+  return { shape: v, open: OPEN[v], round: ROUND[v] };
+}
+
 // ---------------- character ----------------
 
-function faceGroup(style: CharStyle, head: [number, number], facing: 1 | -1, emo: Emotion, frame: number): React.ReactElement {
+function faceGroup(style: CharStyle, head: [number, number], facing: 1 | -1, emo: Emotion, frame: number, mouth?: Viseme): React.ReactElement {
   const hx = head[0], hy = head[1];
   const r = style.headR;
   const dark = style.headFill === '#ffffff' ? INK : '#ffffff';
@@ -84,9 +92,29 @@ function faceGroup(style: CharStyle, head: [number, number], facing: 1 | -1, emo
         stroke={dark} strokeWidth={3.2} fill="none" strokeLinecap="round" />;
   }
 
+  // If a viseme is provided (character is speaking), override the emotion mouth
+  // with the current mouth shape. Between-words silence falls through to
+  // 'closed' so the mouth rests between syllables, like real speech.
+  if (mouth !== undefined) {
+    const mv = mouthStateForViseme(mouth);
+    if (mv.shape === 'closed' || mv.shape === 'M') {
+      mouth = <path d={`M ${hx - facing * 9} ${mouthY} Q ${hx + facing * 2} ${mouthY + 1.5} ${hx + facing * 10} ${mouthY}`}
+        stroke={dark} strokeWidth={3.2} fill="none" strokeLinecap="round" />;
+    } else {
+      const rx = 5.4 * (0.4 + 0.9 * (1 - mv.round));
+      const ry = 4.2 + mv.open * 8.5;
+      mouth = <ellipse cx={hx + facing * 2} cy={mouthY} rx={rx} ry={ry} fill={dark} />;
+    }
+  }
+
   // A deterministic blink cycle adds life without storing redundant face tracks.
-  const blinkPhase = frame % 101;
-  const blinking = blinkPhase >= 0 && blinkPhase < 4;
+  // Irregular blink: three sine waves at incommensurate frequencies beat
+  // against each other so blinks feel organic instead of metronomic.
+  // Seeded by the head X position so each character blinks independently.
+  const seed = head[0] * 0.013;
+  const t = frame / 30;
+  const wave = Math.sin(t * 1.3 + seed) + Math.sin(t * 0.7 + seed * 1.7) + Math.sin(t * 2.1 + seed * 3.1);
+  const blinking = wave > 1.85;
   const eyeChoice = (emo === 'surprised' || emo === 'fear') ? eyeWide : (emo === 'bigsmile' || emo === 'proud' || emo === 'happy') ? eyeHappyArc : eyeDot;
   const closedEye = (cx: number) => <path d={`M ${cx - 7} ${eyeY} Q ${cx} ${eyeY + 5} ${cx + 7} ${eyeY}`} stroke={dark} strokeWidth={3.4} fill="none" strokeLinecap="round" />;
   els.push(blinking || emo === 'wink' ? closedEye(exL) : eyeChoice(exL), blinking ? closedEye(exR) : eyeChoice(exR));
@@ -122,9 +150,9 @@ function faceGroup(style: CharStyle, head: [number, number], facing: 1 | -1, emo
 }
 
 export function Stickman({
-  style, frame: sk, emotion, frameNo,
+  style, frame: sk, emotion, frameNo, mouth,
 }: {
-  style: CharStyle; frame: SkeletonFrame; emotion: Emotion; frameNo: number;
+  style: CharStyle; frame: SkeletonFrame; emotion: Emotion; frameNo: number; mouth?: Viseme;
 }) {
   const s = style;
   const sw = s.strokeW;
@@ -168,7 +196,7 @@ export function Stickman({
       {/* head */}
       <circle cx={sk.head[0]} cy={sk.head[1]} r={s.headR}
         fill={s.headFill === 'none' ? 'none' : s.headFill} stroke={s.ink} strokeWidth={sw * 0.62} />
-      {faceGroup(s, sk.head, sk.head[0] >= sk.pel[0] ? 1 : -1, emotion, frameNo)}
+      {faceGroup(s, sk.head, sk.head[0] >= sk.pel[0] ? 1 : -1, emotion, frameNo, mouth)}
       {/* near side */}
       {limb([sk.hipR, sk.knR, sk.ftR])}
       {foot(sk.ftR)}
