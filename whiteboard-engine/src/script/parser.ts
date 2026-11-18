@@ -358,6 +358,22 @@ export function parseScript(source: string): VideoSpec {
     if (!spec.narration) {
       throw new ScriptParseError(`Scene "${spec.id}" is missing a "narration:" line.`, scene.line);
     }
+
+    // Safety net for older/weak AI scripts: a scene with no explicit written
+    // teaching text must still visibly write its spoken explanation. This
+    // prevents a diagram-only scene even when the planner omits text: lines.
+    const hasWrittenTeaching = spec.elements.some((el) =>
+      (el.type === 'text' || el.type === 'bullet' || el.type === 'tick' || el.type === 'callout') &&
+      !!el.text?.trim(),
+    );
+    if (!hasWrittenTeaching) {
+      spec.elements.push({
+        id: nextId('text'),
+        type: 'text',
+        text: spec.narration,
+      });
+    }
+
     if (scene.layout === 'title' && !spec.heading) {
       spec.heading = title; // fall back to the video title
     }
