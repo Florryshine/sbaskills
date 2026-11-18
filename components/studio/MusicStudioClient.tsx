@@ -371,7 +371,7 @@ export default function StudioPage() {
     if (!rawSpec || queueBusy) return;
     setQueueBusy(true);
     try {
-      const scriptId = currentScriptId ?? await saveScript();
+      const scriptId = await saveScript();
       if (!scriptId) throw new Error('Save the song script before starting background rendering.');
       const res = await fetch('/api/admin/music-studio/jobs', {
         method: 'POST',
