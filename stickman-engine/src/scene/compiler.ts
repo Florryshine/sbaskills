@@ -328,7 +328,8 @@ export function compile(script: SceneScript, narration: NarrationMap): Timeline 
           blendInto(streams[act.char],res.frames,a0-sf0,5); events[act.char].push(...res.events); break;
         }
         case 'fall':
-        case 'getUp': {
+        case 'getUp':
+        case 'stand': {
           const res=act.do==='fall'
             ? fallStream({style:st.style,startFrame:a0,frames:Math.min(sfN-a0,Math.round((act.dur??1.1)*fps)),fps,x:st.x,facing:st.facing})
             : getUpStream({style:st.style,startFrame:a0,frames:Math.min(sfN-a0,Math.round((act.dur??1.4)*fps)),fps,x:st.x,facing:st.facing});
