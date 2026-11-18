@@ -207,6 +207,9 @@ export async function DELETE(req: NextRequest) {
   const media = (asset as unknown as { media_files?: Array<{ storage_path: string | null }> }).media_files ?? [];
   for (const file of media) {
     if (file.storage_path) {
+      // New background renders live in music-studio-media; lesson-videos is
+      // retained for older exports created by the original browser workflow.
+      await supabase.storage.from('music-studio-media').remove([file.storage_path]);
       await supabase.storage.from('lesson-videos').remove([file.storage_path]);
     }
   }
