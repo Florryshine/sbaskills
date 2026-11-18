@@ -51,14 +51,11 @@ async function stage(job, name, pct, message) {
 
 async function runEngine(job, dir) {
   const bundlePath = path.join(dir, 'music-engine.bundle.js');
-  const built = await Bun.build({
-    entrypoints: [path.join(ROOT, 'lib/studio/background-entry.ts')],
-    target: 'browser', format: 'iife', minify: true, outfile: bundlePath,
-  });
-  if (!built.success) throw new Error(built.logs.map((x) => x.message).join('\n') || 'Could not bundle music engine.');
-  const browser = await openBrowser('chrome', { headless: true });
+  await execFile('bun', ['build', path.join(ROOT, 'lib/studio/background-entry.ts'), '--target=browser', '--outfile', bundlePath, '--minify']);
+  const browser = await openBrowser('chrome');
   try {
-    const page = await browser.newPage({ viewport: { width: 720, height: 1280 }, deviceScaleFactor: 1 });
+    const page = await browser.newPage();
+    await page.setViewport({ width: 720, height: 1280, deviceScaleFactor: 1 });
     page.on('console', async (msg) => {
       const line = msg.text();
       if (!line.startsWith('SBA_MUSIC_PROGRESS:')) return;
