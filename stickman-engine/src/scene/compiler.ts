@@ -17,7 +17,7 @@ import {
   pushStream, aimStream, waveStream, reactSurprise, cheerStream,
   laughStream, stumbleStream, sitStream, talkStream,
 } from '../motion/actions';
-import { jumpStream, clapStream, danceStream, pullStream, pickupStream, carryStream, throwStream, fallStream, getUpStream, turnStream } from '../motion/advanced';
+import { jumpStream, landStream, clapStream, danceStream, pullStream, pickupStream, carryStream, throwStream, fallStream, getUpStream, turnStream } from '../motion/advanced';
 
 export type NarrationMap = Record<string, { file: string; dur: number }>;
 
@@ -299,7 +299,8 @@ export function compile(script: SceneScript, narration: NarrationMap): Timeline 
         }
         case 'jump':
         case 'land': {
-          const res = jumpStream({ style: st.style, startFrame: a0, frames: Math.min(sfN-a0, Math.round((act.dur ?? 1.15)*fps)), fps, x: st.x, facing: st.facing, height: act.height });
+          const opts = { style: st.style, startFrame: a0, frames: Math.min(sfN-a0, Math.round((act.dur ?? 1.15)*fps)), fps, x: st.x, facing: st.facing, height: act.height };
+          const res = act.do === 'jump' ? jumpStream(opts) : landStream(opts);
           blendInto(streams[act.char], res.frames, a0-sf0, 7); events[act.char].push(...res.events); break;
         }
         case 'clap': {
@@ -495,6 +496,9 @@ export function compile(script: SceneScript, narration: NarrationMap): Timeline 
       track.faceEvents.push(...events[id]);
     }
   });
+
+  // Face events must be chronological: action cues and dialogue cues are collected in separate passes.
+  for (const t of characters) t.faceEvents.sort((a, b) => a.frame - b.frame);
 
   // pad to duration
   for (const t of characters) {
