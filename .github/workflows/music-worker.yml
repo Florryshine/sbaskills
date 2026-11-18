@@ -1,8 +1,17 @@
 name: Musical Learning background renderer
 
 on:
+  push:
+    branches:
+      - master
+    paths:
+      - 'local-video-renderer/music-worker.js'
+      - 'lib/studio/background-entry.ts'
+      - 'lib/studio/tts.ts'
+      - '.github/workflows/music-worker.yml'
   repository_dispatch:
-    types: [music-render-job]
+    types:
+      - music-render-job
   workflow_dispatch:
 
 permissions:
@@ -19,7 +28,8 @@ jobs:
     timeout-minutes: 55
     env:
       NEXT_PUBLIC_SUPABASE_URL: ${{ secrets.NEXT_PUBLIC_SUPABASE_URL || secrets.SUPABASE_URL }}
-      SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}\n      TTS_ENDPOINT: ${{ secrets.TTS_ENDPOINT }}
+      SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
+      TTS_ENDPOINT: ${{ secrets.TTS_ENDPOINT }}
     steps:
       - name: Check out repository
         uses: actions/checkout@v4
