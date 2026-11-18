@@ -11,7 +11,7 @@ import { STYLES } from '../rig/character';
 const KNOWN_ENVIRONMENTS = new Set(['street', 'abstract', 'classroom']);
 const KNOWN_ACTIONS = new Set([
   'walk', 'run', 'push', 'point', 'present', 'wave', 'reactSurprise',
-  'cheer', 'laugh', 'stumble', 'sit', 'face', 'talkGestures',
+  'cheer', 'laugh', 'stumble', 'sit', 'face', 'talkGestures', 'jump', 'land', 'clap', 'dance', 'pull', 'pickUp', 'throw', 'carry', 'drop', 'fall', 'getUp', 'turn',
 ]);
 
 const MAX_SCENES = 12;
