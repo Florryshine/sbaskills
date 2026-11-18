@@ -156,8 +156,11 @@ export type DialogueLine = {
 };
 
 export type SceneAction =
+  // ---- locomotion ----
   | { char: string; do: 'walk'; from: number; to: number; speed?: number; t0?: number; pushProp?: string }
   | { char: string; do: 'run'; from: number; to: number; speed?: number; t0?: number }
+  | { char: string; do: 'turn'; facing: 1 | -1; t0?: number; dur?: number }
+  // ---- single-character actions ----
   | { char: string; do: 'push'; prop?: string; moving?: boolean; at?: number; t0?: number; dur?: number }
   | { char: string; do: 'point'; at: [number, number]; t0?: number; dur?: number }
   | { char: string; do: 'present'; at: [number, number]; t0?: number; dur?: number }
@@ -168,7 +171,29 @@ export type SceneAction =
   | { char: string; do: 'stumble'; t0?: number }
   | { char: string; do: 'face'; facing: 1 | -1; t0?: number }
   | { char: string; do: 'sit'; t0?: number }
-  | { char: string; do: 'talkGestures'; line?: number; stressEvery?: number; t0?: number; dur?: number };
+  | { char: string; do: 'stand'; t0?: number; dur?: number }
+  | { char: string; do: 'talkGestures'; line?: number; stressEvery?: number; t0?: number; dur?: number }
+  // ---- Phase A: physical actions ----
+  | { char: string; do: 'jump'; height?: number; t0?: number; dur?: number }
+  | { char: string; do: 'land'; t0?: number; dur?: number }
+  | { char: string; do: 'fall'; t0?: number; dur?: number }
+  | { char: string; do: 'getUp'; t0?: number; dur?: number }
+  | { char: string; do: 'clap'; t0?: number; dur?: number }
+  | { char: string; do: 'dance'; t0?: number; dur?: number }
+  | { char: string; do: 'pull'; prop?: string; t0?: number; dur?: number }
+  // ---- Phase A: object interactions ----
+  | { char: string; do: 'pickUp'; prop: string; t0?: number; dur?: number }
+  | { char: string; do: 'carry'; prop: string; t0?: number; dur?: number }
+  | { char: string; do: 'throw'; prop: string; t0?: number; dur?: number }
+  | { char: string; do: 'drop'; prop: string; t0?: number; dur?: number }
+  // ---- Phase A: emotion ----
+  | { char: string; do: 'expression'; emotion: string; t0?: number; dur?: number }
+  // ---- Phase C: inter-character interactions ----
+  | { char: string; do: 'approach'; target: string; t0?: number; dur?: number }
+  | { char: string; do: 'retreat'; target: string; t0?: number; dur?: number }
+  | { char: string; do: 'faceToward'; target: string; t0?: number }
+  | { char: string; do: 'leanIn'; target: string; t0?: number; dur?: number }
+  | { char: string; do: 'recoil'; target: string; t0?: number; dur?: number };
 
 /** Authoring-format overlay (scene-relative seconds); compiled to OverlayTrack. */
 export type SceneOverlay =

@@ -18,6 +18,8 @@ import {
   laughStream, stumbleStream, sitStream, talkStream,
 } from '../motion/actions';
 import { jumpStream, landStream, clapStream, danceStream, pullStream, pickupStream, carryStream, throwStream, fallStream, getUpStream, turnStream } from '../motion/advanced';
+import { leanInStream, recoilStream } from '../motion/advanced';
+import { autoDirector } from '../motion/director';
 import { reactionsForDialogue } from '../motion/reactions';
 
 export type NarrationMap = Record<string, { file: string; dur: number }>;
@@ -367,6 +369,68 @@ export function compile(script: SceneScript, narration: NarrationMap): Timeline 
           }
           break;
         }
+        case 'approach': {
+          const target = cast[(act as any).target];
+          if (!target) break;
+          const gap = 60;
+          const to = target.x - Math.sign(target.x - st.x || 1) * gap;
+          const w = makeWalk(st.style, {
+            from: st.x, to, speed: 90,
+            startFrame: a0, frames: sfN - a0, fps,
+          });
+          blendInto(streams[act.char], w.frames, a0 - sf0, 8);
+          st.x = to;
+          st.facing = (target.x - to) > 0 ? 1 : -1;
+          break;
+        }
+        case 'retreat': {
+          const target = cast[(act as any).target];
+          if (!target) break;
+          const dir = target.x > st.x ? -1 : 1;
+          const to = st.x + dir * 60;
+          const w = makeWalk(st.style, {
+            from: st.x, to, speed: 100,
+            startFrame: a0, frames: sfN - a0, fps,
+          });
+          blendInto(streams[act.char], w.frames, a0 - sf0, 8);
+          st.x = to;
+          break;
+        }
+        case 'faceToward': {
+          const target = cast[(act as any).target];
+          if (!target) break;
+          st.facing = (target.x - st.x) > 0 ? 1 : -1;
+          break;
+        }
+        case 'leanIn': {
+          const target = cast[(act as any).target];
+          if (!target) break;
+          const res = leanInStream({
+            style: st.style, startFrame: a0,
+            frames: Math.min(sfN - a0, Math.round(((act as any).dur ?? 1) * fps)),
+            fps, x: st.x,
+            facing: ((target.x - st.x) > 0 ? 1 : -1) as 1 | -1,
+            targetX: target.x,
+          });
+          blendInto(streams[act.char], res.frames, a0 - sf0, 6);
+          events[act.char].push(...res.events);
+          break;
+        }
+        case 'recoil': {
+          const target = cast[(act as any).target];
+          if (!target) break;
+          const res = recoilStream({
+            style: st.style, startFrame: a0,
+            frames: Math.min(sfN - a0, Math.round(((act as any).dur ?? 0.7) * fps)),
+            fps, x: st.x,
+            facing: ((target.x - st.x) > 0 ? 1 : -1) as 1 | -1,
+            awayFrom: target.x,
+          });
+          blendInto(streams[act.char], res.frames, a0 - sf0, 6);
+          events[act.char].push(...res.events);
+          st.x = res.exitX ?? st.x;
+          break;
+        }
       }
     }
 
@@ -552,7 +616,7 @@ function buildCamera(
   },
 ) {
   const { sf0, sfN, fps, W, H } = ctx;
-  const intents = sc.camera ?? [{ do: 'establish' as const }];
+  const intents = (sc.camera && sc.camera.length > 0) ? sc.camera : autoDirector(sc, cast, sc.actions ?? []);
   type Seg = { f0: number; f1: number; kind: string; p: any };
   const segs: Seg[] = [];
   intents.forEach((it, idx) => {
