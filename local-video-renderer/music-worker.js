@@ -8,7 +8,8 @@ import { mkdir, readFile, rm, writeFile } from 'node:fs/promises';
 import path from 'node:path';
 import os from 'node:os';
 import { randomUUID } from 'node:crypto';
-import { fileURLToPath } from 'node:url';\nimport { syllabify } from '../lib/studio/theory.ts';
+import { fileURLToPath } from 'node:url';
+import { syllabify } from '../lib/studio/theory.ts';
 
 const execFile = promisify(execFileCb);
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
@@ -184,7 +185,8 @@ async function processJob(job) {
     if(!job.payload?.spec||!job.payload?.settings) throw new Error('Job is missing SongSpec or Studio settings.');
     await stage(job,'preparing',5,'Preparing independent music renderer');
     await mkdir(TMP,{recursive:true});
-    const ttsBank = await synthesizeTtsBank(job);\n    const summary=await runEngine(job,TMP,ttsBank);
+    const ttsBank = await synthesizeTtsBank(job);
+    const summary=await runEngine(job,TMP,ttsBank);
     await stage(job,'encoding',87,'Encoding synchronized MP4 video');
     const videoPath=await muxVideo(TMP,summary);
     await stage(job,'uploading',93,'Uploading audio and video to SBA media storage');
