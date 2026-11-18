@@ -243,8 +243,10 @@ export async function loadImage(ref: string, opts: LoadOptions = {}): Promise<Lo
     }
     const hash = createHash('sha1').update(cached).digest('hex').slice(0, 12);
     if (opts.avoid?.has(hash)) {
-      // cached image already used elsewhere in this job — fall through to search
+      // Cached bytes were already used in another scene of this job.
+      // Fall through to search for a different candidate.
     } else {
+      opts.avoid?.add(hash);
       return { buffer: cached, credit };
     }
   } catch {
@@ -254,6 +256,11 @@ export async function loadImage(ref: string, opts: LoadOptions = {}): Promise<Lo
   // 1. direct URL
   if (/^https?:\/\//i.test(r)) {
     const buffer = await download(r);
+    const hash = createHash('sha1').update(buffer).digest('hex').slice(0, 12);
+    if (opts.avoid?.has(hash)) {
+      throw new Error(`image URL repeats an image already used in this lesson: ${r}`);
+    }
+    opts.avoid?.add(hash);
     await fs.writeFile(cacheKey, buffer);
     return { buffer };
   }
