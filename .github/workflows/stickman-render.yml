@@ -4,6 +4,9 @@ name: Stickman renderer
 # GitHub Actions checks the Supabase queue every 5 minutes, runs one job,
 # then exits. No always-on Render worker is required.
 on:
+  push:
+    paths:
+      - '.github/workflows/stickman-render.yml'
   schedule:
     - cron: '*/5 * * * *'
   workflow_dispatch:
