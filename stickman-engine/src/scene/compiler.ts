@@ -337,7 +337,7 @@ export function compile(script: SceneScript, narration: NarrationMap): Timeline 
           blendInto(streams[act.char],res.frames,a0-sf0,6); events[act.char].push(...res.events); shakeEvents.push(...(res.shake??[])); break;
         }
         case 'turn': {
-          const res=turnStream({style:st.style,startFrame:a0,frames:Math.min(sfN-a0,Math.round((act.dur??.55)*fps)),fps,x:st.x,facing:act.facing});
+          const res=turnStream({style:st.style,startFrame:a0,frames:Math.min(sfN-a0,Math.round((act.dur??.55)*fps)),fps,x:st.x,facing:act.facing,fromFacing:st.facing});
           blendInto(streams[act.char],res.frames,a0-sf0,6); st.facing=act.facing; break;
         }
         case 'expression': {
