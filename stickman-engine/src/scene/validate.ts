@@ -11,7 +11,7 @@ import { STYLES } from '../rig/character';
 const KNOWN_ENVIRONMENTS = new Set(['street', 'abstract', 'classroom']);
 const KNOWN_ACTIONS = new Set([
   'walk', 'run', 'push', 'point', 'present', 'wave', 'reactSurprise',
-  'cheer', 'laugh', 'stumble', 'sit', 'face', 'talkGestures', 'jump', 'land', 'clap', 'dance', 'pull', 'pickUp', 'throw', 'carry', 'drop', 'fall', 'getUp', 'turn',
+  'cheer', 'laugh', 'stumble', 'sit', 'face', 'talkGestures', 'jump', 'land', 'clap', 'dance', 'pull', 'pickUp', 'throw', 'carry', 'drop', 'fall', 'getUp', 'turn', 'expression',
 ]);
 
 const MAX_SCENES = 12;
@@ -86,6 +86,7 @@ export function validateSceneScript(script: any): string[] {
       if ((a.do === 'walk' || a.do === 'run') && (typeof a.from !== 'number' || typeof a.to !== 'number')) {
         problems.push(where(`${a.do} needs numeric from and to (world x coordinates)`));
       }
+      if (a.do === 'expression' && !['neutral','talk','happy','bigsmile','worried','strain','surprised','proud','sad','crying','angry','fear','confused','wink','focused'].includes(a.emotion)) problems.push(where('expression needs a supported emotion'));
       if (a.do === 'face' && a.facing !== 1 && a.facing !== -1) {
         problems.push(where('face needs facing: 1 or -1'));
       }
