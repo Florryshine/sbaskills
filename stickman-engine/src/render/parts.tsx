@@ -89,7 +89,7 @@ function faceGroup(style: CharStyle, head: [number, number], facing: 1 | -1, emo
   const blinking = blinkPhase >= 0 && blinkPhase < 4;
   const eyeChoice = (emo === 'surprised' || emo === 'fear') ? eyeWide : (emo === 'bigsmile' || emo === 'proud' || emo === 'happy') ? eyeHappyArc : eyeDot;
   const closedEye = (cx: number) => <path d={`M ${cx - 7} ${eyeY} Q ${cx} ${eyeY + 5} ${cx + 7} ${eyeY}`} stroke={dark} strokeWidth={3.4} fill="none" strokeLinecap="round" />;
-  els.push(blinking || emo === 'wink' ? closedEye(exL) : eyeChoice(exL), eyeChoice(exR));
+  els.push(blinking || emo === 'wink' ? closedEye(exL) : eyeChoice(exL), blinking ? closedEye(exR) : eyeChoice(exR));
 
   if (emo === 'worried' || emo === 'sad' || emo === 'crying' || emo === 'fear') { els.push(brow(exL, 5), brow(exR, 5)); }
   if (emo === 'angry') { els.push(brow(exL, -8), brow(exR, -8)); }
