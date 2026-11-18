@@ -390,7 +390,8 @@ export function compile(script: SceneScript, narration: NarrationMap): Timeline 
     for (const p of sc.props ?? []) {
       if (p.type === 'box') {
         const w = p.w ?? 64, h = p.h ?? 64;
-        const frames = [];
+        const existingTrack = props.find((q) => q.id === p.id && q.type === 'box');
+        const frames = existingTrack?.frames ?? Array.from({ length: durationFrames }, (_, frame) => ({ frame, x: p.x, y: 0, rot: 0 }));
         for (let i = 0; i < sfN - sf0; i++) {
           const t = i / fps;
           let x = p.x, y = 0, rot = 0;
@@ -439,15 +440,16 @@ export function compile(script: SceneScript, narration: NarrationMap): Timeline 
               }
             }
           }
-          frames.push({ frame: sf0 + i, x, y, rot });
+          frames[sf0 + i] = { frame: sf0 + i, x, y, rot };
         }
-        props.push({
-          id: p.id, type: 'box', w, h, color: '#b9814a', color2: '#8f5f30', z: 1,
-          frames, handles: [
-            { x: -w / 2 + 8, y: -h + 12 },
-            { x: -w / 2 + 22, y: -h + 14 },
-          ],
-        });
+        if (existingTrack) {
+          existingTrack.w = w; existingTrack.h = h; existingTrack.frames = frames;
+          existingTrack.handles = [{ x: -w / 2 + 8, y: -h + 12 }, { x: -w / 2 + 22, y: -h + 14 }];
+        } else {
+          props.push({ id: p.id, type: 'box', w, h, color: '#b9814a', color2: '#8f5f30', z: 1, frames, handles: [
+            { x: -w / 2 + 8, y: -h + 12 }, { x: -w / 2 + 22, y: -h + 14 },
+          ] });
+        }
       } else {
         if (!props.find((q) => q.id === p.id)) {
           props.push(staticProp(p.id, p.type, p.x));
