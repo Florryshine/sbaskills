@@ -17,6 +17,7 @@ import {
   pushStream, aimStream, waveStream, reactSurprise, cheerStream,
   laughStream, stumbleStream, sitStream, talkStream,
 } from '../motion/actions';
+import { jumpStream, landStream, clapStream, danceStream, pullStream, pickupStream, carryStream, throwStream, fallStream, getUpStream, turnStream } from '../motion/advanced';
 
 export type NarrationMap = Record<string, { file: string; dur: number }>;
 
@@ -296,6 +297,54 @@ export function compile(script: SceneScript, narration: NarrationMap): Timeline 
           events[act.char].push(...res.events);
           break;
         }
+        case 'jump':
+        case 'land': {
+          const opts = { style: st.style, startFrame: a0, frames: Math.min(sfN-a0, Math.round((act.dur ?? 1.15)*fps)), fps, x: st.x, facing: st.facing, height: act.height };
+          const res = act.do === 'jump' ? jumpStream(opts) : landStream(opts);
+          blendInto(streams[act.char], res.frames, a0-sf0, 7); events[act.char].push(...res.events); break;
+        }
+        case 'clap': {
+          const res = clapStream({ style: st.style, startFrame:a0, frames:Math.min(sfN-a0,Math.round((act.dur??1.8)*fps)), fps, x:st.x, facing:st.facing });
+          blendInto(streams[act.char],res.frames,a0-sf0,7); events[act.char].push(...res.events); break;
+        }
+        case 'dance': {
+          const res = danceStream({ style:st.style,startFrame:a0,frames:Math.min(sfN-a0,Math.round((act.dur??3)*fps)),fps,x:st.x,facing:st.facing });
+          blendInto(streams[act.char],res.frames,a0-sf0,8); events[act.char].push(...res.events); break;
+        }
+        case 'pull':
+        case 'pickUp':
+        case 'throw': {
+          const spec=(sc.props??[]).find(p=>p.id===act.prop);
+          const propX=spec?.x ?? st.x+60*st.facing, propH=spec && 'h' in spec ? (spec.h??64) : 64;
+          const opts={style:st.style,startFrame:a0,frames:Math.min(sfN-a0,Math.round((act.dur??1.5)*fps)),fps,x:st.x,facing:st.facing,propX,propH};
+          const res=act.do==='pull'?pullStream(opts):act.do==='pickUp'?pickupStream(opts):throwStream(opts);
+          blendInto(streams[act.char],res.frames,a0-sf0,7); events[act.char].push(...res.events); break;
+        }
+        case 'carry': {
+          const res=carryStream({style:st.style,startFrame:a0,frames:Math.min(sfN-a0,Math.round((act.dur??2)*fps)),fps,x:st.x,facing:st.facing});
+          blendInto(streams[act.char],res.frames,a0-sf0,7); events[act.char].push(...res.events); break;
+        }
+        case 'drop': {
+          const res=throwStream({style:st.style,startFrame:a0,frames:Math.min(sfN-a0,Math.round((act.dur??.8)*fps)),fps,x:st.x,facing:st.facing});
+          blendInto(streams[act.char],res.frames,a0-sf0,5); events[act.char].push(...res.events); break;
+        }
+        case 'fall':
+        case 'getUp':
+        case 'stand': {
+          const res=act.do==='fall'
+            ? fallStream({style:st.style,startFrame:a0,frames:Math.min(sfN-a0,Math.round((act.dur??1.1)*fps)),fps,x:st.x,facing:st.facing})
+            : getUpStream({style:st.style,startFrame:a0,frames:Math.min(sfN-a0,Math.round((act.dur??1.4)*fps)),fps,x:st.x,facing:st.facing});
+          blendInto(streams[act.char],res.frames,a0-sf0,6); events[act.char].push(...res.events); shakeEvents.push(...(res.shake??[])); break;
+        }
+        case 'turn': {
+          const res=turnStream({style:st.style,startFrame:a0,frames:Math.min(sfN-a0,Math.round((act.dur??.55)*fps)),fps,x:st.x,facing:act.facing,fromFacing:st.facing});
+          blendInto(streams[act.char],res.frames,a0-sf0,6); st.facing=act.facing; break;
+        }
+        case 'expression': {
+          events[act.char].push({ frame: a0, emo: act.emotion });
+          if (act.dur) events[act.char].push({ frame: a0 + Math.round(act.dur * fps), emo: 'neutral' });
+          break;
+        }
         case 'talkGestures': {
           const info = act as any;
           const li = info.line ?? 0;
@@ -342,24 +391,66 @@ export function compile(script: SceneScript, narration: NarrationMap): Timeline 
     for (const p of sc.props ?? []) {
       if (p.type === 'box') {
         const w = p.w ?? 64, h = p.h ?? 64;
-        const frames = [];
+        const existingTrack = props.find((q) => q.id === p.id && q.type === 'box');
+        const frames = existingTrack?.frames ?? Array.from({ length: durationFrames }, (_, frame) => ({ frame, x: p.x, y: 0, rot: 0 }));
         for (let i = 0; i < sfN - sf0; i++) {
           const t = i / fps;
-          let x = p.x, rot = 0;
+          let x = p.x, y = 0, rot = 0;
           if (p.moving && t >= p.moving.t0) {
             const k = clamp((t - p.moving.t0) / Math.max(0.01, p.moving.t1 - p.moving.t0), 0, 1);
             x = p.moving.from + (p.moving.to - p.moving.from) * easeInOut(k);
             rot = k > 0 && k < 1 ? Math.sin(t * 2 * Math.PI * 5) * 0.8 : 0;
           }
-          frames.push({ frame: sf0 + i, x, y: 0, rot });
+
+          // Object ownership is resolved from the same character hand joints
+          // used by the renderer. Pickup blends from the floor into the grip;
+          // carry remains attached until a throw/drop release event.
+          const objectActions = actions.filter((a: any) => a.prop === p.id && ['pickUp','carry','throw','drop'].includes(a.do));
+          let interaction: any = null;
+          for (const candidate of objectActions) if ((candidate.t0 ?? 0) <= t) interaction = candidate;
+          if (interaction) {
+            const charFrames = streams[interaction.char];
+            const actionStart = interaction.t0 ?? 0;
+            const actionDur = interaction.dur ?? (interaction.do === 'carry' ? 2 : 1.5);
+            const releaseAt = actionStart + actionDur * 0.62;
+            const handAt = (seconds: number) => {
+              const idx = clamp(Math.round(seconds * fps), 0, Math.max(0, (charFrames?.length ?? 1) - 1));
+              const sk = charFrames?.[idx];
+              return sk ? { x: (sk.haL[0] + sk.haR[0]) / 2, y: (sk.haL[1] + sk.haR[1]) / 2 + h } : { x: p.x, y: 0 };
+            };
+            if (interaction.do === 'pickUp') {
+              const grip = handAt(t);
+              const k = easeInOut(clamp((t - actionStart) / Math.max(0.2, actionDur), 0, 1));
+              x = lerp(p.x, grip.x, k); y = lerp(0, grip.y, k);
+            } else if (interaction.do === 'carry') {
+              const grip = handAt(t); x = grip.x; y = grip.y;
+            } else if (t < releaseAt) {
+              const grip = handAt(t); x = grip.x; y = grip.y;
+            } else {
+              const release = handAt(releaseAt);
+              const dt = t - releaseAt;
+              const facing = cast[interaction.char]?.facing ?? 1;
+              if (interaction.do === 'throw') {
+                x = release.x + facing * 250 * dt;
+                y = Math.min(0, release.y - 250 * dt + 260 * dt * dt);
+                rot = facing * dt * 220;
+              } else {
+                x = release.x;
+                y = Math.min(0, release.y + 520 * dt * dt);
+                rot = 0;
+              }
+            }
+          }
+          frames[sf0 + i] = { frame: sf0 + i, x, y, rot };
         }
-        props.push({
-          id: p.id, type: 'box', w, h, color: '#b9814a', color2: '#8f5f30', z: 1,
-          frames, handles: [
-            { x: -w / 2 + 8, y: -h + 12 },
-            { x: -w / 2 + 22, y: -h + 14 },
-          ],
-        });
+        if (existingTrack) {
+          existingTrack.w = w; existingTrack.h = h; existingTrack.frames = frames;
+          existingTrack.handles = [{ x: -w / 2 + 8, y: -h + 12 }, { x: -w / 2 + 22, y: -h + 14 }];
+        } else {
+          props.push({ id: p.id, type: 'box', w, h, color: '#b9814a', color2: '#8f5f30', z: 1, frames, handles: [
+            { x: -w / 2 + 8, y: -h + 12 }, { x: -w / 2 + 22, y: -h + 14 },
+          ] });
+        }
       } else {
         if (!props.find((q) => q.id === p.id)) {
           props.push(staticProp(p.id, p.type, p.x));
@@ -405,6 +496,9 @@ export function compile(script: SceneScript, narration: NarrationMap): Timeline 
       track.faceEvents.push(...events[id]);
     }
   });
+
+  // Face events must be chronological: action cues and dialogue cues are collected in separate passes.
+  for (const t of characters) t.faceEvents.sort((a, b) => a.frame - b.frame);
 
   // pad to duration
   for (const t of characters) {
