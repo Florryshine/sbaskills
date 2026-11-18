@@ -18,14 +18,14 @@ permissions:
   contents: read
 
 concurrency:
-  group: music-render-queue
+  group: music-render-queue-v2
   cancel-in-progress: false
 
 jobs:
   render:
     name: Claim and render a queued learning song
     runs-on: ubuntu-latest
-    timeout-minutes: 55
+    timeout-minutes: 30
     env:
       NEXT_PUBLIC_SUPABASE_URL: ${{ secrets.NEXT_PUBLIC_SUPABASE_URL || secrets.SUPABASE_URL }}
       SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
