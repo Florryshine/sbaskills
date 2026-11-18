@@ -82,6 +82,16 @@ export async function fetchSyllables(
 
 export const apiTtsProvider = (): TtsProvider => ({
   async synthesize(items: string[]) {
+    // Background workers preload syllable audio independently of the user's
+    // browser session. Prefer that bank when present; normal studio sessions
+    // continue using the authenticated API route below.
+    const preloaded = (window as unknown as { __SBA_MUSIC_TTS_BANK__?: Record<string, string> }).__SBA_MUSIC_TTS_BANK__;
+    if (preloaded) {
+      return Object.fromEntries(items.flatMap((item) => {
+        const audio = preloaded[item.toLowerCase()];
+        return audio ? [[item, audio] as [string, string]] : [];
+      }));
+    }
     const res = await fetch('/api/admin/music-studio/tts', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
