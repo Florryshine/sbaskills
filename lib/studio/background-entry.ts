@@ -5,7 +5,7 @@ import type { SongSpec, StudioSettings, Timeline } from './types';
 
 declare global {
   interface Window {
-    __SBA_MUSIC_JOB__?: { spec: SongSpec; settings: StudioSettings };
+    __SBA_MUSIC_JOB__?: { spec: SongSpec; settings: StudioSettings };\n    __SBA_MUSIC_TTS_BANK__?: Record<string, string>;
     __SBA_MUSIC_RESULT__?: { timeline: Timeline; wavBase64: string; usedTts: boolean; warnings: string[]; frameCount: number; width: number; height: number; fps: number };
     __SBA_MUSIC_RENDER__?: () => Promise<{ durationSec: number; frameCount: number; width: number; height: number; fps: number; usedTts: boolean; warnings: string[]; wavBase64Length: number }>;
   __SBA_MUSIC_RENDER_BATCH__?: (start: number, count: number) => string[];
@@ -15,7 +15,7 @@ declare global {
 window.__SBA_MUSIC_RENDER__ = async () => {
   const job = window.__SBA_MUSIC_JOB__;
   if (!job) throw new Error('Missing music render payload.');
-  const settings = { ...job.settings, vocalMode: 'synth' as const };
+  const settings = { ...job.settings };
   const result = await generateSong(job.spec, {
     settings,
     onProgress: (message, percent) => console.log('SBA_MUSIC_PROGRESS:' + JSON.stringify({ message, percent })),
@@ -38,7 +38,7 @@ window.__SBA_MUSIC_RENDER__ = async () => {
   if (!ctx) throw new Error('Could not create video canvas.');
   window.__SBA_MUSIC_RESULT__ = {
     timeline: result.timeline, wavBase64, usedTts: result.usedTts,
-    warnings: [...result.warnings, ...(job.spec.vocal.mode === 'tts' ? ['Background worker currently uses the built-in synth voice; server-side TTS migration is pending.'] : [])],
+    warnings: result.warnings,
     frameCount, width, height, fps,
   };
   window.__SBA_MUSIC_RENDER_BATCH__ = (start, count) => {
