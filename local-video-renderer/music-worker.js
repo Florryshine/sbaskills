@@ -8,7 +8,7 @@ import { mkdir, readFile, rm, writeFile } from 'node:fs/promises';
 import path from 'node:path';
 import os from 'node:os';
 import { randomUUID } from 'node:crypto';
-import { fileURLToPath } from 'node:url';
+import { fileURLToPath } from 'node:url';\nimport { syllabify } from '../lib/studio/theory.ts';
 
 const execFile = promisify(execFileCb);
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
@@ -49,7 +49,61 @@ async function stage(job, name, pct, message) {
   console.log(`[${job.id}] ${pct}% ${name}: ${message}`);
 }
 
-async function runEngine(job, dir) {
+async function synthesizeTtsBank(job) {
+  if (job.payload?.settings?.vocalMode !== 'tts' && job.payload?.spec?.vocal?.mode !== 'tts') return {};
+  const items = new Set();
+  for (const section of job.payload.spec.sections || []) {
+    for (const line of section.lines || []) {
+      for (const word of line.words || []) {
+        const syllables = Array.isArray(word.syllables) && word.syllables.length
+          ? word.syllables : syllabify(String(word.text || ''));
+        for (const syllable of syllables) {
+          const value = String(syllable || '').trim().toLowerCase().slice(0, 80);
+          if (value) items.add(value);
+        }
+      }
+    }
+  }
+  const queue = [...items];
+  if (!queue.length) return {};
+  const endpoint = (process.env.TTS_ENDPOINT || 'https://openai-edge-tts-aqq1.onrender.com').replace(/\\/+$/, '');
+  const audio = {};
+  let next = 0, failures = 0, completed = 0;
+  const worker = async () => {
+    while (next < queue.length && failures < 3) {
+      const item = queue[next++];
+      const controller = new AbortController();
+      const timeout = setTimeout(() => controller.abort(), 12000);
+      try {
+        const response = await fetch(`${endpoint}/v1/audio/speech`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ model: 'tts-1', input: item, voice: 'en-NG-EzinneNeural', speed: 1, response_format: 'wav' }),
+          signal: controller.signal,
+        });
+        if (!response.ok) throw new Error(`TTS HTTP ${response.status}`);
+        const bytes = Buffer.from(await response.arrayBuffer());
+        if (bytes.length < 512 || bytes.toString('ascii', 0, 4) !== 'RIFF') throw new Error('TTS returned invalid WAV data');
+        audio[item] = bytes.toString('base64');
+      } catch (error) {
+        failures++;
+        console.warn(`[music-worker] TTS fragment "${item}" unavailable:`, error.message);
+      } finally {
+        clearTimeout(timeout);
+        completed++;
+      }
+      if (completed % 8 === 0) {
+        await heartbeat(job, 'tts', Math.min(12, 5 + Math.round((completed / queue.length) * 7)),
+          `Preparing voice fragments ${completed}/${queue.length}`);
+      }
+    }
+  };
+  await Promise.all(Array.from({ length: Math.min(5, queue.length) }, () => worker()));
+  console.log(`[music-worker] prepared ${Object.keys(audio).length}/${queue.length} TTS syllables`);
+  return audio;
+}
+
+async function runEngine(job, dir, ttsBank) {
   const bundlePath = path.join(dir, 'music-engine.bundle.js');
   await execFile('bun', ['build', path.join(ROOT, 'lib/studio/background-entry.ts'), '--target=browser', '--outfile', bundlePath, '--minify']);
   const browser = await openBrowser('chrome');
@@ -66,7 +120,7 @@ async function runEngine(job, dir) {
     });
     await page.setContent('<!doctype html><html><head><meta charset="utf-8"></head><body style="margin:0;background:#111"></body></html>');
     await page.addScriptTag({ path: bundlePath });
-    await page.evaluate((payload) => { window.__SBA_MUSIC_JOB__ = payload; }, job.payload);
+    await page.evaluate(({ payload, bank }) => { window.__SBA_MUSIC_JOB__ = payload; window.__SBA_MUSIC_TTS_BANK__ = bank; }, { payload: job.payload, bank: ttsBank });
     const summary = await page.evaluate(async () => {
       if (!window.__SBA_MUSIC_RENDER__) throw new Error('Music renderer bundle did not initialize.');
       return await window.__SBA_MUSIC_RENDER__();
@@ -130,7 +184,7 @@ async function processJob(job) {
     if(!job.payload?.spec||!job.payload?.settings) throw new Error('Job is missing SongSpec or Studio settings.');
     await stage(job,'preparing',5,'Preparing independent music renderer');
     await mkdir(TMP,{recursive:true});
-    const summary=await runEngine(job,TMP);
+    const ttsBank = await synthesizeTtsBank(job);\n    const summary=await runEngine(job,TMP,ttsBank);
     await stage(job,'encoding',87,'Encoding synchronized MP4 video');
     const videoPath=await muxVideo(TMP,summary);
     await stage(job,'uploading',93,'Uploading audio and video to SBA media storage');
