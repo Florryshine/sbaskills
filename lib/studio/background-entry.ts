@@ -18,7 +18,7 @@ window.__SBA_MUSIC_RENDER__ = async () => {
   const settings = { ...job.settings, vocalMode: 'synth' as const };
   const result = await generateSong(job.spec, {
     settings,
-    onProgress: (message, percent) => window.parent.postMessage({ type: 'SBA_MUSIC_PROGRESS', message, percent }, '*'),
+    onProgress: (message, percent) => console.log('SBA_MUSIC_PROGRESS:' + JSON.stringify({ message, percent })),
   });
   const wav = audioBufferToWav(result.audio);
   const wavBytes = new Uint8Array(await wav.arrayBuffer());
