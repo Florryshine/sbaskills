@@ -26,8 +26,6 @@ export interface PrepareResult {
   notes: string[];
 }
 
-const traceCache = new Map<string, Promise<{ spec: IllustrationSpec; credit?: string }>>();
-
 async function buildSpec(
   ref: string,
   colorize: boolean,
@@ -55,6 +53,23 @@ export async function prepareImages(spec: VideoSpec): Promise<PrepareResult> {
   const usedHashes = new Set<string>();
 
   for (const scene of spec.scenes) {
+    // The planner is instructed to include a real image in every scene. Keep
+    // that guarantee even for older scripts and manually pasted lessons.
+    // This is a fetch attempt, not a fabricated/local substitute: if no
+    // suitable free image exists, the normal warning/fallback path reports it.
+    if (!scene.elements.some((el) => !!el.image)) {
+      const query = [scene.heading || spec.title, spec.subject, 'educational diagram'].filter(Boolean).join(' ');
+      scene.elements.push({
+        id: `auto-image-${scene.id}`,
+        type: 'illustration',
+        image: query,
+        colorize: true,
+        sync: { kind: 'fraction', fraction: 0.42 },
+        at: 'right',
+        scale: 0.65,
+      });
+      notes.push(`Scene "${scene.id}": added an automatic educational-image search because the script supplied no image: directive.`);
+    }
     const kept = [];
     for (const el of scene.elements) {
       if (!el.image) {
@@ -76,17 +91,13 @@ export async function prepareImages(spec: VideoSpec): Promise<PrepareResult> {
 
         // 2. everything else: external free sources first
         try {
-          let p = traceCache.get(key);
-          let credit: string | undefined;
-          if (!p) {
-            p = buildSpec(el.image, colorize, usedHashes, notes).then((r) => {
-              registerIllustration(r.spec);
-              return r;
-            });
-            traceCache.set(key, p);
-          }
-          const prepared = await p;
-          credit = prepared.credit;
+          // Do not keep a process-global promise cache here: it bypasses the
+          // per-job duplicate-image set and can silently reuse one image in
+          // every scene/video. loadImage has its own byte cache and honours
+          // usedHashes while selecting a distinct source.
+          const prepared = await buildSpec(el.image, colorize, usedHashes, notes);
+          registerIllustration(prepared.spec);
+          const credit = prepared.credit;
           if (credit) credits.push(`${el.image}: ${credit}`);
           el.asset = prepared.spec.id;
           kept.push(el);
