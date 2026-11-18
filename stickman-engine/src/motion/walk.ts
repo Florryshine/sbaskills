@@ -1,6 +1,13 @@
 /**
  * Procedural walk / run cycle generator with pinned stance feet
  * (feet cannot slide by construction - contacts are world-fixed).
+ *
+ * Phase A upgrade:
+ *   - lateral hip shift toward the stance foot (fixes the "gliding puppet" look)
+ *   - correct two-per-stride vertical bob (was one per full step)
+ *   - torso yaw so shoulders counter-rotate against the swing leg
+ *   - stance pelvis drop so the knee never fully locks
+ *   - longer entry/exit cross-fades so walk <-> idle is invisible
  */
 import { clamp, easeInOut, lerp, V2 } from '../rig/geometry';
 import { CharStyle, SkeletonFrame } from '../rig/character';
@@ -36,16 +43,24 @@ export function makeWalk(s: CharStyle, o: WalkOpts): { frames: SkeletonFrame[]; 
   const arrivalT = steps * T;
   const arrivalFrame = o.startFrame + Math.max(1, Math.round(arrivalT * fps));
   const stepH = running ? 26 : 16;
-  const bobAmp = running ? 6 : 3.5;
+  const bobAmp = running ? 7 : 4;
   const armAmp = running ? 34 : 15;
   const lean = o.lean ?? (running ? 13 : 4);
   const stanceY = -(s.thigh + s.shin + s.ankleH);
+  const hipShiftAmp = running ? 4 : 6;         // lateral hip sway toward stance foot
+  const torsoYawAmp = running ? 6 : 4;         // shoulder counter-rotation
+  // Pelvis drop that flexes the stance knee slightly instead of locking it.
+  const stanceKneeFlexDeg = 8;
+  const pelvisDropAmp =
+    (s.thigh + s.shin) *
+    (1 - Math.cos((stanceKneeFlexDeg * Math.PI) / 180)) *
+    0.5;
 
   const out: SkeletonFrame[] = [];
   for (let i = 0; i < o.frames; i++) {
     const frame = o.startFrame + i;
     const t = i / fps;
-    const x = o.from + facing * o.speed * t;
+    const baseX = o.from + facing * o.speed * t;
 
     if (t >= arrivalT) {
       const breath = Math.sin((frame / fps) * 2 * Math.PI * 0.55) * 0.5 + 0.5;
@@ -53,18 +68,21 @@ export function makeWalk(s: CharStyle, o: WalkOpts): { frames: SkeletonFrame[]; 
       continue;
     }
 
-    const y = stanceY - Math.abs(Math.sin((Math.PI * t) / T)) * bobAmp;
+    // Two vertical dips per stride (one per footfall). The old single-dip
+    // curve read as a bounce, not a gait.
+    const y = stanceY - Math.abs(Math.sin((2 * Math.PI * t) / T)) * bobAmp;
     const cycle = Math.sin((Math.PI * t) / T);          // + during first half-step
     const feet: [V2, V2] = [[0, 0], [0, 0]];
+    let stanceFoot: 0 | 1 = 0;
+    let stanceWeight = 0;                               // 0..1, 1 = fully on stance foot
 
     for (const f of [0, 1] as const) {
-      // contacts for foot f occur at global step index m where m % 2 === f
       let m = Math.floor(t / T + 1e-6);
       if (m % 2 !== f) m -= 1;
-      const firstContact = f;                            // foot1 plants at m=1 (t=T)
+      const firstContact = f;
       if (m < firstContact) {
-        // standing start: feet together until this foot's first plant
         feet[f] = [o.from + (f === 0 ? -11 : 11) * facing, 0];
+        if (f === 0) { stanceFoot = 0; stanceWeight = 1; }
         continue;
       }
       const plantT = m * T;
@@ -75,6 +93,9 @@ export function makeWalk(s: CharStyle, o: WalkOpts): { frames: SkeletonFrame[]; 
       const finalPlant = nextPlantT >= arrivalT;
       if (t < liftT) {
         feet[f] = [plantX, 0];
+        stanceFoot = f;
+        const stanceProgress = (t - plantT) / Math.max(0.01, liftT - plantT);
+        stanceWeight = stanceProgress < 0.75 ? 1 : (1 - stanceProgress) / 0.25;
       } else {
         const swEnd = finalPlant ? arrivalT : nextPlantT;
         const sw = clamp((t - liftT) / Math.max(0.01, swEnd - liftT), 0, 1);
@@ -83,6 +104,17 @@ export function makeWalk(s: CharStyle, o: WalkOpts): { frames: SkeletonFrame[]; 
         feet[f] = [lerp(plantX, targetX, ex), -Math.sin(Math.PI * sw) * stepH];
       }
     }
+
+    // Lateral hip shift: hips ride over the stance foot. This is the fix
+    // for the "gliding on rails" look.
+    const hipShift = hipShiftAmp * stanceWeight * (stanceFoot === 0 ? -1 : 1) * facing;
+    const x = baseX + hipShift;
+
+    // Slight pelvis drop during stance so the stance knee flexes.
+    const yAdjusted = y + stanceWeight * pelvisDropAmp;
+
+    // Shoulder counter-rotation against swing leg.
+    const torsoYaw = -cycle * torsoYawAmp;
 
     let armL, armR;
     if (o.handTargets) {
@@ -99,7 +131,8 @@ export function makeWalk(s: CharStyle, o: WalkOpts): { frames: SkeletonFrame[]; 
 
     const leanNow = lean + cycle * 1.5;
     const pose: PoseParams = {
-      x, y, lean: leanNow, headTilt: -leanNow * 0.35, facing,
+      x, y: yAdjusted, lean: leanNow, headTilt: -leanNow * 0.35, facing,
+      torsoYaw,
       armL, armR,
       legL: { mode: 'ik', foot: [feet[0][0], feet[0][1]] },
       legR: { mode: 'ik', foot: [feet[1][0], feet[1][1]] },
@@ -107,11 +140,11 @@ export function makeWalk(s: CharStyle, o: WalkOpts): { frames: SkeletonFrame[]; 
     out.push(buildFrame(s, pose));
   }
 
-  // smooth entry / exit cross-fades
-  const entry = makeIdle(s, { x: o.from, facing, startFrame: 0, frames: 8, fps });
-  blendInto(out, entry, 0, 6);
+  // Longer entry / exit cross-fades (was 6 frames — visible snap).
+  const entry = makeIdle(s, { x: o.from, facing, startFrame: 0, frames: 12, fps });
+  blendInto(out, entry, 0, 10);
   const exitBlend = Math.min(out.length - (arrivalFrame - o.startFrame), Math.round(T * fps * 0.5));
-  if (exitBlend > 2) {
+  if (exitBlend > 3) {
     const exitIdle = makeIdle(s, {
       x: o.to, facing, startFrame: arrivalFrame - exitBlend, frames: exitBlend, fps,
     });

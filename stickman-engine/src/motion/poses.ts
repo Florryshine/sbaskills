@@ -19,6 +19,10 @@ export type PoseParams = {
   lean: number;                 // torso lean, deg (+ = forward)
   headTilt: number;             // deg relative to torso
   facing: 1 | -1;
+  /** Torso yaw in degrees around the neck pivot. Positive rotates the right
+   *  shoulder forward (+x when facing=1). Used for walk/run shoulder
+   *  counter-rotation and for throwing/dancing twists. */
+  torsoYaw?: number;
   armL: ArmSpec;
   armR: ArmSpec;
   legL: LegSpec;
@@ -56,15 +60,23 @@ export function buildFrame(s: CharStyle, p: PoseParams): SkeletonFrame {
   const pel: V2 = [p.x, p.y];
   const neck = add(pel, mul(limbDir(180 - p.lean, f), s.torso));
   const head = add(neck, mul(limbDir(180 - p.lean - p.headTilt, f), s.neck + s.headR));
-  const armL = solveArm(s, [neck[0] - 9, neck[1] + 2], p.armL, f);
-  const armR = solveArm(s, [neck[0] + 9, neck[1] + 2], p.armR, f);
+
+  // Torso yaw rotates the shoulder offsets around the neck pivot.
+  const yaw = (p.torsoYaw ?? 0) * (Math.PI / 180) * f;
+  const cosY = Math.cos(yaw);
+  const sinY = Math.sin(yaw);
+  const shL: V2 = [neck[0] - 9 * cosY, neck[1] + 2 - 9 * sinY];
+  const shR: V2 = [neck[0] + 9 * cosY, neck[1] + 2 + 9 * sinY];
+
+  const armL = solveArm(s, shL, p.armL, f);
+  const armR = solveArm(s, shR, p.armR, f);
   const legL = solveLeg(s, [pel[0] - 6, pel[1]], p.legL, f);
   const legR = solveLeg(s, [pel[0] + 6, pel[1]], p.legR, f);
   return {
     pel: [pel[0], pel[1]],
     neck: [neck[0], neck[1]],
     head: [head[0], head[1]],
-    shL: [neck[0] - 9, neck[1] + 2], shR: [neck[0] + 9, neck[1] + 2],
+    shL: [shL[0], shL[1]], shR: [shR[0], shR[1]],
     elL: [armL.el[0], armL.el[1]], elR: [armR.el[0], armR.el[1]],
     haL: [armL.ha[0], armL.ha[1]], haR: [armR.ha[0], armR.ha[1]],
     hipL: [pel[0] - 6, pel[1]], hipR: [pel[0] + 6, pel[1]],
@@ -100,6 +112,7 @@ export function blendInto(
     const b = from[i];
     const mix = (p: V2, q: V2): V2 => [p[0] + (q[0] - p[0]) * t, p[1] + (q[1] - p[1]) * t];
     a.pel = mix(a.pel, b.pel); a.neck = mix(a.neck, b.neck); a.head = mix(a.head, b.head);
+    a.shL = mix(a.shL, b.shL); a.shR = mix(a.shR, b.shR);
     a.elL = mix(a.elL, b.elL); a.elR = mix(a.elR, b.elR);
     a.haL = mix(a.haL, b.haL); a.haR = mix(a.haR, b.haR);
     a.knL = mix(a.knL, b.knL); a.knR = mix(a.knR, b.knR);
