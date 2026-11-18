@@ -338,6 +338,11 @@ export function compile(script: SceneScript, narration: NarrationMap): Timeline 
           const res=turnStream({style:st.style,startFrame:a0,frames:Math.min(sfN-a0,Math.round((act.dur??.55)*fps)),fps,x:st.x,facing:act.facing});
           blendInto(streams[act.char],res.frames,a0-sf0,6); st.facing=act.facing; break;
         }
+        case 'expression': {
+          events[act.char].push({ frame: a0, emo: act.emotion });
+          if (act.dur) events[act.char].push({ frame: a0 + Math.round(act.dur * fps), emo: 'neutral' });
+          break;
+        }
         case 'talkGestures': {
           const info = act as any;
           const li = info.line ?? 0;
