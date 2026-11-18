@@ -634,7 +634,7 @@ export default function StudioPage() {
                   <p><b className="text-[#0B5BC1]">4. Composer</b> — a genre template (Afrobeats, Amapiano, Hip-hop, Reggae, Gospel…) synthesizes drums, bass, chords and leads from scratch, with intro, drops, fills and outro.</p>
                   <p><b className="text-[#0B5BC1]">5. Mixer</b> — vocals and instruments render offline through buses, compression, delay and reverb into one finished song, faster than realtime.</p>
                   <p><b className="text-[#0B5BC1]">6. Kinetic typography</b> — the same timeline drives every word, letter, bounce and background transition on canvas, so words land exactly on the beat.</p>
-                  <p><b className="text-[#0B5BC1]">7. Export & Social Post</b> — MP4 (H.264 + AAC) is encoded in your browser via WebCodecs; WebM and WAV are also available for download. "Send to Social Post" stores the script, video and audio on the server for preview and publishing in the Social Engine.</p>
+                  <p><b className="text-[#0B5BC1]">7. Export & Social Post</b> — Local MP4/WebM/WAV exports remain available. Render in background queues a server-side MP4 that continues after you leave the page. "Send to Social Post" stores the script, video and audio on the server for preview and publishing in the Social Engine.</p>
                   <p className="text-xs text-[#637B98]">The instrumental and video render in your browser. Gemini TTS uses your existing Gemini API key and is subject to its free-tier quotas or account billing; no separate singing server is required.</p>
                 </div>
               </DialogContent>
@@ -859,7 +859,17 @@ export default function StudioPage() {
                         {job.status !== 'completed' && job.status !== 'failed' && <Progress value={job.progress} className="mt-2 h-1.5" />}
                         <p className="mt-1 text-[11px] text-[#7188A4]">{job.stage_message || job.stage} · {job.progress}%</p>
                         {job.status === 'completed' && job.video_url && <a className="mt-1 inline-block text-xs font-semibold text-[#0B5BC1] underline" href={job.video_url} target="_blank" rel="noreferrer">Open rendered video</a>}
-                        {job.status === 'failed' && <p className="mt-1 text-[11px] text-red-600">{job.error_message || 'Render failed'}</p>}
+                        {job.status === 'failed' && (
+                          <div className="mt-1 flex items-start justify-between gap-2">
+                            <p className="text-[11px] text-red-600">{job.error_message || 'Render failed'}</p>
+                            <button type="button" className="shrink-0 text-[11px] font-semibold text-[#0B5BC1] underline" onClick={async () => {
+                              const response = await fetch(`/api/admin/music-studio/jobs/${job.id}/retry`, { method: 'POST' });
+                              const result = await response.json();
+                              if (!response.ok) toast({ title: 'Retry failed', description: result.error || 'Could not retry this render', variant: 'destructive' });
+                              else { toast({ title: 'Render queued again' }); void loadBackgroundJobs(); }
+                            }}>Retry</button>
+                          </div>
+                        )}
                       </div>
                     ))}
                   </div>
