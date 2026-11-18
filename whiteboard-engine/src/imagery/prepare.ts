@@ -78,7 +78,6 @@ export async function prepareImages(spec: VideoSpec): Promise<PrepareResult> {
         continue;
       }
       const colorize = el.colorize !== false;
-      const key = `${el.image}|${colorize}`;
       try {
         // 1. explicit legacy refs resolve locally
         if (/^legacy\./i.test(el.image)) {
