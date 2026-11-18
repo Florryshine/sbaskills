@@ -1,0 +1,46 @@
+name: Musical Learning background renderer
+
+on:
+  repository_dispatch:
+    types: [music-render-job]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: music-render-queue
+  cancel-in-progress: false
+
+jobs:
+  render:
+    name: Claim and render a queued learning song
+    runs-on: ubuntu-latest
+    timeout-minutes: 55
+    env:
+      NEXT_PUBLIC_SUPABASE_URL: ${{ secrets.NEXT_PUBLIC_SUPABASE_URL || secrets.SUPABASE_URL }}
+      SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: npm
+      - name: Set up Bun
+        uses: oven-sh/setup-bun@v2
+      - name: Install FFmpeg
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends ffmpeg
+      - name: Install production dependencies
+        run: npm ci --omit=dev
+      - name: Install headless Chromium for Remotion
+        run: npx remotion browser ensure
+      - name: Validate worker and browser entry
+        run: |
+          node --check local-video-renderer/music-worker.js
+          bun build lib/studio/background-entry.ts --target=browser --outdir=/tmp/sba-music-bundle-check
+      - name: Claim and render one song
+        run: bun local-video-renderer/music-worker.js
