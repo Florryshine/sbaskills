@@ -4,7 +4,7 @@
  * render time (all randomness is seeded at compile time).
  */
 import React from 'react';
-import { AbsoluteFill, Audio, useCurrentFrame } from 'remotion';
+import { AbsoluteFill, Audio, Sequence, staticFile, useCurrentFrame } from 'remotion';
 import { Timeline, Emotion } from '../rig/character';
 import { Stickman, Prop, Environment, OverlayArrows, FormulaCard, TitleCard, Captions, Wipe } from './parts';
 
@@ -37,7 +37,14 @@ function shakeAt(timeline: Timeline, frame: number): [number, number] {
   return [dx, dy];
 }
 
-export const StickmanComposition: React.FC<{ timeline: Timeline }> = ({ timeline }) => {
+export const StickmanComposition: React.FC<{
+  timeline: Timeline;
+  /** Optional narration URL overrides (file -> public URL) so browser
+   * previews (@remotion/player) can stream audio from Storage instead of
+   * the bundler's static public dir. The CLI render omits it and uses
+   * staticFile(). */
+  audioUrls?: Record<string, string>;
+}> = ({ timeline, audioUrls }) => {
   const frame = useCurrentFrame();
   const { width: W, height: H } = timeline;
   const cam = timeline.camera[Math.min(frame, timeline.camera.length - 1)] ?? { cx: 0, cy: -160, scale: 1.8, rot: 0 };
@@ -93,17 +100,21 @@ export const StickmanComposition: React.FC<{ timeline: Timeline }> = ({ timeline
         {caption && <Captions caption={caption} frameNo={frame} speakerColor={SPEAKER_COLORS[caption.who] ?? '#8fa4b5'} />}
         {wipe && <Wipe progress={(frame - wipe.frame) / wipe.dur} />}
       </svg>
+      {/* Each clip starts at the frame the compiler assigned to its dialogue
+          line. Without the Sequence wrapper every clip plays from frame 0 and
+          all voices talk over each other (the original audio-timing bug). */}
       {timeline.audio.map((a, i) => (
-        <Audio key={`a${i}`} src={staticFileUrl(a.file)} />
+        <Sequence key={`a${i}`} from={Math.max(0, Math.round(a.frameStart))}>
+          <Audio src={audioUrl(a.file, audioUrls)} />
+        </Sequence>
       ))}
     </AbsoluteFill>
   );
 };
 
-/** staticFile is imported lazily so this file also loads in plain Node (CLI). */
-function staticFileUrl(file: string): string {
-  // eslint-disable-next-line @typescript-eslint/no-var-requires
-  const { staticFile } = require('remotion') as typeof import('remotion');
+/** staticFile inside the bundler; direct URL override when previewing. */
+function audioUrl(file: string, audioUrls?: Record<string, string>): string {
+  if (audioUrls && audioUrls[file]) return audioUrls[file];
   return staticFile(file);
 }
 

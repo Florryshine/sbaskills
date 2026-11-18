@@ -29,6 +29,8 @@ check rpc_missing  "r['status']=='narrating' and r['stage']=='queued' and r['wor
 check ai_ok        "r['status']=='ready' and r['has_script'] and r['title']=='Photosynthesis' and r['ka_rows']==1 and r['asset_links_knowledge'] and 'scripting' in r['stages']"
 check ai_retry     "r['status']=='ready' and r['has_script']"
 check ai_fail      "r['status']=='failed' and 'AI script generation failed' in r['error'] and r['content_assets']==0"
-check ai_garbage   "r['status']=='failed' and 'AI script generation failed' in r['error']"
+# Garbage scripts are rejected by the worker's validator reflect loop: the job
+# fails with the validator's message (not the planner's) after 3 attempts.
+check ai_garbage   "r['status']=='failed' and r['content_assets']==0 and r['has_script']==False"
 check once         "r['exited_by_worker'] and r['status']=='ready' and r['exit_code']==0 and r['content_assets']==1"
 exit $fail

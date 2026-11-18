@@ -2,7 +2,10 @@
 // real whiteboard-worker.js without network. Mirrors claim_whiteboard_job() from the migrations.
 import { randomUUID } from 'node:crypto';
 
-export const db = { whiteboard_jobs: [], content_assets: [], media_files: [], whiteboard_workers: [], knowledge_assets: [] };
+export const db = {
+  whiteboard_jobs: [], content_assets: [], media_files: [], whiteboard_workers: [], knowledge_assets: [],
+  stickman_jobs: [], stickman_workers: [], stickman_scripts: [], publish_jobs: [], social_channels_v2: [],
+};
 export const storage = new Map(); // `${bucket}/${path}` -> Buffer
 export const faults = { uploadBucket: null, rpcError: null };
 export const log = { stageHistory: [] };
@@ -36,10 +39,15 @@ class Query {
     const rows = db[this.table];
     let out = [];
     if (this.mode === 'insert') {
-      const row = { id: randomUUID(), ...this.payload };
-      rows.push(row); out = [row];
+      const payloads = Array.isArray(this.payload) ? this.payload : [this.payload];
+      const inserted = payloads.map((p) => {
+        const row = { id: randomUUID(), ...p };
+        rows.push(row);
+        return row;
+      });
+      out = inserted;
     } else if (this.mode === 'upsert') {
-      const key = this.table === 'whiteboard_workers' ? 'worker_id' : 'id';
+      const key = this.table === 'whiteboard_workers' || this.table === 'stickman_workers' ? 'worker_id' : 'id';
       const i = rows.findIndex((r) => r[key] === this.payload[key]);
       if (i >= 0) Object.assign(rows[i], this.payload); else rows.push({ ...this.payload });
       out = [this.payload];
@@ -47,7 +55,7 @@ class Query {
       out = rows.filter((r) => matches(r, this.filters));
       out.forEach((r) => {
         Object.assign(r, this.payload);
-        if (this.table === 'whiteboard_jobs' && this.payload.stage) log.stageHistory.push(this.payload.stage);
+        if ((this.table === 'whiteboard_jobs' || this.table === 'stickman_jobs') && this.payload.stage) log.stageHistory.push(this.payload.stage);
       });
     } else {
       out = rows.filter((r) => matches(r, this.filters));
@@ -60,24 +68,38 @@ class Query {
   }
 }
 
+// Mirrors claim_whiteboard_job() / claim_stickman_job() from the migrations:
+// poison-pill stale leases (3+ attempts) then atomically claim the oldest
+// actionable job, resuming at 'rendering' when narration already survived.
+// emptyScriptStatus: stickman AI jobs (no script yet) stay 'queued'; whiteboard
+// has no such state (pass null).
+function claimJob(rows, args, statuses, emptyScriptStatus) {
+  const cutoff = Date.now() - 5 * 60 * 1000;
+  for (const j of rows) {
+    if (statuses.includes(j.status) && j.claim_token && new Date(j.heartbeat_at).getTime() < cutoff && (j.attempt_count || 0) >= 3) {
+      Object.assign(j, { status: 'failed', stage: 'failed', claim_token: null, heartbeat_at: null, stage_message: 'Worker stopped responding repeatedly', error_message: `Worker stopped responding after ${j.attempt_count || 0} attempts (crash, out-of-memory or restart during processing). Use Retry to run it again.` });
+    }
+  }
+  const j = rows.find((x) => statuses.includes(x.status) && (!x.claim_token || !x.heartbeat_at || new Date(x.heartbeat_at).getTime() < cutoff));
+  if (!j) return { data: [], error: null };
+  const hasAudio = Array.isArray(j.audio_files) && j.audio_files.length > 0;
+  const resumed = j.timeline && hasAudio;
+  const status = emptyScriptStatus && !String(j.script_text || '').trim() ? emptyScriptStatus : resumed ? 'rendering' : 'narrating';
+  Object.assign(j, { status, stage: resumed ? 'rendering' : status, claim_token: randomUUID(), worker_id: args.p_worker_id, claimed_at: new Date().toISOString(), heartbeat_at: new Date().toISOString(), attempt_count: (j.attempt_count || 0) + 1, error_message: null });
+  log.stageHistory.push(j.stage);
+  return { data: [JSON.parse(JSON.stringify(j))], error: null };
+}
+
 export function createClient() {
   return {
     from: (t) => new Query(t),
     rpc: async (name, args) => {
       if (faults.rpcError) return { data: null, error: { message: faults.rpcError } };
-      if (name !== 'claim_whiteboard_job') return { data: null, error: { message: 'unknown rpc' } };
-      const cutoff = Date.now() - 5 * 60 * 1000;
-      for (const j of db.whiteboard_jobs) {
-        if (['narrating', 'rendering'].includes(j.status) && j.claim_token && new Date(j.heartbeat_at).getTime() < cutoff && j.attempt_count >= 3) {
-          Object.assign(j, { status: 'failed', stage: 'failed', claim_token: null, heartbeat_at: null });
-        }
-      }
-      const j = db.whiteboard_jobs.find((x) => ['narrating', 'rendering'].includes(x.status) && (!x.claim_token || !x.heartbeat_at || new Date(x.heartbeat_at).getTime() < cutoff));
-      if (!j) return { data: [], error: null };
-      const resumed = j.timeline && (j.audio_files || []).length;
-      Object.assign(j, { status: resumed ? 'rendering' : 'narrating', stage: resumed ? 'rendering' : 'narrating', claim_token: randomUUID(), worker_id: args.p_worker_id, claimed_at: new Date().toISOString(), heartbeat_at: new Date().toISOString(), attempt_count: (j.attempt_count || 0) + 1, error_message: null });
-      log.stageHistory.push(j.stage);
-      return { data: [JSON.parse(JSON.stringify(j))], error: null };
+      // Whiteboard jobs are never 'queued' (claim_whiteboard_job); stickman AI
+      // jobs sit in 'queued' until the worker writes the script.
+      if (name === 'claim_whiteboard_job') return claimJob(db.whiteboard_jobs, args, ['narrating', 'rendering'], null);
+      if (name === 'claim_stickman_job') return claimJob(db.stickman_jobs, args, ['queued', 'narrating', 'rendering'], 'queued');
+      return { data: null, error: { message: 'unknown rpc' } };
     },
     storage: {
       from: (bucket) => ({
