@@ -72,3 +72,15 @@ export function turnStream(o:AdvancedOpts & {facing:1|-1}):AdvancedResult {
  out.push(pose(s,o.x,ground(s),f,twist,twist*.35,{mode:'fk',sh:8,el:8},{mode:'fk',sh:-8,el:8},{mode:'ik',foot:[o.x-11,0]},{mode:'ik',foot:[o.x+11,0]}));}
  return result(out);
 }
+
+export function landStream(o:AdvancedOpts):AdvancedResult {
+ const out:SkeletonFrame[]=[],s=o.style;
+ for(let i=0;i<o.frames;i++){
+  const t=clamp(i/Math.max(1,o.frames-1),0,1),compress=Math.sin(Math.PI*t),y=ground(s)+compress*16;
+  out.push(pose(s,o.x,y,o.facing,-5+compress*9,4,
+   {mode:'fk',sh:lerp(95,8,t),el:lerp(48,12,t)},
+   {mode:'fk',sh:lerp(-95,-8,t),el:lerp(48,12,t)},
+   {mode:'ik',foot:[o.x-11,0]},{mode:'ik',foot:[o.x+11,0]}));
+ }
+ return result(out,[{frame:o.startFrame+1,emo:'surprised'},{frame:o.startFrame+Math.floor(o.frames*.55),emo:'neutral'}]);
+}
