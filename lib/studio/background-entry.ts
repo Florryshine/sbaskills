@@ -7,7 +7,8 @@ declare global {
   interface Window {
     __SBA_MUSIC_JOB__?: { spec: SongSpec; settings: StudioSettings };
     __SBA_MUSIC_RESULT__?: { timeline: Timeline; wavBase64: string; usedTts: boolean; warnings: string[]; frameCount: number; width: number; height: number; fps: number };
-    __SBA_MUSIC_RENDER_BATCH__?: (start: number, count: number) => string[];
+    __SBA_MUSIC_RENDER__?: () => Promise<{ durationSec: number; frameCount: number; width: number; height: number; fps: number; usedTts: boolean; warnings: string[]; wavBase64Length: number }>;
+  __SBA_MUSIC_RENDER_BATCH__?: (start: number, count: number) => string[];
   }
 }
 
