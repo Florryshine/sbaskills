@@ -514,6 +514,7 @@ async function saveToInfrastructure(job, outPath, entries, timeline) {
     media_type: 'video',
     role: 'primary',
     position: 0,
+    url: videoUrl,
     storage_path: storagePath,
     mime_type: 'video/mp4',
     file_size_bytes: buffer.length,
