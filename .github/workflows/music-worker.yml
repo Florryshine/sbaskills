@@ -30,6 +30,12 @@ jobs:
       NEXT_PUBLIC_SUPABASE_URL: ${{ secrets.NEXT_PUBLIC_SUPABASE_URL || secrets.SUPABASE_URL }}
       SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
       TTS_ENDPOINT: ${{ secrets.TTS_ENDPOINT }}
+      GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
+      GEMINI_API_KEY_1: ${{ secrets.GEMINI_API_KEY_1 }}
+      GEMINI_API_KEY_2: ${{ secrets.GEMINI_API_KEY_2 }}
+      GEMINI_API_KEY_3: ${{ secrets.GEMINI_API_KEY_3 }}
+      GEMINI_TTS_MODEL: ${{ secrets.GEMINI_TTS_MODEL }}
+      GEMINI_TTS_VOICE_A: ${{ secrets.GEMINI_TTS_VOICE_A }}
     steps:
       - name: Check out repository
         uses: actions/checkout@v4
