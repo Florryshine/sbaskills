@@ -17,6 +17,7 @@ import {
   pushStream, aimStream, waveStream, reactSurprise, cheerStream,
   laughStream, stumbleStream, sitStream, talkStream,
 } from '../motion/actions';
+import { jumpStream, clapStream, danceStream, pullStream, pickupStream, carryStream, throwStream, fallStream, getUpStream, turnStream } from '../motion/advanced';
 
 export type NarrationMap = Record<string, { file: string; dur: number }>;
 
@@ -295,6 +296,47 @@ export function compile(script: SceneScript, narration: NarrationMap): Timeline 
           blendInto(streams[act.char], res.frames, a0 - sf0, 6);
           events[act.char].push(...res.events);
           break;
+        }
+        case 'jump':
+        case 'land': {
+          const res = jumpStream({ style: st.style, startFrame: a0, frames: Math.min(sfN-a0, Math.round((act.dur ?? 1.15)*fps)), fps, x: st.x, facing: st.facing, height: act.height });
+          blendInto(streams[act.char], res.frames, a0-sf0, 7); events[act.char].push(...res.events); break;
+        }
+        case 'clap': {
+          const res = clapStream({ style: st.style, startFrame:a0, frames:Math.min(sfN-a0,Math.round((act.dur??1.8)*fps)), fps, x:st.x, facing:st.facing });
+          blendInto(streams[act.char],res.frames,a0-sf0,7); events[act.char].push(...res.events); break;
+        }
+        case 'dance': {
+          const res = danceStream({ style:st.style,startFrame:a0,frames:Math.min(sfN-a0,Math.round((act.dur??3)*fps)),fps,x:st.x,facing:st.facing });
+          blendInto(streams[act.char],res.frames,a0-sf0,8); events[act.char].push(...res.events); break;
+        }
+        case 'pull':
+        case 'pickUp':
+        case 'throw': {
+          const spec=(sc.props??[]).find(p=>p.id===act.prop);
+          const propX=spec?.x ?? st.x+60*st.facing, propH=spec && 'h' in spec ? (spec.h??64) : 64;
+          const opts={style:st.style,startFrame:a0,frames:Math.min(sfN-a0,Math.round((act.dur??1.5)*fps)),fps,x:st.x,facing:st.facing,propX,propH};
+          const res=act.do==='pull'?pullStream(opts):act.do==='pickUp'?pickupStream(opts):throwStream(opts);
+          blendInto(streams[act.char],res.frames,a0-sf0,7); events[act.char].push(...res.events); break;
+        }
+        case 'carry': {
+          const res=carryStream({style:st.style,startFrame:a0,frames:Math.min(sfN-a0,Math.round((act.dur??2)*fps)),fps,x:st.x,facing:st.facing});
+          blendInto(streams[act.char],res.frames,a0-sf0,7); events[act.char].push(...res.events); break;
+        }
+        case 'drop': {
+          const res=throwStream({style:st.style,startFrame:a0,frames:Math.min(sfN-a0,Math.round((act.dur??.8)*fps)),fps,x:st.x,facing:st.facing});
+          blendInto(streams[act.char],res.frames,a0-sf0,5); events[act.char].push(...res.events); break;
+        }
+        case 'fall':
+        case 'getUp': {
+          const res=act.do==='fall'
+            ? fallStream({style:st.style,startFrame:a0,frames:Math.min(sfN-a0,Math.round((act.dur??1.1)*fps)),fps,x:st.x,facing:st.facing})
+            : getUpStream({style:st.style,startFrame:a0,frames:Math.min(sfN-a0,Math.round((act.dur??1.4)*fps)),fps,x:st.x,facing:st.facing});
+          blendInto(streams[act.char],res.frames,a0-sf0,6); events[act.char].push(...res.events); shakeEvents.push(...(res.shake??[])); break;
+        }
+        case 'turn': {
+          const res=turnStream({style:st.style,startFrame:a0,frames:Math.min(sfN-a0,Math.round((act.dur??.55)*fps)),fps,x:st.x,facing:st.facing,facing:act.facing});
+          blendInto(streams[act.char],res.frames,a0-sf0,6); st.facing=act.facing; break;
         }
         case 'talkGestures': {
           const info = act as any;
