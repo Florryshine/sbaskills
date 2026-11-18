@@ -168,7 +168,9 @@ export type SceneAction =
   | { char: string; do: 'stumble'; t0?: number }
   | { char: string; do: 'face'; facing: 1 | -1; t0?: number }
   | { char: string; do: 'sit'; t0?: number; dur?: number }
-  | { char: string; do: 'jump' | 'land' | 'clap' | 'dance' | 'fall' | 'getUp' | 'carry' | 'drop'; t0?: number; dur?: number; height?: number }
+  | { char: string; do: 'jump' | 'land' | 'clap' | 'dance' | 'fall' | 'getUp'; t0?: number; dur?: number; height?: number }
+  | { char: string; do: 'carry' | 'drop'; prop?: string; t0?: number; dur?: number }
+  | { char: string; do: 'expression'; emotion: Emotion; t0?: number; dur?: number }
   | { char: string; do: 'pull' | 'pickUp' | 'throw'; prop: string; t0?: number; dur?: number }
   | { char: string; do: 'turn'; facing: 1 | -1; t0?: number; dur?: number }
   | { char: string; do: 'talkGestures'; line?: number; stressEvery?: number; t0?: number; dur?: number };
