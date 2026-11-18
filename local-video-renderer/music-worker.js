@@ -50,57 +50,98 @@ async function stage(job, name, pct, message) {
   console.log(`[${job.id}] ${pct}% ${name}: ${message}`);
 }
 
+function pcm16ToWavBase64(pcm, sampleRate = 24000) {
+  const header = Buffer.alloc(44);
+  header.write('RIFF',0); header.writeUInt32LE(36+pcm.length,4); header.write('WAVE',8);
+  header.write('fmt ',12); header.writeUInt32LE(16,16); header.writeUInt16LE(1,20);
+  header.writeUInt16LE(1,22); header.writeUInt32LE(sampleRate,24);
+  header.writeUInt32LE(sampleRate*2,28); header.writeUInt16LE(2,32);
+  header.writeUInt16LE(16,34); header.write('data',36); header.writeUInt32LE(pcm.length,40);
+  return Buffer.concat([header,pcm]).toString('base64');
+}
+
+async function synthesizeWithGemini(item, apiKeys) {
+  const models = [...new Set([process.env.GEMINI_TTS_MODEL || 'gemini-2.5-flash-preview-tts','gemini-2.5-flash-preview-tts','gemini-2.5-pro-preview-tts'])];
+  const voiceName = process.env.GEMINI_TTS_VOICE_A || 'Kore';
+  let lastError = 'Gemini TTS returned no audio.';
+  for (const model of models) for (const apiKey of apiKeys) {
+    const controller = new AbortController();
+    const timeout = setTimeout(() => controller.abort(), 15000);
+    try {
+      const response = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/${encodeURIComponent(model)}:generateContent`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', 'x-goog-api-key': apiKey },
+        body: JSON.stringify({
+          contents: [{ role: 'user', parts: [{ text: `Pronounce only this English syllable clearly and naturally, sustained on one steady pitch, with no introduction or extra words: ${item}` }] }],
+          generationConfig: { responseModalities: ['AUDIO'], speechConfig: { voiceConfig: { prebuiltVoiceConfig: { voiceName } } } },
+        }),
+        signal: controller.signal,
+      });
+      const payload = await response.json().catch(() => null);
+      if (!response.ok) {
+        lastError = payload?.error?.message || `Gemini TTS (${model}) returned HTTP ${response.status}`;
+        if ([401,403,429].includes(response.status) || /quota|rate.?limit|exhausted/i.test(lastError)) continue;
+        throw new Error(lastError);
+      }
+      const part = payload?.candidates?.[0]?.content?.parts?.find((p) => p.inlineData?.data);
+      if (!part?.inlineData?.data) { lastError = `Gemini TTS (${model}) returned no audio data.`; continue; }
+      const bytes = Buffer.from(part.inlineData.data,'base64');
+      if (bytes.length >= 44 && bytes.toString('ascii',0,4)==='RIFF') return bytes.toString('base64');
+      const rateMatch = /rate=(\\d+)/i.exec(part.inlineData.mimeType || '');
+      return pcm16ToWavBase64(bytes,rateMatch?Number(rateMatch[1]):24000);
+    } catch (error) {
+      lastError = error instanceof Error ? error.message : 'Gemini TTS failed.';
+      if (!/429|quota|rate.?limit/i.test(lastError)) throw error;
+    } finally { clearTimeout(timeout); }
+  }
+  throw new Error(lastError);
+}
+
 async function synthesizeTtsBank(job) {
   if (job.payload?.settings?.vocalMode !== 'tts' && job.payload?.spec?.vocal?.mode !== 'tts') return {};
   const items = new Set();
-  for (const section of job.payload.spec.sections || []) {
-    for (const line of section.lines || []) {
-      for (const word of line.words || []) {
-        const syllables = Array.isArray(word.syllables) && word.syllables.length
-          ? word.syllables : syllabify(String(word.text || ''));
-        for (const syllable of syllables) {
-          const value = String(syllable || '').trim().toLowerCase().slice(0, 80);
-          if (value) items.add(value);
-        }
-      }
+  for (const section of job.payload.spec.sections || []) for (const line of section.lines || []) for (const word of line.words || []) {
+    const syllables = Array.isArray(word.syllables) && word.syllables.length ? word.syllables : syllabify(String(word.text || ''));
+    for (const syllable of syllables) {
+      const value = String(syllable || '').trim().toLowerCase().slice(0,80);
+      if (value) items.add(value);
     }
   }
-  const queue = [...items];
-  if (!queue.length) return {};
-  const endpoint = (process.env.TTS_ENDPOINT || 'https://openai-edge-tts-aqq1.onrender.com').replace(/\/+$/, '');
-  const audio = {};
-  let next = 0, failures = 0, completed = 0;
-  const worker = async () => {
-    while (next < queue.length && failures < 3) {
-      const item = queue[next++];
-      const controller = new AbortController();
-      const timeout = setTimeout(() => controller.abort(), 12000);
-      try {
-        const response = await fetch(`${endpoint}/v1/audio/speech`, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ model: 'tts-1', input: item, voice: 'en-NG-EzinneNeural', speed: 1, response_format: 'wav' }),
-          signal: controller.signal,
-        });
-        if (!response.ok) throw new Error(`TTS HTTP ${response.status}`);
-        const bytes = Buffer.from(await response.arrayBuffer());
-        if (bytes.length < 512 || bytes.toString('ascii', 0, 4) !== 'RIFF') throw new Error('TTS returned invalid WAV data');
-        audio[item] = bytes.toString('base64');
-      } catch (error) {
-        failures++;
-        console.warn(`[music-worker] TTS fragment "${item}" unavailable:`, error.message);
-      } finally {
-        clearTimeout(timeout);
-        completed++;
+  const queue=[...items]; if(!queue.length) return {};
+  const endpoint=(process.env.TTS_ENDPOINT||'https://openai-edge-tts-aqq1.onrender.com').replace(/\\/+$/,'');
+  const apiKeys=[process.env.GEMINI_API_KEY_1,process.env.GEMINI_API_KEY_2,process.env.GEMINI_API_KEY_3,process.env.GEMINI_API_KEY]
+    .filter((value)=>Boolean(value&&value.trim()));
+  const audio={}; let next=0,edgeFailures=0,completed=0;
+  const worker=async()=>{
+    while(next<queue.length){
+      const item=queue[next++];
+      let encoded=null;
+      if(edgeFailures<2){
+        const controller=new AbortController(); const timeout=setTimeout(()=>controller.abort(),12000);
+        try{
+          const response=await fetch(`${endpoint}/v1/audio/speech`,{
+            method:'POST',headers:{'Content-Type':'application/json'},
+            body:JSON.stringify({model:'tts-1',input:item,voice:'en-NG-EzinneNeural',speed:1,response_format:'wav'}),
+            signal:controller.signal,
+          });
+          if(!response.ok) throw new Error(`Edge TTS HTTP ${response.status}`);
+          const bytes=Buffer.from(await response.arrayBuffer());
+          if(bytes.length<512||bytes.toString('ascii',0,4)!=='RIFF') throw new Error('Edge TTS returned invalid WAV data');
+          encoded=bytes.toString('base64');
+        }catch(error){edgeFailures++;console.warn(`[music-worker] Edge TTS "${item}" unavailable:`,error.message);}
+        finally{clearTimeout(timeout);}
       }
-      if (completed % 8 === 0) {
-        await heartbeat(job, 'tts', Math.min(12, 5 + Math.round((completed / queue.length) * 7)),
-          `Preparing voice fragments ${completed}/${queue.length}`);
+      if(!encoded&&apiKeys.length){
+        try{encoded=await synthesizeWithGemini(item,apiKeys);}
+        catch(error){console.warn(`[music-worker] Gemini TTS "${item}" unavailable:`,error.message);}
       }
+      if(encoded) audio[item]=encoded;
+      completed++;
+      if(completed%8===0) await heartbeat(job,'tts',Math.min(12,5+Math.round((completed/queue.length)*7)),`Preparing voice fragments ${completed}/${queue.length}`);
     }
   };
-  await Promise.all(Array.from({ length: Math.min(5, queue.length) }, () => worker()));
-  console.log(`[music-worker] prepared ${Object.keys(audio).length}/${queue.length} TTS syllables`);
+  await Promise.all(Array.from({length:Math.min(5,queue.length)},()=>worker()));
+  console.log(`[music-worker] prepared ${Object.keys(audio).length}/${queue.length} TTS syllables (Edge failures: ${edgeFailures})`);
   return audio;
 }
 
