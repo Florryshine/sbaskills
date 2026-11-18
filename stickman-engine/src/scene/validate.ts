@@ -12,6 +12,8 @@ const KNOWN_ENVIRONMENTS = new Set(['street', 'abstract', 'classroom']);
 const KNOWN_ACTIONS = new Set([
   'walk', 'run', 'push', 'point', 'present', 'wave', 'reactSurprise',
   'cheer', 'laugh', 'stumble', 'sit', 'face', 'talkGestures', 'jump', 'land', 'clap', 'dance', 'stand', 'pull', 'pickUp', 'throw', 'carry', 'drop', 'fall', 'getUp', 'turn', 'expression',
+  // Phase C: inter-character interactions
+  'approach', 'retreat', 'faceToward', 'leanIn', 'recoil',
 ]);
 
 const MAX_SCENES = 12;

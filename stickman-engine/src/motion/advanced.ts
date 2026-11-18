@@ -582,3 +582,65 @@ export function dropStream(o: AdvancedOpts): AdvancedResult {
   }
   return result(out);
 }
+
+/* ------------------------------------------------------------------ */
+/* Interaction streams (Phase C)                                       */
+/* ------------------------------------------------------------------ */
+
+export function leanInStream(o: AdvancedOpts & { targetX: number }): AdvancedResult {
+  // A short forward step + torso lean toward the target. Used when a
+  // character wants to emphasise a point or close distance for dialogue.
+  const s = o.style;
+  const out: SkeletonFrame[] = [];
+  const g = ground(s);
+  const dir = Math.sign(o.targetX - o.x) || o.facing;
+
+  for (let i = 0; i < o.frames; i++) {
+    const t = i / Math.max(1, o.frames - 1);
+    const ease = easeInOut(t);
+    const lean = 2 + ease * 14;             // 2° -> 16° lean
+    const x = o.x + dir * ease * 14;         // small forward step
+    out.push(
+      build(
+        s, x, g, dir as 1 | -1, lean, lean * 0.4,
+        { mode: 'fk', sh: 6 + ease * 8, el: 12 + ease * 6 },
+        { mode: 'fk', sh: -4 - ease * 4, el: 10 },
+        { mode: 'ik', foot: [x - 11, 0] },
+        { mode: 'ik', foot: [x + 11, 0] },
+      ),
+    );
+  }
+
+  return result(out, [{ frame: o.startFrame + 1, emo: 'focused' as any }]);
+}
+
+export function recoilStream(o: AdvancedOpts & { awayFrom: number }): AdvancedResult & { exitX: number } {
+  // Stagger back from the target. Body leans away, one foot steps back,
+  // arms come up defensively in the first half, then settle.
+  const s = o.style;
+  const out: SkeletonFrame[] = [];
+  const g = ground(s);
+  const dir = Math.sign(o.x - o.awayFrom) || -o.facing;   // backward direction
+  let exitX = o.x;
+
+  for (let i = 0; i < o.frames; i++) {
+    const t = i / Math.max(1, o.frames - 1);
+    // Defensive lean in first half, settle in second.
+    const recoilPhase = t < 0.5 ? easeInOut(t * 2) : 1 - easeInOut((t - 0.5) * 2) * 0.4;
+    const leanBack = -recoilPhase * 12;    // negative = lean back
+    const x = o.x + dir * recoilPhase * 28;
+    exitX = x;
+
+    out.push(
+      build(
+        s, x, g, o.facing, leanBack, -8,
+        { mode: 'fk', sh: 60 + recoilPhase * 30, el: 40 + recoilPhase * 20 },
+        { mode: 'fk', sh: -60 - recoilPhase * 30, el: 40 + recoilPhase * 20 },
+        { mode: 'ik', foot: [x - 11 + dir * 6, 0] },
+        { mode: 'ik', foot: [x + 11 + dir * 6, 0] },
+      ),
+    );
+  }
+
+  return { ...result(out, [{ frame: o.startFrame + 1, emo: 'surprised' }]), exitX };
+}
