@@ -51,6 +51,6 @@ jobs:
       - name: Validate worker and browser entry
         run: |
           node --check local-video-renderer/music-worker.js
-          bun build lib/studio/background-entry.ts --target=browser --outdir=/tmp/sba-music-bundle-check
+          bun build lib/studio/background-entry.ts --target=browser --format=iife --outdir=/tmp/sba-music-bundle-check
       - name: Claim and render one song
         run: bun local-video-renderer/music-worker.js
