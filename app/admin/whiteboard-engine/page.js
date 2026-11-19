@@ -29,7 +29,7 @@ highlight: Three Ingredients style:underline
 // the stage column is advanced by the worker (claim_whiteboard_job + setStage), never by the UI.
 const STAGES = [
   { key: 'queued', label: 'Queued' },
-  { key: 'scripting', label: 'Planning explanation & script' }
+  { key: 'scripting', label: 'Planning explanation & script' },
   { key: 'narrating', label: 'Generating narration' },
   { key: 'timeline', label: 'Building timeline' },
   { key: 'rendering', label: 'Rendering animation' },
