@@ -185,7 +185,7 @@ async function runEngine(job, dir, ttsBank) {
         `Rendering synchronized video frames ${Math.min(start + frames.length, summary.frameCount)}/${summary.frameCount}`);
     }
     return { ...summary, warnings: await page.evaluate(() => window.__SBA_MUSIC_RESULT__?.warnings || []) };
-  } finally { await browser.close(); }
+  } finally { await browser.close({ silent: true }); }
 }
 
 async function muxVideo(dir, summary) {
