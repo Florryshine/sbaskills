@@ -6,23 +6,35 @@ import { WhiteboardEngineComposition } from './WhiteboardEngineComposition';
 
 const SUBJECTS = ['biology', 'chemistry', 'physics', 'mathematics', 'general'];
 
-const SAMPLE_SCRIPT = `@title Photosynthesis
+const SAMPLE_SCRIPT = `@title How Do Plants Make Their Own Food?
 @subject biology
 
 scene title
-heading: Photosynthesis
-sub: How green plants make their own food
-narration: Welcome to Shiney Brain Academy. Today we explore photosynthesis, the remarkable process green plants use to manufacture their own food.
-draw: biology.plant scale:1.0
-highlight: Photosynthesis style:underline
+heading: Plants Make Their Own Food
+narration: A plant cannot walk to a kitchen or hunt for food. Yet it can build the sugar it needs using sunlight, water and a gas from the air.
+draw: biology.plant sync:plant scale:0.8
+text: Plants manufacture glucose using light energy
 
 scene concept
-heading: The Three Ingredients
-narration: Photosynthesis needs three key ingredients. First, sunlight provides the energy. Second, water is absorbed from the soil through the roots.
-draw: biology.sun scale:0.95 sync:sunlight
-draw: biology.water-drop scale:0.95 sync:water
+heading: Three Inputs Enter the Process
+narration: The leaves capture light energy, the roots absorb water, and carbon dioxide enters through tiny openings in the leaves. Each input has a different role.
+draw: biology.sun sync:light energy scale:0.45
+draw: biology.water-drop sync:water scale:0.45
+draw: biology.co2-cloud sync:carbon dioxide scale:0.45
 text: Light + Water + Carbon Dioxide
-highlight: Three Ingredients style:underline
+
+scene diagram
+heading: The Chloroplast Uses Light Energy
+narration: Inside leaf cells, chloroplasts contain chlorophyll, which absorbs light. The plant uses that energy to drive the chemical reactions that build glucose.
+draw: biology.chloroplast sync:chloroplasts scale:0.8
+text: Chloroplasts convert light energy into chemical energy
+
+scene summary
+heading: Sugar Is Made, Oxygen Is Released
+narration: The process produces glucose, which the plant can use or store, and releases oxygen into the air. That is the central idea of photosynthesis.
+equation: 6CO2 + 6H2O ->[light] C6H12O6 + 6O2
+text: Glucose stores energy; oxygen is released
+draw: biology.o2-bubbles sync:oxygen into the air scale:0.45
 `;
 
 // Each step is only shown as running when the backend has really reached it:
