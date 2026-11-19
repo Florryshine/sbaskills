@@ -41,7 +41,7 @@ function legacyCatalogLines(): string[] {
 }
 
 function keywordsFromTopic(topic: string): string[] {
-  return topic.toLowerCase().replace(/[^a-z0-9\\s]/g, ' ').split(/\\s+/).filter((w) => w.length >= 4);
+  return topic.toLowerCase().replace(/[^a-z0-9\s]/g, ' ').split(/\s+/).filter((w) => w.length >= 4);
 }
 
 function formatKnowledgeContext(context: string): string {
