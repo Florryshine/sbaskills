@@ -144,10 +144,47 @@ async function heartbeat(job) {
   if (!data) throw new Error('Job lease was lost while the worker was processing the job.');
 }
 
+async function loadKnowledgeAssetContext(knowledgeAssetId) {
+  if (!knowledgeAssetId) return '';
+  const { data, error } = await supabase
+    .from('knowledge_assets')
+    .select('*')
+    .eq('id', knowledgeAssetId)
+    .maybeSingle();
+  if (error) throw new Error(`Could not load the selected Knowledge Asset for Whiteboard research context: ${error.message}`);
+  if (!data) {
+    console.warn(`[whiteboard-worker] Knowledge Asset ${knowledgeAssetId} was not found; generating without its source context.`);
+    return '';
+  }
+
+  // Keep only fields intended to ground the explanation; do not pass unrelated
+  // account metadata or the entire database row to the language model.
+  const source = {
+    keyword: data.keyword,
+    subject: data.subject,
+    summary: data.summary,
+    description: data.description,
+    raw_content: data.raw_content,
+    content: data.content,
+    definitions: data.definitions,
+    key_concepts: data.key_concepts,
+    learning_objectives: data.learning_objectives,
+    sub_topics: data.sub_topics,
+    facts: data.facts,
+    examples: data.examples,
+    common_mistakes: data.common_mistakes,
+  };
+  const compact = Object.fromEntries(
+    Object.entries(source).filter(([, value]) => value !== undefined && value !== null && value !== ''),
+  );
+  return JSON.stringify(compact).slice(0, 12000);
+}
+
 async function generateScriptForJob(job) {
   const topic = String(job.topic || job.title || '').trim();
   if (!topic) throw new Error('Job has neither a script nor a topic to generate one from.');
-  await setStage(job, 'scripting', `Writing lesson script for "${topic}"`);
+  await setStage(job, 'scripting', `Developing the explanation and writing "${topic}"`);
+  const knowledgeContext = await loadKnowledgeAssetContext(job.knowledge_asset_id);
 
   // Generate, then validate by really parsing it. Validation failures are fed
   // BACK into the next prompt (reflect loop) instead of blind retries — the
@@ -157,7 +194,7 @@ async function generateScriptForJob(job) {
   for (let attempt = 1; attempt <= 3; attempt++) {
     assertLease(job);
     try {
-      const text = await generateScriptWithAI(topic, job.subject || 'general', feedback);
+      const text = await generateScriptWithAI(topic, job.subject || 'general', feedback, knowledgeContext);
       const parsed = parseScript(text);
       const missing = parsed.scenes
         .flatMap((sc) => sc.elements)
