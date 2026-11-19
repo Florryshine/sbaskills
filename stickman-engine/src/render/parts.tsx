@@ -407,11 +407,21 @@ export function OverlayArrows({ arrows, appear }: { arrows: { from: [number, num
 
 export function FormulaCard({ text, appear }: { text: string; appear: number }) {
   const k = Math.min(1, appear / 10);
+  // Auto-shrink the font so long formulas stay inside the card.
+  // Card is 640px wide with ~40px side padding -> usable width ~560px.
+  // Short formulas keep their 86px bold size; long ones shrink to 26px floor.
+  const baseFont = 86;
+  const maxTextWidth = 560;
+  const estimate = (size: number) => text.length * size * 0.55;
+  let fontSize = baseFont;
+  while (estimate(fontSize) > maxTextWidth && fontSize > 26) {
+    fontSize -= 4;
+  }
   return (
     <g transform={`translate(0 ${(1 - k) * 40})`} opacity={k}>
       <rect x={40} y={800} width={640} height={210} rx={22} fill="#ffffff" opacity={0.94}
         stroke="#2285b7" strokeWidth={5} />
-      <text x={360} y={925} textAnchor="middle" fontSize={86} fontWeight="700" fill="#1a2530"
+      <text x={360} y={925} textAnchor="middle" fontSize={fontSize} fontWeight="700" fill="#1a2530"
         fontFamily="'DejaVu Sans', sans-serif">{text}</text>
     </g>
   );
