@@ -188,8 +188,8 @@ export default function WhiteboardEnginePage() {
       <header className="mb-6">
         <h1 className="text-2xl font-bold">Whiteboard Studio v3</h1>
         <p className="text-sm text-gray-500 mt-1">
-          Paste a lesson script (or generate one with AI) — the engine writes, draws and narrates
-          it into a synced whiteboard video.
+          Paste an explainer script (or generate one with AI) — the engine progressively writes, draws and narrates
+          the explanation in a synced whiteboard video.
         </p>
       </header>
 
