@@ -144,21 +144,22 @@ async function heartbeat(job) {
   if (!data) throw new Error('Job lease was lost while the worker was processing the job.');
 }
 
-async function loadKnowledgeAssetContext(knowledgeAssetId) {
-  if (!knowledgeAssetId) return '';
-  const { data, error } = await supabase
-    .from('knowledge_assets')
-    .select('*')
-    .eq('id', knowledgeAssetId)
-    .maybeSingle();
-  if (error) throw new Error(`Could not load the selected Knowledge Asset for Whiteboard research context: ${error.message}`);
-  if (!data) {
-    console.warn(`[whiteboard-worker] Knowledge Asset ${knowledgeAssetId} was not found; generating without its source context.`);
-    return '';
+async function loadKnowledgeAssetContext(knowledgeAssetId, topic, subject) {
+  let query = supabase.from('knowledge_assets').select('*');
+  if (knowledgeAssetId) {
+    query = query.eq('id', knowledgeAssetId);
+  } else {
+    // If the admin did not explicitly attach a Knowledge Asset, reuse an
+    // existing exact topic match rather than treating a newly generated script
+    // as independent research material.
+    query = query.eq('keyword', topic).eq('subject', subject).limit(1);
   }
+  const { data, error } = knowledgeAssetId
+    ? await query.maybeSingle()
+    : await query.maybeSingle();
+  if (error) throw new Error(`Could not load the matching Knowledge Asset for Whiteboard source context: ${error.message}`);
+  if (!data) return { id: null, context: '' };
 
-  // Keep only fields intended to ground the explanation; do not pass unrelated
-  // account metadata or the entire database row to the language model.
   const source = {
     keyword: data.keyword,
     subject: data.subject,
@@ -177,14 +178,22 @@ async function loadKnowledgeAssetContext(knowledgeAssetId) {
   const compact = Object.fromEntries(
     Object.entries(source).filter(([, value]) => value !== undefined && value !== null && value !== ''),
   );
-  return JSON.stringify(compact).slice(0, 12000);
+
+  // A Knowledge Asset created by this Whiteboard Engine contains the output
+  // script itself, not independent source research. Reuse its ID for linkage,
+  // but do not feed that script back as if it were verified source material.
+  const context = data.source === 'whiteboard_engine_v3'
+    ? ''
+    : JSON.stringify(compact).slice(0, 12000);
+  return { id: data.id, context };
 }
 
 async function generateScriptForJob(job) {
   const topic = String(job.topic || job.title || '').trim();
   if (!topic) throw new Error('Job has neither a script nor a topic to generate one from.');
   await setStage(job, 'scripting', `Developing the explanation and writing "${topic}"`);
-  const knowledgeContext = await loadKnowledgeAssetContext(job.knowledge_asset_id);
+  const knowledgeSource = await loadKnowledgeAssetContext(job.knowledge_asset_id, topic, job.subject || 'general');
+  const knowledgeContext = knowledgeSource.context;
 
   // Generate, then validate by really parsing it. Validation failures are fed
   // BACK into the next prompt (reflect loop) instead of blind retries — the
@@ -210,7 +219,7 @@ async function generateScriptForJob(job) {
       const subject = /^\s*@subject\b/im.test(withSpec.text) ? withSpec.parsed.subject : (job.subject || 'general');
 
       // Reuse (or create) the shared Knowledge Asset: content_assets requires it.
-      let knowledgeAssetId = job.knowledge_asset_id || null;
+      let knowledgeAssetId = job.knowledge_asset_id || knowledgeSource.id || null;
       if (!knowledgeAssetId) {
         const { data: found, error: findErr } = await supabase.from('knowledge_assets')
           .select('id').eq('keyword', title).eq('subject', subject).limit(1);
