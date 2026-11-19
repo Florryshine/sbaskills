@@ -1,0 +1,60 @@
+{
+  "title": "Engine Test Reel",
+  "description": "Visual QA spec",
+  "caption": "test",
+  "hashtags": [],
+  "music": "none",
+  "characters": [
+    { "ref": "a", "name": "Tobi", "presetKey": "tobi" },
+    { "ref": "b", "name": "Ada", "presetKey": "ada" },
+    { "ref": "c", "name": "Chidi", "presetKey": "chidi" },
+    { "ref": "d", "name": "Ngozi", "presetKey": "ngozi" }
+  ],
+  "scenes": [
+    {
+      "id": "s1", "heading": "Meet Tobi", "narration": "Hello friends, welcome to Shiney Brain Academy, where learning feels like play.",
+      "visualConcept": "park", "layout": "focus-center",
+      "cast": [{ "ref": "a", "action": "wave", "expression": "happy", "x": 500, "y": 820, "scale": 1.15, "speaking": true }],
+      "props": [{ "kind": "sun", "x": 120, "y": 120, "scale": 0.8 }],
+      "camera": "zoom-in", "transition": "fade", "onScreenText": "Hi! I am Tobi!"
+    },
+    {
+      "id": "s2", "heading": "In Class", "narration": "Today we learn something amazing about the human body, so pay close attention.",
+      "visualConcept": "classroom", "layout": "focus-left",
+      "cast": [
+        { "ref": "a", "action": "sit", "expression": "excited", "x": 260, "y": 800, "scale": 0.9 },
+        { "ref": "b", "action": "point", "expression": "happy", "x": 700, "y": 810, "scale": 1.05, "speaking": true }
+      ],
+      "props": [{ "kind": "chair", "x": 260, "y": 810, "scale": 0.9 }, { "kind": "book", "x": 480, "y": 700, "scale": 0.7 }],
+      "camera": "none", "transition": "slide"
+    },
+    {
+      "id": "s3", "heading": "The Journey", "narration": "Watch carefully as we shrink down and travel inside a blood vessel.",
+      "visualConcept": "bloodstream", "layout": "journey",
+      "cast": [{ "ref": "c", "action": "run", "expression": "surprised", "x": 430, "y": 760, "scale": 0.75, "speaking": true }],
+      "props": [{ "kind": "blood-cell", "x": 700, "y": 640, "scale": 0.7 }, { "kind": "blood-cell", "x": 240, "y": 580, "scale": 0.5 }],
+      "camera": "zoom-in", "transition": "wipe"
+    },
+    {
+      "id": "s4", "heading": "The Laboratory", "narration": "In the laboratory we can mix chemicals and watch colourful reactions happen.",
+      "visualConcept": "chemistry-lab", "layout": "focus-right",
+      "cast": [{ "ref": "d", "action": "talk", "expression": "proud", "x": 640, "y": 800, "scale": 1.0, "speaking": true }],
+      "props": [{ "kind": "flask", "x": 300, "y": 640, "scale": 0.8 }, { "kind": "molecule", "x": 150, "y": 420, "scale": 0.6 }],
+      "camera": "pan-right", "transition": "wipe"
+    },
+    {
+      "id": "s5", "heading": "Inside a Leaf", "narration": "Plants make their own food from sunlight, water and air every single day.",
+      "visualConcept": "leaf-world", "layout": "focus-left",
+      "cast": [{ "ref": "b", "action": "dance", "expression": "excited", "x": 380, "y": 800, "scale": 0.95, "speaking": true }],
+      "props": [{ "kind": "oxygen-bubble", "x": 650, "y": 500, "scale": 1.2 }, { "kind": "oxygen-bubble", "x": 780, "y": 640, "scale": 0.8 }],
+      "camera": "zoom-in", "transition": "fade"
+    },
+    {
+      "id": "s6", "heading": "Space", "narration": "Gravity keeps the moon circling our beautiful planet Earth.",
+      "visualConcept": "space", "layout": "focus-center",
+      "cast": [{ "ref": "a", "action": "cheer", "expression": "excited", "x": 480, "y": 800, "scale": 1.0, "speaking": true }],
+      "props": [{ "kind": "rocket", "x": 150, "y": 640, "scale": 0.9 }, { "kind": "star", "x": 800, "y": 300, "scale": 0.6 }],
+      "camera": "zoom-out", "transition": "iris"
+    }
+  ]
+}

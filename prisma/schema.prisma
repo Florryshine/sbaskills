@@ -1,0 +1,209 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "sqlite"
+  url      = env("DATABASE_URL")
+}
+
+// ============================================================
+// Knowledge Asset (source of truth) — mirrors sbaskills
+// knowledge_assets table. In production this table already
+// exists in Supabase; here it is mirrored for the sandbox.
+// ============================================================
+model KnowledgeAsset {
+  id             String   @id @default(cuid())
+  keyword        String   @unique
+  subject        String   @default("General")
+  topicType      String   @default("learning")
+  summary        String
+  subTopics      String   @default("[]") // json: [{title, explanation}]
+  keyConcepts    String   @default("[]") // json: string[]
+  definitions    String   @default("[]") // json: [{term, definition}]
+  examples       String   @default("[]") // json: string[]
+  facts          String   @default("[]") // json: string[]
+  rawContent     String   @default("")
+  status         String   @default("approved")
+  source         String   @default("seed")
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+
+  cartoonProjects CartoonProject[]
+}
+
+// ============================================================
+// Cartoon characters — reusable, data-driven (DNA JSON)
+// ============================================================
+model CartoonCharacter {
+  id        String   @id @default(cuid())
+  name      String
+  presetKey String   @unique // "tobi", "ada", ... or "custom-<id>"
+  dna       String // json: full character DNA
+  isPreset  Boolean  @default(false)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+}
+
+// ============================================================
+// Cartoon production jobs — mirrors whiteboard_jobs pattern:
+// status/stage/progress/attemptCount + retry + recovery
+// ============================================================
+model CartoonProject {
+  id               String   @id @default(cuid())
+  title            String   @default("Untitled Cartoon")
+  knowledgeAssetId String?
+  knowledgeAsset   KnowledgeAsset? @relation(fields: [knowledgeAssetId], references: [id])
+  customTopic      String?
+  orientation      String   @default("9:16") // 9:16 | 16:9 | 1:1
+  subtitles        Boolean  @default(true)
+  // lifecycle: draft -> scripting -> cast_ready -> narrating -> rendering -> ready -> failed
+  status           String   @default("draft")
+  stage            String   @default("idle") // scripting|characters|narration|render|upload|done
+  stageMessage     String   @default("")
+  progress         Float    @default(0)
+  rawScript        String? // json: raw LLM storyboard before validation
+  spec             String? // json: validated CartoonSpec (the production master)
+  narration        String? // json: [{sceneId, audioPath, durationSeconds, words:[{word,start,end}], voice}]
+  videoUrl         String?
+  videoPath        String?
+  videoSizeBytes   Int?
+  durationSeconds  Float?
+  error            String?
+  attemptCount     Int      @default(0)
+  renderJobToken   String?
+  renderStartedAt  DateTime?
+  heartbeatAt      DateTime?
+  createdAt        DateTime @default(now())
+  updatedAt        DateTime @updatedAt
+
+  contentAssets ContentAsset[]
+}
+
+// ============================================================
+// Publishing contract — mirrors sbaskills content_assets /
+// media_files / social_channels_v2 / publish_jobs exactly,
+// so the port plugs into lib/publish-engine.js unchanged.
+// ============================================================
+model ContentAsset {
+  id               String   @id @default(cuid())
+  knowledgeAssetId String?
+  projectId        String?
+  project          CartoonProject? @relation(fields: [projectId], references: [id])
+  assetType        String // 'cartoon_video'
+  platform         String? // null = format-agnostic (matches VIDEO_CAPABLE_PLATFORMS flow)
+  format           String   @default("video")
+  title            String
+  body             String   @default("")
+  metadata         String   @default("{}") // json: hashtags, description, tags, durationSeconds, engine...
+  status           String   @default("draft") // draft|approved|scheduled|publishing|published|failed|archived
+  version          Int      @default(1)
+  generatedBy      String   @default("cartoon-studio")
+  createdAt        DateTime @default(now())
+  updatedAt        DateTime @updatedAt
+
+  mediaFiles  MediaFile[]
+  publishJobs PublishJob[]
+}
+
+model MediaFile {
+  id             String  @id @default(cuid())
+  contentAssetId String
+  contentAsset   ContentAsset @relation(fields: [contentAssetId], references: [id], onDelete: Cascade)
+  mediaType      String // 'video'
+  role           String  @default("primary")
+  position       Int     @default(0)
+  url            String
+  storagePath    String?
+  mimeType       String  @default("video/mp4")
+  width          Int?
+  height         Int?
+  durationSeconds Float?
+  fileSizeBytes  Int?
+  source         String  @default("render")
+  altText        String?
+  createdAt      DateTime @default(now())
+}
+
+model SocialChannel {
+  id        String   @id @default(cuid())
+  platform  String // facebook|instagram|youtube|tiktok|linkedin|telegram|x
+  label     String
+  accountId String?
+  isActive  Boolean  @default(true)
+  simulated Boolean  @default(false) // true = sandbox channel (no real credentials)
+  meta      String   @default("{}")
+  createdAt DateTime @default(now())
+
+  publishJobs PublishJob[]
+
+  @@unique([platform, label])
+}
+
+model PublishJob {
+  id             String   @id @default(cuid())
+  contentAssetId String
+  contentAsset   ContentAsset @relation(fields: [contentAssetId], references: [id], onDelete: Cascade)
+  channelId      String
+  channel        SocialChannel @relation(fields: [channelId], references: [id])
+  status         String   @default("queued") // queued|publishing|published|failed|cancelled|rate_limited
+  scheduledAt    DateTime?
+  publishedAt    DateTime?
+  externalPostId String?
+  externalUrl    String?
+  attemptCount   Int      @default(0)
+  maxAttempts    Int      @default(3)
+  lastError      String?
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+}
+
+// audit trail (mirrors publish_history in sbaskills)
+model PublishHistory {
+  id             String   @id @default(cuid())
+  contentAssetId String
+  platform       String
+  status         String // success|error|retry
+  response       String   @default("{}") // json
+  error          String?
+  createdAt      DateTime @default(now())
+}
+
+// ============================================================
+// SHARED VISUAL ASSET LIBRARY (section 7)
+// One library for every production engine (Cartoon Animation
+// Studio, Whiteboard Studio, Notebook Studio, …). NOT per-engine.
+// Mirrors the sbaskills media/knowledge conventions: metadata in
+// json text columns, storage paths relative to public/ (sandbox)
+// which become Supabase Storage paths in production.
+// ============================================================
+model VisualAsset {
+  id          String  @id @default(cuid())
+  name        String
+  slug        String  @unique // file-safe unique name, drives the filename
+  description String  @default("")
+  subject     String  @default("General") // Biology, Chemistry, Physics, Geography, Mathematics, English, General…
+  category    String  @default("object") // organ|cell|microorganism|plant|animal|molecule|science-object|diagram|character|object|background
+  assetType   String  @default("svg") // svg | image | 3d
+  keywords    String  @default("[]") // json string[]
+  filePath    String // relative to public/, e.g. "visual-assets/cat-heart.svg" (Supabase path in prod)
+  publicUrl   String // served URL, e.g. "/visual-assets/cat-heart.svg"
+  mimeType    String  @default("image/svg+xml")
+  width       Int?
+  height      Int?
+  fileSizeBytes Int   @default(0)
+  source      String  @default("catalog") // catalog|svg-llm|upload|pexels|pixabay|unsplash|openverse|wikimedia
+  sourceRef   String? // provider photo id (dedup within provider)
+  sourceUrl   String? // provider page URL (licence proof)
+  creator     String?
+  license     String  @default("SBA Original (CC0)") // "Pexels License", "CC BY 4.0", "Pixabay Content License"…
+  licenseUrl  String?
+  attributionRequired Boolean @default(false)
+  attribution String? // pre-filled credit line, ready to paste
+  contentHash String  @unique // sha256 of normalised content — hard dedup
+  generationParams String @default("{}") // json — SVG regeneration/editability
+  usageCount  Int     @default(0)
+  isActive    Boolean @default(true)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+}
