@@ -153,7 +153,6 @@ SCENESCRIPT RULES (the validator rejects anything else):
 - camera intents ONLY: establish (optional scale ~1.5-1.9, drift), focus (point:[x,y], scale ~2.4-3.2), follow (target: cast id), twoShot (targets:[idA,idB]), shake (at, amp). Add "at" (seconds) and "dur". A scene without camera gets a plain establishing shot.
 - props ONLY: box (x, optional w/h ~40-80, optional moving:{from,to,t0,t1}), easel, lamppost, bench, plant — each with an id and numeric x. Repeat the props a scene needs in every scene that uses them (props do not carry over between scenes).
 - overlays (scene-relative seconds, t0<t1): title {text, sub?}, formula {text} (plain ASCII math only: + - = ^ mu x N; keep formulas 3-12 chars, use standard symbols like v = d/t or F = ma; do NOT write half-formulas or bare fractions), arrows {arrows:[{from:[x,y],to:[x,y],color:"#hex",label}]}. Overlays are the main teaching surface — put the key term, formula or diagram label on screen while the narrator explains it.
-- ${storytellingRules()}
 - Numbers: keep the total video under 100 seconds.
 
 EXAMPLE (shape only — write ORIGINAL content for the topic, do not copy this story):
