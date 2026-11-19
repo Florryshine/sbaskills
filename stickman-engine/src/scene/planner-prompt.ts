@@ -78,6 +78,52 @@ function subjectRules(subject: string): string {
   }
 }
 
+
+function storytellingRules(): string {
+  return `STORY DESIGN — choose the best approach for THIS topic; do not use one formula every time.
+Before writing, silently consider several possible treatments and choose the one with the strongest natural story potential. Possible approaches include:
+- character-driven drama or conversational comedy;
+- mystery, investigation or problem-solving;
+- action, adventure, challenge or survival;
+- competition, rivalry or a race against time;
+- discovery, experiment or documentary-style revelation;
+- relatable everyday situation, misunderstanding or unexpected consequence;
+- what-if scenario, transformation or emotional journey.
+You may combine approaches when it genuinely improves the story. Do not announce the chosen style in the output.
+
+CORE STORY REQUIREMENTS:
+- Make the opening immediately interesting: begin with an unusual event, urgent problem, provocative question, funny situation, surprising discovery or character goal. No greetings, lesson announcements or generic "Today we will learn..." openings.
+- Give the viewer a clear reason to continue: establish a question, goal, mystery, challenge, conflict or anticipated outcome.
+- Give every character a clear role, motivation and recognisable way of speaking. Dialogue should sound like people responding to each other, not like a textbook split between character names.
+- Let events cause other events. Prefer a clear "but / therefore" chain over a list of unrelated things that merely happen one after another.
+- Develop the situation across scenes. Introduce meaningful new information, obstacles, decisions, reactions, clues, consequences or reversals. Do not repeat the same point in different words.
+- Use humour, suspense, emotion, surprise or tension only when appropriate to the selected approach. Do not force a villain, accident, argument, twist or emotional scene into every script.
+- Deliver a satisfying payoff: resolve the central question or goal, make the outcome understandable, and leave the viewer with a memorable insight.
+- The educational idea must be accurate and genuinely understood through what happens. Integrate explanations at the moment they become relevant; do not pause the story for a long textbook lecture.
+- Never invent scientific facts, historical claims, statistics or named real people. If the source material does not support a detail, leave it out or keep the scenario clearly fictional.
+
+SCENE-TO-ANIMATION PLANNING:
+- The script and animation plan are one coordinated SceneScript. Plan visible action while writing the story; do not write dialogue first and add random movements afterwards.
+- Every scene must change something or serve a clear purpose: establish, reveal, react, attempt, fail, discover, decide, demonstrate, escalate, resolve or pay off.
+- Use actions, facial expressions, props, camera framing and overlays to make the important story beats visible. Let characters react to each other and to events.
+- Match movement to the moment: a reveal can use a focus or shake; a conversation can use a twoShot; an important object can be presented or picked up; a chase can use run/follow; a discovery can use a focused overlay. Use only supported schema actions and camera intents listed below.
+- Do not add movement merely to satisfy a quota. Calm scenes, close conversations and documentary-style narration are valid when visually purposeful.
+- Keep the screen composition readable. Avoid too many actions, props, overlays or dialogue lines competing in one scene.
+- Make each scene's dialogue, action, camera and overlays agree with one another and with the narration.
+- Vary scene rhythm and visual framing where the story benefits; avoid repeating the same two-shot, point gesture and formula overlay in every scene.
+
+SILENT QUALITY CHECK BEFORE OUTPUT:
+1. Is the opening compelling without a long introduction?
+2. Is there a clear story question, goal, conflict, discovery or journey?
+3. Does each scene move the story forward?
+4. Do the characters sound distinct and natural?
+5. Is the educational content accurate and naturally integrated?
+6. Are there meaningful developments and a satisfying payoff?
+7. Can the animation compiler actually stage every action using the supported schema?
+8. Could any scene be removed without losing story or understanding? If yes, improve or remove it.
+Revise the script silently until these checks are satisfied. Return only the required JSON.`;
+}
+
 export function buildPlannerPrompt(topic: string, subject: string, kaSource = ''): string {
   const source = kaSource
     ? `\n\nSOURCE OF TRUTH (teaching material for "${topic}" — ground every fact in it, do not invent facts, statistics or names):\n"""\n${kaSource.slice(0, 6000)}\n"""\n`
@@ -87,7 +133,9 @@ export function buildPlannerPrompt(topic: string, subject: string, kaSource = ''
 
 TOPIC: ${topic}
 SUBJECT: ${subject}
-${subjectRules(subject)}${source}
+${subjectRules(subject)}
+
+${storytellingRules()}${source}
 
 OUTPUT FORMAT — return STRICT JSON, no markdown fences, exactly this shape:
 {"script": { ...SceneScript below... }}
@@ -96,7 +144,7 @@ SCENESCRIPT RULES (the validator rejects anything else):
 - title: short video title (max 80 chars), NOT the topic restated verbatim. Make it story-flavoured, e.g. "Ben and the Stubborn Box".
 - environment (top-level): one of {"type":"street","seed":<int>,"time":"day"} | {"type":"abstract","seed":<int>,"accent":"#2285b7"} | {"type":"classroom","seed":<int>}. The same environment should repeat across scenes unless the story changes world (a scene may override with "env").
 - cast: 1-2 characters. Styles: "ben" (orange hoodie), "maya" (blue hoodie), "prof" (classic black). Example: {"ben":{"style":"ben"},"maya":{"style":"maya"}}.
-- scenes: 4-8 scenes, each 4-10 seconds. Give each scene a unique id like "s1-hook".
+- scenes: usually 5-9 scenes, adapting the count to the story; never exceed the validator's 12-scene maximum. Give each scene a unique id like "s1-hook". Do not pad the story to reach a scene count.
 - Every scene with characters positions them in its "cast" map with a numeric starting x (world units; keep x between -400 and 500) and optional facing (1 right, -1 left).
 - dialogue: who is a cast id or "narr" (narrator). 1-3 lines per scene, each under 220 characters, natural spoken English, exam-relevant, NEVER markdown. Line "t0" (scene-relative seconds) is optional; lines without t0 play one after another with a 0.4s gap starting at 0.35s.
 - actions use ONLY these verbs: walk (from,to; speed), run (from,to), jump/land (optional height), push/pull (prop id), pickUp/throw (prop id), carry/drop (optional prop id), clap, dance, fall, getUp/stand, sit, point/present (at:[x,y]), wave, reactSurprise, cheer, laugh, stumble, face/turn (facing:1 or -1), talkGestures (line index), expression (emotion). Supported emotions: neutral, talk, happy, bigsmile, worried, strain, surprised, proud, sad, crying, angry, fear, confused, wink, focused. Use expression events to match story reactions; use pickUp then carry then drop/throw for object handling. Actions can overlap across different characters so they react to one another. Each action has t0 and optional dur (scene-relative seconds).
@@ -105,7 +153,7 @@ SCENESCRIPT RULES (the validator rejects anything else):
 - camera intents ONLY: establish (optional scale ~1.5-1.9, drift), focus (point:[x,y], scale ~2.4-3.2), follow (target: cast id), twoShot (targets:[idA,idB]), shake (at, amp). Add "at" (seconds) and "dur". A scene without camera gets a plain establishing shot.
 - props ONLY: box (x, optional w/h ~40-80, optional moving:{from,to,t0,t1}), easel, lamppost, bench, plant — each with an id and numeric x. Repeat the props a scene needs in every scene that uses them (props do not carry over between scenes).
 - overlays (scene-relative seconds, t0<t1): title {text, sub?}, formula {text} (plain ASCII math only: + - = ^ mu x N; keep formulas 3-12 chars, use standard symbols like v = d/t or F = ma; do NOT write half-formulas or bare fractions), arrows {arrows:[{from:[x,y],to:[x,y],color:"#hex",label}]}. Overlays are the main teaching surface — put the key term, formula or diagram label on screen while the narrator explains it.
-- Narrative arc: scene 1 hooks with the characters' goal, middle scenes dramatise the concept (failure first, then the fix), final scene recaps the rule with a formula/title overlay and ends with a character cheering.
+- ${storytellingRules()}
 - Numbers: keep the total video under 100 seconds.
 
 EXAMPLE (shape only — write ORIGINAL content for the topic, do not copy this story):
