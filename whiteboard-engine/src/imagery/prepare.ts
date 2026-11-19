@@ -49,29 +49,16 @@ export async function prepareImages(spec: VideoSpec): Promise<PrepareResult> {
   const warnings: string[] = [];
   const credits: string[] = [];
   const notes: string[] = [];
-  // content hashes of every image used in this job → later lookups avoid them
+  // Only explicitly requested images are fetched. Local stroke illustrations,
+  // handwriting and equations are complete visual treatments in their own
+  // right; do not add a stock/reference image to every scene by default.
   const usedHashes = new Set<string>();
 
   for (const scene of spec.scenes) {
-    // The planner is instructed to include a real image in every scene. Keep
-    // that guarantee even for older scripts and manually pasted lessons.
-    // This is a fetch attempt, not a fabricated/local substitute: if no
-    // suitable free image exists, the normal warning/fallback path reports it.
-    if (!scene.elements.some((el) => !!el.image)) {
-      const query = [scene.heading || spec.title, spec.subject, 'educational diagram'].filter(Boolean).join(' ');
-      scene.elements.push({
-        id: `auto-image-${scene.id}`,
-        type: 'illustration',
-        image: query,
-        colorize: true,
-        sync: { kind: 'fraction', fraction: 0.42 },
-        at: 'right',
-        scale: 0.65,
-      });
-      notes.push(`Scene "${scene.id}": added an automatic educational-image search because the script supplied no image: directive.`);
-    }
+    const hasImageRequest = scene.elements.some((el) => !!el.image);
+    if (!hasImageRequest) continue;
     const kept = [];
-    let fetchedRealImage = false;
+    let hasUsableImage = false;
     for (const el of scene.elements) {
       if (!el.image) {
         kept.push(el);
@@ -85,6 +72,7 @@ export async function prepareImages(spec: VideoSpec): Promise<PrepareResult> {
           if (!local) throw new Error(`legacy SBA illustration not found: ${el.image}`);
           registerIllustration(local);
           el.asset = local.id;
+          hasUsableImage = true;
           kept.push(el);
           continue;
         }
@@ -100,7 +88,7 @@ export async function prepareImages(spec: VideoSpec): Promise<PrepareResult> {
           const credit = prepared.credit;
           if (credit) credits.push(`${el.image}: ${credit}`);
           el.asset = prepared.spec.id;
-          fetchedRealImage = true;
+          hasUsableImage = true;
           kept.push(el);
           continue;
         } catch (extErr) {
@@ -112,6 +100,7 @@ export async function prepareImages(spec: VideoSpec): Promise<PrepareResult> {
           if (!local) throw extErr;
           registerIllustration(local);
           el.asset = local.id;
+          hasUsableImage = true;
           kept.push(el);
           continue;
         }
@@ -120,9 +109,9 @@ export async function prepareImages(spec: VideoSpec): Promise<PrepareResult> {
       }
     }
 
-    // If the requested search/direct image failed, make one independent
-    // educational-image attempt before accepting a scene with no real image.
-    if (!fetchedRealImage) {
+    // If an explicitly requested external image failed, make one independent
+    // reference-image attempt. Do not run this for scenes with no image request.
+    if (!hasUsableImage) {
       const fallbackQuery = `${scene.heading || spec.title} ${spec.subject} real educational reference`;
       try {
         const fallback = await buildSpec(fallbackQuery, true, usedHashes, notes);
