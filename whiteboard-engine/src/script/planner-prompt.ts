@@ -157,7 +157,7 @@ export function buildPlannerPrompt(topic: string, subject: Subject, knowledgeCon
     'heading: What Density Tells Us',
     'narration: Density compares how much mass is packed into a given volume. If the same mass occupies more space, its density is lower.',
     'text: Density = mass ÷ volume',
-    'draw: general.grid sync:how much mass scale:0.65',
+    'draw: math.grid sync:how much mass scale:0.65',
     'highlight: density style:underline',
     '',
     'scene diagram',
