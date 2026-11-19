@@ -154,9 +154,7 @@ async function loadKnowledgeAssetContext(knowledgeAssetId, topic, subject) {
     // as independent research material.
     query = query.eq('keyword', topic).eq('subject', subject).limit(1);
   }
-  const { data, error } = knowledgeAssetId
-    ? await query.maybeSingle()
-    : await query.maybeSingle();
+  const { data, error } = await query.maybeSingle();
   if (error) throw new Error(`Could not load the matching Knowledge Asset for Whiteboard source context: ${error.message}`);
   if (!data) return { id: null, context: '' };
 
