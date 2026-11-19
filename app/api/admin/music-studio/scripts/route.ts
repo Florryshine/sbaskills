@@ -91,7 +91,7 @@ export async function GET() {
     .from('content_assets')
     .select(
       'id, title, body, status, created_at, updated_at, knowledge_assets(keyword), ' +
-      'metadata(topic, notes, spec, settings), ' +
+      'metadata, ' +
       'media_files(id, media_type, role, url, storage_path, duration_seconds, mime_type)'
     )
     .eq('asset_type', ASSET_TYPE)
