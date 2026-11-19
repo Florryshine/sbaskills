@@ -180,7 +180,9 @@ async function loadKnowledgeAssetContext(knowledgeAssetId, topic, subject) {
   // A Knowledge Asset created by this Whiteboard Engine contains the output
   // script itself, not independent source research. Reuse its ID for linkage,
   // but do not feed that script back as if it were verified source material.
-  const context = data.source === 'whiteboard_engine_v3'
+  const rawContent = typeof data.raw_content === 'string' ? data.raw_content : '';
+  const containsGeneratedDsl = /^\\s*@title\\b/im.test(rawContent) && /^\\s*scene\\s+/im.test(rawContent);
+  const context = data.source === 'whiteboard_engine_v3' || containsGeneratedDsl
     ? ''
     : JSON.stringify(compact).slice(0, 12000);
   return { id: data.id, context };
