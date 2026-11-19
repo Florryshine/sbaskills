@@ -4,12 +4,13 @@
 // warning is returned.
 //
 // Routing rules:
+//   • Only explicit image: directives are processed. Scenes without one rely
+//     on planned handwriting, equations and local stroke illustrations.
 //   • "legacy.<id>" refs go straight to the local SBA artwork library.
-//   • Plain keyword refs search EXTERNAL free sources first (the planner was
-//     promised external images) and fall back to a local legacy match when the
-//     network fails — a local drawing beats a dropped scene.
-//   • Every image used in the job is hashed; later lookups exclude repeats so
-//     scenes never show the same stock photo twice.
+//   • Plain keyword refs search EXTERNAL free sources first and fall back to a
+//     local legacy match when the network fails.
+//   • Every external image used in the job is hashed; later lookups exclude
+//     repeats so scenes never show the same stock photo twice.
 
 import type { VideoSpec, IllustrationSpec } from '../types';
 import { registerIllustration } from '../illustrations/registry';
