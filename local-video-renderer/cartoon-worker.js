@@ -172,6 +172,50 @@ async function ensureKnowledgeAsset(project, spec, subject) {
   if (error) throw new Error('Could not create linked Knowledge Asset: ' + error.message);
   return data.id;
 }
+function sceneTokens(scene) {
+  const stop = new Set(['about','after','again','also','because','before','being','between','could','does','from','have','into','just','more','most','other','should','some','than','that','their','there','these','this','those','through','today','what','when','where','which','while','with','would','your','learn','learning','friends']);
+  return new Set((String(scene.heading || '') + ' ' + String(scene.narration || ''))
+    .toLowerCase().match(/[a-z0-9]{3,}/g)?.filter(word => !stop.has(word)) || []);
+}
+async function attachVisualAssets(spec, subject) {
+  const { data, error } = await supabase.from('visual_assets')
+    .select('id,name,description,subject,category,keywords,public_url,license,attribution_required,attribution')
+    .eq('is_active', true)
+    .in('subject', [subject, 'General'])
+    .order('usage_count', { ascending: false })
+    .limit(120);
+  if (error) {
+    log('shared visual library lookup skipped:', error.message);
+    return spec;
+  }
+  const assets = data || [];
+  if (!assets.length) return spec;
+  for (const scene of spec.scenes) {
+    const tokens = sceneTokens(scene);
+    const ranked = assets.map(asset => {
+      const text = [asset.name, asset.description, ...(asset.keywords || [])].join(' ').toLowerCase();
+      let score = 0;
+      for (const token of tokens) if (text.includes(token)) score += token.length >= 7 ? 3 : 1;
+      if (asset.subject === subject) score += 1;
+      return { asset, score };
+    }).filter(item => item.score > 0)
+      .sort((a, b) => b.score - a.score)
+      .slice(0, 2);
+    scene.customAssets = ranked.map(({ asset }, index) => ({
+      assetId: asset.id,
+      url: asset.public_url,
+      x: index === 0 ? 790 : 220,
+      y: index === 0 ? 330 : 430,
+      scale: 0.78,
+      popAt: 0.5 + index * 0.35,
+      name: asset.name,
+      license: asset.attribution_required
+        ? `${asset.license} — ${asset.attribution || 'attribution required'}`
+        : asset.license,
+    }));
+  }
+  return spec;
+}
 async function makeStoryboard(job, project) {
   const subject = String(job.payload?.subject || 'General').slice(0, 80);
   const topicHint = String(project.custom_topic || project.title || '').trim();
@@ -186,10 +230,11 @@ async function makeStoryboard(job, project) {
   } : { keyword: topic, subject, summary: topic };
   await setStage(job, 'scripting', 8, 'Creating the cartoon storyboard...');
   const generated = await generateStoryboard(kaLike, topic);
-  const spec = generated.spec;
+  let spec = generated.spec;
   if (!spec || !Array.isArray(spec.scenes) || spec.scenes.length < 3) {
     throw new Error('Storyboard generator returned an invalid scene list.');
   }
+  spec = await attachVisualAssets(spec, subject);
   const knowledgeAssetId = await ensureKnowledgeAsset(project, spec, subject);
   assertLease(job);
   const { error } = await supabase.from('cartoon_projects').update({
