@@ -65,6 +65,13 @@ function copyInto(buf: FrameBuf, from: FrameBuf, at: number) {
   for (let i = 0; i < from.length && at + i < buf.length; i++) buf[at + i] = from[i];
 }
 
+function actionFrameCount(act: { dur?: number }, remaining: number, fps: number, fallbackSeconds: number): number {
+  const seconds = typeof act.dur === 'number' && Number.isFinite(act.dur)
+    ? act.dur
+    : fallbackSeconds;
+  return Math.max(1, Math.min(remaining, Math.round(Math.max(0.15, seconds) * fps)));
+}
+
 function latestPropX(p: PropTrack, frame: number): number {
   let x = p.frames[0]?.x ?? 0;
   for (const k of p.frames) {
@@ -218,7 +225,7 @@ export function compile(script: SceneScript, narration: NarrationMap): Timeline 
           const specX = (sc.props ?? []).find((p) => p.id === act.prop)?.x ?? st.x + 60 * st.facing;
           const propX = prop ? latestPropX(prop, a0) : specX;
           const res = pushStream({
-            style: st.style, startFrame: a0, frames: sfN - a0, fps,
+            style: st.style, startFrame: a0, frames: actionFrameCount(act, sfN - a0, fps, 1.8), fps,
             x: st.x,   // author positions the character at the box
             facing: st.facing, propX, propW: prop?.w ?? 64, propH: prop?.h ?? 64,
             strain: true,
@@ -234,7 +241,7 @@ export function compile(script: SceneScript, narration: NarrationMap): Timeline 
         case 'point':
         case 'present': {
           const res = aimStream({
-            style: st.style, startFrame: a0, frames: sfN - a0, fps,
+            style: st.style, startFrame: a0, frames: actionFrameCount(act, sfN - a0, fps, 2.2), fps,
             x: st.x, facing: st.facing,
             target: act.at, arm: 'R', support: act.do === 'present',
           });
@@ -244,7 +251,7 @@ export function compile(script: SceneScript, narration: NarrationMap): Timeline 
         }
         case 'wave': {
           const res = waveStream({
-            style: st.style, startFrame: a0, frames: sfN - a0, fps,
+            style: st.style, startFrame: a0, frames: actionFrameCount(act, sfN - a0, fps, 1.4), fps,
             x: st.x, facing: st.facing, arm: 'R',
           });
           blendInto(streams[act.char], res.frames, a0 - sf0, 6);
@@ -262,7 +269,7 @@ export function compile(script: SceneScript, narration: NarrationMap): Timeline 
         }
         case 'cheer': {
           const res = cheerStream({
-            style: st.style, startFrame: a0, frames: sfN - a0, fps,
+            style: st.style, startFrame: a0, frames: actionFrameCount(act, sfN - a0, fps, 1.8), fps,
             x: st.x, facing: st.facing,
           });
           blendInto(streams[act.char], res.frames, a0 - sf0, 6);
@@ -271,7 +278,7 @@ export function compile(script: SceneScript, narration: NarrationMap): Timeline 
         }
         case 'laugh': {
           const res = laughStream({
-            style: st.style, startFrame: a0, frames: sfN - a0, fps,
+            style: st.style, startFrame: a0, frames: actionFrameCount(act, sfN - a0, fps, 1.5), fps,
             x: st.x, facing: st.facing,
           });
           blendInto(streams[act.char], res.frames, a0 - sf0, 6);
@@ -291,7 +298,7 @@ export function compile(script: SceneScript, narration: NarrationMap): Timeline 
         case 'sit': {
           const bench = props.find((p) => p.type === 'bench');
           const res = sitStream({
-            style: st.style, startFrame: a0, frames: sfN - a0, fps,
+            style: st.style, startFrame: a0, frames: actionFrameCount(act, sfN - a0, fps, 2.5), fps,
             x: st.x, facing: st.facing,
             seatX: bench ? latestPropX(bench, a0) : st.x,
             seatY: -34,
@@ -361,7 +368,7 @@ export function compile(script: SceneScript, narration: NarrationMap): Timeline 
               if (idx % every === 0 || idx === words.length - 1) times.push(lineT0 + w.start / fps);
             });
             const res = talkStream({
-              style: st.style, startFrame: a0, frames: sfN - a0, fps,
+              style: st.style, startFrame: a0, frames: actionFrameCount(act, sfN - a0, fps, line.duration ?? 2.5), fps,
               x: st.x, facing: st.facing, wordTimes: times,
             });
             blendInto(streams[act.char], res.frames, a0 - sf0, 6);
