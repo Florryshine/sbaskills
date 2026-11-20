@@ -499,6 +499,10 @@ async function runOnce() {
     count++;
   }
   log('run-once finished:', count, 'job(s)');
+  if (lastClaimError) {
+    console.error('[cartoon-worker] exiting non-zero because the queue claim failed:', lastClaimError);
+    process.exit(1);
+  }
   process.exit(0);
 }
 async function loop() {

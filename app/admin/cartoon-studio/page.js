@@ -129,7 +129,7 @@ export default function CartoonStudioPage() {
                 <p className="mt-1 text-xs text-slate-500">{worker.current_job_id ? 'Processing a job' : 'Waiting for work'}</p>
                 {worker.info?.last_error && <p className="mt-2 text-xs text-rose-400">{worker.info.last_error}</p>}
               </div>
-            )) : <p className="text-sm text-slate-500">No worker heartbeat recorded yet. The scheduled worker becomes active after the Phase B branch is deployed and the database migration is applied.</p>}
+            )) : <p className="text-sm text-slate-500">No worker heartbeat recorded yet. Check the Cartoon Studio queue-worker workflow in GitHub Actions and confirm the Supabase URL and service-role secrets are configured.</p>}
           </aside>
         </section>
 

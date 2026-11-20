@@ -3,6 +3,19 @@ name: Cartoon Studio queue worker
 # Scheduled queue runner: no always-on server required. It drains queued jobs,
 # and can reclaim processing jobs whose worker lease has expired.
 on:
+  # Run immediately when worker code lands on the production branch.
+  # This avoids waiting for the first cron tick after a new queue is deployed.
+  push:
+    branches: [master]
+    paths:
+      - '.github/workflows/cartoon-worker.yml'
+      - 'local-video-renderer/cartoon-worker.js'
+      - 'cartoon/**'
+      - 'remotion/**'
+      - 'lib/podcastTTS.js'
+      - 'lib/whiteboard/audio.js'
+      - 'package.json'
+      - 'package-lock.json'
   schedule:
     - cron: '*/5 * * * *'
   workflow_dispatch:
