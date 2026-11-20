@@ -1,5 +1,6 @@
 import { NextResponse } from 'next/server';
 import { createHash } from 'node:crypto';
+import DOMPurify from 'isomorphic-dompurify';
 import { requireAdminApi } from '@/lib/require-admin-api';
 import { createAdminClient } from '@/lib/supabase-admin';
 
@@ -17,17 +18,19 @@ function slugify(value) {
     .replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '').slice(0, 70) || 'visual-asset';
 }
 function sanitizeSvg(source) {
-  let svg = String(source || '');
-  if (!/<svg[\s>]/i.test(svg)) throw new Error('The uploaded file is not a valid SVG document.');
-  // Reject active/embedded content rather than trying to repair arbitrary XML.
-  if (/<(script|foreignObject|iframe|object|embed|audio|video)\b/i.test(svg)) {
-    throw new Error('SVG contains unsupported active or embedded content.');
-  }
-  if (/<!ENTITY|<!DOCTYPE/i.test(svg)) throw new Error('SVG document types and entities are not allowed.');
+  const raw = String(source || '');
+  if (!/<svg[\\s>]/i.test(raw)) throw new Error('The uploaded file is not a valid SVG document.');
+  if (/<!ENTITY|<!DOCTYPE/i.test(raw)) throw new Error('SVG document types and entities are not allowed.');
+  let svg = DOMPurify.sanitize(raw, {
+    USE_PROFILES: { svg: true, svgFilters: true },
+    FORBID_TAGS: ['script', 'foreignObject', 'iframe', 'object', 'embed'],
+    FORBID_ATTR: ['style'],
+  });
+  // Shared-library SVGs must not load remote resources.
   svg = svg
-    .replace(/\s+on[a-z]+\s*=\s*("[^"]*"|'[^']*'|[^\s>]+)/gi, '')
-    .replace(/(href|xlink:href)\s*=\s*("|')\s*(?:javascript:|data:text\/html)[\s\S]*?\2/gi, '')
-    .replace(/url\(\s*['"]?https?:[^)]+\)/gi, 'none');
+    .replace(/\\s+(?:xlink:)?href\\s*=\\s*("|')(?!#)[\\s\\S]*?\\1/gi, '')
+    .replace(/url\\(\\s*['"]?(?!#)[^)]+\\)/gi, 'none');
+  if (!/<svg[\\s>]/i.test(svg)) throw new Error('SVG did not pass sanitization.');
   return svg;
 }
 
