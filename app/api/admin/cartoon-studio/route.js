@@ -128,7 +128,7 @@ export async function POST(request) {
       if (jobError) return jsonError(jobError.message, 500);
 
       await supabase.from('cartoon_projects').update({
-        status: jobType === 'render' ? 'queued' : project.status,
+        status: jobType === 'narrate' ? 'narrating' : 'queued',
         stage: 'queued', stage_message: 'Waiting for a Cartoon worker...',
         error_message: null, updated_at: new Date().toISOString(),
       }).eq('id', projectId);
