@@ -86,7 +86,7 @@ jobs:
 
       - name: Install SBA dependencies
         if: steps.check.outputs.has_jobs == 'true'
-        run: npm ci --omit=dev
+        run: npm ci
 
       - name: Install Remotion Chromium
         if: steps.check.outputs.has_jobs == 'true'
