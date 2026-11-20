@@ -1,0 +1,26 @@
+{
+  "name": "@sbaskills/visual-learning-engine",
+  "version": "1.1.0",
+  "private": true,
+  "description": "Visual Learning Video Production Engine: topic -> script -> narration -> illustrations (multi-shot, <=3s per image) -> animated Remotion composition -> MP4. 100% free toolchain.",
+  "scripts": {
+    "typecheck": "tsc --noEmit",
+    "render": "bun src/render/cli.ts",
+    "selftest": "bun src/render/cli.ts --selftest"
+  },
+  "dependencies": {
+    "@remotion/bundler": "4.0.541",
+    "@remotion/fonts": "4.0.541",
+    "@remotion/renderer": "4.0.541",
+    "edge-tts-universal": "^1.4.0",
+    "react": "18.3.1",
+    "react-dom": "18.3.1",
+    "remotion": "4.0.541",
+    "sharp": "^0.35.3"
+  },
+  "devDependencies": {
+    "@types/bun": "^1.4.4",
+    "@types/react": "18.3.12",
+    "typescript": "5.5.4"
+  }
+}

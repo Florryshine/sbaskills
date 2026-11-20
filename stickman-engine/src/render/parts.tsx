@@ -20,7 +20,7 @@ function mouthStateForViseme(v: Viseme): { shape: Viseme; open: number; round: n
 
 // ---------------- character ----------------
 
-function faceGroup(style: CharStyle, head: [number, number], facing: 1 | -1, emo: Emotion, frame: number, viseme?: Viseme): React.ReactElement {
+function faceGroup(style: CharStyle, head: [number, number], facing: 1 | -1, emo: Emotion, frame: number, mouth?: Viseme): React.ReactElement {
   const hx = head[0], hy = head[1];
   const r = style.headR;
   const dark = style.headFill === '#ffffff' ? INK : '#ffffff';
@@ -95,8 +95,8 @@ function faceGroup(style: CharStyle, head: [number, number], facing: 1 | -1, emo
   // If a viseme is provided (character is speaking), override the emotion mouth
   // with the current mouth shape. Between-words silence falls through to
   // 'closed' so the mouth rests between syllables, like real speech.
-  if (viseme !== undefined) {
-    const mv = mouthStateForViseme(viseme);
+  if (mouth !== undefined) {
+    const mv = mouthStateForViseme(mouth);
     if (mv.shape === 'closed' || mv.shape === 'M') {
       mouth = <path d={`M ${hx - facing * 9} ${mouthY} Q ${hx + facing * 2} ${mouthY + 1.5} ${hx + facing * 10} ${mouthY}`}
         stroke={dark} strokeWidth={3.2} fill="none" strokeLinecap="round" />;

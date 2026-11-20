@@ -5,6 +5,7 @@ import { randomUUID } from 'node:crypto';
 export const db = {
   whiteboard_jobs: [], content_assets: [], media_files: [], whiteboard_workers: [], knowledge_assets: [],
   stickman_jobs: [], stickman_workers: [], stickman_scripts: [], publish_jobs: [], social_channels_v2: [],
+  visual_learning_jobs: [], visual_learning_workers: [], visual_learning_dispatch_attempts: [],
 };
 export const storage = new Map(); // `${bucket}/${path}` -> Buffer
 export const faults = { uploadBucket: null, rpcError: null };
@@ -47,7 +48,7 @@ class Query {
       });
       out = inserted;
     } else if (this.mode === 'upsert') {
-      const key = this.table === 'whiteboard_workers' || this.table === 'stickman_workers' ? 'worker_id' : 'id';
+      const key = this.table === 'whiteboard_workers' || this.table === 'stickman_workers' || this.table === 'visual_learning_workers' ? 'worker_id' : 'id';
       const i = rows.findIndex((r) => r[key] === this.payload[key]);
       if (i >= 0) Object.assign(rows[i], this.payload); else rows.push({ ...this.payload });
       out = [this.payload];
@@ -55,7 +56,7 @@ class Query {
       out = rows.filter((r) => matches(r, this.filters));
       out.forEach((r) => {
         Object.assign(r, this.payload);
-        if ((this.table === 'whiteboard_jobs' || this.table === 'stickman_jobs') && this.payload.stage) log.stageHistory.push(this.payload.stage);
+        if ((this.table === 'whiteboard_jobs' || this.table === 'stickman_jobs' || this.table === 'visual_learning_jobs') && this.payload.stage) log.stageHistory.push(this.payload.stage);
       });
     } else {
       out = rows.filter((r) => matches(r, this.filters));
@@ -99,6 +100,7 @@ export function createClient() {
       // jobs sit in 'queued' until the worker writes the script.
       if (name === 'claim_whiteboard_job') return claimJob(db.whiteboard_jobs, args, ['narrating', 'rendering'], null);
       if (name === 'claim_stickman_job') return claimJob(db.stickman_jobs, args, ['queued', 'narrating', 'rendering'], 'queued');
+      if (name === 'claim_visual_learning_job') return claimJob(db.visual_learning_jobs, args, ['queued', 'scripting', 'imagery', 'narrating', 'timeline', 'rendering', 'saving'], 'scripting');
       return { data: null, error: { message: 'unknown rpc' } };
     },
     storage: {
