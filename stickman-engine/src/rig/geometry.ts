@@ -41,3 +41,21 @@ export function solve2Bone(start: V2, end: V2, L1: number, L2: number, bend: 1 |
   const mid: V2 = [px + bend * h * -uy, py + bend * h * ux];
   return { mid, end: [start[0] + ux * d, start[1] + uy * d], reachable };
 }
+
+/**
+ * Create a deterministic pseudo-random number generator for scene decoration.
+ * A fresh generator with the same seed produces the same sequence, which keeps
+ * Remotion renders reproducible when it evaluates frames out of order.
+ */
+export function rng(seed: number): () => number {
+  let state = (Number.isFinite(seed) ? Math.trunc(seed) : 0) >>> 0;
+
+  return () => {
+    // Mulberry32: compact, fast, deterministic 32-bit PRNG.
+    state = (state + 0x6D2B79F5) >>> 0;
+    let t = state;
+    t = Math.imul(t ^ (t >>> 15), t | 1);
+    t ^= t + Math.imul(t ^ (t >>> 7), t | 61);
+    return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
+  };
+}
