@@ -3,7 +3,7 @@
 // camera -> subtitles -> audio + music, with per-scene transitions.
 import React from "react";
 import {
-  AbsoluteFill, Audio, Sequence, interpolate, staticFile,
+  AbsoluteFill, Audio, Sequence, interpolate,
   useCurrentFrame, useVideoConfig,
 } from "remotion";
 import type { CartoonProjectProps, SceneCastMember, StoryboardScene, CharacterDNA } from "./types";
@@ -254,7 +254,10 @@ export const CartoonVideo: React.FC<CartoonProjectProps> = (props) => {
   const total = durations.reduce((a, b) => a + b, 0);
 
   // background music (staticFile works in Player AND server render bundle)
-  const musicFile = spec.music && spec.music !== "none" ? staticFile(`audio/music-${spec.music}.mp3`) : null;
+  // SBA master does not yet contain the source branch music files. Keep the
+  // render deterministic and avoid broken staticFile references until a
+  // licensed/shared music pack is added to the production public directory.
+  const musicFile = null;
 
   return (
     <AbsoluteFill style={{ background: BRAND.paper }}>
