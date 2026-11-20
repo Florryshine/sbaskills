@@ -181,7 +181,6 @@ async function attachVisualAssets(spec, subject) {
   const { data, error } = await supabase.from('visual_assets')
     .select('id,name,description,subject,category,keywords,public_url,license,attribution_required,attribution')
     .eq('is_active', true)
-    .in('subject', [subject, 'General'])
     .order('usage_count', { ascending: false })
     .limit(120);
   if (error) {
@@ -196,7 +195,8 @@ async function attachVisualAssets(spec, subject) {
       const text = [asset.name, asset.description, ...(asset.keywords || [])].join(' ').toLowerCase();
       let score = 0;
       for (const token of tokens) if (text.includes(token)) score += token.length >= 7 ? 3 : 1;
-      if (asset.subject === subject) score += 1;
+      if (String(asset.subject || '').toLowerCase() === String(subject || '').toLowerCase()) score += 2;
+      if (String(asset.subject || '').toLowerCase() === 'general') score += 0.5;
       return { asset, score };
     }).filter(item => item.score > 0)
       .sort((a, b) => b.score - a.score)
