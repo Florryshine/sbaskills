@@ -61,7 +61,7 @@ describe('Stickman push posture', () => {
       propH: 64,
       strain: true,
     });
-    const leanProxy = (frame: typeof result.frames[number]) => Math.abs(frame.neck[0] - frame.pel[0]);
+    const leanProxy = (frame: typeof result.frames[number]) => Math.atan2(Math.abs(frame.neck[0] - frame.pel[0]), Math.abs(frame.neck[1] - frame.pel[1])) * 180 / Math.PI;
     expect(leanProxy(result.frames[0])).toBeLessThan(5);
     expect(leanProxy(result.frames[30])).toBeLessThan(20);
     expect(leanProxy(result.frames[result.frames.length - 1])).toBeLessThan(5);
