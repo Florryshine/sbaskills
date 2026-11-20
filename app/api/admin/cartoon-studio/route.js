@@ -33,12 +33,12 @@ export async function GET(request) {
     }
 
     const [{ data: projects, error }, { data: workers, error: workerError }] = await Promise.all([
-      supabase.from('cartoon_projects').select('id,title,custom_topic,orientation,status,stage,stage_message,progress,error_message,video_url,duration_seconds,created_at,updated_at').order('created_at', { ascending: false }).limit(50),
+      supabase.from('cartoon_projects').select('id,title,custom_topic,orientation,status,stage,stage_message,progress,error_message,video_url,duration_seconds,spec,created_at,updated_at').order('created_at', { ascending: false }).limit(50),
       supabase.from('cartoon_workers').select('worker_id,last_seen_at,current_job_id,info').order('last_seen_at', { ascending: false }).limit(10),
     ]);
     if (error) return jsonError(error.message, 500);
     if (workerError) return jsonError(workerError.message, 500);
-    return NextResponse.json({ projects: projects || [], workers: workers || [], userId: user.id });
+    return NextResponse.json({ projects: (projects || []).map(({ spec, ...project }) => ({ ...project, has_spec: Boolean(spec) })), workers: workers || [], userId: user.id });
   } catch (error) {
     console.error('[cartoon-studio] GET failed:', error);
     return jsonError(error.message || 'Could not load Cartoon Studio.', 500);
