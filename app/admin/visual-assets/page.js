@@ -97,7 +97,7 @@ export default function VisualAssetLibraryPage() {
             <input value={keywords} onChange={e => setKeywords(e.target.value)} className="mb-3 w-full rounded-xl border border-slate-700 bg-slate-950 px-3 py-3" placeholder="heart, circulation, anatomy" />
             <label className="mb-2 block text-sm text-slate-300">Licence / usage terms</label>
             <input value={license} onChange={e => setLicense(e.target.value)} className="mb-3 w-full rounded-xl border border-slate-700 bg-slate-950 px-3 py-3" />
-            <label className="mb-2 block text-sm text-slate-300">File (SVG, PNG, JPG, WEBP, GIF · max 12 MB)</label>
+            <label className="mb-2 block text-sm text-slate-300">File (SVG, PNG, JPG, WEBP, GIF · max 4 MB)</label>
             <input type="file" accept=".svg,.png,.jpg,.jpeg,.webp,.gif,image/svg+xml,image/png,image/jpeg,image/webp,image/gif" onChange={e => setFile(e.target.files?.[0] || null)} required className="w-full text-sm text-slate-400 file:mr-3 file:rounded-lg file:border-0 file:bg-slate-700 file:px-3 file:py-2 file:text-white" />
             <button disabled={uploading || !file || !name.trim()} className="mt-5 inline-flex items-center gap-2 rounded-xl bg-sky-500 px-4 py-3 font-semibold text-slate-950 disabled:opacity-50">
               {uploading ? <Loader2 size={16} className="animate-spin" /> : <Upload size={16} />}
