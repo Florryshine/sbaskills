@@ -88,7 +88,7 @@ describe('Stickman locomotion quality', () => {
     const result = makeWalk(STYLES.ben, {
       from: -150, to: 150, speed: 120, startFrame: 0, frames: 90, fps: 30,
     });
-    const plantedXs = result.frames.slice(20, 25).map((frame) => frame.ftL[0]);
+    const plantedXs = result.frames.slice(12, 17).map((frame) => frame.ftL[0]);
     expect(Math.max(...plantedXs) - Math.min(...plantedXs)).toBeLessThan(0.5);
   });
 
