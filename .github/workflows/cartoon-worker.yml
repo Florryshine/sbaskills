@@ -1,0 +1,97 @@
+name: Cartoon Studio queue worker
+
+# Scheduled queue runner: no always-on server required. It drains queued jobs,
+# and can reclaim processing jobs whose worker lease has expired.
+on:
+  schedule:
+    - cron: '*/5 * * * *'
+  workflow_dispatch:
+
+concurrency:
+  group: cartoon-studio-render
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+
+jobs:
+  render:
+    runs-on: ubuntu-latest
+    timeout-minutes: 55
+    env:
+      NEXT_PUBLIC_SUPABASE_URL: ${{ secrets.NEXT_PUBLIC_SUPABASE_URL || secrets.SUPABASE_URL }}
+      SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
+      GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
+      GEMINI_API_KEY_1: ${{ secrets.GEMINI_API_KEY_1 }}
+      GEMINI_API_KEY_2: ${{ secrets.GEMINI_API_KEY_2 }}
+      GEMINI_API_KEY_3: ${{ secrets.GEMINI_API_KEY_3 }}
+      GROQ_API_KEY: ${{ secrets.GROQ_API_KEY }}
+      GROQ_API_KEY_1: ${{ secrets.GROQ_API_KEY_1 }}
+      GROQ_API_KEY_2: ${{ secrets.GROQ_API_KEY_2 }}
+      GROQ_API_KEY_3: ${{ secrets.GROQ_API_KEY_3 }}
+      OPENROUTER_API_KEY: ${{ secrets.OPENROUTER_API_KEY }}
+      HUGGINGFACE_API_KEY: ${{ secrets.HUGGINGFACE_API_KEY }}
+      TTS_ENDPOINT: ${{ secrets.TTS_ENDPOINT }}
+      GEMINI_TTS_MODEL: ${{ secrets.GEMINI_TTS_MODEL }}
+      GEMINI_TTS_VOICE_A: ${{ secrets.GEMINI_TTS_VOICE_A }}
+      GEMINI_TTS_VOICE_B: ${{ secrets.GEMINI_TTS_VOICE_B }}
+      CARTOON_RUN_ONCE: '1'
+      CARTOON_RUN_ONCE_MAX_MS: '2400000'
+      CARTOON_WORKER_HEARTBEAT_MS: '30000'
+
+    steps:
+      - name: Check for queued or abandoned Cartoon jobs
+        id: check
+        shell: bash
+        run: |
+          if [ -z "$NEXT_PUBLIC_SUPABASE_URL" ] || [ -z "$SUPABASE_SERVICE_ROLE_KEY" ]; then
+            echo "::error::Repo secrets NEXT_PUBLIC_SUPABASE_URL / SUPABASE_SERVICE_ROLE_KEY are not set."
+            exit 1
+          fi
+          cutoff=$(date -u -d '5 minutes ago' '+%Y-%m-%dT%H:%M:%SZ')
+          body=$(curl -sS --fail-with-body --get \
+            "$NEXT_PUBLIC_SUPABASE_URL/rest/v1/cartoon_jobs" \
+            --data-urlencode "select=id" \
+            --data-urlencode "or=(status.eq.queued,and(status.eq.processing,heartbeat_at.is.null),and(status.eq.processing,heartbeat_at.lt.$cutoff))" \
+            --data-urlencode "limit=1" \
+            -H "apikey: $SUPABASE_SERVICE_ROLE_KEY" \
+            -H "Authorization: Bearer $SUPABASE_SERVICE_ROLE_KEY") || { echo "::error::Supabase query failed: $body"; exit 1; }
+          if [ "$body" = "[]" ]; then
+            echo "No queued or abandoned Cartoon jobs."
+            echo "has_jobs=false" >> "$GITHUB_OUTPUT"
+          else
+            echo "Cartoon jobs are waiting."
+            echo "has_jobs=true" >> "$GITHUB_OUTPUT"
+          fi
+
+      - uses: actions/checkout@v4
+        if: steps.check.outputs.has_jobs == 'true'
+
+      - uses: actions/setup-node@v4
+        if: steps.check.outputs.has_jobs == 'true'
+        with:
+          node-version: 24
+          cache: npm
+
+      - uses: oven-sh/setup-bun@v2
+        if: steps.check.outputs.has_jobs == 'true'
+
+      - name: Install renderer system dependencies
+        if: steps.check.outputs.has_jobs == 'true'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends ffmpeg libnss3 libdbus-1-3 libatk1.0-0 libgbm1 libasound2t64 \
+            libxrandr2 libxkbcommon0 libxfixes3 libxcomposite1 libxdamage1 libatk-bridge2.0-0 \
+            libpango-1.0-0 libcairo2 libcups2 fonts-dejavu-core
+
+      - name: Install SBA dependencies
+        if: steps.check.outputs.has_jobs == 'true'
+        run: npm ci --omit=dev
+
+      - name: Install Remotion Chromium
+        if: steps.check.outputs.has_jobs == 'true'
+        run: npx remotion browser ensure
+
+      - name: Run Cartoon Studio queue worker
+        if: steps.check.outputs.has_jobs == 'true'
+        run: bun local-video-renderer/cartoon-worker.js
