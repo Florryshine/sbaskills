@@ -153,3 +153,76 @@ registration, UI and runtime tests remain subsequent implementation work.
 Phase A is complete as an architecture and database-foundation phase. The
 runtime port begins in the next phase after this migration is reviewed and
 applied in the intended Supabase environment.
+
+
+## 9. Phase B — runtime implementation started
+
+Branch: `feat/cartoon-studio-phase-b` (branched from the Phase A integration branch).
+
+### Implemented in this branch
+
+- Ported the Cartoon Remotion visual engine into the SBA root-level tree:
+  `cartoon/engine/**`. This includes character rigs, expressions, hair,
+  presets, animated concept backgrounds, scene props, transitions, subtitles,
+  and shared-asset scene placements.
+- Registered the `CartoonVideo` composition alongside the existing
+  LessonVideo and WhiteboardVideo compositions in `remotion/Root.jsx`.
+- Removed the source branch's font-file loading dependency and disabled
+  source-only music-file references because those binary music assets are
+  not present on SBA `master`. Narration audio remains supported by
+  absolute Supabase Storage URLs.
+- Ported storyboard validation and connected generation to SBA's existing
+  `generateWithFallback` + `parseJsonFromText` chain.
+- Added an admin-only Cartoon Studio API for project creation, status reads,
+  and durable script/narration/render job enqueueing.
+- Added `local-video-renderer/cartoon-worker.js` using the existing worker
+  architecture: atomic claims, lease heartbeats, retry limits, narration
+  checkpoints, Remotion rendering, Supabase Storage uploads, and idempotent
+  `content_assets` / `media_files` registration.
+- Connected scene visual selection to the engine-neutral `visual_assets`
+  catalogue. Matching is deterministic and keyword-based; it does not spend
+  an extra LLM call.
+- Added a secure admin upload/search API and admin page for the shared
+  Visual Asset Library, including content-hash deduplication and SVG
+  sanitization.
+- Added the Cartoon Studio admin page and navigation entries.
+- Added scheduled GitHub Actions worker and composition smoke-test workflows.
+- Hardened stale-job retry exhaustion in the additive migration.
+
+### Current runtime flow
+
+1. Admin creates a topic from `/admin/cartoon-studio`.
+2. API creates a `cartoon_projects` row and a queued `script` job.
+3. GitHub Actions checks the queue every five minutes and runs the persistent
+   worker when queued or abandoned work exists.
+4. Worker loads the selected Knowledge Asset (or uses the topic), generates
+   and validates a storyboard through SBA's shared LLM fallback chain, and
+   links/creates a Knowledge Asset when required.
+5. Worker attaches matching shared visual assets, generates narration through
+   `lib/podcastTTS.js`, and stores audio in Supabase Storage.
+6. Admin queues a render. Worker renders the `CartoonVideo` Remotion
+   composition, uploads the MP4 to `lesson-videos`, and registers the output
+   through the existing content library contract.
+
+### Not yet verified / remaining Phase B work
+
+- The migration is still not applied to the live Supabase project.
+- The GitHub Actions workflows have been committed but have not yet been
+  executed; the Remotion bundle and worker have not passed a live CI run.
+- No Vercel deployment or production database write has been made.
+- The five-minute scheduled worker cadence is intentional for this first
+  integration. Immediate event dispatch can be added after the first worker
+  run is verified.
+- The visual library's first matching pass is keyword-based. Richer ranking,
+  per-scene editing, source-provider ingestion, and asset-use analytics remain
+  follow-up improvements.
+- Cartoon background music is intentionally disabled until compatible music
+  files are added to SBA's production public assets.
+- The current admin studio creates, tracks, retries and renders projects; a
+  full scene-by-scene storyboard editor and in-browser Remotion preview remain
+  to be integrated.
+
+### Safety boundary
+
+All Phase B code remains on `feat/cartoon-studio-phase-b`. Production
+`master`, existing engines, and live Supabase have not been changed.
