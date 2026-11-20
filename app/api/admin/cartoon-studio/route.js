@@ -33,12 +33,18 @@ export async function GET(request) {
     }
 
     const [{ data: projects, error }, { data: workers, error: workerError }] = await Promise.all([
-      supabase.from('cartoon_projects').select('id,title,custom_topic,orientation,status,stage,stage_message,progress,error_message,video_url,duration_seconds,spec,created_at,updated_at').order('created_at', { ascending: false }).limit(50),
+      supabase.from('cartoon_projects').select('id,title,custom_topic,orientation,status,stage,stage_message,progress,error_message,video_url,duration_seconds,spec,narration,created_at,updated_at').order('created_at', { ascending: false }).limit(50),
       supabase.from('cartoon_workers').select('worker_id,last_seen_at,current_job_id,info').order('last_seen_at', { ascending: false }).limit(10),
     ]);
     if (error) return jsonError(error.message, 500);
     if (workerError) return jsonError(workerError.message, 500);
-    return NextResponse.json({ projects: (projects || []).map(({ spec, ...project }) => ({ ...project, has_spec: Boolean(spec) })), workers: workers || [], userId: user.id });
+    return NextResponse.json({ projects: (projects || []).map(({ spec, narration, ...project }) => ({
+      ...project,
+      has_spec: Boolean(spec),
+      has_narration: Boolean(spec?.scenes?.length) && spec.scenes.every(scene =>
+        Boolean(narration?.[scene.id]?.audioUrl && narration?.[scene.id]?.durationSeconds)
+      ),
+    })), workers: workers || [], userId: user.id });
   } catch (error) {
     console.error('[cartoon-studio] GET failed:', error);
     return jsonError(error.message || 'Could not load Cartoon Studio.', 500);
@@ -112,6 +118,13 @@ export async function POST(request) {
       if (projectError) return jsonError(projectError.message, 500);
       if (!project) return jsonError('Cartoon project not found.', 404);
       if (jobType === 'render' && !project.spec) return jsonError('Generate the storyboard before rendering.');
+      if (jobType === 'render') {
+        const narration = project.narration && typeof project.narration === 'object' ? project.narration : {};
+        const complete = project.spec.scenes?.length && project.spec.scenes.every(scene =>
+          narration[scene.id]?.audioUrl && narration[scene.id]?.durationSeconds
+        );
+        if (!complete) return jsonError('Complete narration for every scene before rendering. Queue narration first.');
+      }
       if (jobType === 'narrate' && !project.spec) return jsonError('Generate the storyboard before narration.');
 
       const { data: active, error: activeError } = await supabase
