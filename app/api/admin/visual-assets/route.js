@@ -7,7 +7,7 @@ import { createAdminClient } from '@/lib/supabase-admin';
 export const runtime = 'nodejs';
 export const maxDuration = 30;
 
-const MAX_BYTES = 12 * 1024 * 1024;
+const MAX_BYTES = 4 * 1024 * 1024;
 const MIME_TYPES = new Set(['image/svg+xml', 'image/png', 'image/jpeg', 'image/webp', 'image/gif']);
 
 function fail(message, status = 400) {
@@ -48,7 +48,7 @@ export async function GET(request) {
     if (subject) query = query.eq('subject', subject);
     if (category) query = query.eq('category', category);
     if (q) {
-      const safe = q.replace(/[,%()]/g, ' ').trim();
+      const safe = q.replace(/[^a-z0-9 _-]/gi, ' ').trim();
       if (safe) query = query.or(`name.ilike.%${safe}%,description.ilike.%${safe}%`);
     }
     const { data, error } = await query;
