@@ -72,11 +72,20 @@ export function validateSceneScript(script: any): string[] {
     }
 
     const sceneCastIds = Object.keys(sc.cast ?? {});
-    if (sceneCastIds.length > MAX_SCENE_CAST) {
-      problems.push(where(`may stage at most ${MAX_SCENE_CAST} characters in one scene (got ${sceneCastIds.length})`));
-    }
-
     const dialogue = Array.isArray(sc.dialogue) ? sc.dialogue : [];
+    const sceneActions = Array.isArray(sc.actions) ? sc.actions : [];
+    const sceneCamera = Array.isArray(sc.camera) ? sc.camera : [];
+    const visibleIds = new Set<string>([
+      ...sceneCastIds,
+      ...sceneActions.map((a: any) => a?.char).filter((id: any): id is string => typeof id === 'string'),
+      ...dialogue.map((d: any) => d?.who).filter((id: any): id is string => typeof id === 'string' && id !== 'narr'),
+      ...sceneCamera.flatMap((intent: any) => intent?.do === 'follow'
+        ? [intent.target]
+        : intent?.do === 'twoShot' && Array.isArray(intent.targets) ? intent.targets : []),
+    ]);
+    if (visibleIds.size > MAX_SCENE_CAST) {
+      problems.push(where(`may stage at most ${MAX_SCENE_CAST} visible characters in one scene (got ${visibleIds.size})`));
+    }
     if (dialogue.length > 6) problems.push(where('has more than 6 dialogue lines; split it into another scene'));
     for (const d of dialogue) {
       if (!d || typeof d !== 'object') { problems.push(where('dialogue entries must be objects')); continue; }
