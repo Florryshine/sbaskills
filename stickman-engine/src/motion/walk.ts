@@ -38,7 +38,7 @@ export function makeWalk(s: CharStyle, o: WalkOpts): { frames: SkeletonFrame[]; 
   const speed = Math.max(1, Math.abs(o.speed));
   const running = speed > 170;
   const S_target = running ? clamp(speed * 0.42, 40, 92) : clamp(speed * 0.52, 22, 60);
-  const steps = Math.max(1, Math.round(distance / S_target));
+  const steps = Math.max(2, Math.round(distance / S_target));
   const S = distance > 0 ? distance / steps : 1;
   // Speed is the average travel speed. Smoothstep gives the character a
   // readable push-off and deceleration instead of instant start/stop.
