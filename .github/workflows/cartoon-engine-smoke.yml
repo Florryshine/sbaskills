@@ -1,0 +1,38 @@
+name: Cartoon Studio composition smoke test
+
+on:
+  pull_request:
+    paths:
+      - 'cartoon/engine/**'
+      - 'cartoon/server/**'
+      - 'remotion/Root.jsx'
+      - 'remotion/index.js'
+      - 'local-video-renderer/cartoon-worker.js'
+      - 'app/api/admin/cartoon-studio/**'
+      - 'app/api/admin/visual-assets/**'
+      - 'package.json'
+      - 'package-lock.json'
+      - '.github/workflows/cartoon-engine-smoke.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  composition:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: npm
+      - name: Install application dependencies
+        run: npm ci
+      - name: Install Remotion browser
+        run: npx remotion browser ensure
+      - name: Verify all Remotion compositions bundle
+        run: npx remotion compositions remotion/index.js
+      - name: Verify Cartoon worker JavaScript syntax
+        run: node --check local-video-renderer/cartoon-worker.js
