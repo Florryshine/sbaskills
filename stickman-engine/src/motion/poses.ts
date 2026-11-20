@@ -49,7 +49,11 @@ function solveLeg(s: CharStyle, hip: V2, spec: LegSpec, f: 1 | -1): { kn: V2; ft
     const ft = add(kn, mul(limbDir(spec.hip - spec.knee, f), s.shin));
     return { kn, ft };
   }
-  const ankle: V2 = [spec.foot[0], spec.foot[1] - s.ankleH * 0.45];
+  // foot is the ground-contact point; the skeleton ankle sits one full
+  // ankle segment above it. Using only 45% of ankleH made the target
+  // unreachable (thigh + shin were shorter than the pelvis-to-ankle span),
+  // so the IK solver silently clamped and the feet drifted under the body.
+  const ankle: V2 = [spec.foot[0], spec.foot[1] - s.ankleH];
   const r = solve2Bone(hip, ankle, s.thigh, s.shin, kneeBend(f));
   return { kn: r.mid, ft: r.end };
 }

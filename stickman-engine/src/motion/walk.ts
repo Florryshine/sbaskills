@@ -35,13 +35,15 @@ export function makeWalk(s: CharStyle, o: WalkOpts): { frames: SkeletonFrame[]; 
   const fps = o.fps;
   const facing: 1 | -1 = o.to >= o.from ? 1 : -1;
   const distance = Math.abs(o.to - o.from);
-  const running = o.speed > 170;
-  const S_target = running ? clamp(o.speed * 0.42, 40, 92) : clamp(o.speed * 0.52, 22, 60);
-  const steps = Math.max(1, Math.round(distance / S_target));
-  const S = distance / steps;
-  const T = S / o.speed;                       // seconds between successive plants
-  const arrivalT = steps * T;
-  const arrivalFrame = o.startFrame + Math.max(1, Math.round(arrivalT * fps));
+  const speed = Math.max(1, Math.abs(o.speed));
+  const running = speed > 170;
+  const S_target = running ? clamp(speed * 0.42, 40, 92) : clamp(speed * 0.52, 22, 60);
+  const steps = Math.max(2, Math.round(distance / S_target));
+  const S = distance > 0 ? distance / steps : 1;
+  // Speed is the average travel speed. Smoothstep gives the character a
+  // readable push-off and deceleration instead of instant start/stop.
+  const arrivalT = distance / speed;
+  const arrivalFrame = o.startFrame + Math.max(1, Math.ceil(arrivalT * fps));
   const stepH = running ? 26 : 16;
   const bobAmp = running ? 7 : 4;
   const armAmp = running ? 34 : 15;
@@ -50,17 +52,22 @@ export function makeWalk(s: CharStyle, o: WalkOpts): { frames: SkeletonFrame[]; 
   const hipShiftAmp = running ? 4 : 6;         // lateral hip sway toward stance foot
   const torsoYawAmp = running ? 6 : 4;         // shoulder counter-rotation
   // Pelvis drop that flexes the stance knee slightly instead of locking it.
-  const stanceKneeFlexDeg = 8;
+  const stanceKneeFlexDeg = running ? 48 : 45;
   const pelvisDropAmp =
     (s.thigh + s.shin) *
     (1 - Math.cos((stanceKneeFlexDeg * Math.PI) / 180)) *
     0.5;
 
   const out: SkeletonFrame[] = [];
+  if (distance < 0.001) {
+    return {
+      frames: makeIdle(s, { x: o.to, facing, startFrame: o.startFrame, frames: o.frames, fps }),
+      arrivalFrame: o.startFrame,
+    };
+  }
   for (let i = 0; i < o.frames; i++) {
     const frame = o.startFrame + i;
     const t = i / fps;
-    const baseX = o.from + facing * o.speed * t;
 
     if (t >= arrivalT) {
       const breath = Math.sin((frame / fps) * 2 * Math.PI * 0.55) * 0.5 + 0.5;
@@ -68,16 +75,22 @@ export function makeWalk(s: CharStyle, o: WalkOpts): { frames: SkeletonFrame[]; 
       continue;
     }
 
-    // Two vertical dips per stride (one per footfall). The old single-dip
-    // curve read as a bounce, not a gait.
-    const y = stanceY - Math.abs(Math.sin((2 * Math.PI * t) / T)) * bobAmp;
-    const cycle = Math.sin((Math.PI * t) / T);          // + during first half-step
+    // Distance-based gait phase keeps foot plants tied to the ground even
+    // while the body accelerates and decelerates.
+    const timeProgress = clamp(t / Math.max(0.001, arrivalT), 0, 1);
+    const easedProgress = timeProgress * timeProgress * (3 - 2 * timeProgress);
+    const travelled = distance * easedProgress;
+    const baseX = o.from + facing * travelled;
+    const stepPhase = travelled / S;
+    // Two small vertical pulses per step interval, one around each footfall.
+    const y = stanceY - Math.abs(Math.sin(2 * Math.PI * stepPhase)) * bobAmp;
+    const cycle = Math.sin(Math.PI * stepPhase);
     const feet: [V2, V2] = [[0, 0], [0, 0]];
     let stanceFoot: 0 | 1 = 0;
     let stanceWeight = 0;                               // 0..1, 1 = fully on stance foot
 
     for (const f of [0, 1] as const) {
-      let m = Math.floor(t / T + 1e-6);
+      let m = Math.floor(stepPhase + 1e-6);
       if (m % 2 !== f) m -= 1;
       const firstContact = f;
       if (m < firstContact) {
@@ -85,20 +98,23 @@ export function makeWalk(s: CharStyle, o: WalkOpts): { frames: SkeletonFrame[]; 
         if (f === 0) { stanceFoot = 0; stanceWeight = 1; }
         continue;
       }
-      const plantT = m * T;
+      const plantPhase = m;
       const plantX = o.from + facing * m * S;
-      const liftT = plantT + 1.22 * T;
-      const nextPlantT = plantT + 2 * T;
+      // Release the planted foot before the hip outruns the leg's reachable
+      // IK envelope. A long locked stance was making the solver clamp the
+      // ankle and visually slide the foot.
+      const liftPhase = plantPhase + 0.78;
+      const nextPlantPhase = plantPhase + 2;
       const nextPlantX = o.from + facing * (m + 2) * S;
-      const finalPlant = nextPlantT >= arrivalT;
-      if (t < liftT) {
+      const finalPlant = nextPlantPhase >= steps;
+      if (stepPhase < liftPhase) {
         feet[f] = [plantX, 0];
         stanceFoot = f;
-        const stanceProgress = (t - plantT) / Math.max(0.01, liftT - plantT);
+        const stanceProgress = (stepPhase - plantPhase) / Math.max(0.01, liftPhase - plantPhase);
         stanceWeight = stanceProgress < 0.75 ? 1 : (1 - stanceProgress) / 0.25;
       } else {
-        const swEnd = finalPlant ? arrivalT : nextPlantT;
-        const sw = clamp((t - liftT) / Math.max(0.01, swEnd - liftT), 0, 1);
+        const swEnd = finalPlant ? steps : nextPlantPhase;
+        const sw = clamp((stepPhase - liftPhase) / Math.max(0.01, swEnd - liftPhase), 0, 1);
         const ex = easeInOut(sw);
         const targetX = finalPlant ? o.to + (f === 0 ? -11 : 11) : nextPlantX;
         feet[f] = [lerp(plantX, targetX, ex), -Math.sin(Math.PI * sw) * stepH];
@@ -141,9 +157,10 @@ export function makeWalk(s: CharStyle, o: WalkOpts): { frames: SkeletonFrame[]; 
   }
 
   // Longer entry / exit cross-fades (was 6 frames — visible snap).
-  const entry = makeIdle(s, { x: o.from, facing, startFrame: 0, frames: 12, fps });
+  const entry = makeIdle(s, { x: o.from, facing, startFrame: o.startFrame, frames: 12, fps });
   blendInto(out, entry, 0, 10);
-  const exitBlend = Math.min(out.length - (arrivalFrame - o.startFrame), Math.round(T * fps * 0.5));
+  const stepSeconds = distance / steps / speed;
+  const exitBlend = Math.min(out.length - (arrivalFrame - o.startFrame), Math.round(stepSeconds * fps * 0.5));
   if (exitBlend > 3) {
     const exitIdle = makeIdle(s, {
       x: o.to, facing, startFrame: arrivalFrame - exitBlend, frames: exitBlend, fps,

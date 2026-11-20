@@ -3,6 +3,7 @@ import { compile } from '../src/scene/compiler';
 import { validateSceneScript } from '../src/scene/validate';
 import { STYLES } from '../src/rig/character';
 import { pushStream } from '../src/motion/actions';
+import { makeWalk } from '../src/motion/walk';
 
 const baseScript = {
   title: 'A Solo Demonstration',
@@ -65,5 +66,47 @@ describe('Stickman push posture', () => {
     expect(leanProxy(result.frames[0])).toBeLessThan(5);
     expect(leanProxy(result.frames[30])).toBeLessThan(20);
     expect(leanProxy(result.frames[result.frames.length - 1])).toBeLessThan(5);
+  });
+});
+
+
+describe('Stickman locomotion quality', () => {
+  const torsoLean = (frame: { neck: [number, number]; pel: [number, number] }) =>
+    Math.atan2(Math.abs(frame.neck[0] - frame.pel[0]), Math.abs(frame.neck[1] - frame.pel[1])) * 180 / Math.PI;
+
+  it('walks to the exact destination with a smooth upright posture', () => {
+    const result = makeWalk(STYLES.ben, {
+      from: -150, to: 150, speed: 120, startFrame: 0, frames: 90, fps: 30,
+    });
+    expect(result.arrivalFrame).toBeGreaterThan(0);
+    expect(result.frames[result.arrivalFrame].pel[0]).toBeCloseTo(150, 1);
+    expect(torsoLean(result.frames[20])).toBeLessThan(6);
+    expect(torsoLean(result.frames[35])).toBeLessThan(6);
+  });
+
+  it('keeps a planted foot at a stable world position during the stance phase', () => {
+    const result = makeWalk(STYLES.ben, {
+      from: -150, to: 150, speed: 120, startFrame: 0, frames: 90, fps: 30,
+    });
+    const plantedXs = result.frames.slice(12, 17).map((frame) => frame.ftL[0]);
+    expect(Math.max(...plantedXs) - Math.min(...plantedXs)).toBeLessThan(0.5);
+  });
+
+  it('includes alternating footfalls even for short movements', () => {
+    const result = makeWalk(STYLES.ben, {
+      from: 0, to: 45, speed: 120, startFrame: 0, frames: 30, fps: 30,
+    });
+    const leftLift = result.frames.some((frame) => frame.ftL[1] < -3);
+    const rightLift = result.frames.some((frame) => frame.ftR[1] < -3);
+    expect(leftLift || rightLift).toBe(true);
+    expect(result.frames[result.arrivalFrame].pel[0]).toBeCloseTo(45, 1);
+  });
+
+  it('runs with visible foot lift and finishes at the requested destination', () => {
+    const result = makeWalk(STYLES.ben, {
+      from: 180, to: -180, speed: 260, startFrame: 0, frames: 60, fps: 30,
+    });
+    expect(result.frames.some((frame) => frame.ftL[1] < -8 || frame.ftR[1] < -8)).toBe(true);
+    expect(result.frames[result.arrivalFrame].pel[0]).toBeCloseTo(-180, 1);
   });
 });
