@@ -17,6 +17,8 @@ const KNOWN_ACTIONS = new Set([
 ]);
 
 const MAX_SCENES = 12;
+const MAX_CAST = 24;
+const MAX_SCENE_CAST = 20;
 const MAX_DURATION_SECONDS = 8 * 60;
 
 export function validateSceneScript(script: any): string[] {
@@ -50,6 +52,9 @@ export function validateSceneScript(script: any): string[] {
   }
 
   const castIds = new Set(Object.keys(script.cast || {}));
+  if (castIds.size > MAX_CAST) {
+    problems.push(`cast{} may define at most ${MAX_CAST} reusable characters (got ${castIds.size})`);
+  }
   let totalDuration = 0;
   let sceneIndex = -1;
   for (const sc of script.scenes ?? []) {
@@ -66,7 +71,21 @@ export function validateSceneScript(script: any): string[] {
       problems.push(where(`env.type "${sc.env.type}" is unknown (street, abstract, classroom)`));
     }
 
+    const sceneCastIds = Object.keys(sc.cast ?? {});
     const dialogue = Array.isArray(sc.dialogue) ? sc.dialogue : [];
+    const sceneActions = Array.isArray(sc.actions) ? sc.actions : [];
+    const sceneCamera = Array.isArray(sc.camera) ? sc.camera : [];
+    const visibleIds = new Set<string>([
+      ...sceneCastIds,
+      ...sceneActions.map((a: any) => a?.char).filter((id: any): id is string => typeof id === 'string'),
+      ...dialogue.map((d: any) => d?.who).filter((id: any): id is string => typeof id === 'string' && id !== 'narr'),
+      ...sceneCamera.flatMap((intent: any) => intent?.do === 'follow'
+        ? [intent.target]
+        : intent?.do === 'twoShot' && Array.isArray(intent.targets) ? intent.targets : []),
+    ]);
+    if (visibleIds.size > MAX_SCENE_CAST) {
+      problems.push(where(`may stage at most ${MAX_SCENE_CAST} visible characters in one scene (got ${visibleIds.size})`));
+    }
     if (dialogue.length > 6) problems.push(where('has more than 6 dialogue lines; split it into another scene'));
     for (const d of dialogue) {
       if (!d || typeof d !== 'object') { problems.push(where('dialogue entries must be objects')); continue; }

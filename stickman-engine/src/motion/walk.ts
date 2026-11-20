@@ -45,7 +45,7 @@ export function makeWalk(s: CharStyle, o: WalkOpts): { frames: SkeletonFrame[]; 
   const stepH = running ? 26 : 16;
   const bobAmp = running ? 7 : 4;
   const armAmp = running ? 34 : 15;
-  const lean = o.lean ?? (running ? 13 : 4);
+  const lean = o.lean ?? (running ? 7 : 2.5);
   const stanceY = -(s.thigh + s.shin + s.ankleH);
   const hipShiftAmp = running ? 4 : 6;         // lateral hip sway toward stance foot
   const torsoYawAmp = running ? 6 : 4;         // shoulder counter-rotation
@@ -129,7 +129,7 @@ export function makeWalk(s: CharStyle, o: WalkOpts): { frames: SkeletonFrame[]; 
       armR = { mode: 'fk' as const, sh: 3 + swingR, el: 7 + Math.max(0, cycle) * 12 };
     }
 
-    const leanNow = lean + cycle * 1.5;
+    const leanNow = lean + cycle * (running ? 1.0 : 0.6);
     const pose: PoseParams = {
       x, y: yAdjusted, lean: leanNow, headTilt: -leanNow * 0.35, facing,
       torsoYaw,

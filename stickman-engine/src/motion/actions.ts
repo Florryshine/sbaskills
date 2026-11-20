@@ -44,43 +44,50 @@ function entryBlend(stream: SkeletonFrame[], o: BaseOpts) {
 export function pushStream(
   o: BaseOpts & {
     propX: number; propW: number; propH: number;
-    strain?: boolean;              // effort oscillation + strain face
-    slide?: { speed: number };     // if the box slides, character keeps pushing (feet re-plant)
+    strain?: boolean;
+    slide?: { speed: number };
   },
 ): ActionResult {
   const s = o.style;
   const f = o.facing;
   const handleY = -o.propH + 12;
   const out: SkeletonFrame[] = [];
-  const events: FaceEvent[] = [{ frame: o.startFrame + 1, emo: 'strain' }];
+  const n = Math.max(1, o.frames);
+  const events: FaceEvent[] = [
+    { frame: o.startFrame + Math.min(2, n - 1), emo: 'focused' },
+    { frame: o.startFrame + Math.floor(n * 0.22), emo: 'strain' },
+    { frame: o.startFrame + Math.max(0, n - 2), emo: 'neutral' },
+  ];
   const shake: { frame: number; amp: number; dur: number }[] = [];
-  for (let i = 0; i < o.frames; i++) {
-    const t = i / o.fps;
-    const frame = o.startFrame + i;
-    const effort = o.strain ? Math.sin(t * 2 * Math.PI * 1.1) : 0;
-    const x = o.x + effort * 3;
+
+  for (let i = 0; i < n; i++) {
+    const progress = n <= 1 ? 1 : i / (n - 1);
+    const effortWindow = Math.sin(Math.PI * clamp((progress - 0.12) / 0.76, 0, 1));
+    const effort = o.strain ? Math.sin((i / o.fps) * 2 * Math.PI * 1.1) * effortWindow : 0;
+    const x = o.x + effort * 1.5;
+    const active = progress >= 0.12 && progress <= 0.88;
+    const lean = 1.5 + effortWindow * (7 + effort * 1.5);
+    const armL = active
+      ? { mode: 'ik' as const, target: [o.propX + f * (o.propW / 2 - 20), handleY] as V2, bend: (f === 1 ? 1 : -1) as 1 | -1 }
+      : { mode: 'fk' as const, sh: 5, el: 7 };
+    const armR = active
+      ? { mode: 'ik' as const, target: [o.propX + f * (o.propW / 2 - 6), handleY - 2] as V2, bend: (f === 1 ? 1 : -1) as 1 | -1 }
+      : { mode: 'fk' as const, sh: -5, el: 7 };
+
     const pose: PoseParams = {
       x,
-      y: stanceY(s) + 9 + effort * 1.5,
-      lean: 27 + effort * 7,
-      headTilt: 14,
+      y: stanceY(s) + effortWindow * (2 + Math.max(0, effort) * 1.2),
+      lean,
+      headTilt: -lean * 0.25,
       facing: f,
-      armL: {
-        mode: 'ik',
-        target: [o.propX + f * (o.propW / 2 - 20) - f * 0, handleY],
-        bend: (f === 1 ? 1 : -1),
-      },
-      armR: {
-        mode: 'ik',
-        target: [o.propX + f * (o.propW / 2 - 6), handleY - 2],
-        bend: (f === 1 ? 1 : -1),
-      },
-      legL: { mode: 'ik', foot: [o.propX - f * 40, 0] },
-      legR: { mode: 'ik', foot: [o.propX - f * 78, 0] },
+      armL,
+      armR,
+      legL: { mode: 'ik', foot: [o.x - f * 11 - effortWindow * 3, 0] },
+      legR: { mode: 'ik', foot: [o.x - f * 34 + effortWindow * 3, 0] },
     };
     out.push(buildFrame(s, pose));
   }
-  void base; void entryBlend; void idleBase;
+
   return { frames: out, events, shake };
 }
 

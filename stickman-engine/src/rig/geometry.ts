@@ -41,3 +41,12 @@ export function solve2Bone(start: V2, end: V2, L1: number, L2: number, bend: 1 |
   const mid: V2 = [px + bend * h * -uy, py + bend * h * ux];
   return { mid, end: [start[0] + ux * d, start[1] + uy * d], reachable };
 }
+
+/** Deterministic seeded random generator for repeatable environment dressing. */
+export function rng(seed: number): () => number {
+  let state = seed >>> 0;
+  return () => {
+    state = (Math.imul(state, 1664525) + 1013904223) >>> 0;
+    return state / 0x100000000;
+  };
+}

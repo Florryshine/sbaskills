@@ -65,6 +65,13 @@ function copyInto(buf: FrameBuf, from: FrameBuf, at: number) {
   for (let i = 0; i < from.length && at + i < buf.length; i++) buf[at + i] = from[i];
 }
 
+function actionFrameCount(act: { dur?: number }, remaining: number, fps: number, fallbackSeconds: number): number {
+  const seconds = typeof act.dur === 'number' && Number.isFinite(act.dur)
+    ? act.dur
+    : fallbackSeconds;
+  return Math.max(1, Math.min(remaining, Math.round(Math.max(0.15, seconds) * fps)));
+}
+
 function latestPropX(p: PropTrack, frame: number): number {
   let x = p.frames[0]?.x ?? 0;
   for (const k of p.frames) {
@@ -152,17 +159,35 @@ export function compile(script: SceneScript, narration: NarrationMap): Timeline 
       if (c.facing) cast[id].facing = c.facing;
     }
 
-    // ---- per-scene dense streams per character ----
+    // Only characters explicitly staged or used in this scene are rendered.
+    // Defining a reusable character in the top-level cast must not make them
+    // appear in every scene.
+    const actions = [...(sc.actions ?? [])].sort((a, b) => (a.t0 ?? 0) - (b.t0 ?? 0));
+    const activeIds = new Set<string>([
+      ...Object.keys(sc.cast ?? {}),
+      ...actions.map((a) => a.char),
+      ...(sc.dialogue ?? []).map((line) => line.who).filter((who) => who !== 'narr'),
+      ...(sc.camera ?? []).flatMap((intent) => {
+        if (intent.do === 'follow') return [intent.target];
+        if (intent.do === 'twoShot') return [...intent.targets];
+        return [];
+      }),
+    ]);
+    const activeCast = Object.fromEntries(
+      [...activeIds].filter((id) => cast[id]).map((id) => [id, cast[id]]),
+    ) as Record<string, CharState>;
+
+    // ---- per-scene dense streams for active characters only ----
     const streams: Record<string, FrameBuf> = {};
     const events: Record<string, { frame: number; emo: any }[]> = {};
-    for (const id of Object.keys(cast)) {
-      streams[id] = makeIdle(cast[id].style, {
-        x: cast[id].x, facing: cast[id].facing, startFrame: sf0, frames: sfN - sf0, fps,
+    for (const id of activeIds) {
+      const st = cast[id];
+      if (!st) continue;
+      streams[id] = makeIdle(st.style, {
+        x: st.x, facing: st.facing, startFrame: sf0, frames: sfN - sf0, fps,
       });
       events[id] = [];
     }
-
-    const actions = [...(sc.actions ?? [])].sort((a, b) => (a.t0 ?? 0) - (b.t0 ?? 0));
     for (const act of actions) {
       const st = cast[act.char];
       if (!st) continue;
@@ -178,7 +203,11 @@ export function compile(script: SceneScript, narration: NarrationMap): Timeline 
         }
         case 'walk':
         case 'run': {
-          const speed = act.speed ?? (act.do === 'run' ? 260 : 120);
+          const defaultSpeed = act.do === 'run' ? 260 : 120;
+          const distance = Math.abs(act.to - st.x);
+          const speed = act.speed ?? (act.dur ? distance / Math.max(0.15, act.dur - 0.15) : defaultSpeed);
+          const travelSeconds = act.dur ?? (distance / Math.max(1, speed) + 0.35);
+          const travelFrames = actionFrameCount({ dur: travelSeconds }, sfN - a0, fps, travelSeconds);
           // optional push-while-walking: hands IK to the moving prop's handles
           let handTargets: [(x: number, t: number) => [number, number], (x: number, t: number) => [number, number]] | null = null;
           if ('pushProp' in act && act.pushProp) {
@@ -205,7 +234,7 @@ export function compile(script: SceneScript, narration: NarrationMap): Timeline 
             }
           }
           const w = makeWalk(st.style, {
-            from: st.x, to: act.to, speed, startFrame: a0, frames: sfN - a0, fps,
+            from: st.x, to: act.to, speed, startFrame: a0, frames: travelFrames, fps,
             handTargets,
           });
           blendInto(streams[act.char], w.frames, a0 - sf0, 6);
@@ -218,7 +247,7 @@ export function compile(script: SceneScript, narration: NarrationMap): Timeline 
           const specX = (sc.props ?? []).find((p) => p.id === act.prop)?.x ?? st.x + 60 * st.facing;
           const propX = prop ? latestPropX(prop, a0) : specX;
           const res = pushStream({
-            style: st.style, startFrame: a0, frames: sfN - a0, fps,
+            style: st.style, startFrame: a0, frames: actionFrameCount(act, sfN - a0, fps, 1.8), fps,
             x: st.x,   // author positions the character at the box
             facing: st.facing, propX, propW: prop?.w ?? 64, propH: prop?.h ?? 64,
             strain: true,
@@ -234,7 +263,7 @@ export function compile(script: SceneScript, narration: NarrationMap): Timeline 
         case 'point':
         case 'present': {
           const res = aimStream({
-            style: st.style, startFrame: a0, frames: sfN - a0, fps,
+            style: st.style, startFrame: a0, frames: actionFrameCount(act, sfN - a0, fps, 2.2), fps,
             x: st.x, facing: st.facing,
             target: act.at, arm: 'R', support: act.do === 'present',
           });
@@ -244,7 +273,7 @@ export function compile(script: SceneScript, narration: NarrationMap): Timeline 
         }
         case 'wave': {
           const res = waveStream({
-            style: st.style, startFrame: a0, frames: sfN - a0, fps,
+            style: st.style, startFrame: a0, frames: actionFrameCount(act, sfN - a0, fps, 1.4), fps,
             x: st.x, facing: st.facing, arm: 'R',
           });
           blendInto(streams[act.char], res.frames, a0 - sf0, 6);
@@ -262,7 +291,7 @@ export function compile(script: SceneScript, narration: NarrationMap): Timeline 
         }
         case 'cheer': {
           const res = cheerStream({
-            style: st.style, startFrame: a0, frames: sfN - a0, fps,
+            style: st.style, startFrame: a0, frames: actionFrameCount(act, sfN - a0, fps, 1.8), fps,
             x: st.x, facing: st.facing,
           });
           blendInto(streams[act.char], res.frames, a0 - sf0, 6);
@@ -271,7 +300,7 @@ export function compile(script: SceneScript, narration: NarrationMap): Timeline 
         }
         case 'laugh': {
           const res = laughStream({
-            style: st.style, startFrame: a0, frames: sfN - a0, fps,
+            style: st.style, startFrame: a0, frames: actionFrameCount(act, sfN - a0, fps, 1.5), fps,
             x: st.x, facing: st.facing,
           });
           blendInto(streams[act.char], res.frames, a0 - sf0, 6);
@@ -291,7 +320,7 @@ export function compile(script: SceneScript, narration: NarrationMap): Timeline 
         case 'sit': {
           const bench = props.find((p) => p.type === 'bench');
           const res = sitStream({
-            style: st.style, startFrame: a0, frames: sfN - a0, fps,
+            style: st.style, startFrame: a0, frames: actionFrameCount(act, sfN - a0, fps, 2.5), fps,
             x: st.x, facing: st.facing,
             seatX: bench ? latestPropX(bench, a0) : st.x,
             seatY: -34,
@@ -302,7 +331,7 @@ export function compile(script: SceneScript, narration: NarrationMap): Timeline 
         }
         case 'jump':
         case 'land': {
-          const opts = { style: st.style, startFrame: a0, frames: Math.min(sfN-a0, Math.round((act.dur ?? 1.15)*fps)), fps, x: st.x, facing: st.facing, height: act.height };
+          const opts = { style: st.style, startFrame: a0, frames: Math.min(sfN-a0, Math.round((act.dur ?? 1.15)*fps)), fps, x: st.x, facing: st.facing, height: 'height' in act ? act.height : undefined };
           const res = act.do === 'jump' ? jumpStream(opts) : landStream(opts);
           blendInto(streams[act.char], res.frames, a0-sf0, 7); events[act.char].push(...res.events); break;
         }
@@ -361,7 +390,7 @@ export function compile(script: SceneScript, narration: NarrationMap): Timeline 
               if (idx % every === 0 || idx === words.length - 1) times.push(lineT0 + w.start / fps);
             });
             const res = talkStream({
-              style: st.style, startFrame: a0, frames: sfN - a0, fps,
+              style: st.style, startFrame: a0, frames: actionFrameCount(act, sfN - a0, fps, line.duration ?? 2.5), fps,
               x: st.x, facing: st.facing, wordTimes: times,
             });
             blendInto(streams[act.char], res.frames, a0 - sf0, 6);
@@ -558,19 +587,21 @@ export function compile(script: SceneScript, narration: NarrationMap): Timeline 
 
     // ---- camera ----
     buildCamera(sc, {
-      sf0, sfN, fps, W, H, cast, streams,
+      sf0, sfN, fps, W, H, cast: activeCast, streams,
       onShake: (e) => shakeEvents.push(e),
       onCam: (k) => cameraKeys.push(k),
     });
 
     // ---- concatenate character tracks ----
-    for (const id of Object.keys(cast)) {
+    for (const id of activeIds) {
+      const character = cast[id];
+      if (!character || !streams[id]) continue;
       let track = characters.find((c) => c.id === id);
       if (!track) {
-        track = { id, style: cast[id].style, z: cast[id].z, frames: [], faceEvents: [] };
+        track = { id, style: character.style, z: character.z, frames: [], faceEvents: [] };
         characters.push(track);
       }
-      while (track.frames.length < sf0) track.frames.push(parkedFrame(cast[id].style));
+      while (track.frames.length < sf0) track.frames.push(parkedFrame(character.style));
       track.frames.push(...streams[id]);
       track.faceEvents.push(...events[id]);
     }
@@ -616,7 +647,7 @@ function buildCamera(
   },
 ) {
   const { sf0, sfN, fps, W, H } = ctx;
-  const intents = (sc.camera && sc.camera.length > 0) ? sc.camera : autoDirector(sc, cast, sc.actions ?? []);
+  const intents = (sc.camera && sc.camera.length > 0) ? sc.camera : autoDirector(sc, ctx.cast, sc.actions ?? []);
   type Seg = { f0: number; f1: number; kind: string; p: any };
   const segs: Seg[] = [];
   intents.forEach((it, idx) => {
