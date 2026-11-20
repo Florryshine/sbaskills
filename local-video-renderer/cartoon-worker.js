@@ -348,6 +348,7 @@ async function registerVideo(job, project, rendered) {
   const videoUrl = publicData?.publicUrl;
   if (!videoUrl) throw new Error('Uploaded video has no public URL; refusing to save media_files with a null URL.');
 
+  assertLease(job);
   const metadata = {
     engine: 'cartoon-studio', cartoon_project_id: project.id, cartoon_job_id: job.id,
     title: project.title, caption: project.spec?.caption || '', description: project.spec?.description || '',
@@ -377,6 +378,7 @@ async function registerVideo(job, project, rendered) {
     if (error) throw new Error('Content asset insert failed: ' + error.message);
     assetId = data.id;
   }
+  assertLease(job);
   const mediaPayload = {
     content_asset_id: assetId, media_type: 'video', role: 'primary', position: 0,
     url: videoUrl, storage_path: storagePath, mime_type: 'video/mp4',
@@ -435,6 +437,7 @@ async function processJob(job) {
     } else if (job.job_type === 'narrate') {
       if (!project.spec) throw new Error('Project has no storyboard.');
       const narration = await narrateScenes(job, project, project.spec);
+      assertLease(job);
       await supabase.from('cartoon_projects').update({
         narration, status: 'cast_ready', stage: 'done', progress: 100,
         stage_message: 'Narration ready.', updated_at: new Date().toISOString(),
