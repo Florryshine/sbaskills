@@ -110,10 +110,11 @@ async function setStage(job, stage, progress, message) {
   job.stage = stage;
   job.progress = Math.max(0, Math.min(100, Math.round(progress)));
   job.stage_message = String(message || '').slice(0, 300);
-  const { error } = await supabase.from('cartoon_jobs').update({
+  const { data: ownedJob, error } = await supabase.from('cartoon_jobs').update({
     stage, progress: job.progress, stage_message: job.stage_message, updated_at: new Date().toISOString(),
-  }).eq('id', job.id).eq('claim_token', job.claim_token).eq('status', 'processing');
+  }).eq('id', job.id).eq('claim_token', job.claim_token).eq('status', 'processing').select('id').maybeSingle();
   if (error) throw new Error('Could not update job progress: ' + error.message);
+  if (!ownedJob) { job.leaseLost = true; throw new Error('Cartoon job lease was lost.'); }
   const { error: projectError } = await supabase.from('cartoon_projects').update({
     stage, progress: job.progress, stage_message: job.stage_message, updated_at: new Date().toISOString(),
   }).eq('id', job.project_id);
@@ -121,11 +122,14 @@ async function setStage(job, stage, progress, message) {
 }
 async function failJob(job, error) {
   const message = String(error?.message || error || 'Unknown Cartoon worker error').slice(0, 1800);
-  await supabase.from('cartoon_jobs').update({
+  const { data: failedJob, error: failError } = await supabase.from('cartoon_jobs').update({
     status: 'failed', stage: 'failed', stage_message: 'Job failed',
     error_message: message, claim_token: null, worker_id: null,
     claimed_at: null, heartbeat_at: null, updated_at: new Date().toISOString(),
-  }).eq('id', job.id).eq('claim_token', job.claim_token);
+  }).eq('id', job.id).eq('claim_token', job.claim_token).select('id').maybeSingle();
+  if (failError) log('could not record job failure:', failError.message);
+  // A worker whose lease was reclaimed must never overwrite the newer worker's project state.
+  if (!failedJob) return;
   await supabase.from('cartoon_projects').update({
     status: 'failed', stage: 'failed', stage_message: 'Production failed',
     error_message: message, updated_at: new Date().toISOString(),
@@ -276,6 +280,7 @@ async function narrateScenes(job, project, spec) {
       storagePath, durationSeconds: Number(durationSeconds.toFixed(3)),
       words: wordsFor(scene.narration, durationSeconds),
     };
+    assertLease(job);
     const { error: saveError } = await supabase.from('cartoon_projects')
       .update({ narration: existing, updated_at: new Date().toISOString() }).eq('id', project.id);
     if (saveError) throw new Error('Could not checkpoint narration: ' + saveError.message);
@@ -394,6 +399,7 @@ async function registerVideo(job, project, rendered) {
     if (error) throw new Error('Media file insert failed: ' + error.message);
     mediaId = data.id;
   }
+  assertLease(job);
   const { error: projectError } = await supabase.from('cartoon_projects').update({
     status: 'ready', stage: 'done', progress: 100, stage_message: 'Cartoon video is ready.',
     video_url: videoUrl, video_storage_path: storagePath,
@@ -449,13 +455,14 @@ async function processJob(job) {
       throw new Error('Unsupported Cartoon job type: ' + job.job_type);
     }
     assertLease(job);
-    const { error: completeError } = await supabase.from('cartoon_jobs').update({
+    const { data: completedJob, error: completeError } = await supabase.from('cartoon_jobs').update({
       status: 'completed', stage: 'done', progress: 100, stage_message: 'Completed',
       result: { completedAt: new Date().toISOString() }, completed_at: new Date().toISOString(),
       claim_token: null, worker_id: null, claimed_at: null, heartbeat_at: null,
       updated_at: new Date().toISOString(),
-    }).eq('id', job.id).eq('claim_token', job.claim_token);
+    }).eq('id', job.id).eq('claim_token', job.claim_token).select('id').maybeSingle();
     if (completeError) throw new Error('Could not mark job completed: ' + completeError.message);
+    if (!completedJob) throw new Error('Cartoon job lease was lost before completion could be recorded.');
     log('completed', job.job_type, job.id);
   } catch (error) {
     await failJob(job, error);
