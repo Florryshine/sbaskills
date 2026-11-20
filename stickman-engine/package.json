@@ -5,7 +5,8 @@
   "description": "Reusable skeletal stickman animation engine: SceneScript -> deterministic timeline -> Remotion render. Storytelling and educational videos.",
   "scripts": {
     "typecheck": "tsc --noEmit",
-    "render:sample": "bun src/render/cli.ts --job jobs/sample-job.json --out out/friction-story.mp4"
+    "render:sample": "bun src/render/cli.ts --job jobs/sample-job.json --out out/friction-story.mp4",
+    "test": "bun test"
   },
   "dependencies": {
     "react": "18.3.1",
