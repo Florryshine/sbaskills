@@ -10,14 +10,13 @@
  */
 
 const SCHEMA_EXAMPLE = `{
-  "title": "Ben and Maya Learn About Friction",
+  "title": "Ben Discovers Friction",
   "fps": 30,
   "width": 720,
   "height": 1280,
   "environment": { "type": "street", "seed": 7, "time": "day" },
   "cast": {
-    "ben": { "style": "ben" },
-    "maya": { "style": "maya" }
+    "ben": { "style": "ben" }
   },
   "scenes": [
     {
@@ -36,18 +35,18 @@ const SCHEMA_EXAMPLE = `{
     },
     {
       "id": "s2-explain",
-      "cast": { "ben": { "x": -46, "facing": 1 }, "maya": { "x": 240, "facing": -1 } },
+      "cast": { "ben": { "x": -46, "facing": 1 } },
       "props": [
         { "id": "box", "type": "box", "x": 30, "w": 64, "h": 64,
           "moving": { "from": 30, "to": 180, "t0": 1.3, "t1": 2.5 } },
         { "id": "bench1", "type": "bench", "x": 300 }
       ],
       "actions": [
-        { "char": "maya", "do": "present", "at": [10, -40], "t0": 0.4 },
-        { "char": "maya", "do": "talkGestures", "line": 0, "stressEvery": 4, "t0": 2.2 }
+        { "char": "ben", "do": "present", "at": [10, -40], "t0": 0.4, "dur": 1.8 },
+        { "char": "ben", "do": "talkGestures", "line": 0, "stressEvery": 4, "t0": 2.2 }
       ],
       "camera": [
-        { "do": "twoShot", "targets": ["ben", "maya"], "scale": 1.55, "at": 0.1, "dur": 3.0 },
+        { "do": "follow", "target": "ben", "scale": 1.55, "at": 0.1, "dur": 3.0 },
         { "do": "focus", "point": [10, -40], "scale": 2.6, "at": 3.4, "dur": 3.4 }
       ],
       "overlays": [
@@ -57,7 +56,7 @@ const SCHEMA_EXAMPLE = `{
         ] }
       ],
       "dialogue": [
-        { "who": "maya", "text": "See those tiny bumps? When two surfaces rub, they grip. That is friction!" }
+        { "who": "ben", "text": "See those tiny bumps? When two surfaces rub, they grip. That is friction!" }
       ]
     }
   ]
