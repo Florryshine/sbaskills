@@ -58,8 +58,12 @@ function solveLeg(s: CharStyle, hip: V2, spec: LegSpec, f: 1 | -1): { kn: V2; ft
 export function buildFrame(s: CharStyle, p: PoseParams): SkeletonFrame {
   const f = p.facing;
   const pel: V2 = [p.x, p.y];
-  const neck = add(pel, mul(limbDir(180 - p.lean, f), s.torso));
-  const head = add(neck, mul(limbDir(180 - p.lean - p.headTilt, f), s.neck + s.headR));
+  // In SVG/world coordinates, y increases downward: 270° points straight up.
+  // 180° points horizontally left, which made every "upright" character's
+  // torso lie sideways and created the permanently bent-waist appearance.
+  // Positive lean follows the character's facing direction.
+  const neck = add(pel, mul(limbDir(270 + p.lean, f), s.torso));
+  const head = add(neck, mul(limbDir(270 + p.lean + p.headTilt, f), s.neck + s.headR));
 
   // Torso yaw rotates the shoulder offsets around the neck pivot.
   const yaw = (p.torsoYaw ?? 0) * (Math.PI / 180) * f;
