@@ -38,15 +38,23 @@ export const PaperBackground: React.FC<{ layout: Layout }> = ({ layout }) => {
   );
 };
 
-/** Split a headline into words; `accentWord` (case-insensitive) gets the accent color. */
+/** Normalize surrounding punctuation while preserving Unicode letters. */
+function normalizeAccentToken(value: string): string {
+  return value
+    .trim()
+    .toLowerCase()
+    .replace(/^[\s.,!?;:()[\]{}"“”'’]+|[\s.,!?;:()[\]{}"“”'’]+$/g, '');
+}
+
+/** Split a headline into words; \`accentWord\` (case-insensitive) gets the accent color. */
 function splitAccent(headline: string, accentWord?: string): { word: string; accent: boolean }[] {
-  const target = (accentWord || '').replace(/[^\p{L}\p{N}'’-]/gu, '').toLowerCase();
+  const target = normalizeAccentToken(accentWord || '');
   if (!target) return headline.split(/\s+/).filter(Boolean).map((word) => ({ word, accent: false }));
   return headline
     .split(/\s+/)
     .filter(Boolean)
     .map((word) => {
-      const clean = word.replace(/[^\p{L}\p{N}'’-]/gu, '').toLowerCase();
+      const clean = normalizeAccentToken(word);
       return { word, accent: clean === target };
     });
 }
