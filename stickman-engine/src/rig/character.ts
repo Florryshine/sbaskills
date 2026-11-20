@@ -170,7 +170,7 @@ export type SceneAction =
   | { char: string; do: 'laugh'; t0?: number; dur?: number }
   | { char: string; do: 'stumble'; t0?: number }
   | { char: string; do: 'face'; facing: 1 | -1; t0?: number }
-  | { char: string; do: 'sit'; t0?: number }
+  | { char: string; do: 'sit'; t0?: number; dur?: number }
   | { char: string; do: 'stand'; t0?: number; dur?: number }
   | { char: string; do: 'talkGestures'; line?: number; stressEvery?: number; t0?: number; dur?: number }
   // ---- Phase A: physical actions ----
