@@ -173,9 +173,10 @@ async function ensureKnowledgeAsset(project, spec, subject) {
   return data.id;
 }
 async function makeStoryboard(job, project) {
-  const topic = String(project.custom_topic || project.title || '').trim();
   const subject = String(job.payload?.subject || 'General').slice(0, 80);
-  const ka = await loadKnowledgeAsset(project.knowledge_asset_id, topic, subject);
+  const topicHint = String(project.custom_topic || project.title || '').trim();
+  const ka = await loadKnowledgeAsset(project.knowledge_asset_id, topicHint, subject);
+  const topic = String(project.custom_topic || ka?.keyword || project.title || '').trim();
   const kaLike = ka ? {
     keyword: ka.keyword, subject: ka.subject || subject, summary: ka.summary || topic,
     subTopics: JSON.stringify(asJsonArray(ka.sub_topics)),
@@ -262,12 +263,20 @@ async function renderVideo(job, project) {
     serveUrl, id: 'CartoonVideo', inputProps,
     timeoutInMilliseconds: 120000,
   });
+  await supabase.from('cartoon_projects').update({
+    status: 'rendering', stage: 'rendering', stage_message: 'Rendering animated scenes...',
+    updated_at: new Date().toISOString(),
+  }).eq('id', project.id);
   await setStage(job, 'rendering', 76, 'Rendering animated scenes...');
+  let lastProgressWrite = 0;
   await renderMedia({
     composition: { ...composition, width: dims.width, height: dims.height },
     serveUrl, codec: 'h264', outputLocation, inputProps,
     concurrency: Math.max(1, Math.min(4, Number(process.env.CARTOON_RENDER_CONCURRENCY || 2))),
     onProgress: ({ progress }) => {
+      const now = Date.now();
+      if (now - lastProgressWrite < 2500 && progress < 1) return;
+      lastProgressWrite = now;
       const value = 76 + Math.round(progress * 18);
       setStage(job, 'rendering', value, `Rendering cartoon video: ${Math.round(progress * 100)}%`).catch(err => log('progress update failed:', err.message));
     },
