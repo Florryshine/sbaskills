@@ -124,7 +124,7 @@ export default function CartoonStudioPage() {
             <h2 className="mb-3 font-semibold">Worker status</h2>
             {workers.length ? workers.slice(0, 3).map(worker => (
               <div key={worker.worker_id} className="mb-3 rounded-xl bg-slate-950 p-3">
-                <div className="flex items-center gap-2 text-sm font-medium"><span className="h-2 w-2 rounded-full bg-emerald-400" /> Online recently</div>
+                <div className="flex items-center gap-2 text-sm font-medium"><span className={\`h-2 w-2 rounded-full \${Date.now() - new Date(worker.last_seen_at).getTime() < 90000 ? 'bg-emerald-400' : 'bg-amber-400'}\`} />{Date.now() - new Date(worker.last_seen_at).getTime() < 90000 ? 'Online' : 'Last seen earlier'}</div>
                 <p className="mt-1 truncate text-xs text-slate-500">{worker.worker_id}</p>
                 <p className="mt-1 text-xs text-slate-500">{worker.current_job_id ? 'Processing a job' : 'Waiting for work'}</p>
                 {worker.info?.last_error && <p className="mt-2 text-xs text-rose-400">{worker.info.last_error}</p>}
@@ -157,7 +157,7 @@ export default function CartoonStudioPage() {
                   <div className="mt-2 flex justify-between text-xs text-slate-500"><span>{project.stage_message || project.stage}</span><span>{project.progress || 0}%</span></div>
                   {project.error_message && <p className="mt-3 rounded-lg bg-rose-950/40 p-3 text-xs text-rose-300">{project.error_message}</p>}
                   <div className="mt-4 flex flex-wrap items-center gap-3">
-                    {project.status === 'cast_ready' || project.status === 'failed' ? (
+                    {project.has_spec && (project.status === 'cast_ready' || project.status === 'failed') ? (
                       <button onClick={() => enqueueRender(project.id)} disabled={busyId === project.id} className="inline-flex items-center gap-2 rounded-lg bg-emerald-500 px-3 py-2 text-sm font-semibold text-slate-950 disabled:opacity-50">
                         {busyId === project.id ? <Loader2 size={15} className="animate-spin" /> : <Play size={15} />} Render video
                       </button>
