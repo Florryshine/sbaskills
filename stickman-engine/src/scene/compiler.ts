@@ -167,6 +167,11 @@ export function compile(script: SceneScript, narration: NarrationMap): Timeline 
       ...Object.keys(sc.cast ?? {}),
       ...actions.map((a) => a.char),
       ...(sc.dialogue ?? []).map((line) => line.who).filter((who) => who !== 'narr'),
+      ...(sc.camera ?? []).flatMap((intent) => {
+        if (intent.do === 'follow') return [intent.target];
+        if (intent.do === 'twoShot') return [...intent.targets];
+        return [];
+      }),
     ]);
     const activeCast = Object.fromEntries(
       [...activeIds].filter((id) => cast[id]).map((id) => [id, cast[id]]),
