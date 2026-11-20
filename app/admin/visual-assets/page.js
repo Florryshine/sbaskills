@@ -38,6 +38,7 @@ export default function VisualAssetLibraryPage() {
 
   async function submit(event) {
     event.preventDefault();
+    const formElement = event.currentTarget;
     if (!file || !name.trim()) return;
     setUploading(true);
     setError('');
@@ -57,7 +58,7 @@ export default function VisualAssetLibraryPage() {
       setName('');
       setKeywords('');
       setFile(null);
-      event.currentTarget.reset();
+      formElement.reset();
       await load('');
     } catch (err) {
       setError(err.message || 'Asset upload failed.');
