@@ -105,3 +105,51 @@ Before implementation proceeds:
 6. Add isolated Cartoon tests/smoke checks without modifying existing engine test paths.
 
 This document is an architecture decision record, not evidence that the engine has already been ported or that any database migration has been applied.
+
+
+## 8. Phase A implementation foundation — completed 2026-11-20
+
+Phase A now includes the first additive production-schema foundation on
+`feat/cartoon-studio-integration`:
+
+- Added `supabase/migrations/20261120080000_cartoon_studio_foundation.sql`.
+- Added `cartoon_projects`, `cartoon_jobs`, `cartoon_workers`, and
+  `cartoon_characters` tables with project/job state, progress, bounded
+  retries, worker leases, and ownership fields.
+- Added an engine-neutral `visual_assets` catalogue with content-hash
+  deduplication, search metadata, source/licence/creator/attribution fields,
+  and a Storage path.
+- Added admin RLS policies for project, character, job and visual-asset
+  access; worker liveness is service-role only.
+- Added the `cartoon-assets` and `visual-assets` Storage buckets.
+- Added atomic `claim_cartoon_job` and lease-guarded
+  `cartoon_job_heartbeat` RPCs, following the existing Whiteboard,
+  Stickman and Music Learning worker patterns.
+
+### Phase A safety boundary
+
+This migration is committed to the integration branch only. It has NOT been
+applied to the live Supabase project. No Vercel deployment, package/config
+change, existing engine modification, publishing change, or production
+branch update was made.
+
+The migration intentionally does not yet install a GitHub Actions dispatch
+trigger: that must be wired to the actual Cartoon worker workflow in the
+worker implementation phase, rather than dispatching jobs to a nonexistent
+handler. API routes, Supabase adapters, the worker, Remotion composition
+registration, UI and runtime tests remain subsequent implementation work.
+
+### Verification performed
+
+- Compared `feat/cartoon-studio-integration` against `master`: the branch
+  is exactly 2 commits ahead and 0 commits behind.
+- The only changed files are this integration plan and the additive
+  Cartoon/Visual Asset migration.
+- Confirmed the migration file is present on the integration branch and
+  includes both worker RPCs and the shared visual-assets table.
+- Confirmed no changes were made to `package.json`, lockfiles,
+  `next.config.js`, existing Remotion registrations, or existing workers.
+
+Phase A is complete as an architecture and database-foundation phase. The
+runtime port begins in the next phase after this migration is reviewed and
+applied in the intended Supabase environment.
