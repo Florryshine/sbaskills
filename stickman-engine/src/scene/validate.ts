@@ -17,6 +17,8 @@ const KNOWN_ACTIONS = new Set([
 ]);
 
 const MAX_SCENES = 12;
+const MAX_CAST = 24;
+const MAX_SCENE_CAST = 20;
 const MAX_DURATION_SECONDS = 8 * 60;
 
 export function validateSceneScript(script: any): string[] {
@@ -50,6 +52,9 @@ export function validateSceneScript(script: any): string[] {
   }
 
   const castIds = new Set(Object.keys(script.cast || {}));
+  if (castIds.size > MAX_CAST) {
+    problems.push(`cast{} may define at most ${MAX_CAST} reusable characters (got ${castIds.size})`);
+  }
   let totalDuration = 0;
   let sceneIndex = -1;
   for (const sc of script.scenes ?? []) {
@@ -64,6 +69,11 @@ export function validateSceneScript(script: any): string[] {
     // Per-scene env override must also be a known environment.
     if (sc.env && !KNOWN_ENVIRONMENTS.has(sc.env.type)) {
       problems.push(where(`env.type "${sc.env.type}" is unknown (street, abstract, classroom)`));
+    }
+
+    const sceneCastIds = Object.keys(sc.cast ?? {});
+    if (sceneCastIds.length > MAX_SCENE_CAST) {
+      problems.push(where(`may stage at most ${MAX_SCENE_CAST} characters in one scene (got ${sceneCastIds.length})`));
     }
 
     const dialogue = Array.isArray(sc.dialogue) ? sc.dialogue : [];
