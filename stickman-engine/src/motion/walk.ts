@@ -52,7 +52,7 @@ export function makeWalk(s: CharStyle, o: WalkOpts): { frames: SkeletonFrame[]; 
   const hipShiftAmp = running ? 4 : 6;         // lateral hip sway toward stance foot
   const torsoYawAmp = running ? 6 : 4;         // shoulder counter-rotation
   // Pelvis drop that flexes the stance knee slightly instead of locking it.
-  const stanceKneeFlexDeg = 8;
+  const stanceKneeFlexDeg = running ? 48 : 45;
   const pelvisDropAmp =
     (s.thigh + s.shin) *
     (1 - Math.cos((stanceKneeFlexDeg * Math.PI) / 180)) *
@@ -100,7 +100,10 @@ export function makeWalk(s: CharStyle, o: WalkOpts): { frames: SkeletonFrame[]; 
       }
       const plantPhase = m;
       const plantX = o.from + facing * m * S;
-      const liftPhase = plantPhase + 1.22;
+      // Release the planted foot before the hip outruns the leg's reachable
+      // IK envelope. A long locked stance was making the solver clamp the
+      // ankle and visually slide the foot.
+      const liftPhase = plantPhase + 0.78;
       const nextPlantPhase = plantPhase + 2;
       const nextPlantX = o.from + facing * (m + 2) * S;
       const finalPlant = nextPlantPhase >= steps;
