@@ -157,8 +157,8 @@ export type DialogueLine = {
 
 export type SceneAction =
   // ---- locomotion ----
-  | { char: string; do: 'walk'; from: number; to: number; speed?: number; t0?: number; pushProp?: string }
-  | { char: string; do: 'run'; from: number; to: number; speed?: number; t0?: number }
+  | { char: string; do: 'walk'; from: number; to: number; speed?: number; t0?: number; dur?: number; pushProp?: string }
+  | { char: string; do: 'run'; from: number; to: number; speed?: number; t0?: number; dur?: number }
   | { char: string; do: 'turn'; facing: 1 | -1; t0?: number; dur?: number }
   // ---- single-character actions ----
   | { char: string; do: 'push'; prop?: string; moving?: boolean; at?: number; t0?: number; dur?: number }
