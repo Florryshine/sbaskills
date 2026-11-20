@@ -206,14 +206,23 @@ begin
       claim_token = null, worker_id = null, claimed_at = null, heartbeat_at = null,
       updated_at = now()
   where status = 'processing'
-    and heartbeat_at < now() - interval '5 minutes'
+    and (heartbeat_at is null or heartbeat_at < now() - interval '5 minutes')
+    and attempt_count >= max_attempts;
+
+  update public.cartoon_jobs
+  set status = 'failed',
+      stage = 'failed',
+      stage_message = 'Job reached the maximum number of attempts',
+      error_message = 'Cartoon job reached its maximum retry count before a worker could claim it.',
+      updated_at = now()
+  where status = 'queued'
     and attempt_count >= max_attempts;
 
   return query
   with candidate as (
     select id
     from public.cartoon_jobs
-    where status = 'queued'
+    where (status = 'queued' and attempt_count < max_attempts)
        or (status = 'processing'
            and (claim_token is null or heartbeat_at is null
                 or heartbeat_at < now() - interval '5 minutes')
