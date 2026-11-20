@@ -60,14 +60,14 @@ export default function CartoonStudioPage() {
     }
   }
 
-  async function enqueueRender(projectId) {
+  async function enqueueRender(projectId, jobType = 'render') {
     setBusyId(projectId);
     setError('');
     try {
       const response = await fetch('/api/admin/cartoon-studio', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ action: 'enqueue', projectId, jobType: 'render' }),
+        body: JSON.stringify({ action: 'enqueue', projectId, jobType }),
       });
       const data = await response.json();
       if (!response.ok) throw new Error(data.error || 'Could not queue rendering.');
@@ -158,8 +158,13 @@ export default function CartoonStudioPage() {
                   {project.error_message && <p className="mt-3 rounded-lg bg-rose-950/40 p-3 text-xs text-rose-300">{project.error_message}</p>}
                   <div className="mt-4 flex flex-wrap items-center gap-3">
                     {project.has_spec && (project.status === 'cast_ready' || project.status === 'failed') ? (
-                      <button onClick={() => enqueueRender(project.id)} disabled={busyId === project.id} className="inline-flex items-center gap-2 rounded-lg bg-emerald-500 px-3 py-2 text-sm font-semibold text-slate-950 disabled:opacity-50">
+                      <button onClick={() => enqueueRender(project.id, 'render')} disabled={busyId === project.id} className="inline-flex items-center gap-2 rounded-lg bg-emerald-500 px-3 py-2 text-sm font-semibold text-slate-950 disabled:opacity-50">
                         {busyId === project.id ? <Loader2 size={15} className="animate-spin" /> : <Play size={15} />} Render video
+                      </button>
+                    ) : null}
+                    {!project.has_spec && project.status === 'failed' ? (
+                      <button onClick={() => enqueueRender(project.id, 'script')} disabled={busyId === project.id} className="inline-flex items-center gap-2 rounded-lg bg-sky-500 px-3 py-2 text-sm font-semibold text-slate-950 disabled:opacity-50">
+                        {busyId === project.id ? <Loader2 size={15} className="animate-spin" /> : <RefreshCw size={15} />} Retry storyboard
                       </button>
                     ) : null}
                     {project.video_url && <a href={project.video_url} target="_blank" rel="noreferrer" className="rounded-lg border border-slate-700 px-3 py-2 text-sm text-sky-300 hover:bg-slate-800">Open video</a>}
