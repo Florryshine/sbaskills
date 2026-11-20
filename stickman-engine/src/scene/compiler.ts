@@ -185,7 +185,11 @@ export function compile(script: SceneScript, narration: NarrationMap): Timeline 
         }
         case 'walk':
         case 'run': {
-          const speed = act.speed ?? (act.do === 'run' ? 260 : 120);
+          const defaultSpeed = act.do === 'run' ? 260 : 120;
+          const distance = Math.abs(act.to - st.x);
+          const speed = act.speed ?? (act.dur ? distance / Math.max(0.15, act.dur - 0.15) : defaultSpeed);
+          const travelSeconds = act.dur ?? (distance / Math.max(1, speed) + 0.35);
+          const travelFrames = actionFrameCount({ dur: travelSeconds }, sfN - a0, fps, travelSeconds);
           // optional push-while-walking: hands IK to the moving prop's handles
           let handTargets: [(x: number, t: number) => [number, number], (x: number, t: number) => [number, number]] | null = null;
           if ('pushProp' in act && act.pushProp) {
@@ -212,7 +216,7 @@ export function compile(script: SceneScript, narration: NarrationMap): Timeline 
             }
           }
           const w = makeWalk(st.style, {
-            from: st.x, to: act.to, speed, startFrame: a0, frames: sfN - a0, fps,
+            from: st.x, to: act.to, speed, startFrame: a0, frames: travelFrames, fps,
             handTargets,
           });
           blendInto(streams[act.char], w.frames, a0 - sf0, 6);
