@@ -159,17 +159,30 @@ export function compile(script: SceneScript, narration: NarrationMap): Timeline 
       if (c.facing) cast[id].facing = c.facing;
     }
 
-    // ---- per-scene dense streams per character ----
+    // Only characters explicitly staged or used in this scene are rendered.
+    // Defining a reusable character in the top-level cast must not make them
+    // appear in every scene.
+    const actions = [...(sc.actions ?? [])].sort((a, b) => (a.t0 ?? 0) - (b.t0 ?? 0));
+    const activeIds = new Set<string>([
+      ...Object.keys(sc.cast ?? {}),
+      ...actions.map((a) => a.char),
+      ...(sc.dialogue ?? []).map((line) => line.who).filter((who) => who !== 'narr'),
+    ]);
+    const activeCast = Object.fromEntries(
+      [...activeIds].filter((id) => cast[id]).map((id) => [id, cast[id]]),
+    ) as Record<string, CharState>;
+
+    // ---- per-scene dense streams for active characters only ----
     const streams: Record<string, FrameBuf> = {};
     const events: Record<string, { frame: number; emo: any }[]> = {};
-    for (const id of Object.keys(cast)) {
-      streams[id] = makeIdle(cast[id].style, {
-        x: cast[id].x, facing: cast[id].facing, startFrame: sf0, frames: sfN - sf0, fps,
+    for (const id of activeIds) {
+      const st = cast[id];
+      if (!st) continue;
+      streams[id] = makeIdle(st.style, {
+        x: st.x, facing: st.facing, startFrame: sf0, frames: sfN - sf0, fps,
       });
       events[id] = [];
     }
-
-    const actions = [...(sc.actions ?? [])].sort((a, b) => (a.t0 ?? 0) - (b.t0 ?? 0));
     for (const act of actions) {
       const st = cast[act.char];
       if (!st) continue;
@@ -569,19 +582,21 @@ export function compile(script: SceneScript, narration: NarrationMap): Timeline 
 
     // ---- camera ----
     buildCamera(sc, {
-      sf0, sfN, fps, W, H, cast, streams,
+      sf0, sfN, fps, W, H, cast: activeCast, streams,
       onShake: (e) => shakeEvents.push(e),
       onCam: (k) => cameraKeys.push(k),
     });
 
     // ---- concatenate character tracks ----
-    for (const id of Object.keys(cast)) {
+    for (const id of activeIds) {
+      const character = cast[id];
+      if (!character || !streams[id]) continue;
       let track = characters.find((c) => c.id === id);
       if (!track) {
-        track = { id, style: cast[id].style, z: cast[id].z, frames: [], faceEvents: [] };
+        track = { id, style: character.style, z: character.z, frames: [], faceEvents: [] };
         characters.push(track);
       }
-      while (track.frames.length < sf0) track.frames.push(parkedFrame(cast[id].style));
+      while (track.frames.length < sf0) track.frames.push(parkedFrame(character.style));
       track.frames.push(...streams[id]);
       track.faceEvents.push(...events[id]);
     }
