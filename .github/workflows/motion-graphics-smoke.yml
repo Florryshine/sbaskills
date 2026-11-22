@@ -1,0 +1,41 @@
+name: Motion Graphics Engine Smoke
+
+# Verifies the shared Remotion bundle still registers every composition
+# (LessonVideo, WhiteboardVideo, CartoonVideo, MotionGraphicsVideo) and that
+# the motion graphics engine variation logic stays healthy. Runs on pushes
+# that touch the motion engine or the shared bundle.
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [master]
+    paths:
+      - 'remotion/**'
+      - 'lib/motion/**'
+      - 'local-video-renderer/motion-graphics-worker.js'
+
+jobs:
+  smoke:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+
+      - name: Install Chrome for Remotion
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y chromium-browser
+          echo "CHROME_PATH=$(which chromium-browser)" >> "$GITHUB_ENV"
+
+      - name: Install dependencies
+        run: npm ci || npm install
+
+      - name: List compositions (bundle check)
+        run: npx remotion compositions remotion/index.js
+
+      - name: Engine variation check
+        run: node local-video-renderer/tests/motion-variation-check.mjs
