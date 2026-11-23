@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { createBrowserClient } from '@/lib/supabase';
 import { useRouter, useParams } from 'next/navigation';
 import Link from 'next/link';
@@ -19,6 +19,12 @@ export default function LessonPlayerPage() {
   const [loading, setLoading] = useState(true);
   const [isComplete, setIsComplete] = useState(false);
   const [processing, setProcessing] = useState(false);
+  // Ref that is set true ONLY when LessonScreenPlayer calls its onComplete
+  // callback.  This is defence-in-depth: even if the external Mark-as-Complete
+  // button were re-enabled or handleMarkComplete were called from the
+  // browser console, bite-sized lessons cannot be marked complete without
+  // the player having reached its final screen.
+  const playerCompletedRef = useRef(false);
   const router = useRouter();
   const params = useParams();
   const { id, lessonId } = params;
@@ -152,6 +158,19 @@ export default function LessonPlayerPage() {
 
   const handleMarkComplete = async () => {
     if (isComplete) return;
+
+    // Bite-sized lessons can only be completed through the LessonScreenPlayer
+    // flow.  The player calls its onComplete callback (which sets
+    // playerCompletedRef to true) only when the student reaches the final
+    // screen — and every question screen before it blocks forward progress
+    // until the student submits an answer.  The external Mark-as-Complete
+    // button is hidden for bite-sized lessons, so this guard is
+    // defence-in-depth against programmatic bypass.
+    if (lesson?.content_type === 'bite_sized' && !playerCompletedRef.current) {
+      alert('Please complete all lesson screens in the player to finish this lesson.');
+      return;
+    }
+
     setProcessing(true);
 
     try {
@@ -276,7 +295,13 @@ export default function LessonPlayerPage() {
                   completed={isComplete}
                   initialScreenIndex={screenProgress?.current_screen_index || 0}
                   onProgress={handleScreenProgress}
-                  onComplete={handleMarkComplete}
+                  onComplete={() => {
+                    // Mark that the player — not an external button — triggered
+                    // completion.  handleMarkComplete checks this ref before
+                    // allowing the upsert for bite-sized lessons.
+                    playerCompletedRef.current = true;
+                    handleMarkComplete();
+                  }}
                   onExit={() => router.push(`/courses/${id}`)}
                 />
               ) : (
@@ -325,16 +350,30 @@ export default function LessonPlayerPage() {
               )}
             </div>
 
-            <button
-              onClick={handleMarkComplete}
-              disabled={isComplete || processing}
-              className={`px-6 py-3 rounded-full font-bold transition ${
-                isComplete ? 'bg-green-100 text-green-700 cursor-default' :
-                processing ? 'bg-gray-400 text-white cursor-not-allowed' :
-                'bg-brand-yellow text-brand-dark hover:opacity-90'
-              }`}>
-              {isComplete ? '✅ Completed' : processing ? 'Processing...' : '✅ Mark as Complete'}
-            </button>
+            {/*
+              Bite-sized lessons do NOT show the external Mark-as-Complete
+              button.  Completion for bite-sized lessons flows exclusively
+              through the LessonScreenPlayer's onComplete callback, which is
+              only triggered when the student reaches the final screen — and
+              every question screen before it blocks forward progress until
+              the student submits an answer.  This prevents students from
+              bypassing required practice activities.
+
+              For non-bite-sized lessons (video / text / pdf) the external
+              button is retained as before.
+            */}
+            {lesson.content_type !== 'bite_sized' && (
+              <button
+                onClick={handleMarkComplete}
+                disabled={isComplete || processing}
+                className={`px-6 py-3 rounded-full font-bold transition ${
+                  isComplete ? 'bg-green-100 text-green-700 cursor-default' :
+                  processing ? 'bg-gray-400 text-white cursor-not-allowed' :
+                  'bg-brand-yellow text-brand-dark hover:opacity-90'
+                }`}>
+                {isComplete ? '✅ Completed' : processing ? 'Processing...' : '✅ Mark as Complete'}
+              </button>
+            )}
 
             <div>
               {nextLesson && isComplete && (
