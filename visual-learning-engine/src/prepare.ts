@@ -19,7 +19,7 @@ import { synthesizeSceneNarration, probeDurationSeconds, VOICE_PRESETS } from '.
 import { normalizeNarrationClip, generateSilence } from './audio/mix';
 import { resolveSceneImages } from './imagery/providers';
 import { generateMusicFile } from './music/generator';
-import { access, mkdir, copyFile } from 'node:fs/promises';
+import { access, mkdir, copyFile, unlink } from 'node:fs/promises';
 import { existsSync } from 'node:fs';
 import { join } from 'node:path';
 
@@ -79,19 +79,27 @@ export async function prepareNarration(
         ? 'wav'
         : null;
     const metaPath = join(narrDir, `scene-${String(i).padStart(3, '0')}.meta.json`);
-    let cachedMeta: { provider?: NarrationManifest['provider']; voice?: string } | null = null;
+    let cachedMeta: { provider?: NarrationManifest['provider']; voice?: string; ext?: 'wav' | 'mp3' } | null = null;
     if (cachedExt) {
       try {
         cachedMeta = JSON.parse(await (await import('node:fs/promises')).readFile(metaPath, 'utf8'));
-        if (!cachedMeta?.provider || cachedMeta.provider === 'silent' || !cachedMeta.voice || cachedMeta.voice === 'none') cachedExt = null;
+        if (!cachedMeta?.provider || cachedMeta.provider === 'silent' || !cachedMeta.voice || cachedMeta.voice === 'none' || !cachedMeta.ext || cachedMeta.ext !== cachedExt) cachedExt = null;
       } catch {
         // Legacy cache entries have no trustworthy provider metadata: regenerate them.
         cachedExt = null;
       }
+      if (!cachedExt) {
+        await Promise.all(['mp3', 'wav'].map((ext) => unlink(join(narrDir, `scene-${String(i).padStart(3, '0')}.${ext}`)).catch(() => {})));
+      }
     }
     if (cachedExt && cachedMeta) {
       const file = join(narrDir, `scene-${String(i).padStart(3, '0')}.${cachedExt}`);
-      const duration = probeDurationSeconds(file) ?? 3;
+      const duration = probeDurationSeconds(file);
+      if (!duration || duration <= 0) {
+        await unlink(file).catch(() => {});
+        cachedExt = null;
+      }
+      if (!cachedExt || !duration) continue;
       opts.onProgress?.('narrating', `scene ${i + 1}/${script.scenes.length} (cached)`);
       clips.push({
         sceneIndex: i,
@@ -99,7 +107,7 @@ export async function prepareNarration(
         file: join('narration', `scene-${String(i).padStart(3, '0')}.${cachedExt}`),
         duration,
         words: [],
-        voice: preset,
+        voice: cachedMeta.voice!,
       });
       // Word timings sidecar (saved on first run)
       try {
@@ -140,7 +148,7 @@ export async function prepareNarration(
     }
     const { writeFile } = await import('node:fs/promises');
     await writeFile(join(narrDir, `scene-${String(i).padStart(3, '0')}.words.json`), JSON.stringify(result.words));
-    await writeFile(metaPath, JSON.stringify({ provider: result.provider, voice: result.voice }));
+    await writeFile(metaPath, JSON.stringify({ provider: result.provider, voice: result.voice, ext: result.ext }));
   }
   const provider = clips[0]?.provider ?? spec.narrationProvider ?? 'edge';
   return { provider, voice: clips[0]?.voice ?? preset, clips };
