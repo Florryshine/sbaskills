@@ -247,6 +247,7 @@ async function prepareEpisodeAssets(job, spec, script, workDir) {
     publicDir,
     narrationProvider: spec.narrationProvider,
     proxyEndpoint: process.env.TTS_ENDPOINT,
+    allowSilent: false,
     onProgress: async (stage, message) => {
       if (stage === 'narrating') await setStage(job, 'narrating', message);
     },
