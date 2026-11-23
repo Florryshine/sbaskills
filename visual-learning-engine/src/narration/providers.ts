@@ -1,6 +1,7 @@
 // src/narration/providers.ts — Gemini-first narration chain with measured word timings.
 //
-// Order (first available wins; every step is free, no API keys):
+// Order (first available wins; Gemini uses the configured SBA API key):
+//   gemini  — shared Gemini TTS implementation (primary narrator).
 //   edge    — edge-tts-universal (free Microsoft Edge voices). Real
 //             word-boundary timestamps. Works from residential IPs; cloud
 //             IPs are usually blocked (as whiteboard-engine documents).
@@ -8,8 +9,7 @@
 //             compatible /v1/audio/speech). Cloud-safe, no timestamps →
 //             proportional alignment from measured duration.
 //   zai     — sandbox/dev TTS via the z-ai CLI (in-house tool).
-//   silent  — timed silence (renders a captioned, muted video rather than
-//             failing; last resort).
+//   silent  — optional timed silence for explicit previews/tests only.
 //
 // All clips are stored as mp3 (edge/proxy) or wav (zai/silent) and measured
 // with ffprobe so the timeline is always built from real durations.
@@ -205,7 +205,7 @@ export async function synthesizeNarration(req: NarrationRequest, opts: { proxyEn
   // fallback, never as a way to bypass the primary Gemini voice.
   const chain: NarrationProviderName[] = ['gemini'];
   chain.push('edge', 'proxy', 'zai');
-  if (req.preferred && req.preferred !== 'gemini') chain.push(req.preferred);
+  if (req.preferred && req.preferred !== 'gemini' && req.preferred !== 'silent') chain.push(req.preferred);
   if (opts.allowSilent === true) chain.push('silent');
 
   for (const provider of [...new Set(chain)]) {
