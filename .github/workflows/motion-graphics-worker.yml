@@ -1,0 +1,50 @@
+name: Motion Graphics Worker
+
+# Renders Dynamic Motion Graphics Engine videos on the free GitHub Actions
+# runner (same dispatch pattern as the visual-learning worker). The job table
+# is drained with MOTION_RUN_ONCE=1 and the runner exits.
+
+on:
+  workflow_dispatch:
+    inputs:
+      job_id:
+        description: 'Optional job id to render (empty = drain the whole queue)'
+        required: false
+        default: ''
+  repository_dispatch:
+    types: [motion-graphics-render]
+
+concurrency:
+  group: motion-graphics-worker
+  cancel-in-progress: false
+
+jobs:
+  render:
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: latest
+
+      - name: Install Chrome for Remotion
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y chromium-browser
+          echo "CHROME_PATH=$(which chromium-browser)" >> "$GITHUB_ENV"
+
+      - name: Install dependencies
+        run: npm ci || npm install
+
+      - name: Render queued jobs
+        env:
+          NEXT_PUBLIC_SUPABASE_URL: ${{ secrets.NEXT_PUBLIC_SUPABASE_URL }}
+          SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
+          TTS_ENDPOINT: ${{ secrets.TTS_ENDPOINT }}
+          GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
+          MOTION_RUN_ONCE: '1'
+          MOTION_RUN_ONCE_MAX_MS: '2700000'
+          MOTION_RENDER_CONCURRENCY: '2'
+        run: bun local-video-renderer/motion-graphics-worker.js
