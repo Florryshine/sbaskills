@@ -97,9 +97,13 @@ jobs:
             libxrandr2 libxkbcommon0 libxfixes3 libxcomposite1 libxdamage1 libatk-bridge2.0-0 \
             libpango-1.0-0 libcairo2 libcups2 fonts-dejavu-core
 
+      - name: Reconcile npm lockfile with package manifest
+        if: steps.check.outputs.has_jobs == 'true'
+        run: npm install --package-lock-only --ignore-scripts --no-audit --no-fund
+
       - name: Install SBA dependencies
         if: steps.check.outputs.has_jobs == 'true'
-        run: npm ci
+        run: npm ci --no-audit --no-fund
 
       - name: Install Remotion Chromium
         if: steps.check.outputs.has_jobs == 'true'
