@@ -274,9 +274,8 @@ export default function VisualLearningPage() {
         </div>
       ) : null}
       {worker && !worker.unknown && !workerOnline ? (
-        <div className="mb-4 rounded-lg border border-red-500/40 bg-red-500/10 px-4 py-3 text-sm text-red-200">
-          No render worker is online. Jobs will wait until <code className="text-xs">bun local-video-renderer/visual-learning-worker.js</code> runs
-          (locally or via the GitHub Actions worker).
+        <div className="mb-4 rounded-lg border border-amber-500/40 bg-amber-500/10 px-4 py-3 text-sm text-amber-200">
+          No render process is running right now. The GitHub Actions worker checks the queue automatically every 5 minutes, so new jobs should be picked up shortly. For an immediate test, run <strong>Visual Learning Worker</strong> from the repository's Actions tab.
         </div>
       ) : null}
       {worker?.online && activeJobs > 0 ? (
