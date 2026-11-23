@@ -12,6 +12,14 @@ const emptyBlueprint = {
   difficulty: 'beginner',
 };
 
+function blueprintLabel(item, fallback = '') {
+  if (typeof item === 'string' || typeof item === 'number') return String(item);
+  if (item && typeof item === 'object') {
+    return item.text || item.name || item.title || item.label || item.description || fallback;
+  }
+  return fallback;
+}
+
 function diagnosticsFor(lesson) {
   return Array.isArray(lesson?.generation_diagnostics) ? lesson.generation_diagnostics : [];
 }
@@ -283,8 +291,8 @@ export default function BiteSizedLessonEditor({ lesson, onLessonUpdated }) {
           <span className="text-xs text-slate-500">Review before Stage 2</span>
         </div>
         <div className="mt-3 grid gap-3 text-sm md:grid-cols-2">
-          <div><strong>Objectives</strong><ul className="mt-1 list-disc pl-5">{(blueprint?.objectives || []).map((item, index) => <li key={index}>{item}</li>)}</ul></div>
-          <div><strong>Concepts</strong><ul className="mt-1 list-disc pl-5">{(blueprint?.concepts || []).map((item, index) => <li key={index}>{item}</li>)}</ul></div>
+          <div><strong>Objectives</strong><ul className="mt-1 list-disc pl-5">{(blueprint?.objectives || []).map((item, index) => <li key={item?.id || index}>{blueprintLabel(item, `Objective ${index + 1}`)}</li>)}</ul></div>
+          <div><strong>Concepts</strong><ul className="mt-1 list-disc pl-5">{(blueprint?.concepts || []).map((item, index) => <li key={item?.id || index}>{blueprintLabel(item, `Concept ${index + 1}`)}</li>)}</ul></div>
           <div><strong>Misconceptions</strong><ul className="mt-1 list-disc pl-5">{(blueprint?.misconceptions || []).map((item, index) => <li key={index}>{item}</li>)}</ul></div>
           <div><strong>Strategy</strong><p className="mt-1">{blueprint?.teachingStrategy || 'Not generated yet'} · {blueprint?.difficulty || '—'}</p></div>
         </div>
