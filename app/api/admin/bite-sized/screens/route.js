@@ -2,6 +2,67 @@ import { NextResponse } from 'next/server';
 import { createRouteHandlerClient } from '@/lib/supabase-server';
 import { generateInteractiveLesson } from '@/lib/bite-sized/screens';
 import { validateLessonContent } from '@/lib/bite-sized/validator';
+import { createAdminClient } from '@/lib/supabase-admin';
+import {
+  downloadImageBuffer,
+  searchPexelsMulti,
+  searchPixabayMulti,
+  searchWikimediaMulti,
+} from '@/lib/image-search';
+
+const IMAGE_BUCKET = 'lesson-screen-images';
+
+function imageExtension(url) {
+  const extension = String(url || '').split('?')[0].split('.').pop()?.toLowerCase();
+  return ['png', 'webp', 'gif'].includes(extension) ? extension : 'jpg';
+}
+
+async function attachGeneratedImages(screens, lessonId) {
+  const admin = createAdminClient();
+  let attached = 0;
+  const results = [];
+
+  for (const screen of screens) {
+    if (!screen.imageQuery) {
+      results.push(screen);
+      continue;
+    }
+    try {
+      const providers = [searchPexelsMulti, searchPixabayMulti, searchWikimediaMulti];
+      let candidate = null;
+      for (const search of providers) {
+        const matches = await search(screen.imageQuery, 2);
+        candidate = matches.find((item) => item?.url);
+        if (candidate) break;
+      }
+      if (!candidate) {
+        results.push(screen);
+        continue;
+      }
+      const buffer = await downloadImageBuffer(candidate.url);
+      const extension = imageExtension(candidate.url);
+      const path = `lesson-screens/${lessonId}/${screen.orderIndex}.${extension}`;
+      const { error: uploadError } = await admin.storage.from(IMAGE_BUCKET).upload(path, buffer, {
+        contentType: `image/${extension === 'jpg' ? 'jpeg' : extension}`,
+        upsert: true,
+      });
+      if (uploadError) throw uploadError;
+      const { data: publicUrl } = admin.storage.from(IMAGE_BUCKET).getPublicUrl(path);
+      attached += 1;
+      results.push({
+        ...screen,
+        imageUrl: publicUrl.publicUrl,
+        imageCredit: [candidate.source, candidate.photographer, candidate.sourceUrl, candidate.license]
+          .filter(Boolean)
+          .join(' · '),
+      });
+    } catch (error) {
+      console.warn('[BiteSized Screens] Image attachment failed for screen:', screen.orderIndex, error.message);
+      results.push(screen);
+    }
+  }
+  return { screens: results, attached };
+}
 
 async function getAdminContext() {
   const supabase = createRouteHandlerClient();
@@ -89,6 +150,8 @@ export async function POST(request) {
       lessonTitle: lesson.title,
       lessonDescription: lesson.description,
     });
+    const imageResult = await attachGeneratedImages(content.screens, lessonId);
+    content.screens = imageResult.screens;
     const contentValidation = validateLessonContent(content, { forPublish: false });
     const contentVersion = Number.isInteger(lesson.content_version) && lesson.content_version > 0
       ? lesson.content_version
@@ -102,6 +165,15 @@ export async function POST(request) {
     if (insertError) throw insertError;
 
     const combinedDiagnostics = [...diagnostics, ...contentValidation.diagnostics];
+    const requestedImages = content.screens.filter((screen) => Boolean(screen.imageQuery)).length;
+    if (requestedImages > imageResult.attached) {
+      combinedDiagnostics.push({
+        severity: 'warning',
+        code: 'some_lesson_images_not_attached',
+        message: `${imageResult.attached} of ${requestedImages} planned instructional images were attached automatically. Open the editor to find and attach alternatives for any remaining image queries.`,
+        path: 'screens.images',
+      });
+    }
     const nextStatus = combinedDiagnostics.some((item) => item.severity === 'error')
       ? 'needs_review'
       : 'screens_ready';
@@ -123,6 +195,8 @@ export async function POST(request) {
       lessonId,
       generationStatus: nextStatus,
       screenCount: rows.length,
+      imageCount: imageResult.attached,
+      plannedImageCount: requestedImages,
       diagnostics: combinedDiagnostics,
       screens: content.screens,
     });
