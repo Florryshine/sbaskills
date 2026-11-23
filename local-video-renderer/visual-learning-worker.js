@@ -6,8 +6,8 @@
 //   - scripts:  lib/visual-learning/planner.js (shared LLM fallback chain →
 //               z-ai CLI in dev → deterministic engine architect). Jobs may
 //               also carry a pasted script, which is used as-is.
-//   - narration: visual-learning-engine providers (edge-tts → free public
-//               proxy → z-ai dev → timed silence), loudness-normalized, real
+//   - narration: visual-learning-engine providers (Gemini TTS → Edge → proxy
+//               → z-ai dev), loudness-normalized, real
 //               word timestamps when the provider exposes them.
 //   - imagery:  visual-learning-engine providers — multi-shot scenes (no
 //               image on screen longer than 3s) from pollinations, pexels,
@@ -31,7 +31,7 @@
 //                  VISUAL_LEARNING_AUTO_PUBLISH=0, CHROME_PATH,
 //                  TTS_ENDPOINT (free public edge-tts proxy),
 //                  PEXELS_API_KEY, PIXABAY_API_KEY (free stock-image keys),
-//                  VL_NARRATION_PROVIDER (edge|proxy), VL_IMAGE_PROVIDER,
+//                  VL_NARRATION_PROVIDER (gemini|edge|proxy), VL_IMAGE_PROVIDER,
 //                  VL_MAX_SHOT_SECONDS (default 3), VL_WORK_CONCURRENCY
 
 import 'dotenv/config';
@@ -167,7 +167,7 @@ function specFromJob(job) {
     subtitles: raw.subtitles !== false,
     seed: Number(raw.seed) || Math.floor((Date.now() % 100000) + job.id.length),
     maxShotSeconds: Math.max(1.5, Math.min(10, Number(raw.maxShotSeconds ?? process.env.VL_MAX_SHOT_SECONDS) || 3)),
-    narrationProvider: ['edge', 'proxy', 'zai', 'silent'].includes(process.env.VL_NARRATION_PROVIDER) ? process.env.VL_NARRATION_PROVIDER : (raw.narrationProvider || undefined),
+    narrationProvider: ['gemini', 'edge', 'proxy', 'zai'].includes(process.env.VL_NARRATION_PROVIDER) ? process.env.VL_NARRATION_PROVIDER : 'gemini',
     imageProvider: ['pollinations', 'pexels', 'pixabay', 'wikimedia', 'openverse', 'placeholder'].includes(process.env.VL_IMAGE_PROVIDER) ? process.env.VL_IMAGE_PROVIDER : (raw.imageProvider || undefined),
     watermark: String(raw.watermark ?? 'Shiney Brain Academy').slice(0, 60),
     keyPoints: Array.isArray(raw.keyPoints) ? raw.keyPoints.map((k) => String(k).slice(0, 200)).slice(0, 8) : undefined,
@@ -242,7 +242,7 @@ async function prepareEpisodeAssets(job, spec, script, workDir) {
   });
 
   // Narration (resumable per scene).
-  await setStage(job, 'narrating', 'Narrating scenes (free TTS chain)');
+  await setStage(job, 'narrating', 'Narrating scenes (Gemini TTS primary; fallbacks enabled)');
   const narration = await prepareNarration(script, spec, {
     publicDir,
     narrationProvider: spec.narrationProvider,
@@ -251,8 +251,12 @@ async function prepareEpisodeAssets(job, spec, script, workDir) {
       if (stage === 'narrating') await setStage(job, 'narrating', message);
     },
   });
-  if (narration.provider === 'silent') {
-    await setStage(job, 'narrating', 'All TTS providers failed — rendering a muted, captioned video');
+  const silentClips = narration.clips.filter((clip) => clip.provider === 'silent' || clip.voice === 'none');
+  if (silentClips.length > 0) {
+    throw new Error(`Narration validation failed: ${silentClips.length} scene(s) have no spoken audio. Refusing to render a silent lesson.`);
+  }
+  if (!narration.clips.length || narration.clips.length !== script.scenes.length) {
+    throw new Error(`Narration validation failed: expected ${script.scenes.length} spoken clips, received ${narration.clips.length}.`);
   }
 
   // Music bed.
