@@ -95,13 +95,9 @@ export async function prepareNarration(
     if (cachedExt && cachedMeta) {
       const file = join(narrDir, `scene-${String(i).padStart(3, '0')}.${cachedExt}`);
       const duration = probeDurationSeconds(file);
-      if (!duration || duration <= 0) {
-        await unlink(file).catch(() => {});
-        cachedExt = null;
-      }
-      if (!cachedExt || !duration) continue;
-      opts.onProgress?.('narrating', `scene ${i + 1}/${script.scenes.length} (cached)`);
-      clips.push({
+      if (duration && duration > 0) {
+        opts.onProgress?.('narrating', `scene ${i + 1}/${script.scenes.length} (cached)`);
+        clips.push({
         sceneIndex: i,
         provider: cachedMeta.provider!,
         file: join('narration', `scene-${String(i).padStart(3, '0')}.${cachedExt}`),
@@ -117,8 +113,10 @@ export async function prepareNarration(
       } catch {
         const { proportionalWords } = await import('./narration/align');
         clips[clips.length - 1].words = proportionalWords(scene.narration, duration);
+        }
+        continue;
       }
-      continue;
+      await unlink(file).catch(() => {});
     }
 
     opts.onProgress?.('narrating', `scene ${i + 1}/${script.scenes.length}`);
