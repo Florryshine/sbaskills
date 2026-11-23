@@ -128,7 +128,7 @@ export async function POST(request) {
 
   const { data: lesson, error: lessonError } = await supabase
     .from('lessons')
-    .select('id, title, description, content_type, learning_blueprint, content_version')
+    .select('id, course_id, title, description, content_type, learning_blueprint, content_version')
     .eq('id', lessonId)
     .single();
 
@@ -145,10 +145,23 @@ export async function POST(request) {
   }
 
   try {
+    let subjectHint = '';
+    if (lesson.course_id) {
+      const { data: course } = await supabase
+        .from('courses')
+        .select('*')
+        .eq('id', lesson.course_id)
+        .maybeSingle();
+      subjectHint = [course?.subject, course?.category, course?.title, course?.name]
+        .filter((value) => typeof value === 'string' && value.trim())
+        .join(' · ');
+    }
+
     const { content, diagnostics } = await generateInteractiveLesson({
       blueprint,
       lessonTitle: lesson.title,
       lessonDescription: lesson.description,
+      subjectHint,
     });
     const imageResult = await attachGeneratedImages(content.screens, lessonId);
     content.screens = imageResult.screens;
