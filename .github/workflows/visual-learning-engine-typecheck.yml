@@ -1,0 +1,37 @@
+name: Visual Learning Engine Typecheck
+
+on:
+  pull_request:
+    paths:
+      - 'visual-learning-engine/**'
+      - 'local-video-renderer/visual-learning-worker.js'
+      - 'lib/podcastTTS.js'
+      - 'lib/podcastTTS.d.ts'
+      - '.github/workflows/visual-learning-engine-typecheck.yml'
+  push:
+    branches: [master]
+    paths:
+      - 'visual-learning-engine/**'
+      - 'local-video-renderer/visual-learning-worker.js'
+      - 'lib/podcastTTS.js'
+      - 'lib/podcastTTS.d.ts'
+      - '.github/workflows/visual-learning-engine-typecheck.yml'
+
+jobs:
+  typecheck:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: npm
+      - uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: latest
+      - name: Install root dependencies
+        run: npm ci
+      - name: Install Visual Learning dependencies
+        run: cd visual-learning-engine && bun install --frozen-lockfile
+      - name: Typecheck Visual Learning Engine
+        run: cd visual-learning-engine && bun run typecheck

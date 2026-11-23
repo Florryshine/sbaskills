@@ -12,7 +12,7 @@ export type Aspect = '16:9' | '9:16' | '1:1';
 
 export type StylePreset = 'cartoon' | 'photo' | 'sketch';
 
-export type NarrationProviderName = 'edge' | 'proxy' | 'zai' | 'silent';
+export type NarrationProviderName = 'gemini' | 'edge' | 'proxy' | 'zai' | 'silent';
 
 export type ImageProviderName = 'pollinations' | 'zai' | 'wikimedia' | 'pexels' | 'pixabay' | 'openverse' | 'placeholder';
 

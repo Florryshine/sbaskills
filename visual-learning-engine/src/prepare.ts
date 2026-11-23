@@ -19,7 +19,7 @@ import { synthesizeSceneNarration, probeDurationSeconds, VOICE_PRESETS } from '.
 import { normalizeNarrationClip, generateSilence } from './audio/mix';
 import { resolveSceneImages } from './imagery/providers';
 import { generateMusicFile } from './music/generator';
-import { access, mkdir, copyFile } from 'node:fs/promises';
+import { access, mkdir, copyFile, unlink } from 'node:fs/promises';
 import { existsSync } from 'node:fs';
 import { join } from 'node:path';
 
@@ -28,6 +28,8 @@ export interface PrepareOptions {
   narrationProvider?: VLJobSpec['narrationProvider'];
   imageProvider?: VLJobSpec['imageProvider'];
   proxyEndpoint?: string;
+  /** Silent clips are disabled unless explicitly requested for a preview/test. */
+  allowSilent?: boolean;
   /** parallel image resolution (default 3) */
   imageConcurrency?: number;
   /** max seconds a single image stays on screen (default 3) */
@@ -71,22 +73,37 @@ export async function prepareNarration(
   const clips: NarrationManifest['clips'] = [];
   for (let i = 0; i < script.scenes.length; i++) {
     const scene = script.scenes[i];
-    const cachedExt = existsSync(join(narrDir, `scene-${String(i).padStart(3, '0')}.mp3`))
+    let cachedExt = existsSync(join(narrDir, `scene-${String(i).padStart(3, '0')}.mp3`))
       ? 'mp3'
       : existsSync(join(narrDir, `scene-${String(i).padStart(3, '0')}.wav`))
         ? 'wav'
         : null;
+    const metaPath = join(narrDir, `scene-${String(i).padStart(3, '0')}.meta.json`);
+    let cachedMeta: { provider?: NarrationManifest['provider']; voice?: string; ext?: 'wav' | 'mp3' } | null = null;
     if (cachedExt) {
+      try {
+        cachedMeta = JSON.parse(await (await import('node:fs/promises')).readFile(metaPath, 'utf8'));
+        if (!cachedMeta?.provider || cachedMeta.provider === 'silent' || !cachedMeta.voice || cachedMeta.voice === 'none' || !cachedMeta.ext || cachedMeta.ext !== cachedExt) cachedExt = null;
+      } catch {
+        // Legacy cache entries have no trustworthy provider metadata: regenerate them.
+        cachedExt = null;
+      }
+      if (!cachedExt) {
+        await Promise.all(['mp3', 'wav'].map((ext) => unlink(join(narrDir, `scene-${String(i).padStart(3, '0')}.${ext}`)).catch(() => {})));
+      }
+    }
+    if (cachedExt && cachedMeta) {
       const file = join(narrDir, `scene-${String(i).padStart(3, '0')}.${cachedExt}`);
-      const duration = probeDurationSeconds(file) ?? 3;
-      opts.onProgress?.('narrating', `scene ${i + 1}/${script.scenes.length} (cached)`);
-      clips.push({
+      const duration = probeDurationSeconds(file);
+      if (duration && duration > 0) {
+        opts.onProgress?.('narrating', `scene ${i + 1}/${script.scenes.length} (cached)`);
+        clips.push({
         sceneIndex: i,
-        provider: spec.narrationProvider ?? 'edge',
+        provider: cachedMeta.provider!,
         file: join('narration', `scene-${String(i).padStart(3, '0')}.${cachedExt}`),
         duration,
         words: [],
-        voice: preset,
+        voice: cachedMeta.voice!,
       });
       // Word timings sidecar (saved on first run)
       try {
@@ -96,14 +113,16 @@ export async function prepareNarration(
       } catch {
         const { proportionalWords } = await import('./narration/align');
         clips[clips.length - 1].words = proportionalWords(scene.narration, duration);
+        }
+        continue;
       }
-      continue;
+      await unlink(file).catch(() => {});
     }
 
     opts.onProgress?.('narrating', `scene ${i + 1}/${script.scenes.length}`);
     const result = await synthesizeSceneNarration(
       { text: scene.narration, preset, preferred: opts.narrationProvider },
-      { proxyEndpoint: opts.proxyEndpoint },
+      { proxyEndpoint: opts.proxyEndpoint, allowSilent: opts.allowSilent === true },
     );
     if (!result) throw new Error(`narration failed for scene ${i} (all providers failed)`);
     const ext = result.ext;
@@ -127,6 +146,7 @@ export async function prepareNarration(
     }
     const { writeFile } = await import('node:fs/promises');
     await writeFile(join(narrDir, `scene-${String(i).padStart(3, '0')}.words.json`), JSON.stringify(result.words));
+    await writeFile(metaPath, JSON.stringify({ provider: result.provider, voice: result.voice, ext: result.ext }));
   }
   const provider = clips[0]?.provider ?? spec.narrationProvider ?? 'edge';
   return { provider, voice: clips[0]?.voice ?? preset, clips };
