@@ -16,6 +16,7 @@ on:
       - 'lib/whiteboard/audio.js'
       - 'package.json'
       - 'package-lock.json'
+      - 'app/admin/cartoon-studio/page.js'
   schedule:
     - cron: '*/5 * * * *'
   workflow_dispatch:
@@ -73,7 +74,7 @@ jobs:
             echo "No queued or abandoned Cartoon jobs."
             echo "has_jobs=false" >> "$GITHUB_OUTPUT"
           else
-            echo "Cartoon jobs are waiting."
+            echo "Cartoon jobs are waiting. Queue response: $body"
             echo "has_jobs=true" >> "$GITHUB_OUTPUT"
           fi
 
