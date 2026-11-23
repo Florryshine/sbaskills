@@ -124,9 +124,14 @@ export default function CartoonStudioPage() {
             <h2 className="mb-3 font-semibold">Worker status</h2>
             {workers.length ? workers.slice(0, 3).map(worker => (
               <div key={worker.worker_id} className="mb-3 rounded-xl bg-slate-950 p-3">
-                <div className="flex items-center gap-2 text-sm font-medium"><span className={`h-2 w-2 rounded-full ${Date.now() - new Date(worker.last_seen_at).getTime() < 90000 ? 'bg-emerald-400' : 'bg-amber-400'}`} />{Date.now() - new Date(worker.last_seen_at).getTime() < 90000 ? 'Online' : 'Last seen earlier'}</div>
-                <p className="mt-1 truncate text-xs text-slate-500">{worker.worker_id}</p>
-                <p className="mt-1 text-xs text-slate-500">{worker.current_job_id ? 'Processing a job' : 'Waiting for work'}</p>
+                {(() => {
+                  const isOnline = Date.now() - new Date(worker.last_seen_at).getTime() < 90000;
+                  return <>
+                    <div className="flex items-center gap-2 text-sm font-medium"><span className={`h-2 w-2 rounded-full ${isOnline ? 'bg-emerald-400' : 'bg-amber-400'}`} />{isOnline ? 'Online' : 'Offline · last seen earlier'}</div>
+                    <p className="mt-1 truncate text-xs text-slate-500">{worker.worker_id}</p>
+                    <p className="mt-1 text-xs text-slate-500">{isOnline ? (worker.current_job_id ? 'Processing a job' : 'Waiting for work') : (worker.current_job_id ? 'Last known job — worker is no longer reporting' : 'Worker is no longer reporting')}</p>
+                  </>;
+                })()}
                 {worker.info?.last_error && <p className="mt-2 text-xs text-rose-400">{worker.info.last_error}</p>}
               </div>
             )) : <p className="text-sm text-slate-500">No worker heartbeat recorded yet. Check the Cartoon Studio queue-worker workflow in GitHub Actions and confirm the Supabase URL and service-role secrets are configured.</p>}
@@ -147,7 +152,7 @@ export default function CartoonStudioPage() {
                   <div className="flex items-start justify-between gap-3">
                     <div>
                       <h3 className="font-semibold">{project.title}</h3>
-                      <p className="mt-1 text-xs text-slate-500">{project.orientation} · {project.status}</p>
+                      <p className="mt-1 text-xs text-slate-500">{project.orientation} · {project.status === 'cast_ready' ? 'Storyboard + narration ready · awaiting render' : project.status}</p>
                     </div>
                     {project.status === 'ready' ? <CheckCircle2 className="text-emerald-400" /> : activeStatuses.has(project.status) ? <Loader2 className="animate-spin text-sky-400" /> : <Film className="text-slate-500" />}
                   </div>
