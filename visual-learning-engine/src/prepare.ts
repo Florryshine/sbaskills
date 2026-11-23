@@ -28,6 +28,8 @@ export interface PrepareOptions {
   narrationProvider?: VLJobSpec['narrationProvider'];
   imageProvider?: VLJobSpec['imageProvider'];
   proxyEndpoint?: string;
+  /** Silent clips are disabled unless explicitly requested for a preview/test. */
+  allowSilent?: boolean;
   /** parallel image resolution (default 3) */
   imageConcurrency?: number;
   /** max seconds a single image stays on screen (default 3) */
