@@ -11,6 +11,10 @@ on:
       - 'local-video-renderer/visual-learning-worker.js'
       - 'visual-learning-engine/**'
       - 'lib/visual-learning/**'
+      - 'app/api/admin/visual-learning/route.js'
+      - 'app/admin/visual-learning/**'
+      - 'supabase/migrations/20261119_visual_learning_jobs.sql'
+      - 'package-lock.json'
   schedule:
     - cron: '*/5 * * * *'
   workflow_dispatch:
@@ -60,17 +64,23 @@ jobs:
           cutoff=$(date -u -d '8 minutes ago' '+%Y-%m-%dT%H:%M:%SZ')
           body=$(curl -sS --fail-with-body --get \
             "$NEXT_PUBLIC_SUPABASE_URL/rest/v1/visual_learning_jobs" \
-            --data-urlencode "select=id" \
+            --data-urlencode "select=id,status,attempt_count,claim_token,heartbeat_at" \
             --data-urlencode "status=in.(queued,scripting,imagery,narrating,timeline,rendering,saving)" \
             --data-urlencode "or=(claim_token.is.null,heartbeat_at.is.null,heartbeat_at.lt.$cutoff)" \
-            --data-urlencode "limit=1" \
+            --data-urlencode "order=created_at.asc" \
+            --data-urlencode "limit=10" \
             -H "apikey: $SUPABASE_SERVICE_ROLE_KEY" \
             -H "Authorization: Bearer $SUPABASE_SERVICE_ROLE_KEY")
-          if [ "$body" = "[]" ]; then
+          echo "Queue preflight response: $body"
+          if ! echo "$body" | jq -e 'type == "array"' >/dev/null; then
+            echo "::error::Queue preflight returned an unexpected response."
+            exit 1
+          fi
+          if [ "$(echo "$body" | jq 'length')" -eq 0 ]; then
             echo "No waiting Visual Learning jobs."
             echo "has_jobs=false" >> "$GITHUB_OUTPUT"
           else
-            echo "Visual Learning jobs are waiting."
+            echo "Visual Learning jobs are waiting: $(echo "$body" | jq -r '.[].id' | paste -sd, -)"
             echo "has_jobs=true" >> "$GITHUB_OUTPUT"
           fi
 
