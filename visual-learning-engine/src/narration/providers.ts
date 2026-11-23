@@ -1,4 +1,4 @@
-// src/narration/providers.ts — free narration chain with word timings.
+// src/narration/providers.ts — Gemini-first narration chain with measured word timings.
 //
 // Order (first available wins; every step is free, no API keys):
 //   edge    — edge-tts-universal (free Microsoft Edge voices). Real
@@ -15,6 +15,7 @@
 // with ffprobe so the timeline is always built from real durations.
 
 import type { NarrationProviderName, WordTiming } from '../types';
+import { synthesizeLine, getAudioExtension } from '../../../lib/podcastTTS.js';
 import { proportionalWords } from './align';
 import { spawn, spawnSync } from 'node:child_process';
 import { mkdtemp, readFile, writeFile } from 'node:fs/promises';
@@ -73,6 +74,24 @@ function splitSentences(text: string): string[] {
     .map((s) => s.trim())
     .filter(Boolean);
   return parts.length > 0 ? parts : [text.trim()];
+}
+
+/** Gemini TTS — primary provider, using the shared SBA Gemini speech implementation. */
+async function synthesizeGemini(req: NarrationRequest): Promise<NarrationResult | null> {
+  try {
+    const malePresets = new Set(['warm_male', 'calm_male', 'nigerian_male', 'uk_male']);
+    const speaker = malePresets.has(req.preset) ? 'host_b' : 'host_a';
+    const audio = await synthesizeLine(req.text, speaker, 'neutral');
+    const ext = getAudioExtension(audio) as 'wav' | 'mp3';
+    const file = await writeFileTemp(Buffer.from(audio), ext);
+    const duration = probeDurationSeconds(file);
+    if (!duration || duration <= 0 || audio.length < 512) return null;
+    const voice = speaker === 'host_b' ? 'Charon' : 'Kore';
+    return { file, ext, duration, words: proportionalWords(req.text, duration), provider: 'gemini', voice };
+  } catch (error) {
+    console.warn('[visual-learning] Gemini TTS failed; trying fallback provider:', error instanceof Error ? error.message : String(error));
+    return null;
+  }
 }
 
 /** Edge provider — real word boundaries. */
@@ -182,10 +201,12 @@ async function synthesizeSilent(req: NarrationRequest): Promise<NarrationResult>
  */
 export async function synthesizeNarration(req: NarrationRequest, opts: { proxyEndpoint?: string; allowSilent?: boolean } = {}): Promise<NarrationResult | null> {
   const proxyEndpoint = opts.proxyEndpoint || process.env.TTS_ENDPOINT || 'https://openai-edge-tts-aqq1.onrender.com';
-  const chain: NarrationProviderName[] = [];
-  if (req.preferred) chain.push(req.preferred);
+  // Gemini is always first. A requested provider is treated as an additional
+  // fallback, never as a way to bypass the primary Gemini voice.
+  const chain: NarrationProviderName[] = ['gemini'];
   chain.push('edge', 'proxy', 'zai');
-  if (opts.allowSilent !== false) chain.push('silent');
+  if (req.preferred && req.preferred !== 'gemini') chain.push(req.preferred);
+  if (opts.allowSilent === true) chain.push('silent');
 
   for (const provider of [...new Set(chain)]) {
     if (provider === 'edge') {
