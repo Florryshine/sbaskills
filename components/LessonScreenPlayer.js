@@ -96,7 +96,10 @@ export default function LessonScreenPlayer({ lesson, screens = [], completed = f
           </div>
 
           {screen.image_url ? (
-            <img src={screen.image_url} alt={screen.image_alt || ''} className="mb-6 max-h-72 w-full rounded-2xl object-cover" />
+            <figure className="mb-6">
+              <img src={screen.image_url} alt={screen.image_alt || ''} className="max-h-72 w-full rounded-2xl object-contain bg-slate-50" />
+              {screen.image_credit ? <figcaption className="mt-2 text-xs text-gray-500">{screen.image_credit}</figcaption> : null}
+            </figure>
           ) : null}
 
           <h1 className="text-2xl font-extrabold leading-tight text-gray-900 sm:text-3xl">{screen.headline || screen.title}</h1>
