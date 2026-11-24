@@ -20,6 +20,8 @@ export interface VLJobSpec {
   /** Human episode title (used for the outro card and filenames). */
   title: string;
   topic: string;
+  /** Specific lesson concepts supplied by the creator or knowledge base. */
+  keyPoints?: string[];
   audience: string;
   /** narrator tone, e.g. "warm and curious", "energetic", "calm documentary" */
   tone: string;
@@ -119,6 +121,8 @@ export interface StatScene extends SceneBase {
   /** numeric portion rendered giant and counted up, e.g. "40", "2x", "90%" */
   number: string;
   headline: string;
+  /** Traceable evidence source; required by validation for factual statistics. */
+  source?: string;
   image_prompt?: string;
 }
 
