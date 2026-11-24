@@ -323,6 +323,39 @@ export async function PATCH(req) {
       return NextResponse.json({ job: savedJob });
     }
 
+    if (body.action === 'queue-narration' || body.action === 'retry-narration') {
+      const isRetry = body.action === 'retry-narration';
+      if (!current.script || current.script.review_status !== 'admin_reviewed' || !Array.isArray(current.script.scenes) || !current.script.scenes.length) {
+        return NextResponse.json({ error: 'Save an administrator-approved script and storyboard before generating narration.' }, { status: 409 });
+      }
+      if (isRetry && current.status !== 'failed') {
+        return NextResponse.json({ error: 'Only failed narration jobs can be retried.' }, { status: 409 });
+      }
+      if (!isRetry && current.narration_manifest) {
+        return NextResponse.json({ error: 'Narration already exists. Use regenerate narration if you want to replace it.' }, { status: 409 });
+      }
+      const requestedVoice = safeText(body.voice, 80);
+      const allowedVoices = new Set(['warm_male','bright_female','calm_male','friendly_female','nigerian_male','uk_male']);
+      const voice = allowedVoices.has(requestedVoice) ? requestedVoice : (current.spec?.voice || 'friendly_female');
+      const nextSpec = { ...(current.spec || {}), voice };
+      const { data: queuedJob, error: queueError } = await supabase.from('image_explainer_jobs')
+        .update({
+          spec: nextSpec,
+          status: 'narrating',
+          stage: 'narration_queued',
+          stage_message: 'Approved script queued for background narration. The worker checks the queue automatically.',
+          narration_manifest: null,
+          error_message: null,
+          attempt_count: 0,
+          claim_token: null, worker_id: null, heartbeat_at: null,
+          updated_at: new Date().toISOString(),
+        }).eq('id', body.id)
+        .select('id,title,status,stage,stage_message,spec')
+        .single();
+      if (queueError) throw new Error(queueError.message);
+      return NextResponse.json({ job: queuedJob, queued: true });
+    }
+
     if (body.action === 'retry-analysis') {
       if (current.status !== 'failed' || current.vision_analysis) {
         return NextResponse.json({ error: 'Only failed projects without a completed image analysis can be retried.' }, { status: 409 });
@@ -402,7 +435,7 @@ export async function GET(req) {
   const id = new URL(req.url).searchParams.get('id');
   if (id) {
     const { data: job, error } = await supabase.from('image_explainer_jobs')
-      .select('id,title,status,stage,stage_message,production_mode,spec,source_images,vision_analysis,research_bundle,script,storyboard,error_message,created_at')
+      .select('id,title,status,stage,stage_message,production_mode,spec,source_images,vision_analysis,research_bundle,script,storyboard,narration_manifest,error_message,created_at')
       .eq('id', id).single();
     if (error || !job) return NextResponse.json({ error: 'Project not found.' }, { status: 404 });
     const sourcePath = job.source_images?.[0]?.path;
@@ -415,7 +448,7 @@ export async function GET(req) {
     return NextResponse.json({ job, sourceUrl });
   }
   const { data, error } = await supabase.from('image_explainer_jobs')
-    .select('id,title,status,stage,stage_message,production_mode,video_url,error_message,created_at,vision_analysis,research_bundle,script,storyboard')
+    .select('id,title,status,stage,stage_message,production_mode,video_url,error_message,created_at,vision_analysis,research_bundle,script,storyboard,narration_manifest')
     .order('created_at', { ascending: false }).limit(25);
   if (error) return NextResponse.json({ error: error.message }, { status: 500 });
   return NextResponse.json({ jobs: data || [] });
