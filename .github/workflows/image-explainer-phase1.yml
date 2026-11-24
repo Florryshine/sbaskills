@@ -18,8 +18,14 @@ on:
     paths:
       - 'lib/image-explainer/**'
       - 'app/api/admin/image-explainer/**'
+      - 'app/admin/image-explainer/timeline/**'
       - 'tests/image-explainer-*.test.mjs'
+      - 'local-video-renderer/image-explainer-*.js'
+      - 'remotion/ImageExplainerVideo.jsx'
+      - 'remotion/Root.jsx'
+      - 'supabase/migrations/*image_explainer*.sql'
       - '.github/workflows/image-explainer-phase1.yml'
+      - '.github/workflows/image-explainer-render-worker.yml'
 
 jobs:
   image-explainer-tests:
