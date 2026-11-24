@@ -7,6 +7,20 @@ import { cookies } from 'next/headers';
 const SUPPORTED_PLATFORMS = ['facebook', 'whatsapp', 'instagram', 'x', 'threads', 'telegram', 'linkedin'];
 const CAPTION_LIMITS = { x: 280, threads: 500, linkedin: 3000, facebook: 63206, instagram: 2200, telegram: 4096, whatsapp: 4096 };
 
+function toCampaignPost(post) {
+  const platform = ({ x: 'X', threads: 'Threads', linkedin: 'LinkedIn', facebook: 'Facebook', instagram: 'Instagram', telegram: 'Telegram', whatsapp: 'WhatsApp' })[post.platform] || post.platform;
+  return {
+    ...post,
+    platform,
+    hashtags: Array.isArray(post.hashtags) ? post.hashtags.map((tag) => String(tag).replace(/^#/, '')) : [],
+    bestPostingTime: post.best_posting_time,
+    imagePrompt: post.image_prompt,
+    altText: post.alt_text,
+    callToAction: post.call_to_action,
+    mediaUrls: post.image_urls || [],
+  };
+}
+
 export async function GET() {
   const supabase = createRouteHandlerClient({ cookies });
   const { data: { user } } = await supabase.auth.getUser();
@@ -181,7 +195,7 @@ Include only requested platforms in posts.`;
 
     return NextResponse.json({
       success: true,
-      posts: inserted,
+      posts: inserted.map(toCampaignPost),
       postCount: inserted.length,
       campaign: { id: asset.id, name: topic, audience: String(audience), tone: String(tone) },
     });
