@@ -85,6 +85,7 @@ const sections = [
       { href: '/admin/cartoon-studio', label: 'Cartoon Animation Studio' },
       { href: '/admin/motion-graphics', label: 'Motion Graphics Studio' },
       { href: '/admin/visual-learning', label: 'Visual Learning Studio' },
+      { href: '/admin/image-explainer', label: 'Image-to-Explainer Studio' },
       { href: '/admin/visual-assets', label: 'Shared Visual Asset Library' },
       { href: '/admin/video-studio', label: 'Video Studio' },
       { href: '/admin/music-studio', label: 'Music Learning Video' },
