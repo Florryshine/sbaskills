@@ -36,7 +36,7 @@ async function download(bucket,storagePath,destination){
  return bytes.length;
 }
 
-const MEDIA_HOSTS=['images.pexels.com','videos.pexels.com','cdn.pixabay.com','upload.wikimedia.org'];
+const MEDIA_HOSTS=['images.pexels.com','videos.pexels.com','pixabay.com','cdn.pixabay.com','upload.wikimedia.org'];
 async function downloadApprovedMedia(asset,destination){
  if(!validateAssetForRender(asset)) throw new Error(`Asset ${asset?.id||'unknown'} is not approved or uses an untrusted host.`);
  const source=new URL(asset.media_url);
