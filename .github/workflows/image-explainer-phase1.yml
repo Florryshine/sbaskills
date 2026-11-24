@@ -6,6 +6,7 @@ on:
     paths:
       - 'lib/image-explainer/**'
       - 'app/api/admin/image-explainer/**'
+      - 'app/admin/image-explainer/timeline/**'
       - 'tests/image-explainer-*.test.mjs'
       - 'local-video-renderer/image-explainer-narration-worker.js'
       - 'local-video-renderer/image-explainer-render-worker.js'
