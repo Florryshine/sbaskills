@@ -86,7 +86,10 @@ export default function ImageExplainerStudioPage() {
       form.append('duration', '90');
       const response = await fetch('/api/admin/image-explainer', { method: 'POST', body: form });
       const data = await response.json();
-      if (!response.ok) throw new Error(data.error || 'Image analysis failed.');
+      if (!response.ok) {
+        if (data.jobId) await openProject(data.jobId);
+        throw new Error(data.error || 'Image analysis failed.');
+      }
       setJob(data.job);
       setSelectedComponent(0);
       setNotice('Image analysis complete. Review the detected regions and correct anything inaccurate before production.');
@@ -110,6 +113,25 @@ export default function ImageExplainerStudioPage() {
       setMode(data.job.production_mode || 'educational');
       setSelectedComponent(0);
     } catch (err) { setError(err.message); }
+  }
+
+  async function retryAnalysis() {
+    if (!job?.id) return;
+    setBusy(true); setError(''); setNotice('');
+    try {
+      const response = await fetch('/api/admin/image-explainer', {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ id: job.id, action: 'retry-analysis' }),
+      });
+      const data = await response.json();
+      if (!response.ok) throw new Error(data.error || 'Could not retry image analysis.');
+      setJob(data.job);
+      setSelectedComponent(0);
+      setNotice('Image analysis retry completed. Review the detected regions.');
+      await loadJobs();
+    } catch (err) { setError(err.message || 'Could not retry image analysis.'); }
+    finally { setBusy(false); }
   }
 
   async function saveRegions() {
@@ -201,7 +223,7 @@ export default function ImageExplainerStudioPage() {
             <div className="rounded-2xl border border-slate-800 bg-slate-900 p-5">
               <div className="flex flex-wrap items-start justify-between gap-3">
                 <div><h2 className="text-lg font-semibold">Visual region review</h2><p className="mt-1 text-sm text-slate-400">Select a numbered region to edit its name, explanation and exact bounding box.</p></div>
-                {job && <span className="rounded-full bg-slate-800 px-3 py-1 text-xs text-sky-200">{job.status}</span>}
+                {job && <div className="flex items-center gap-2"><span className="rounded-full bg-slate-800 px-3 py-1 text-xs text-sky-200">{job.status}</span>{job.status === 'failed' && !job.vision_analysis && <button type="button" onClick={retryAnalysis} disabled={busy} className="rounded-lg border border-amber-700 px-3 py-1 text-xs text-amber-200 disabled:opacity-50">{busy ? 'Retrying…' : 'Retry analysis'}</button>}</div>}
               </div>
               {!job ? <div className="flex min-h-72 items-center justify-center text-center text-sm text-slate-500">Analyse a new image or open a saved project to review its visual map.</div> : <>
                 <div className="mt-4 grid gap-5 lg:grid-cols-[minmax(0,1fr)_300px]">
