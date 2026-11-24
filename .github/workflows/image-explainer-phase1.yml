@@ -1,4 +1,4 @@
-name: Image Explainer Phases 1–3 Tests
+name: Image Explainer Phases 1–4 Tests
 
 on:
   push:
@@ -25,9 +25,11 @@ jobs:
           node-version: 24
       - name: Run all image-explainer unit tests
         run: node --test tests/image-explainer-*.test.mjs
-      - name: Check research and script module syntax
+      - name: Check research, script and narration modules
         run: |
           node --check lib/image-explainer/research.mjs
           node --check lib/image-explainer/script.mjs
+          node --check lib/image-explainer/narration-manifest.mjs
+          node --check local-video-renderer/image-explainer-narration-worker.js
       - name: Check API route syntax
         run: node --check app/api/admin/image-explainer/route.js
