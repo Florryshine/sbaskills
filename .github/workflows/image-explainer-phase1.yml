@@ -1,4 +1,4 @@
-name: Image Explainer Phase 1 and 2 Tests
+name: Image Explainer Phases 1–3 Tests
 
 on:
   push:
@@ -25,7 +25,9 @@ jobs:
           node-version: 24
       - name: Test image-region and research utilities
         run: node --test tests/image-explainer-*.test.mjs
-      - name: Check research module syntax
-        run: node --check lib/image-explainer/research.mjs
+      - name: Check research and script module syntax
+        run: |
+          node --check lib/image-explainer/research.mjs
+          node --check lib/image-explainer/script.mjs
       - name: Check API route syntax
         run: node --check app/api/admin/image-explainer/route.js
