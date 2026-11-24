@@ -42,6 +42,7 @@ function isText(value) {
 function validateSocialPosts(parsed, requestedPlatforms) {
   if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed) || !Array.isArray(parsed.posts)) return false;
   const posts = parsed.posts;
+  if (posts.length !== requestedPlatforms.length) return false;
   const byPlatform = new Map();
   for (const post of posts) {
     if (!post || !SUPPORTED_PLATFORMS.includes(post.platform) || !isText(post.caption)) return false;
@@ -129,6 +130,7 @@ Include only requested platforms in posts.`;
       if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) return 'expected a JSON object with a posts array';
       if (!Array.isArray(parsed.posts)) return 'posts is missing or is not an array';
       const issues = [];
+      if (parsed.posts.length !== requestedPlatforms.length) issues.push('expected exactly ' + requestedPlatforms.length + ' posts, received ' + parsed.posts.length);
       const seen = new Set();
       for (const post of parsed.posts) {
         if (!post || !SUPPORTED_PLATFORMS.includes(post.platform)) {
