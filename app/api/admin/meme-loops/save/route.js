@@ -29,7 +29,7 @@ export async function POST(request) {
 
   const { data: contentAsset, error: fetchError } = await supabase
     .from('content_assets')
-    .select('id, title, asset_type, knowledge_asset_id, metadata')
+    .select('id, title, body, asset_type, knowledge_asset_id, metadata')
     .eq('id', contentAssetId)
     .eq('asset_type', 'meme_loop')
     .single();
@@ -75,7 +75,7 @@ export async function POST(request) {
 
   runInBackground(async () => {
     let updatedMetadata = contentAsset.metadata || {};
-    if (!updatedMetadata.youtube && !updatedMetadata.tiktok) {
+    if (!updatedMetadata.cross_platform_metadata && !updatedMetadata.youtube && !updatedMetadata.tiktok) {
       try {
         const { data: knowledgeAsset } = await supabase
           .from('knowledge_assets')
@@ -84,7 +84,14 @@ export async function POST(request) {
           .single();
 
         if (knowledgeAsset) {
-          const allMetadata = await generateAllMetadata(knowledgeAsset);
+          const metadataSource = {
+            ...knowledgeAsset,
+            keyword: [contentAsset.title, contentAsset.metadata?.punchline].filter(Boolean).join(' — ') || knowledgeAsset.keyword,
+            summary: [knowledgeAsset.summary, contentAsset.body, contentAsset.metadata?.punchline]
+              .filter(Boolean)
+              .join('\n\n'),
+          };
+          const allMetadata = await generateAllMetadata(metadataSource);
 
           const platforms = ['youtube', 'tiktok', 'instagram', 'facebook', 'linkedin', 'telegram'];
           for (const platform of platforms) {
@@ -101,11 +108,15 @@ export async function POST(request) {
                 .eq('knowledge_asset_id', contentAsset.knowledge_asset_id)
                 .eq('platform', platform)
                 .eq('format', 'video')
+                .contains('metadata', { source_content_asset_id: contentAssetId })
                 .order('created_at', { ascending: false })
                 .limit(1)
                 .maybeSingle();
 
-              const enrichedMetadata = applyPlatformMetadata({}, allMetadata, platform);
+              const enrichedMetadata = {
+                ...applyPlatformMetadata({}, allMetadata, platform),
+                source_content_asset_id: contentAssetId,
+              };
 
               if (existingPlatformAsset) {
                 await supabase
@@ -159,6 +170,7 @@ export async function POST(request) {
                 .eq('knowledge_asset_id', contentAsset.knowledge_asset_id)
                 .eq('platform', channel.platform)
                 .eq('format', 'video')
+                .contains('metadata', { source_content_asset_id: contentAssetId })
                 .order('created_at', { ascending: false })
                 .limit(1)
                 .maybeSingle();
