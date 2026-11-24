@@ -1,4 +1,4 @@
-name: Image Explainer Phases 1–4 Tests
+name: Image Explainer Phases 1–6 Tests
 
 on:
   push:
@@ -8,6 +8,10 @@ on:
       - 'app/api/admin/image-explainer/**'
       - 'tests/image-explainer-*.test.mjs'
       - 'local-video-renderer/image-explainer-narration-worker.js'
+      - 'local-video-renderer/image-explainer-render-worker.js'
+      - 'remotion/ImageExplainerVideo.jsx'
+      - 'remotion/Root.jsx'
+      - '.github/workflows/image-explainer-render-worker.yml'
       - 'supabase/migrations/*image_explainer*.sql'
       - '.github/workflows/image-explainer-phase1.yml'
   pull_request:
@@ -36,5 +40,8 @@ jobs:
           node --check app/api/admin/image-explainer/timeline/route.js
           node --check app/admin/image-explainer/timeline/[id]/page.js
           node --check local-video-renderer/image-explainer-narration-worker.js
+          node --check local-video-renderer/image-explainer-render-worker.js
+          node --check remotion/Root.jsx
+          node --check remotion/ImageExplainerVideo.jsx
       - name: Check API route syntax
         run: node --check app/api/admin/image-explainer/route.js
