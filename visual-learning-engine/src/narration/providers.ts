@@ -38,7 +38,10 @@ export function probeDurationSeconds(file: string): number | null {
     encoding: 'utf8',
     timeout: 20000,
   });
-  if (res.error || res.status !== 0) {\n    console.warn(`[visual-learning] ffprobe failed for ${file}:`, res.error?.message || res.stderr?.trim() || `exit ${res.status}`);\n    return null;\n  }
+  if (res.error || res.status !== 0) {
+    console.warn(`[visual-learning] ffprobe failed for ${file}:`, res.error?.message || res.stderr?.trim() || `exit ${res.status}`);
+    return null;
+  }
   const v = parseFloat(res.stdout.trim());
   return isFinite(v) && v > 0 ? v : null;
 }
@@ -97,8 +100,8 @@ async function synthesizeGemini(req: NarrationRequest): Promise<NarrationResult 
 /** Edge provider — real word boundaries. */
 async function synthesizeEdge(req: NarrationRequest): Promise<NarrationResult | null> {
   const preset = VOICE_PRESETS[req.preset] ?? VOICE_PRESETS.warm_male;
-  const { EdgeTTS } = await import('edge-tts-universal');
   try {
+    const { EdgeTTS } = await import('edge-tts-universal');
     const tts = new EdgeTTS(req.text, preset.edge, { rate: req.rate || '+0%', volume: '+0%', pitch: '+0Hz' });
     const result = await Promise.race([
       tts.synthesize(),
@@ -127,7 +130,8 @@ async function synthesizeEdge(req: NarrationRequest): Promise<NarrationResult | 
       provider: 'edge',
       voice: preset.edge,
     };
-  } catch {
+  } catch (error) {
+    console.warn('[visual-learning] Edge TTS failed:', error instanceof Error ? error.message : String(error));
     return null; // blocked (datacenter IP) or transient failure → next provider
   }
 }
@@ -135,28 +139,42 @@ async function synthesizeEdge(req: NarrationRequest): Promise<NarrationResult | 
 /** Proxy provider — the free public edge-tts proxy, OpenAI-compatible. */
 async function synthesizeProxy(req: NarrationRequest, endpoint: string): Promise<NarrationResult | null> {
   const preset = VOICE_PRESETS[req.preset] ?? VOICE_PRESETS.warm_male;
-  const r = await Promise.race([
-    fetch(`${endpoint.replace(/\/$/, '')}/v1/audio/speech`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ model: 'tts-1', voice: preset.proxy, input: req.text, response_format: 'mp3' }),
-    }),
-    new Promise<never>((_, rej) => setTimeout(() => rej(new Error('proxy timeout')), 120000)),
-  ]).catch(() => null);
-  if (!r || !(r as Response).ok) return null;
-  const buf = Buffer.from(await (r as Response).arrayBuffer());
-  if (buf.length < 500) return null;
-  const file = await writeFileTemp(buf, 'mp3');
-  const duration = probeDurationSeconds(file);
-  if (!duration) return null;
-  return {
-    file,
-    ext: 'mp3',
-    duration,
-    words: proportionalWords(req.text, duration),
-    provider: 'proxy',
-    voice: preset.proxy,
-  };
+  try {
+    const response = await Promise.race([
+      fetch(`${endpoint.replace(/\/$/, '')}/v1/audio/speech`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        signal: AbortSignal.timeout(120000),
+        body: JSON.stringify({ model: 'tts-1', voice: preset.proxy, input: req.text, response_format: 'mp3' }),
+      }),
+      new Promise<never>((_, rej) => setTimeout(() => rej(new Error('proxy timeout')), 120000)),
+    ]);
+    if (!response.ok) {
+      const detail = (await response.text()).slice(0, 400);
+      console.warn('[visual-learning] proxy TTS HTTP failure:', response.status, detail);
+      return null;
+    }
+    const contentType = response.headers.get('content-type') || '';
+    const buf = Buffer.from(await response.arrayBuffer());
+    if (buf.length < 500 || /application\/(json|problem\+json)|text\/html/i.test(contentType)) {
+      console.warn('[visual-learning] proxy returned invalid audio:', { contentType, bytes: buf.length });
+      return null;
+    }
+    const file = await writeFileTemp(buf, 'mp3');
+    const duration = probeDurationSeconds(file);
+    if (!duration) return null;
+    return {
+      file,
+      ext: 'mp3',
+      duration,
+      words: proportionalWords(req.text, duration),
+      provider: 'proxy',
+      voice: preset.proxy,
+    };
+  } catch (error) {
+    console.warn('[visual-learning] proxy TTS failed:', error instanceof Error ? error.message : String(error));
+    return null;
+  }
 }
 
 /** z-ai sandbox provider (dev environments with the z-ai CLI). */
@@ -209,7 +227,10 @@ export async function synthesizeNarration(req: NarrationRequest, opts: { proxyEn
   if (opts.allowSilent === true) chain.push('silent');
 
   for (const provider of [...new Set(chain)]) {
-    if (provider === 'gemini') {\n      const r = await synthesizeGemini(req);\n      if (r) return r;\n    } else if (provider === 'edge') {
+    if (provider === 'gemini') {
+      const r = await synthesizeGemini(req);
+      if (r) return r;
+    } else if (provider === 'edge') {
       const r = await synthesizeEdge(req);
       if (r) return r;
     } else if (provider === 'proxy') {
@@ -236,14 +257,19 @@ export async function synthesizeSceneNarration(req: NarrationRequest, opts: { pr
   let buffer = '';
   for (const sentence of sentences) {
     if ((buffer + ' ' + sentence).length > 1000 && buffer) {
-      chunkResults.push((await synthesizeNarration({ ...req, text: buffer }, opts))!);
+      const chunk = await synthesizeNarration({ ...req, text: buffer }, opts);
+      if (!chunk) return null;
+      chunkResults.push(chunk);
       buffer = sentence;
     } else {
       buffer = buffer ? `${buffer} ${sentence}` : sentence;
     }
   }
-  if (buffer.trim()) chunkResults.push((await synthesizeNarration({ ...req, text: buffer }, opts))!);
-  if (chunkResults.some((r) => r === null)) return null;
+  if (buffer.trim()) {
+    const chunk = await synthesizeNarration({ ...req, text: buffer }, opts);
+    if (!chunk) return null;
+    chunkResults.push(chunk);
+  }
   if (chunkResults.length === 1) return chunkResults[0];
   // Concatenate with ffmpeg into one file, shifting word timings.
   const dir = await mkdtemp(join(tmpdir(), 'vl-concat-'));
