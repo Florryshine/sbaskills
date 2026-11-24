@@ -203,7 +203,7 @@ async function generateScriptForJob(job) {
   for (let attempt = 1; attempt <= 3; attempt++) {
     assertLease(job);
     try {
-      const text = await generateScriptWithAI(topic, job.subject || 'general', feedback, knowledgeContext);
+      const text = await generateScriptWithAI(topic, job.subject || 'general', feedback, knowledgeContext, Number(job.target_duration_seconds || 120));
       const parsed = parseScript(text);
       const missing = parsed.scenes
         .flatMap((sc) => sc.elements)
