@@ -46,6 +46,9 @@ async function download(bucket,storagePath,destination){
  return bytes.length;
 }
 async function process(job){
+ let leaseLost=false;
+ const heartbeatTimer=setInterval(()=>{supabase.from('image_explainer_jobs').update({heartbeat_at:new Date().toISOString(),updated_at:new Date().toISOString()}).eq('id',job.id).eq('claim_token',job.claim_token).select('id').maybeSingle().then(({data,error})=>{if(error||!data)leaseLost=true;}).catch(()=>{leaseLost=true;});},30000);
+ heartbeatTimer.unref?.();
  const work=path.join(tmpdir(),`image-explainer-render-${job.id}-${randomUUID()}`);
  const publicDir=path.join(work,'public'),out=path.join(work,'output.mp4');
  try{
@@ -78,6 +81,7 @@ async function process(job){
   if(!browser) throw new Error('Chrome/Chromium is missing. Install it in the render workflow or set CHROME_PATH.');
   await update(job,{stage_message:'Rendering H.264 video with scene animation, callouts, subtitles and narration.'});
   await renderMedia({composition:{...composition,...dimensions,fps,durationInFrames:job.timeline.total_frames},serveUrl,codec:'h264',outputLocation:out,inputProps,browserExecutable:browser,concurrency:Math.max(1,Math.min(4,Number(process.env.REMOTION_CONCURRENCY||2))),imageFormat:'jpeg',jpegQuality:92,x264Preset:'medium',crf:18,overwrite:true});
+  if(leaseLost) throw new Error('Render lease was lost during rendering.');
   const info=await stat(out); if(!info.size) throw new Error('Remotion produced an empty MP4.');
   await update(job,{stage_message:`Render complete (${(info.size/1024/1024).toFixed(1)} MB). Uploading final video.`});
   const bytes=await readFile(out);
@@ -98,7 +102,7 @@ async function process(job){
  }catch(error){
   console.error(`[image-explainer-render] failed ${job.id}`,error);
   await supabase.from('image_explainer_jobs').update({status:'failed',stage:'render_failed',stage_message:'Rendering failed. Your approved timeline and narration are preserved for retry.',error_message:String(error?.message||error).slice(0,1800),claim_token:null,worker_id:null,heartbeat_at:null,updated_at:new Date().toISOString()}).eq('id',job.id).eq('claim_token',job.claim_token);
- }finally{await rm(work,{recursive:true,force:true}).catch(()=>{});}
+ }finally{clearInterval(heartbeatTimer);await rm(work,{recursive:true,force:true}).catch(()=>{});}
 }
 async function run(){
  const start=Date.now();let processed=0;
