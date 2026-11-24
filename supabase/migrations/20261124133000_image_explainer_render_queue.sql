@@ -23,7 +23,8 @@ BEGIN
   RETURN QUERY
   WITH candidate AS (
     SELECT id FROM public.image_explainer_jobs
-    WHERE status='rendering' AND stage='render_queued' AND render_attempt_count<3
+    WHERE status='rendering' AND render_attempt_count<3
+      AND (stage='render_queued' OR (stage='render_processing' AND (heartbeat_at IS NULL OR heartbeat_at < now()-interval '2 minutes')))
     ORDER BY updated_at ASC
     FOR UPDATE SKIP LOCKED LIMIT 1
   )
