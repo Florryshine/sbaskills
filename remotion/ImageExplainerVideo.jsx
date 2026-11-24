@@ -18,7 +18,7 @@ const SceneVisual=({scene,source,sourceDimensions})=>{
  const overlayVisible=(o)=>frame/fps>=o.start&&frame/fps<=o.end;
  return <AbsoluteFill style={{background:'#07111f',opacity:fade}}>
    <AbsoluteFill style={{overflow:'hidden',justifyContent:'center',alignItems:'center'}}>
-    <div style={{position:'absolute',inset:0,overflow:'hidden',transform:`translate(${(0.5-x)*100}%,${(0.5-y)*100}%) scale(${scale})`,transformOrigin:'50% 50%'}}>
+    <div style={{position:'absolute',inset:0,overflow:'hidden',transform:`translate(${(0.5-x)*100*scale}%,${(0.5-y)*100*scale}%) scale(${scale})`,transformOrigin:'50% 50%'}}>
      <Img src={staticFile(source)} style={{width:'100%',height:'100%',objectFit:'contain'}}/>
      {scene.focus_regions?.map(r=>{const region=toCanvasRegion(r.region,sourceDimensions,width,height);return <div key={r.component_id} style={{position:'absolute',left:`${region.x*100}%`,top:`${region.y*100}%`,width:`${region.width*100}%`,height:`${region.height*100}%`,border:'2px solid rgba(80,210,255,.9)',borderRadius:12,boxShadow:'0 0 24px rgba(40,180,255,.45)'}}/>})}
      {scene.overlays?.filter(overlayVisible).map(o=>{const anchor=toCanvasRegion(o.anchor_region,sourceDimensions,width,height);return <div key={o.id} style={{position:'absolute',left:anchor?`${clamp(anchor.x+anchor.width/2,.08,.78)*100}%`:'50%',top:anchor?`${clamp(anchor.y+anchor.height/2,.08,.72)*100}%`:'42%',transform:'translate(-50%,-50%)',padding:'12px 20px',borderRadius:12,background:'rgba(5,17,32,.88)',border:'1px solid #55d8ff',color:'white',fontSize:Math.max(24,width*.025),fontWeight:800,letterSpacing:'.02em',boxShadow:'0 8px 36px rgba(0,0,0,.35)',whiteSpace:'nowrap'}}>{o.text}</div>})}
