@@ -43,6 +43,17 @@ function normalizeAnalysis(parsed, dimensions, provider) {
     summary: safeText(parsed.summary, 2000),
     confidence: Math.max(0, Math.min(1, Number(parsed.confidence) || 0)),
     components,
+    detected_text: (Array.isArray(parsed.detected_text) ? parsed.detected_text : [])
+      .slice(0, 200).map((item, index) => {
+        const region = cleanImageRegion(item?.region, width, height);
+        if (!region) return null;
+        return {
+          id: safeText(item.id, 80) || `text-${index + 1}`,
+          text: safeText(item.text, 500),
+          region,
+          confidence: Math.max(0, Math.min(1, Number(item.confidence) || 0)),
+        };
+      }).filter((item) => item && item.text),
     spatial_relationships: Array.isArray(parsed.spatial_relationships)
       ? parsed.spatial_relationships.slice(0, 100).map((v) => safeText(String(v), 300)).filter(Boolean) : [],
     uncertainties: Array.isArray(parsed.uncertainties)
@@ -61,8 +72,8 @@ async function analyse(buffer, mimeType, dimensions) {
   if (!keys.length) throw new Error('Image analysis is not configured. Add a Gemini API key to the app environment.');
   const prompt = `Inspect this uploaded image for an Image-to-Explainer video project.
 Return strict JSON only:
-{"image_type":"diagram|illustration|photograph|chart|technical_drawing|product|other","subject":"concise subject","summary":"what is visibly shown","confidence":0.0,"components":[{"name":"component name","label_text":"exact visible label or null","description":"visually grounded description","function":"only state a function if reliably known; otherwise say needs research","region":{"x":0,"y":0,"width":0,"height":0},"confidence":0.0,"needs_verification":true}],"spatial_relationships":["relationships visible in the image"],"uncertainties":["things that cannot be determined from pixels alone"]}
-Original image dimensions: ${dimensions.width}x${dimensions.height} pixels. Coordinates are pixel coordinates relative to the original image, origin at top-left. Every region must be inside the image. Do not invent labels, functions, or regions. Distinguish visible observations from inferred function. Return at most 100 components.`;
+{"image_type":"diagram|illustration|photograph|chart|technical_drawing|product|other","subject":"concise subject","summary":"what is visibly shown","confidence":0.0,"components":[{"name":"component name","label_text":"exact visible label or null","description":"visually grounded description","function":"only state a function if reliably known; otherwise say needs research","region":{"x":0,"y":0,"width":0,"height":0},"confidence":0.0,"needs_verification":true}],"detected_text":[{"text":"exact text visible in the image","region":{"x":0,"y":0,"width":0,"height":0},"confidence":0.0}],"spatial_relationships":["relationships visible in the image"],"uncertainties":["things that cannot be determined from pixels alone"]}
+Original image dimensions: ${dimensions.width}x${dimensions.height} pixels. Coordinates are pixel coordinates relative to the original image, origin at top-left. Every region must be inside the image. Transcribe all legible visible text in detected_text with pixel bounding boxes (up to 200 blocks). Do not invent labels, functions, or regions. Distinguish visible observations from inferred function. Return at most 100 components.`;
 
   let lastError;
   for (const key of keys) {
