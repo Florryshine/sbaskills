@@ -72,6 +72,7 @@ function deriveStage(job) {
 export default function WhiteboardEnginePage() {
   const [topic, setTopic] = useState('');
   const [subject, setSubject] = useState('biology');
+  const [targetDuration, setTargetDuration] = useState(120);
   const [useAI, setUseAI] = useState(true);
   const [script, setScript] = useState(SAMPLE_SCRIPT);
   const [jobId, setJobId] = useState(null);
@@ -149,7 +150,7 @@ export default function WhiteboardEnginePage() {
       const res = await fetch('/api/admin/whiteboard-engine', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ topic, subject, script, useAI }),
+        body: JSON.stringify({ topic, subject, script, useAI, targetDurationSeconds: targetDuration }),
       });
       const data = await readJson(res);
       if (!res.ok) {
@@ -229,6 +230,13 @@ export default function WhiteboardEnginePage() {
                 <option key={s} value={s}>{s}</option>
               ))}
             </select>
+          </div>
+          <div>
+            <label className="text-sm font-medium block mb-1">Target video duration</label>
+            <select value={targetDuration} onChange={(e) => setTargetDuration(Number(e.target.value))} disabled={!useAI} className="w-full rounded-lg border px-3 py-2 text-sm bg-white disabled:opacity-50">
+              <option value={30}>30 seconds</option><option value={60}>1 minute</option><option value={120}>2 minutes</option><option value={180}>3 minutes</option><option value={300}>5 minutes</option><option value={480}>8 minutes</option><option value={600}>10 minutes</option>
+            </select>
+            <p className="mt-1 text-xs text-gray-500">{useAI ? 'AI will expand the lesson and scene count to target this duration.' : 'A pasted script determines its own duration.'}</p>
           </div>
 
           <label className="flex items-center gap-2 text-sm">
