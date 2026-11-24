@@ -32,6 +32,9 @@ jobs:
           node --check lib/image-explainer/research.mjs
           node --check lib/image-explainer/script.mjs
           node --check lib/image-explainer/narration-manifest.mjs
+          node --check lib/image-explainer/timeline.mjs
+          node --check app/api/admin/image-explainer/timeline/route.js
+          node --check app/admin/image-explainer/timeline/[id]/page.js
           node --check local-video-renderer/image-explainer-narration-worker.js
       - name: Check API route syntax
         run: node --check app/api/admin/image-explainer/route.js
