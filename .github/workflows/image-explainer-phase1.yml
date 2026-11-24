@@ -7,6 +7,8 @@ on:
       - 'lib/image-explainer/**'
       - 'app/api/admin/image-explainer/**'
       - 'tests/image-explainer-*.test.mjs'
+      - 'local-video-renderer/image-explainer-narration-worker.js'
+      - 'supabase/migrations/*image_explainer*.sql'
       - '.github/workflows/image-explainer-phase1.yml'
   pull_request:
     paths:
