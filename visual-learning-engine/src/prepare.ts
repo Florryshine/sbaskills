@@ -197,6 +197,7 @@ export async function prepareImages(
         count: job.count,
         slot: job.slot,
         usedStockUrls,
+        preferMotion: !job.slot && /\b(flow|move|travel|rotate|circulate|pump|contract|expand|evaporat|condens|rise|fall|grow|divide|transform|convert|transfer|spread|diffuse|absorb|release|cycle|boil|melt|freeze|erupt|orbit|spin|breathe|beat|pulse|mix|dissolve)\w*\b/i.test(script.scenes[job.sceneIndex]?.narration || ''),
       });
       assets.push(...resolved);
     }

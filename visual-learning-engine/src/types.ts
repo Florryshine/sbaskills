@@ -14,7 +14,7 @@ export type StylePreset = 'cartoon' | 'photo' | 'sketch';
 
 export type NarrationProviderName = 'gemini' | 'edge' | 'proxy' | 'zai' | 'silent';
 
-export type ImageProviderName = 'pollinations' | 'zai' | 'wikimedia' | 'pexels' | 'pixabay' | 'openverse' | 'placeholder';
+export type ImageProviderName = 'pollinations' | 'zai' | 'wikimedia' | 'pexels' | 'pixabay' | 'openverse' | 'pexels-video' | 'pixabay-video' | 'placeholder';
 
 export interface VLJobSpec {
   /** Human episode title (used for the outro card and filenames). */

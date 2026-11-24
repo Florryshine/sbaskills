@@ -51,8 +51,8 @@ function imagesMap(images: ImageManifest): Record<number, { main?: string; right
     const entry = map[asset.sceneIndex] ?? (map[asset.sceneIndex] = { shots: [] });
     if (/-b\.jpg$/.test(asset.file)) entry.right = asset.file;
     else if (/-a\.jpg$/.test(asset.file)) entry.main = asset.file;
-    else if (/-s(\d+)\.jpg$/.test(asset.file)) {
-      const idx = Number(asset.file.match(/-s(\d+)\.jpg$/)![1]);
+    else if (/-s(\d+)\.(?:jpg|mp4)$/.test(asset.file)) {
+      const idx = Number(asset.file.match(/-s(\d+)\.(?:jpg|mp4)$/)![1]);
       entry.shots[idx] = asset.file;
       if (!entry.main) entry.main = asset.file;
     } else if (!entry.main) entry.main = asset.file;

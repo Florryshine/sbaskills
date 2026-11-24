@@ -36,6 +36,7 @@ export interface ImageRequest {
   /** 'a' | 'b' for the two compare sides (single shot each, no carousel) */
   slot?: 'a' | 'b';
   usedStockUrls?: Set<string>;
+  preferMotion?: boolean;
 }
 
 function targetSize(aspect: '16:9' | '9:16' | '1:1'): { width: number; height: number; aspectHint: 'wide' | 'square' | 'tall' } {
@@ -44,9 +45,9 @@ function targetSize(aspect: '16:9' | '9:16' | '1:1'): { width: number; height: n
   return { width: 1536, height: 1024, aspectHint: 'wide' };
 }
 
-function shotFile(publicDir: string, sceneIndex: number, shot: number, slot?: 'a' | 'b'): { abs: string; rel: string } {
+function shotFile(publicDir: string, sceneIndex: number, shot: number, slot?: 'a' | 'b', extension = 'jpg'): { abs: string; rel: string } {
   const base = `scene-${String(sceneIndex).padStart(3, '0')}`;
-  const name = slot ? `${base}-${slot}.jpg` : `${base}-s${shot}.jpg`;
+  const name = slot ? `${base}-${slot}.jpg` : `${base}-s${shot}.${extension}`;
   return { abs: join(publicDir, 'images', name), rel: join('images', name) };
 }
 
@@ -170,6 +171,39 @@ export async function searchPixabay(query: string, count: number, orientation: '
   if (!r || !r.ok) return [];
   const data = (await r.json().catch(() => null)) as { hits?: { largeImageURL?: string; webformatURL?: string; tags?: string }[] } | null;
   return (data?.hits || []).slice(0, count).map((h): StockHit => ({ url: h.largeImageURL || h.webformatURL || '', source: 'pixabay', title: h.tags || '' })).filter((h) => Boolean(h.url));
+}
+
+async function searchPexelsVideos(query: string, orientation: 'landscape' | 'portrait'): Promise<StockHit[]> {
+  const key = process.env.PEXELS_API_KEY;
+  if (!key) return [];
+  const params = new URLSearchParams({ query, per_page: '12', orientation });
+  const r = await fetchWithTimeout(`https://api.pexels.com/videos/search?${params}`, STOCK_TIMEOUT_MS, { Authorization: key });
+  if (!r || !r.ok) return [];
+  const data = await r.json().catch(() => null) as { videos?: { video_files?: { link?: string; file_type?: string; width?: number; height?: number }[] }[] } | null;
+  return (data?.videos || []).map((v) => {
+    const files = (v.video_files || []).filter((f) => f.link && (!f.file_type || f.file_type === 'video/mp4') && (f.width || 0) >= 640 && (f.height || 0) >= 360);
+    const chosen = files.sort((a, b) => (b.width || 0) - (a.width || 0))[0];
+    return { url: chosen?.link || '', source: 'pexels-video' as const, title: '' };
+  }).filter((hit) => Boolean(hit.url));
+}
+async function searchPixabayVideos(query: string): Promise<StockHit[]> {
+  const key = process.env.PIXABAY_API_KEY;
+  if (!key) return [];
+  const params = new URLSearchParams({ key, q: query, safesearch: 'true', per_page: '12' });
+  const r = await fetchWithTimeout(`https://pixabay.com/api/videos/?${params}`, STOCK_TIMEOUT_MS);
+  if (!r || !r.ok) return [];
+  const data = await r.json().catch(() => null) as { hits?: { tags?: string; videos?: { medium?: { url?: string }; large?: { url?: string } } }[] } | null;
+  return (data?.hits || []).map((hit) => ({ url: hit.videos?.medium?.url || hit.videos?.large?.url || '', source: 'pixabay-video' as const, title: hit.tags || '' })).filter((hit) => Boolean(hit.url));
+}
+async function downloadStockVideo(hit: StockHit): Promise<Buffer | null> {
+  const r = await fetchWithTimeout(hit.url, STOCK_TIMEOUT_MS, { 'User-Agent': STOCK_UA, Accept: 'video/mp4' });
+  if (!r || !r.ok) return null;
+  const type = r.headers.get('content-type') || '';
+  const size = Number(r.headers.get('content-length') || 0);
+  if (size > 40 * 1024 * 1024 || (type && !/video\/mp4|application\/octet-stream/i.test(type))) return null;
+  const buf = Buffer.from(await r.arrayBuffer());
+  if (buf.length < 100_000 || buf.length > 40 * 1024 * 1024 || buf.toString('ascii', 4, 8) !== 'ftyp') return null;
+  return buf;
 }
 
 export async function searchWikimedia(query: string, count: number): Promise<StockHit[]> {
@@ -320,6 +354,21 @@ export async function resolveSceneImages(req: ImageRequest): Promise<ImageAsset[
   const slot = req.slot;
   const count = slot ? 1 : Math.max(1, Math.min(20, req.count ?? 1));
   await mkdir(join(req.publicDir, 'images'), { recursive: true });
+  if (req.preferMotion && !slot) {
+    const query = stockQueryFrom(req.subject, 0, 2, false);
+    const orientation = aspectHint === 'tall' ? 'portrait' : 'landscape';
+    const candidates = [...await searchPexelsVideos(query, orientation), ...await searchPixabayVideos(query)];
+    const hit = chooseRelevantHit(candidates, query, req.usedStockUrls ?? new Set<string>());
+    if (hit) {
+      const buffer = await downloadStockVideo(hit);
+      if (buffer) {
+        const { abs, rel } = shotFile(req.publicDir, req.sceneIndex, 0, undefined, 'mp4');
+        await writeFile(abs, buffer);
+        req.usedStockUrls?.add(hit.url);
+        return [{ sceneIndex: req.sceneIndex, provider: hit.source, file: rel, prompt: req.subject, seed: req.seed + req.sceneIndex * 1009, width, height, shot: 0 }];
+      }
+    }
+  }
 
   // Stock search per (provider, shot-query): SHORT keyword queries (long
   // natural-language sentences return zero results on stock APIs) with a
