@@ -4,6 +4,7 @@ import { GoogleGenerativeAI } from '@google/generative-ai';
 import { requireAdminApi } from '@/lib/require-admin-api';
 import { createAdminClient } from '@/lib/supabase-admin';
 import { cleanImageRegion } from '@/lib/image-explainer/regions.mjs';
+import { researchImageExplainer } from '@/lib/image-explainer/research.mjs';
 
 export const runtime = 'nodejs';
 export const maxDuration = 60;
@@ -205,8 +206,46 @@ export async function PATCH(req) {
     if (!body?.id) return NextResponse.json({ error: 'Provide a project id.' }, { status: 400 });
     const supabase = createAdminClient();
     const { data: current, error: readError } = await supabase.from('image_explainer_jobs')
-      .select('id,title,status,vision_analysis,source_images').eq('id', body.id).single();
+      .select('id,title,status,vision_analysis,source_images,user_instruction').eq('id', body.id).single();
     if (readError || !current) return NextResponse.json({ error: 'Project not found.' }, { status: 404 });
+
+    if (body.action === 'research') {
+      if (!current.vision_analysis?.subject) {
+        return NextResponse.json({ error: 'Complete image analysis before starting research.' }, { status: 409 });
+      }
+      const { error: stageError } = await supabase.from('image_explainer_jobs')
+        .update({
+          status: 'researching', stage: 'research_discovery',
+          stage_message: 'Searching reference sources, scholarly metadata and supporting media.',
+          error_message: null, updated_at: new Date().toISOString(),
+        }).eq('id', body.id);
+      if (stageError) throw new Error(stageError.message);
+      try {
+        const bundle = await researchImageExplainer({
+          analysis: current.vision_analysis,
+          instruction: current.user_instruction || '',
+        });
+        const { data: researchedJob, error: saveError } = await supabase.from('image_explainer_jobs')
+          .update({
+            status: 'analysed', stage: 'research_complete',
+            stage_message: `Research complete: ${bundle.sources.length} reference sources and ${bundle.assets.length} media candidates found. Review before use.`,
+            research_bundle: bundle, error_message: null, updated_at: new Date().toISOString(),
+          })
+          .eq('id', body.id)
+          .select('id,title,status,stage,stage_message,research_bundle')
+          .single();
+        if (saveError) throw new Error(saveError.message);
+        return NextResponse.json({ job: researchedJob });
+      } catch (researchError) {
+        await supabase.from('image_explainer_jobs').update({
+          status: 'analysed', stage: 'research_failed',
+          stage_message: 'Research did not finish. Your image analysis is preserved; you can retry.',
+          error_message: safeText(researchError?.message || 'Research failed.', 1000),
+          updated_at: new Date().toISOString(),
+        }).eq('id', body.id);
+        throw researchError;
+      }
+    }
 
     if (body.action === 'retry-analysis') {
       if (current.status !== 'failed' || current.vision_analysis) {
@@ -287,7 +326,7 @@ export async function GET(req) {
   const id = new URL(req.url).searchParams.get('id');
   if (id) {
     const { data: job, error } = await supabase.from('image_explainer_jobs')
-      .select('id,title,status,stage,stage_message,production_mode,spec,source_images,vision_analysis,error_message,created_at')
+      .select('id,title,status,stage,stage_message,production_mode,spec,source_images,vision_analysis,research_bundle,error_message,created_at')
       .eq('id', id).single();
     if (error || !job) return NextResponse.json({ error: 'Project not found.' }, { status: 404 });
     const sourcePath = job.source_images?.[0]?.path;
@@ -300,7 +339,7 @@ export async function GET(req) {
     return NextResponse.json({ job, sourceUrl });
   }
   const { data, error } = await supabase.from('image_explainer_jobs')
-    .select('id,title,status,stage,stage_message,production_mode,video_url,error_message,created_at,vision_analysis')
+    .select('id,title,status,stage,stage_message,production_mode,video_url,error_message,created_at,vision_analysis,research_bundle')
     .order('created_at', { ascending: false }).limit(25);
   if (error) return NextResponse.json({ error: error.message }, { status: 500 });
   return NextResponse.json({ jobs: data || [] });
