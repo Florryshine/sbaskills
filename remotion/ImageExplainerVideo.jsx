@@ -15,7 +15,7 @@ const SceneVisual=({scene,source})=>{
  const overlayVisible=(o)=>frame/fps>=o.start&&frame/fps<=o.end;
  return <AbsoluteFill style={{background:'#07111f',opacity:fade}}>
    <AbsoluteFill style={{overflow:'hidden',justifyContent:'center',alignItems:'center'}}>
-    <Img src={source} style={{width:'100%',height:'100%',objectFit:'contain',transform:`scale(${scale})`,transformOrigin:`${x*100}% ${y*100}%`}}/>
+    <Img src={staticFile(source)} style={{width:'100%',height:'100%',objectFit:'contain',transform:`translate(${(0.5-x)*100}%,${(0.5-y)*100}%) scale(${scale})`,transformOrigin:'50% 50%'}}/>
     <AbsoluteFill style={{background:'linear-gradient(180deg,rgba(3,8,18,.12),transparent 35%,rgba(3,8,18,.22))'}}/>
     {scene.focus_regions?.map(r=><div key={r.component_id} style={{position:'absolute',left:`${r.region.x*100}%`,top:`${r.region.y*100}%`,width:`${r.region.width*100}%`,height:`${r.region.height*100}%`,border:'2px solid rgba(80,210,255,.9)',borderRadius:12,boxShadow:'0 0 24px rgba(40,180,255,.45)'}}/>)}
     {scene.overlays?.filter(overlayVisible).map(o=><div key={o.id} style={{position:'absolute',left:o.anchor_region?`${clamp(o.anchor_region.x+o.anchor_region.width/2,.08,.78)*100}%`:'50%',top:o.anchor_region?`${clamp(o.anchor_region.y+o.anchor_region.height/2,.08,.72)*100}%`:'42%',transform:'translate(-50%,-50%)',padding:'12px 20px',borderRadius:12,background:'rgba(5,17,32,.88)',border:'1px solid #55d8ff',color:'white',fontSize:Math.max(24,width*.025),fontWeight:800,letterSpacing:'.02em',boxShadow:'0 8px 36px rgba(0,0,0,.35)',whiteSpace:'nowrap'}}>{o.text}</div>)}
