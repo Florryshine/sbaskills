@@ -33,7 +33,14 @@ export async function POST(req) {
       .eq('id', body.id).single();
     if (readError || !current) return NextResponse.json({ error: 'Project not found.' }, { status: 404 });
 
-    if (body.action === 'review-assets') {\n      const researchBundle = reviewAssetCandidates(current.research_bundle || {}, body.updates || []);\n      const { data: saved, error } = await supabase.from('image_explainer_jobs').update({ research_bundle: researchBundle, timeline: null, timeline_reviewed_at: null, stage: 'assets_reviewed', stage_message: 'Supporting media review saved. Regenerate the timeline to apply approved assets.', updated_at: new Date().toISOString() }).eq('id', body.id).select('id,title,status,stage,stage_message,research_bundle').single();\n      if (error) throw new Error(error.message);\n      return NextResponse.json({ job: saved });\n    }\n\n    if (body.action === 'queue-render' || body.action === 'retry-render') {
+    if (body.action === 'review-assets') {
+      const researchBundle = reviewAssetCandidates(current.research_bundle || {}, body.updates || []);
+      const { data: saved, error } = await supabase.from('image_explainer_jobs').update({ research_bundle: researchBundle, timeline: null, timeline_reviewed_at: null, stage: 'assets_reviewed', stage_message: 'Supporting media review saved. Regenerate the timeline to apply approved assets.', updated_at: new Date().toISOString() }).eq('id', body.id).select('id,title,status,stage,stage_message,research_bundle').single();
+      if (error) throw new Error(error.message);
+      return NextResponse.json({ job: saved });
+    }
+
+    if (body.action === 'queue-render' || body.action === 'retry-render') {
       const retry = body.action === 'retry-render';
       if (!current.timeline || current.timeline.review_status !== 'admin_reviewed' || !validateExplainerTimeline(current.timeline, current.script?.scenes?.length || 0)) return NextResponse.json({ error: 'Approve a valid visual timeline before rendering.' }, { status: 409 });
       if (!current.source_images?.[0]?.path || !current.narration_manifest?.clips?.length) return NextResponse.json({ error: 'The original image or narration audio is missing.' }, { status: 409 });
