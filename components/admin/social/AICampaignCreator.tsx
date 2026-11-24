@@ -4,7 +4,7 @@ import {
   Sparkles, BookOpen, Layers, MessageSquare, Send, Calendar, CheckCircle, 
   HelpCircle, ThumbsUp, Trash2, Globe, Eye, Code, RefreshCw
 } from "lucide-react";
-import { TargetAudience, PostTone, SocialPlatform } from "../types";
+import { TargetAudience, PostTone } from "../types";
 import { PostPreviewer } from "./PostPreviewer";
 
 interface AICampaignCreatorProps {
@@ -169,6 +169,8 @@ export function AICampaignCreator({ onCampaignGenerated }: AICampaignCreatorProp
         <div className="p-6 space-y-6">
           {/* Asset picker selector */}
           <div className="space-y-2">
+            {assetLoadError && <p className="text-xs text-rose-400">{assetLoadError}</p>}
+            {!availableAssets.length && !assetLoadError && <p className="text-xs text-slate-400">Loading your knowledge assets…</p>}
             <div className="flex justify-between items-center">
               <label className="text-xs text-slate-300 font-mono flex items-center gap-2">
                 <BookOpen size={13} className="text-indigo-400" />
@@ -205,7 +207,7 @@ export function AICampaignCreator({ onCampaignGenerated }: AICampaignCreatorProp
                     key={asset.id}
                     onClick={() => {
                       setSelectedAsset(asset);
-                      setSubject(asset.subject);
+                      setSubject(asset.subject || "General");
                     }}
                     className={`p-4 rounded-xl border text-left cursor-pointer transition-all ${
                       selectedAsset?.id === asset.id
