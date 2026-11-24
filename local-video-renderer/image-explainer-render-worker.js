@@ -32,7 +32,7 @@ async function download(bucket,storagePath,destination){
  if(error||!data) throw new Error(`Could not download ${bucket}/${storagePath}: ${error?.message||'empty file'}`);
  const bytes=Buffer.from(await data.arrayBuffer());
  if(!bytes.length) throw new Error(`Downloaded asset is empty: ${storagePath}`);
- await mkdir(path.dirname(destination),{recursive:true}); await writeFile(destination+'.'+ext,bytes);
+ await mkdir(path.dirname(destination),{recursive:true}); await writeFile(destination,bytes);
  return bytes.length;
 }
 
