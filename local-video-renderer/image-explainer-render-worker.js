@@ -53,7 +53,7 @@ async function downloadApprovedMedia(asset,destination){
  const bytes=Buffer.from(await response.arrayBuffer());
  if(!bytes.length||bytes.length>limit) throw new Error('Supporting media is empty or exceeds the download size limit.');
  const ext=asset.media_type==='video'?'mp4':type==='image/png'?'png':type==='image/webp'?'webp':'jpg';
- await mkdir(path.dirname(destination),{recursive:true});await writeFile(destination,bytes);
+ await mkdir(path.dirname(destination),{recursive:true});await writeFile(destination+'.'+ext,bytes);
  return ext;
 }
 
