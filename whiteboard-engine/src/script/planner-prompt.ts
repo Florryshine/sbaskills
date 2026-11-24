@@ -59,8 +59,10 @@ function formatKnowledgeContext(context: string): string {
 }
 
 export function buildPlannerPrompt(topic: string, subject: Subject, knowledgeContext = '', targetDurationSeconds = 120): string {
-  const sceneCount = Math.max(4, Math.min(9, Math.ceil(targetDurationSeconds / 70)));
-  const wordsPerScene = Math.max(18, Math.round(targetDurationSeconds * 2.45 / sceneCount));
+  // Aim for a new visual chapter about every 20–25 seconds. Long videos
+  // must grow in scene count instead of stretching a handful of scenes.
+  const sceneCount = Math.max(4, Math.min(24, Math.ceil(targetDurationSeconds / 24)));
+  const wordsPerScene = Math.max(18, Math.round(targetDurationSeconds * 2.4 / sceneCount));
   const recommended = suggestIllustrations(subject, keywordsFromTopic(topic));
   const recommendedBlock = recommended.length
     ? 'RECOMMENDED LOCAL ASSETS FOR THIS TOPIC (use only where they genuinely help):\n' +
@@ -75,7 +77,7 @@ export function buildPlannerPrompt(topic: string, subject: Subject, knowledgeCon
     'TOPIC: ' + topic,
     'SUBJECT: ' + subject,
     'TARGET VIDEO DURATION: approximately ' + targetDurationSeconds + ' seconds.',
-    'Create exactly ' + sceneCount + ' scenes, with approximately ' + wordsPerScene + ' spoken words per scene. Plan enough substantive narration to fill the selected duration at a natural speaking pace (about 140–155 words per minute). Do not pad or repeat. A longer duration requires deeper explanation, examples, mechanisms and useful transitions.',
+    'Create approximately ' + sceneCount + ' scenes (acceptable range ' + Math.max(4, Math.floor(targetDurationSeconds / 30)) + '–' + Math.min(24, Math.max(4, Math.ceil(targetDurationSeconds / 15))) + '), averaging about ' + wordsPerScene + ' spoken words each. Aim for 15–30 seconds per scene at 140–155 words per minute. Split a long explanation whenever its visual focus or teaching step changes. Never force a 5-scene structure onto a long video.',
     '',
     'FACTUAL FOUNDATION:',
     formatKnowledgeContext(knowledgeContext),
@@ -105,16 +107,16 @@ export function buildPlannerPrompt(topic: string, subject: Subject, knowledgeCon
     '- Resolve the opening question or central problem. Finish with the key takeaway or implication, not a generic sign-off.',
     '- Sound like a knowledgeable person explaining something naturally to an intelligent beginner. Use clear, conversational Nigerian English; never pidgin, exaggerated slang or childish language.',
     '- Prefer active, direct sentences. Avoid robotic filler such as "It is important to note", "Let us delve into", "In conclusion" and repeated "as you can see".',
-    '- Use exactly the requested scene count and duration budget. Do not pad a simple topic or compress a complex one to hit a quota.',
-    '- Narration length follows the idea and visual time. Many scenes may need roughly 25–55 spoken words, but shorter or longer scenes are acceptable. Never add words merely to meet a count.',
+    '- Match the duration with the requested adaptive scene range. A 5-minute video should normally have around 12–15 scenes, not 4–6. Do not stretch one scene across a minute; split at each meaningful teaching transition.',
+    '- Keep most scenes to about 30–60 spoken words (roughly 12–25 seconds). Use shorter scenes for a single important reveal or complex diagram. Avoid narration blocks longer than 70 words; split them into separate scenes when the visual focus changes.',
     '- The title scene is part of the explanation and needs an interesting opening. The final scene must answer or complete the central question.',
     '',
     'VISUAL EXPLANATION — NOT DECORATION:',
     '- Every visual must teach, clarify, locate, compare, demonstrate or reinforce a specific point in the narration.',
-    '- Plan visuals from the meaning of the narration, not from a fixed visual quota.',
-    '- Use local draw: assets when they accurately represent the concept. A scene may need one large diagram, several small components, a sequence of parts, or no local illustration if handwriting/equations communicate it better.',
-    '- Do NOT force two drawings, a human character, an external image, a highlight or an arrow into every scene.',
-    '- Use image: only when a real photograph, specimen, apparatus, historical reference, map or detailed educational reference adds information the local library cannot provide. It is optional, not a scene requirement. Use a specific 2–6 word search phrase.',
+    '- Plan visuals from the meaning of the narration AND maintain visual movement throughout. The viewer should see a new useful drawing, label, step, comparison, equation, arrow, callout or reference image every 3–6 seconds during active explanation; do not leave one completed diagram sitting unchanged for 5+ seconds while the narration continues.',
+    '- Use local draw: assets when they accurately represent the concept. Build complex diagrams in stages: draw the main structure, then add its parts, labels, pathways, arrows or comparison elements as those are explained. Long scenes need multiple distinct visual actions, not one oversized drawing.',
+    '- Do not force a human character, stock photo or decorative arrow into every scene. However, for a substantive scene longer than about 20 seconds, plan at least 2–4 meaningful visual beats; for scenes longer than 30 seconds, plan at least 3. These may be separate drawings, diagram components, text/bullet reveals, equations, arrows or callouts.',
+    '- Use image: for real photographs, specimens, apparatus, clinical/anatomical references, microscopy, maps or detailed real-world examples when they add information a vector drawing cannot. Across a 5-minute lesson, aim for 2–4 different external reference images when the topic genuinely supports them; do not force them into every scene. Use specific 2–6 word search phrases, never generic queries.',
     '- Do not use decorative stock imagery or repeat the same image query across scenes.',
     '- Choose a visual strategy suited to the subject: labelled structure, process flow, cause-and-effect chain, before/after comparison, timeline, map, scale comparison, worked example, graph, equation or system diagram.',
     '- Build complex diagrams progressively. Introduce the whole, then reveal parts or stages as explained. Do not dump every label on screen at once.',
@@ -128,13 +130,13 @@ export function buildPlannerPrompt(topic: string, subject: Subject, knowledgeCon
     'DSL AND TIMING RULES:',
     '- Output ONLY DSL text. No markdown fences, commentary, planning notes or sources section.',
     '- Start with @title and @subject.',
-    '- Use 4–9 scenes as appropriate. First scene layout must be title and final scene layout must be summary. Middle scenes may use concept, diagram, list or equation.',
+    '- Use the duration-appropriate scene count from the brief (normally about one scene every 20–25 seconds; maximum 24). First scene layout must be title and final scene layout must be summary. Middle scenes may use concept, diagram, list or equation.',
     '- Every scene must contain exactly one narration: line. Plain spoken sentences only; no stage directions or emojis.',
     '- Every sync:<phrase> must be copied verbatim from that scene narration (case-insensitive, punctuation ignored). Use a short distinctive phrase that occurs exactly in narration. Never invent or paraphrase a sync phrase.',
     '- Supported directives only: heading:, sub:, narration:, draw:, image:, text:, bullet:, arrow:, highlight:, equation:, callout:, tick:.',
     '- Never invent illustration ids. Never write draw: text. Written words and drawings are separate elements.',
     '- A draw: directive should have a short sync: phrase naming the structure or concept as spoken. Use scale:0.8 for a hero diagram, scale:0.65 for support diagrams and scale:0.45 for small props. These are relative weights, not percentages.',
-    '- Use image: <specific 2–6 word search phrase> only when justified by the visual plan. It may be absent from any scene.',
+    '- Use image: <specific 2–6 word search phrase> when a real reference image improves understanding. Do not omit all external references from a long lesson when useful real examples exist; never repeat the same search phrase or image.',
     '- Use highlight: only for an important term appearing verbatim in that scene heading or text:/bullet: directive. At most one per scene. Syntax: highlight: <phrase> style:circle|underline.',
     '- Equations must be accurate and readable. Use ->[condition] for labelled reaction arrows, e.g. equation: 6CO2 + 6H2O ->[light] C6H12O6 + 6O2.',
     '- For physics arrows use arrow: with explicit from:x,y to:x,y coordinates in 1920x1080 board space. Add arrows only when they convey a meaningful relationship.',
