@@ -60,7 +60,7 @@ export async function GET(req) {
   }
 
   const supabase = createAdminClient();
-  const { error: dbError } = await supabase.from('social_channels_v2').upsert(
+  const { data: dbData, error: dbError } = await supabase.from('social_channels_v2').upsert(
     {
       platform: 'youtube',
       label: 'Main',
@@ -72,10 +72,23 @@ export async function GET(req) {
       is_active: true,
     },
     { onConflict: 'platform,label' }
-  );
+  ).select('id').single();
 
   if (dbError) {
     return NextResponse.json({ error: dbError.message }, { status: 500 });
+  }
+
+  // A successful OAuth reconnection restores the YouTube channel and safely
+  // re-queues jobs that were stopped specifically by an invalid_grant error.
+  const { error: resumeError } = await supabase
+    .from('publish_jobs')
+    .update({ status: 'queued', attempt_count: 0, last_error: null })
+    .eq('channel_id', dbData.id)
+    .eq('status', 'failed')
+    .ilike('last_error', '%YouTube authorization expired or was revoked%');
+
+  if (resumeError) {
+    console.error('YouTube reconnected, but failed jobs could not be re-queued:', resumeError.message);
   }
 
   const res = NextResponse.redirect(`${siteUrl}/admin/channels?success=youtube`);
