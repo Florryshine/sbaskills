@@ -438,7 +438,7 @@ export async function GET(req) {
   const id = new URL(req.url).searchParams.get('id');
   if (id) {
     const { data: job, error } = await supabase.from('image_explainer_jobs')
-      .select('id,title,status,stage,stage_message,production_mode,spec,source_images,vision_analysis,research_bundle,script,storyboard,narration_manifest,error_message,created_at')
+      .select('id,title,status,stage,stage_message,production_mode,spec,source_images,vision_analysis,research_bundle,script,storyboard,narration_manifest,timeline,timeline_reviewed_at,error_message,created_at')
       .eq('id', id).single();
     if (error || !job) return NextResponse.json({ error: 'Project not found.' }, { status: 404 });
     const sourcePath = job.source_images?.[0]?.path;
