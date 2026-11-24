@@ -6,6 +6,7 @@ import { createAdminClient } from '@/lib/supabase-admin';
 import { cleanImageRegion } from '@/lib/image-explainer/regions.mjs';
 import { researchImageExplainer } from '@/lib/image-explainer/research.mjs';
 import { generateExplainerPlan } from '@/lib/image-explainer/script.mjs';
+import { GEMINI_MODELS } from '@/lib/aiModels';
 
 export const runtime = 'nodejs';
 export const maxDuration = 60;
@@ -80,7 +81,7 @@ Original image dimensions: ${dimensions.width}x${dimensions.height} pixels. Coor
   let lastError;
   for (const key of keys) {
     const client = new GoogleGenerativeAI(key);
-    for (const modelName of ['gemini-2.5-flash', 'gemini-2.0-flash']) {
+    for (const modelName of GEMINI_MODELS) {
       try {
         const model = client.getGenerativeModel({ model: modelName });
         const result = await model.generateContent({
