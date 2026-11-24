@@ -233,7 +233,7 @@ async function makeStoryboard(job, project) {
     facts: JSON.stringify(asJsonArray(ka.facts)),
   } : { keyword: topic, subject, summary: topic };
   await setStage(job, 'scripting', 8, 'Creating the cartoon storyboard...');
-  const generated = await generateStoryboard(kaLike, topic);
+  const generated = await generateStoryboard(kaLike, topic, Number(project.target_duration_seconds || job.payload?.targetDurationSeconds || 120));
   let spec = generated.spec;
   if (!spec || !Array.isArray(spec.scenes) || spec.scenes.length < 3) {
     throw new Error('Storyboard generator returned an invalid scene list.');
