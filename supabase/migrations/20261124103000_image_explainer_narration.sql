@@ -15,6 +15,18 @@ security definer
 set search_path = public
 as $$
 begin
+  -- Convert exhausted abandoned leases into visible failures instead of leaving them stuck forever.
+  update public.image_explainer_jobs
+  set status = 'failed',
+      stage = 'narration_failed',
+      stage_message = 'Narration worker lease expired after the retry limit.',
+      error_message = coalesce(error_message, 'The narration worker stopped responding after three attempts. Retry this job from the admin studio.'),
+      claim_token = null, worker_id = null, heartbeat_at = null,
+      updated_at = now()
+  where status = 'narrating'
+    and attempt_count >= 3
+    and (heartbeat_at is null or heartbeat_at < now() - interval '10 minutes');
+
   return query
   with candidate as (
     select id
