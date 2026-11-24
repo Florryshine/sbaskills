@@ -69,20 +69,18 @@ export function AICampaignCreator({ onCampaignGenerated }: AICampaignCreatorProp
     }, 1200);
 
     try {
-      const topicText = useCustom ? customTopic : selectedAsset.title;
-      const descriptionText = useCustom ? "" : selectedAsset.description;
+      const topicText = useCustom ? customTopic.trim() : (selectedAsset?.keyword || "");
 
       const response = await fetch("/api/social/generate", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
+          knowledgeAssetId: selectedAsset?.id,
+          platforms: ["facebook", "threads", "x", "instagram", "telegram", "linkedin"],
           topic: topicText,
           subject,
           tone,
           audience,
-          sourceType: "blog",
-          sourceId: selectedAsset.id,
-          sourceTitle: topicText + " " + descriptionText,
         }),
       });
 
