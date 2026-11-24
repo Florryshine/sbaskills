@@ -1,0 +1,58 @@
+name: Image Explainer Narration Worker
+
+on:
+  schedule:
+    - cron: '*/5 * * * *'
+  workflow_dispatch:
+
+concurrency:
+  group: image-explainer-narration-worker
+  cancel-in-progress: false
+
+jobs:
+  narrate:
+    runs-on: ubuntu-latest
+    timeout-minutes: 50
+    env:
+      NEXT_PUBLIC_SUPABASE_URL: ${{ secrets.NEXT_PUBLIC_SUPABASE_URL }}
+      SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
+      TTS_ENDPOINT: ${{ secrets.TTS_ENDPOINT }}
+      GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
+      GEMINI_API_KEY_1: ${{ secrets.GEMINI_API_KEY_1 }}
+      GEMINI_API_KEY_2: ${{ secrets.GEMINI_API_KEY_2 }}
+      GEMINI_API_KEY_3: ${{ secrets.GEMINI_API_KEY_3 }}
+      IMAGE_EXPLAINER_RUN_ONCE_MAX_MS: '2400000'
+    steps:
+      - uses: actions/checkout@v4
+      - name: Check narration queue
+        id: check
+        shell: bash
+        run: |
+          set -euo pipefail
+          test -n "$NEXT_PUBLIC_SUPABASE_URL" && test -n "$SUPABASE_SERVICE_ROLE_KEY"
+          cutoff=$(date -u -d '8 minutes ago' '+%Y-%m-%dT%H:%M:%SZ')
+          body=$(curl -sS --fail-with-body --get "$NEXT_PUBLIC_SUPABASE_URL/rest/v1/image_explainer_jobs" \
+            --data-urlencode "select=id,status,attempt_count,claim_token,heartbeat_at" \
+            --data-urlencode "status=eq.narrating" \
+            --data-urlencode "or=(claim_token.is.null,heartbeat_at.is.null,heartbeat_at.lt.$cutoff)" \
+            --data-urlencode "order=created_at.asc" --data-urlencode "limit=10" \
+            -H "apikey: $SUPABASE_SERVICE_ROLE_KEY" -H "Authorization: Bearer $SUPABASE_SERVICE_ROLE_KEY")
+          echo "$body" | jq -e 'type == "array"' >/dev/null
+          if [ "$(echo "$body" | jq 'length')" -eq 0 ]; then echo "has_jobs=false" >> "$GITHUB_OUTPUT"; else echo "has_jobs=true" >> "$GITHUB_OUTPUT"; fi
+      - uses: oven-sh/setup-bun@v2
+        if: steps.check.outputs.has_jobs == 'true'
+        with:
+          bun-version: latest
+      - uses: actions/setup-node@v4
+        if: steps.check.outputs.has_jobs == 'true'
+        with:
+          node-version: 24
+      - name: Install runtime dependencies
+        if: steps.check.outputs.has_jobs == 'true'
+        run: npm ci --omit=dev
+      - name: Install audio tools
+        if: steps.check.outputs.has_jobs == 'true'
+        run: sudo apt-get update && sudo apt-get install -y ffmpeg
+      - name: Generate and store narration
+        if: steps.check.outputs.has_jobs == 'true'
+        run: bun local-video-renderer/image-explainer-narration-worker.js
