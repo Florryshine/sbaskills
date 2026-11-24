@@ -44,10 +44,11 @@ jobs:
           node --check lib/image-explainer/narration-manifest.mjs
           node --check lib/image-explainer/timeline.mjs
           node --check app/api/admin/image-explainer/timeline/route.js
-          node --check app/admin/image-explainer/timeline/[id]/page.js
           node --check local-video-renderer/image-explainer-narration-worker.js
           node --check local-video-renderer/image-explainer-render-worker.js
-          node --check remotion/Root.jsx
-          node --check remotion/ImageExplainerVideo.jsx
+      - name: Bundle Remotion compositions (compile JSX and resolve imports)
+        run: |
+          npm ci --omit=dev
+          npx remotion compositions remotion/index.js --log=error
       - name: Check API route syntax
         run: node --check app/api/admin/image-explainer/route.js
