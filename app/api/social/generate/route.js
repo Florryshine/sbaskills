@@ -5,6 +5,7 @@ import { createRouteHandlerClient } from '@supabase/auth-helpers-nextjs';
 import { cookies } from 'next/headers';
 
 const SUPPORTED_PLATFORMS = ['facebook', 'whatsapp', 'instagram', 'x', 'threads', 'telegram', 'linkedin'];
+const CAPTION_LIMITS = { x: 280, threads: 500, linkedin: 3000, facebook: 63206, instagram: 2200, telegram: 4096, whatsapp: 4096 };
 
 export async function GET() {
   const supabase = createRouteHandlerClient({ cookies });
@@ -30,6 +31,7 @@ function validateSocialPosts(parsed, requestedPlatforms) {
   const byPlatform = new Map();
   for (const post of posts) {
     if (!post || !SUPPORTED_PLATFORMS.includes(post.platform) || !isText(post.caption)) return false;
+    if (post.caption.trim().length > (CAPTION_LIMITS[post.platform] || 4096)) return false;
     if (byPlatform.has(post.platform)) return false;
     if (post.hashtags != null && (!Array.isArray(post.hashtags) || post.hashtags.some((tag) => !isText(tag)))) return false;
     if (post.seo_keywords != null && (!Array.isArray(post.seo_keywords) || post.seo_keywords.some((tag) => !isText(tag)))) return false;
@@ -119,6 +121,7 @@ Include only requested platforms in posts.`;
         if (seen.has(post.platform)) issues.push('duplicate post for ' + post.platform);
         seen.add(post.platform);
         if (!isText(post.caption)) issues.push(post.platform + '.caption is missing');
+        else if (post.caption.trim().length > (CAPTION_LIMITS[post.platform] || 4096)) issues.push(post.platform + '.caption exceeds ' + (CAPTION_LIMITS[post.platform] || 4096) + ' characters');
         if (post.hashtags != null && !Array.isArray(post.hashtags)) issues.push(post.platform + '.hashtags must be an array');
         if (post.seo_keywords != null && !Array.isArray(post.seo_keywords)) issues.push(post.platform + '.seo_keywords must be an array');
       }
