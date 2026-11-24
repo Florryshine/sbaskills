@@ -4,7 +4,21 @@ import { parseJsonFromText } from '@/lib/robustJsonParse';
 import { createRouteHandlerClient } from '@supabase/auth-helpers-nextjs';
 import { cookies } from 'next/headers';
 
-const SUPPORTED_PLATFORMS = ['facebook', 'whatsapp', 'instagram', 'x', 'telegram', 'linkedin'];
+const SUPPORTED_PLATFORMS = ['facebook', 'whatsapp', 'instagram', 'x', 'threads', 'telegram', 'linkedin'];
+
+export async function GET() {
+  const supabase = createRouteHandlerClient({ cookies });
+  const { data: { user } } = await supabase.auth.getUser();
+  if (!user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+
+  const { data, error } = await supabase
+    .from('knowledge_assets')
+    .select('id, keyword, subject, summary')
+    .order('keyword', { ascending: true })
+    .limit(100);
+  if (error) return NextResponse.json({ error: error.message }, { status: 500 });
+  return NextResponse.json({ assets: data || [] });
+}
 
 function isText(value) {
   return typeof value === 'string' && value.trim().length > 0;
@@ -32,6 +46,8 @@ export async function POST(req) {
 
     const body = await req.json();
     const { knowledgeAssetId, tone = 'clear, engaging and educational', audience = 'students preparing for exams' } = body || {};
+    const topicOverride = typeof body?.topic === 'string' ? body.topic.trim() : '';
+    const subjectOverride = typeof body?.subject === 'string' ? body.subject.trim() : '';
     const requestedPlatforms = Array.isArray(body?.platforms)
       ? [...new Set(body.platforms.map((platform) => String(platform).toLowerCase().trim()))]
       : [];
@@ -49,6 +65,8 @@ export async function POST(req) {
       .eq('id', knowledgeAssetId)
       .single();
     if (error || !asset) return NextResponse.json({ error: 'Asset not found' }, { status: 404 });
+    const topic = topicOverride || asset.keyword || asset.title || 'Learning topic';
+    const subject = subjectOverride || asset.subject || 'General';
 
     const platformInstructions = {
       facebook: '2-4 useful conversational paragraphs; encourage discussion or sharing.',
@@ -150,7 +168,12 @@ Include only requested platforms in posts.`;
       inserted.push(data);
     }
 
-    return NextResponse.json({ success: true, posts: inserted, postCount: inserted.length });
+    return NextResponse.json({
+      success: true,
+      posts: inserted,
+      postCount: inserted.length,
+      campaign: { id: asset.id, name: topic, audience: String(audience), tone: String(tone) },
+    });
   } catch (err) {
     console.error('Social generation error:', err);
     return NextResponse.json({ error: err.message || 'Social generation failed' }, { status: 500 });
