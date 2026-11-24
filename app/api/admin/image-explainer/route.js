@@ -259,10 +259,25 @@ export async function PATCH(req) {
   }
 }
 
-export async function GET() {
+export async function GET(req) {
   const { response } = await requireAdminApi();
   if (response) return response;
   const supabase = createAdminClient();
+  const id = new URL(req.url).searchParams.get('id');
+  if (id) {
+    const { data: job, error } = await supabase.from('image_explainer_jobs')
+      .select('id,title,status,stage,stage_message,production_mode,spec,source_images,vision_analysis,error_message,created_at')
+      .eq('id', id).single();
+    if (error || !job) return NextResponse.json({ error: 'Project not found.' }, { status: 404 });
+    const sourcePath = job.source_images?.[0]?.path;
+    let sourceUrl = null;
+    if (sourcePath) {
+      const { data: signed, error: signedError } = await supabase.storage
+        .from('image-explainer-sources').createSignedUrl(sourcePath, 15 * 60);
+      if (!signedError) sourceUrl = signed?.signedUrl || null;
+    }
+    return NextResponse.json({ job, sourceUrl });
+  }
   const { data, error } = await supabase.from('image_explainer_jobs')
     .select('id,title,status,stage,stage_message,production_mode,video_url,error_message,created_at,vision_analysis')
     .order('created_at', { ascending: false }).limit(25);
