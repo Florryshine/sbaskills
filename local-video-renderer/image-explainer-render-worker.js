@@ -61,7 +61,7 @@ async function process(job){
   }
   const vertical=job.timeline.aspect==='9:16',square=job.timeline.aspect==='1:1';
   const dimensions=square?{width:1080,height:1080}:vertical?{width:1080,height:1920}:{width:1920,height:1080};
-  const inputProps={sourceImage:`source/source.${ext}`,scenes:renderScenes,title:job.title};
+  const inputProps={sourceImage:`source/source.${ext}`,scenes:renderScenes,title:job.title,aspect:job.timeline.aspect,durationInFrames:job.timeline.total_frames};
   const entry=path.join(root,'remotion','index.js');
   await update(job,{stage:'render_processing',stage_message:'Bundling Remotion composition.'});
   const serveUrl=await bundle({entryPoint:entry,publicDir,webpackOverride:c=>c});
