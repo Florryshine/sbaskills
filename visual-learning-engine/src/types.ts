@@ -20,6 +20,8 @@ export interface VLJobSpec {
   /** Human episode title (used for the outro card and filenames). */
   title: string;
   topic: string;
+  /** Specific lesson concepts supplied by the creator or knowledge base. */
+  keyPoints?: string[];
   audience: string;
   /** narrator tone, e.g. "warm and curious", "energetic", "calm documentary" */
   tone: string;
