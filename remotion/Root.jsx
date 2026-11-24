@@ -4,6 +4,7 @@ import {LessonVideo} from './LessonVideo';
 import {WhiteboardVideo} from './WhiteboardVideo';
 import {CartoonVideo, totalDuration} from '../cartoon/engine/CartoonVideo';
 import {MotionGraphicsVideo} from './motion/MotionGraphicsVideo';
+import {ImageExplainerVideo} from './ImageExplainerVideo';
 
 const FPS = 30;
 const calculateMetadata = ({props}) => {
@@ -104,8 +105,20 @@ const calculateMotionMetadata = ({props}) => {
   };
 };
 
+const calculateImageExplainerMetadata = ({props}) => ({ width: props.aspect === '16:9' ? 1920 : 1080, height: props.aspect === '9:16' ? 1920 : 1080, fps: FPS, durationInFrames: Math.max(1, Number(props.durationInFrames) || 60) });
+
 export const Root = () => (
   <>
+    <Composition
+      id="ImageExplainerVideo"
+      component={ImageExplainerVideo}
+      durationInFrames={60}
+      fps={FPS}
+      width={1920}
+      height={1080}
+      calculateMetadata={calculateImageExplainerMetadata}
+      defaultProps={{aspect:"16:9",durationInFrames:60,sourceImage:"source/source.jpg",scenes:[],title:"Image explainer"}}
+    />
     <Composition
       id="LessonVideo"
       component={LessonVideo}

@@ -1,0 +1,55 @@
+name: Image Explainer Phases 1–6 Tests
+
+on:
+  push:
+    branches: ['feat/image-to-explainer-studio']
+    paths:
+      - 'lib/image-explainer/**'
+      - 'app/api/admin/image-explainer/**'
+      - 'app/admin/image-explainer/timeline/**'
+      - 'tests/image-explainer-*.test.mjs'
+      - 'local-video-renderer/image-explainer-narration-worker.js'
+      - 'local-video-renderer/image-explainer-render-worker.js'
+      - 'remotion/ImageExplainerVideo.jsx'
+      - 'remotion/Root.jsx'
+      - '.github/workflows/image-explainer-render-worker.yml'
+      - 'supabase/migrations/*image_explainer*.sql'
+      - '.github/workflows/image-explainer-phase1.yml'
+  pull_request:
+    paths:
+      - 'lib/image-explainer/**'
+      - 'app/api/admin/image-explainer/**'
+      - 'app/admin/image-explainer/timeline/**'
+      - 'tests/image-explainer-*.test.mjs'
+      - 'local-video-renderer/image-explainer-*.js'
+      - 'remotion/ImageExplainerVideo.jsx'
+      - 'remotion/Root.jsx'
+      - 'supabase/migrations/*image_explainer*.sql'
+      - '.github/workflows/image-explainer-phase1.yml'
+      - '.github/workflows/image-explainer-render-worker.yml'
+
+jobs:
+  image-explainer-tests:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+      - name: Run all image-explainer unit tests
+        run: node --test tests/image-explainer-*.test.mjs
+      - name: Check research, script and narration modules
+        run: |
+          node --check lib/image-explainer/research.mjs
+          node --check lib/image-explainer/script.mjs
+          node --check lib/image-explainer/narration-manifest.mjs
+          node --check lib/image-explainer/timeline.mjs
+          node --check app/api/admin/image-explainer/timeline/route.js
+          node --check local-video-renderer/image-explainer-narration-worker.js
+          node --check local-video-renderer/image-explainer-render-worker.js
+      - name: Bundle Remotion compositions (compile JSX and resolve imports)
+        run: |
+          npm ci --omit=dev
+          npx remotion compositions remotion/index.js --log=error
+      - name: Check API route syntax
+        run: node --check app/api/admin/image-explainer/route.js
