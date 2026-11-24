@@ -1,0 +1,53 @@
+name: Image Explainer Remotion Render Worker
+
+on:
+  schedule:
+    - cron: '*/5 * * * *'
+  workflow_dispatch:
+
+concurrency:
+  group: image-explainer-remotion-render-worker
+  cancel-in-progress: false
+
+jobs:
+  render:
+    runs-on: ubuntu-latest
+    timeout-minutes: 50
+    env:
+      NEXT_PUBLIC_SUPABASE_URL: ${{ secrets.NEXT_PUBLIC_SUPABASE_URL }}
+      SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
+      IMAGE_EXPLAINER_RENDER_MAX_MS: '2400000'
+      REMOTION_CONCURRENCY: '2'
+    steps:
+      - uses: actions/checkout@v4
+      - name: Check render queue
+        id: check
+        shell: bash
+        run: |
+          set -euo pipefail
+          test -n "$NEXT_PUBLIC_SUPABASE_URL" && test -n "$SUPABASE_SERVICE_ROLE_KEY"
+          body=$(curl -sS --fail-with-body --get "$NEXT_PUBLIC_SUPABASE_URL/rest/v1/image_explainer_jobs" \
+            --data-urlencode "select=id,status,stage,attempt_count" \
+            --data-urlencode "status=eq.rendering" \
+            --data-urlencode "stage=eq.render_queued" \
+            --data-urlencode "order=updated_at.asc" --data-urlencode "limit=10" \
+            -H "apikey: $SUPABASE_SERVICE_ROLE_KEY" -H "Authorization: Bearer $SUPABASE_SERVICE_ROLE_KEY")
+          echo "$body" | jq -e 'type == "array"' >/dev/null
+          if [ "$(echo "$body" | jq 'length')" -eq 0 ]; then echo "has_jobs=false" >> "$GITHUB_OUTPUT"; else echo "has_jobs=true" >> "$GITHUB_OUTPUT"; fi
+      - uses: oven-sh/setup-bun@v2
+        if: steps.check.outputs.has_jobs == 'true'
+        with:
+          bun-version: latest
+      - uses: actions/setup-node@v4
+        if: steps.check.outputs.has_jobs == 'true'
+        with:
+          node-version: 24
+      - name: Install dependencies
+        if: steps.check.outputs.has_jobs == 'true'
+        run: npm ci --omit=dev
+      - name: Install Remotion browser
+        if: steps.check.outputs.has_jobs == 'true'
+        run: npx remotion browser ensure
+      - name: Render approved explainer jobs
+        if: steps.check.outputs.has_jobs == 'true'
+        run: bun local-video-renderer/image-explainer-render-worker.js
