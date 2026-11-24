@@ -16,7 +16,8 @@ export async function GET(req) {
     .select('id,title,status,stage,stage_message,vision_analysis,script,narration_manifest,research_bundle,timeline,timeline_reviewed_at,video_url,storage_path,error_message')
     .eq('id', id).single();
   if (error || !data) return NextResponse.json({ error: 'Project not found.' }, { status: 404 });
-  const researchBundle = data.research_bundle ? { ...data.research_bundle, assets: (data.research_bundle.assets || []).map((asset, index) => ({ ...asset, id: asset.id || `research-asset-${index + 1}` })) } : null;\n  return NextResponse.json({ job: { ...data, research_bundle: researchBundle } });
+  const researchBundle = data.research_bundle ? { ...data.research_bundle, assets: (data.research_bundle.assets || []).map((asset, index) => ({ ...asset, id: asset.id || `research-asset-${index + 1}` })) } : null;
+  return NextResponse.json({ job: { ...data, research_bundle: researchBundle } });
 }
 
 export async function POST(req) {
