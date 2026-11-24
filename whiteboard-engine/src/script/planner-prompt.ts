@@ -59,6 +59,8 @@ function formatKnowledgeContext(context: string): string {
 }
 
 export function buildPlannerPrompt(topic: string, subject: Subject, knowledgeContext = '', targetDurationSeconds = 120): string {
+  const sceneCount = Math.max(4, Math.min(9, Math.ceil(targetDurationSeconds / 70)));
+  const wordsPerScene = Math.max(18, Math.round(targetDurationSeconds * 2.45 / sceneCount));
   const recommended = suggestIllustrations(subject, keywordsFromTopic(topic));
   const recommendedBlock = recommended.length
     ? 'RECOMMENDED LOCAL ASSETS FOR THIS TOPIC (use only where they genuinely help):\n' +
@@ -73,7 +75,7 @@ export function buildPlannerPrompt(topic: string, subject: Subject, knowledgeCon
     'TOPIC: ' + topic,
     'SUBJECT: ' + subject,
     'TARGET VIDEO DURATION: approximately ' + targetDurationSeconds + ' seconds.',
-    'Plan enough substantive narration and scenes to fill the selected duration at a natural speaking pace (about 140–155 words per minute). Do not pad or repeat. A longer duration requires deeper explanation, examples, mechanisms and useful transitions.',
+    'Create exactly ' + sceneCount + ' scenes, with approximately ' + wordsPerScene + ' spoken words per scene. Plan enough substantive narration to fill the selected duration at a natural speaking pace (about 140–155 words per minute). Do not pad or repeat. A longer duration requires deeper explanation, examples, mechanisms and useful transitions.',
     '',
     'FACTUAL FOUNDATION:',
     formatKnowledgeContext(knowledgeContext),
@@ -103,7 +105,7 @@ export function buildPlannerPrompt(topic: string, subject: Subject, knowledgeCon
     '- Resolve the opening question or central problem. Finish with the key takeaway or implication, not a generic sign-off.',
     '- Sound like a knowledgeable person explaining something naturally to an intelligent beginner. Use clear, conversational Nigerian English; never pidgin, exaggerated slang or childish language.',
     '- Prefer active, direct sentences. Avoid robotic filler such as "It is important to note", "Let us delve into", "In conclusion" and repeated "as you can see".',
-    '- Usually use 4–9 scenes, but choose the number the explanation genuinely needs. Do not pad a simple topic or compress a complex one to hit a quota.',
+    '- Use exactly the requested scene count and duration budget. Do not pad a simple topic or compress a complex one to hit a quota.',
     '- Narration length follows the idea and visual time. Many scenes may need roughly 25–55 spoken words, but shorter or longer scenes are acceptable. Never add words merely to meet a count.',
     '- The title scene is part of the explanation and needs an interesting opening. The final scene must answer or complete the central question.',
     '',
