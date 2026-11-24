@@ -63,7 +63,7 @@ const STOPWORDS = new Set(
   ('a an the with of for and or in on at to from showing show scene concept about ' +
     'illustration cartoon flat vector style simple metaphor symbol symbols person people ' +
     'characters character idea ideas key visual around its what when where how why ' +
-    'glowing happy sad tired fresh clean moment story instead drawn shown')
+    'glowing happy sad tired fresh clean moment story instead drawn shown accurate educational visual explaining this specific lesson point relevant subject matter correct relationships directly depicting central real components clearly only')
     .split(' '),
 );
 
@@ -84,7 +84,9 @@ export function stockQueryFrom(subject: string, shotIndex = 0, maxTerms = 2, wit
     .trim();
   const keywords = cleaned
     .split(/\s+/)
-    .filter((w) => w.length > 2 && !STOPWORDS.has(w.toLowerCase()))
+    .map((w) => w.toLowerCase())
+    .filter((w) => w.length > 2 && !STOPWORDS.has(w))
+    .filter((w, i, all) => all.indexOf(w) === i)
     .slice(0, maxTerms);
   const base = keywords.join(' ') || 'education learning';
   if (!withAngle) return base;
