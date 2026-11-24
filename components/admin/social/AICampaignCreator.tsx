@@ -412,7 +412,7 @@ export function AICampaignCreator({ onCampaignGenerated }: AICampaignCreatorProp
                   <div>
                     <span className="text-[10px] text-slate-400 font-mono block mb-1">Hashtags</span>
                     <div className="flex flex-wrap gap-1">
-                      {getPostByPlatform(currentPlatformPreview)?.hashtags.map((h: string) => (
+                      {(getPostByPlatform(currentPlatformPreview)?.hashtags || []).map((h: string) => (
                         <span key={h} className="text-[10px] bg-indigo-950/30 text-indigo-400 border border-indigo-900 px-2 py-0.5 rounded font-mono">
                           #{h}
                         </span>
