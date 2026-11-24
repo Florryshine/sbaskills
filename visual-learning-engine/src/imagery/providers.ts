@@ -183,7 +183,7 @@ async function searchPexelsVideos(query: string, orientation: 'landscape' | 'por
   return (data?.videos || []).map((v) => {
     const files = (v.video_files || []).filter((f) => f.link && (!f.file_type || f.file_type === 'video/mp4') && (f.width || 0) >= 640 && (f.height || 0) >= 360);
     const chosen = files.sort((a, b) => (b.width || 0) - (a.width || 0))[0];
-    return { url: chosen?.link || '', source: 'pexels-video' as const, title: '' };
+    return { url: chosen?.link || '', source: 'pexels-video' as const, title: query };
   }).filter((hit) => Boolean(hit.url));
 }
 async function searchPixabayVideos(query: string): Promise<StockHit[]> {
