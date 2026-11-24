@@ -14,7 +14,7 @@ const components=[{id:'heart',name:'Heart',region:{x:100,y:100,width:200,height:
 
 test('builds sequential scene timing from measured narration, not script estimates',()=>{
  const t=buildExplainerTimeline({script,narrationManifest:manifest,imageDimensions:{width:1000,height:800},components});
- assert.equal(t.total_duration_seconds,7);assert.equal(t.scenes[1].start_seconds,4);assert.equal(t.scenes[1].duration_frames,90);
+ assert.equal(t.total_duration_seconds,7);assert.equal(t.scenes[1].start_seconds,4);assert.equal(t.scenes[1].duration_frames,90);assert.equal(t.scenes[1].start_frame,t.scenes[0].start_frame+t.scenes[0].duration_frames);
  assert.equal(t.scenes[0].focus_regions[0].region.x,.1);assert.equal(validateExplainerTimeline(t,2),true);
 });
 test('creates readable word-synchronised subtitle cues and camera keyframes',()=>{
