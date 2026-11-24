@@ -106,6 +106,8 @@ begin
 end;
 $$;
 
+revoke all on function public.image_explainer_jobs_dispatch_trigger() from public, anon, authenticated;
+
 drop trigger if exists image_explainer_jobs_auto_dispatch on public.image_explainer_jobs;
 create trigger image_explainer_jobs_auto_dispatch
 after insert or update of status, stage on public.image_explainer_jobs
@@ -127,6 +129,8 @@ begin
   return new;
 end;
 $$;
+
+revoke all on function public.cartoon_jobs_dispatch_trigger() from public, anon, authenticated;
 
 drop trigger if exists cartoon_jobs_auto_dispatch on public.cartoon_jobs;
 create trigger cartoon_jobs_auto_dispatch
