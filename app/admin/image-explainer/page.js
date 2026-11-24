@@ -181,14 +181,30 @@ export default function ImageExplainerStudioPage() {
     if (!job?.id) return;
     setGeneratingNarration(true); setError(''); setNotice('');
     try {
-      const response = await fetch('/api/admin/image-explainer', { method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ id: job.id, action: retry ? 'retry-narration' : 'queue-narration', voice: voicePreset }) });
+      const controller = new AbortController();
+      const timeout = setTimeout(() => controller.abort(), 25000);
+      let response;
+      try {
+        response = await fetch('/api/admin/image-explainer/narration', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ id: job.id, retry, voice: voicePreset }),
+          signal: controller.signal,
+        });
+      } finally {
+        clearTimeout(timeout);
+      }
       const data = await response.json();
       if (!response.ok) throw new Error(data.error || 'Could not queue narration.');
       setJob((current) => ({ ...current, ...data.job }));
       setNotice('Narration queued. The background worker checks automatically and generates one audio clip per scene.');
       await loadJobs();
-    } catch (err) { setError(err.message || 'Could not queue narration.'); }
-    finally { setGeneratingNarration(false); }
+    } catch (err) {
+      const message = err.name === 'AbortError'
+        ? 'The queue request did not respond within 25 seconds. Refresh this project to check whether it was queued before retrying.'
+        : (err.message || 'Could not queue narration.');
+      setError(message);
+    } finally { setGeneratingNarration(false); }
   }
 
   useEffect(() => {
