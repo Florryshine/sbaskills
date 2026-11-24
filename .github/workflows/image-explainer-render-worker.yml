@@ -4,6 +4,8 @@ on:
   schedule:
     - cron: '*/5 * * * *'
   workflow_dispatch:
+  repository_dispatch:
+    types: [image-explainer-render]
 
 concurrency:
   group: image-explainer-remotion-render-worker
