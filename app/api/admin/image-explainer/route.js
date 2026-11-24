@@ -3,6 +3,7 @@ import { randomUUID } from 'node:crypto';
 import { GoogleGenerativeAI } from '@google/generative-ai';
 import { requireAdminApi } from '@/lib/require-admin-api';
 import { createAdminClient } from '@/lib/supabase-admin';
+import { cleanImageRegion } from '@/lib/image-explainer/regions.mjs';
 
 export const runtime = 'nodejs';
 export const maxDuration = 60;
@@ -16,32 +17,13 @@ function safeText(value, max = 500) {
   return typeof value === 'string' ? value.trim().slice(0, max) : '';
 }
 
-function cleanRegion(region, width, height) {
-  if (!region || typeof region !== 'object') return null;
-  const values = ['x', 'y', 'width', 'height'].map((key) => Number(region[key]));
-  if (!values.every(Number.isFinite)) return null;
-  const [rawX, rawY, rawWidth, rawHeight] = values;
-  const x = Math.max(0, Math.min(width, rawX));
-  const y = Math.max(0, Math.min(height, rawY));
-  const right = Math.max(x, Math.min(width, rawX + rawWidth));
-  const bottom = Math.max(y, Math.min(height, rawY + rawHeight));
-  if (right - x < 2 || bottom - y < 2) return null;
-  return {
-    x: Math.round(x), y: Math.round(y),
-    width: Math.round(right - x), height: Math.round(bottom - y),
-    normalized: {
-      x: x / width, y: y / height,
-      width: (right - x) / width, height: (bottom - y) / height,
-    },
-  };
-}
 
 function normalizeAnalysis(parsed, dimensions, provider) {
   const { width, height } = dimensions;
   const components = (Array.isArray(parsed.components) ? parsed.components : [])
     .slice(0, 100)
     .map((component, index) => {
-      const region = cleanRegion(component?.region, width, height);
+      const region = cleanImageRegion(component?.region, width, height);
       if (!region) return null;
       return {
         id: safeText(component.id, 80) || `component-${index + 1}`,
@@ -252,7 +234,7 @@ export async function PATCH(req) {
     if (!width || !height) return NextResponse.json({ error: 'Source image dimensions are missing.' }, { status: 409 });
 
     const components = body.components.map((component, index) => {
-      const region = cleanRegion(component?.region, width, height);
+      const region = cleanImageRegion(component?.region, width, height);
       if (!region) throw new Error(`Component ${index + 1} has an invalid or empty region.`);
       return {
         id: safeText(component.id, 80) || `component-${index + 1}`,
