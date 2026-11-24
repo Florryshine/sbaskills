@@ -1,7 +1,7 @@
 // src/render/ui.tsx — shared visual building blocks for every scene.
 
 import React from 'react';
-import { AbsoluteFill, Img, OffthreadVideo, interpolate, spring, staticFile, useCurrentFrame, useVideoConfig, Easing } from 'remotion';
+import { AbsoluteFill, Img, Loop, OffthreadVideo, interpolate, spring, staticFile, useCurrentFrame, useVideoConfig, Easing } from 'remotion';
 import { FONT_BODY, FONT_HEADLINE } from './fonts';
 import { THEME, type Layout } from './theme';
 
@@ -135,7 +135,7 @@ const ShotImage: React.FC<{
   kb: { fromScale: number; toScale: number; fromX: number; toX: number; fromY: number; toY: number };
 }> = ({ src, layout, shotProgress, kb }) => {
   const style = { width: '100%', height: '100%', objectFit: 'cover' as const, transform: kenBurnsTransform(shotProgress, kb, layout) };
-  return /\.mp4(?:$|[?#])/i.test(src) ? <OffthreadVideo src={src} muted loop style={style} /> : <Img src={src} style={style} />;
+  return /\.mp4(?:$|[?#])/i.test(src) ? <Loop durationInFrames={90}><OffthreadVideo src={src} muted style={style} /></Loop> : <Img src={src} style={style} />;
 };
 
 /**
