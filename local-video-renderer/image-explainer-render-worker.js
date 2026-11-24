@@ -67,7 +67,7 @@ async function downloadApprovedMedia(asset,destination){
  return ext;
 }
 
-async function process(job){
+async function processJob(job){
  let leaseLost=false;
  const heartbeatTimer=setInterval(()=>{supabase.from('image_explainer_jobs').update({heartbeat_at:new Date().toISOString(),updated_at:new Date().toISOString()}).eq('id',job.id).eq('claim_token',job.claim_token).select('id').maybeSingle().then(({data,error})=>{if(error||!data)leaseLost=true;}).catch(()=>{leaseLost=true;});},30000);
  heartbeatTimer.unref?.();
@@ -138,7 +138,7 @@ async function run(){
   const {data,error}=await supabase.rpc('claim_image_explainer_render_job',{p_worker_id:workerId});
   if(error) throw new Error('Render queue claim failed. Apply migration 20261124133000_image_explainer_render_queue.sql. '+error.message);
   const job=Array.isArray(data)?data[0]:data;if(!job) break;
-  await process(job);processed++;
+  await processJob(job);processed++;
  }
  console.log(`[image-explainer-render] finished; processed ${processed} job(s)`);
 }
