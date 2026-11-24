@@ -5,8 +5,6 @@ import {createClient} from '@supabase/supabase-js';
 import {bundle} from '@remotion/bundler';
 import {renderMedia,selectComposition} from '@remotion/renderer';
 import {readFile,writeFile,mkdir,rm,stat} from 'node:fs/promises';
-import {existsSync} from 'node:fs';
-import {execFileSync} from 'node:child_process';
 import {tmpdir} from 'node:os';
 import path from 'node:path';
 import {fileURLToPath} from 'node:url';
@@ -23,15 +21,6 @@ const workerId=`${hostname()}-image-explainer-render-${process.pid}-${randomUUID
 const maxMs=Number(process.env.IMAGE_EXPLAINER_RENDER_MAX_MS||40*60*1000);
 const fps=30;
 
-function chromePath(){
- const candidates=[process.env.CHROME_PATH,'/usr/bin/google-chrome','/usr/bin/chromium','/usr/bin/chromium-browser'].filter(Boolean);
- for(const p of candidates) if(existsSync(p)) return p;
- for(const base of [path.join(process.env.HOME||'','/.cache/remotion'),path.join(process.env.HOME||'','/.cache/puppeteer')]) {
-  if(!existsSync(base)) continue;
-  try { const found=execFileSync('sh',['-lc',`find "${base}" -type f -name chrome-headless-shell -o -name chrome`],{encoding:'utf8',stdio:['ignore','pipe','ignore']}).trim().split('\n').find(p=>p&&existsSync(p)); if(found)return found; } catch {}
- }
- return null;
-}
 async function update(job,patch){
  const {data,error}=await supabase.from('image_explainer_jobs').update({...patch,heartbeat_at:new Date().toISOString(),updated_at:new Date().toISOString()}).eq('id',job.id).eq('claim_token',job.claim_token).select('id').maybeSingle();
  if(error) throw new Error('Render job update failed: '+error.message);
@@ -77,10 +66,8 @@ async function process(job){
   await update(job,{stage:'render_processing',stage_message:'Bundling Remotion composition.'});
   const serveUrl=await bundle({entryPoint:entry,publicDir,webpackOverride:c=>c});
   const composition=await selectComposition({serveUrl,id:'ImageExplainerVideo',inputProps});
-  const browser=chromePath();
-  if(!browser) throw new Error('Chrome/Chromium is missing. Install it in the render workflow or set CHROME_PATH.');
   await update(job,{stage_message:'Rendering H.264 video with scene animation, callouts, subtitles and narration.'});
-  await renderMedia({composition:{...composition,...dimensions,fps,durationInFrames:job.timeline.total_frames},serveUrl,codec:'h264',outputLocation:out,inputProps,browserExecutable:browser,concurrency:Math.max(1,Math.min(4,Number(process.env.REMOTION_CONCURRENCY||2))),imageFormat:'jpeg',jpegQuality:92,x264Preset:'medium',crf:18,overwrite:true});
+  await renderMedia({composition:{...composition,...dimensions,fps,durationInFrames:job.timeline.total_frames},serveUrl,codec:'h264',outputLocation:out,inputProps,concurrency:Math.max(1,Math.min(4,Number(process.env.REMOTION_CONCURRENCY||2))),imageFormat:'jpeg',jpegQuality:92,x264Preset:'medium',crf:18,overwrite:true});
   if(leaseLost) throw new Error('Render lease was lost during rendering.');
   const info=await stat(out); if(!info.size) throw new Error('Remotion produced an empty MP4.');
   await update(job,{stage_message:`Render complete (${(info.size/1024/1024).toFixed(1)} MB). Uploading final video.`});
