@@ -272,6 +272,10 @@ export async function PATCH(req) {
           research: current.research_bundle,
           instruction: current.user_instruction || '',
         });
+        const validComponentIds = new Set((current.vision_analysis.components || []).map((item) => item.id));
+        for (const scene of generated.plan.scenes) {
+          scene.visual.component_ids = scene.visual.component_ids.filter((id) => validComponentIds.has(id));
+        }
         const { data: plannedJob, error: saveError } = await supabase.from('image_explainer_jobs')
           .update({
             status: 'analysed', stage: 'script_storyboard_ready',
