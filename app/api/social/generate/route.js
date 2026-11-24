@@ -33,8 +33,10 @@ function validateSocialPosts(parsed, requestedPlatforms) {
     if (!post || !SUPPORTED_PLATFORMS.includes(post.platform) || !isText(post.caption)) return false;
     if (post.caption.trim().length > (CAPTION_LIMITS[post.platform] || 4096)) return false;
     if (byPlatform.has(post.platform)) return false;
-    if (post.hashtags != null && (!Array.isArray(post.hashtags) || post.hashtags.some((tag) => !isText(tag)))) return false;
-    if (post.seo_keywords != null && (!Array.isArray(post.seo_keywords) || post.seo_keywords.some((tag) => !isText(tag)))) return false;
+    if (!Array.isArray(post.hashtags) || post.hashtags.some((tag) => !isText(tag) || !tag.trim().startsWith('#'))) return false;
+    if (!Array.isArray(post.emojis) || post.emojis.some((emoji) => !isText(emoji))) return false;
+    if (!Array.isArray(post.seo_keywords) || post.seo_keywords.some((tag) => !isText(tag))) return false;
+    if (!isText(post.call_to_action) || !isText(post.best_posting_time) || !isText(post.image_prompt) || !isText(post.alt_text)) return false;
     byPlatform.set(post.platform, post);
   }
   return requestedPlatforms.every((platform) => byPlatform.has(platform));
@@ -98,7 +100,8 @@ Rules:
 - Make the post genuinely useful and specific to the topic, not generic motivational filler.
 - Include a clear, natural call to action and mention Shiney Brain Academy where appropriate.
 - Return exactly one post per requested platform, no extras and no duplicate platforms.
-- hashtags, emojis and seo_keywords must be arrays of strings (empty arrays are allowed).
+- hashtags must be an array of #tag strings; emojis and seo_keywords must be arrays of strings (empty arrays are allowed).
+- call_to_action, best_posting_time, image_prompt and alt_text must all be non-empty strings.
 - best_posting_time should be a short suggestion, not a claimed fact.
 - image_prompt should describe a relevant image that could accompany this exact post; alt_text should describe that image accessibly.
 
@@ -122,8 +125,12 @@ Include only requested platforms in posts.`;
         seen.add(post.platform);
         if (!isText(post.caption)) issues.push(post.platform + '.caption is missing');
         else if (post.caption.trim().length > (CAPTION_LIMITS[post.platform] || 4096)) issues.push(post.platform + '.caption exceeds ' + (CAPTION_LIMITS[post.platform] || 4096) + ' characters');
-        if (post.hashtags != null && !Array.isArray(post.hashtags)) issues.push(post.platform + '.hashtags must be an array');
-        if (post.seo_keywords != null && !Array.isArray(post.seo_keywords)) issues.push(post.platform + '.seo_keywords must be an array');
+        if (!Array.isArray(post.hashtags) || post.hashtags.some((tag) => !isText(tag) || !tag.trim().startsWith('#'))) issues.push(post.platform + '.hashtags must be an array of #tag strings');
+        if (!Array.isArray(post.emojis) || post.emojis.some((emoji) => !isText(emoji))) issues.push(post.platform + '.emojis must be an array of strings');
+        if (!Array.isArray(post.seo_keywords) || post.seo_keywords.some((tag) => !isText(tag))) issues.push(post.platform + '.seo_keywords must be an array of strings');
+        for (const field of ['call_to_action', 'best_posting_time', 'image_prompt', 'alt_text']) {
+          if (!isText(post[field])) issues.push(post.platform + '.' + field + ' is missing');
+        }
       }
       const missing = requestedPlatforms.filter((platform) => !seen.has(platform));
       if (missing.length) issues.push('missing requested platforms: ' + missing.join(', '));
