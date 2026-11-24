@@ -4,13 +4,29 @@ import { NextResponse } from 'next/server';
 
 // Platform character limits, mirrored in PostPreviewer.tsx for the live counter.
 const PLATFORM_LIMITS = {
-  X: 280,
-  Threads: 500,
-  LinkedIn: 3000,
-  Facebook: 63206,
-  Instagram: 2200,
-  Telegram: 4096,
+  X: 280, x: 280,
+  Threads: 500, threads: 500,
+  LinkedIn: 3000, linkedin: 3000,
+  Facebook: 63206, facebook: 63206,
+  Instagram: 2200, instagram: 2200,
+  Telegram: 4096, telegram: 4096,
+  WhatsApp: 4096, whatsapp: 4096,
 };
+
+function toCampaignPost(post) {
+  if (!post) return post;
+  const displayPlatform = ({ x: 'X', threads: 'Threads', linkedin: 'LinkedIn', facebook: 'Facebook', instagram: 'Instagram', telegram: 'Telegram', whatsapp: 'WhatsApp' })[post.platform] || post.platform;
+  return {
+    ...post,
+    platform: displayPlatform,
+    hashtags: Array.isArray(post.hashtags) ? post.hashtags.map((tag) => String(tag).replace(/^#/, '')) : [],
+    bestPostingTime: post.best_posting_time,
+    imagePrompt: post.image_prompt,
+    altText: post.alt_text,
+    callToAction: post.call_to_action,
+    mediaUrls: post.image_urls || [],
+  };
+}
 
 export async function PATCH(req, { params }) {
   try {
@@ -49,7 +65,7 @@ export async function PATCH(req, { params }) {
       .single();
     if (error) throw error;
 
-    return NextResponse.json({ success: true, post: data });
+    return NextResponse.json({ success: true, post: toCampaignPost(data) });
   } catch (err) {
     console.error('Update error:', err);
     return NextResponse.json({ error: err.message }, { status: 500 });
