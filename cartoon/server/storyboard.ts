@@ -57,8 +57,10 @@ const CONCEPT_HINTS: Record<VisualConcept, string> = {
   abstract: "colourful abstract shapes world",
 };
 
-export function buildPrompt(ka: KALike, customTopic?: string): string {
+export function buildPrompt(ka: KALike, customTopic?: string, targetDurationSeconds = 120): string {
   const topic = customTopic || ka.keyword;
+  const sceneCount = Math.max(7, Math.min(9, Math.ceil(targetDurationSeconds / 45)));
+  const wordsPerScene = Math.max(25, Math.round(targetDurationSeconds * 2.55 / sceneCount));
   let sub = "";
   try { sub = (JSON.parse(ka.subTopics || "[]") as { title: string; explanation: string }[]).slice(0, 6).map((s) => `- ${s.title}: ${s.explanation}`).join("\n"); } catch { /* ignore */ }
   let facts = "";
@@ -79,8 +81,8 @@ Amazing facts:
 ${facts || "- (invent none, stay on topic)"}
 
 STORY RULES:
-- 7 scenes: 1) exciting hook that dramatises the topic, 2-5) teach step by step — AT LEAST ONE "journey" scene taking the viewer INSIDE the concept (e.g. shrinking into a blood vessel for the heart, into a leaf for photosynthesis, into a lab for reactions), 6) quick recap of key points, 7) fun ending + call to action to subscribe and keep learning.
-- Narration: warm, playful Nigerian-friendly English, 12-26 words per scene, ONE clear idea per scene. No scene numbering in the text.
+- Target finished video duration: approximately ${targetDurationSeconds} seconds. Create exactly ${sceneCount} scenes: an exciting hook, a logical step-by-step explanation with at least one journey scene, a useful recap and a fun ending.
+- Narration: warm, playful Nigerian-friendly English, approximately ${wordsPerScene} words per scene. For longer videos, expand the mechanism, examples and implications without filler or repetition. One clear idea per scene.
 - 1-3 characters per scene. Available preset characters: ${presets}. Give them actions and expressions that match the story (examples: hook=wave+excited, journey=run+surprised, recap=point+proud, ending=cheer+happy).
 - onScreenText: optional short spoken-style text shown in a speech bubble above ONE speaking character (max 6 words). Omit for most scenes.
 - Choose visualConcept from exactly: ${VISUAL_CONCEPTS.map((c) => `${c} = ${CONCEPT_HINTS[c]}`).join("; ")}.
@@ -136,7 +138,7 @@ export function validateStoryboard(raw: unknown, ka: KALike, customTopic?: strin
   const scenes: StoryboardScene[] = scenesIn.slice(0, 9).map((s, i) => {
     const sc = (s || {}) as Record<string, unknown>;
     const narration = typeof sc.narration === "string" && sc.narration.trim()
-      ? sc.narration.trim().replace(/\s+/g, " ").slice(0, 260)
+      ? sc.narration.trim().replace(/\s+/g, " ").slice(0, 1400)
       : `Let us learn something amazing about ${customTopic || ka.keyword}.`;
     const castIn = Array.isArray(sc.cast) ? sc.cast : [];
     const cast = castIn.slice(0, 3).map((m, j) => {
@@ -275,8 +277,8 @@ export function fallbackStoryboard(ka: KALike, customTopic?: string): Storyboard
   };
 }
 
-export async function generateStoryboard(ka: KALike, customTopic?: string): Promise<{ spec: Storyboard; usedFallback: boolean; error?: string }> {
-  const prompt = buildSystem() + "\\n\\n" + buildPrompt(ka, customTopic);
+export async function generateStoryboard(ka: KALike, customTopic?: string, targetDurationSeconds = 120): Promise<{ spec: Storyboard; usedFallback: boolean; error?: string }> {
+  const prompt = buildSystem() + "\\n\\n" + buildPrompt(ka, customTopic, targetDurationSeconds);
   const generated = await generateWithFallback(
     prompt,
     (text: string) => parseJsonFromText(text, "object"),
