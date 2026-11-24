@@ -26,6 +26,8 @@ export default function ImageExplainerStudioPage() {
   const [busy, setBusy] = useState(false);
   const [saving, setSaving] = useState(false);
   const [researching, setResearching] = useState(false);
+  const [generatingScript, setGeneratingScript] = useState(false);
+  const [savingScript, setSavingScript] = useState(false);
   const [error, setError] = useState('');
   const [notice, setNotice] = useState('');
   const [job, setJob] = useState(null);
@@ -134,6 +136,42 @@ export default function ImageExplainerStudioPage() {
     finally { setResearching(false); }
   }
 
+  async function generateScript() {
+    if (!job?.id) return;
+    setGeneratingScript(true); setError(''); setNotice('');
+    try {
+      const response = await fetch('/api/admin/image-explainer', { method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ id: job.id, action: 'generate-script' }) });
+      const data = await response.json();
+      if (!response.ok) throw new Error(data.error || 'Script generation failed.');
+      setJob((current) => ({ ...current, ...data.job }));
+      setNotice('Draft script and storyboard generated. Review every scene before approval.');
+      await loadJobs();
+    } catch (err) { setError(err.message || 'Script generation failed.'); }
+    finally { setGeneratingScript(false); }
+  }
+
+  function updateScene(index, patch) {
+    setJob((current) => {
+      const scenes = [...(current.script?.scenes || [])];
+      scenes[index] = { ...scenes[index], ...patch };
+      const script = { ...current.script, scenes, total_duration_seconds: scenes.reduce((sum, scene) => sum + Number(scene.duration_seconds || 0), 0), review_status: 'needs_admin_review' };
+      return { ...current, script, storyboard: scenes };
+    });
+  }
+
+  async function saveScript() {
+    if (!job?.id || !job?.script) return;
+    setSavingScript(true); setError(''); setNotice('');
+    try {
+      const response = await fetch('/api/admin/image-explainer', { method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ id: job.id, action: 'save-script', script: job.script }) });
+      const data = await response.json();
+      if (!response.ok) throw new Error(data.error || 'Could not save script.');
+      setJob((current) => ({ ...current, ...data.job }));
+      setNotice('Reviewed script and storyboard saved. Rendering has not started.');
+      await loadJobs();
+    } catch (err) { setError(err.message || 'Could not save script.'); }
+    finally { setSavingScript(false); }
+  }
   async function retryAnalysis() {
     if (!job?.id) return;
     setBusy(true); setError(''); setNotice('');
@@ -323,8 +361,21 @@ export default function ImageExplainerStudioPage() {
               </div></div>
               <div className="rounded-lg border border-amber-900/60 bg-amber-950/30 p-3 text-xs leading-5 text-amber-100"><strong>Research safeguard:</strong> These are discovery results, not approved facts or assets. Check primary references before using factual claims. Open each asset's source page and verify its exact licence, attribution and commercial-use terms. Media is not automatically downloaded or inserted into a video.</div>
             </section>}
+            {job && <section className="space-y-4 rounded-2xl border border-slate-800 bg-slate-900 p-5">
+              <div className="flex flex-wrap items-center justify-between gap-3"><div><p className="text-xs font-semibold uppercase tracking-wider text-sky-300">Phase 3 · Script & storyboard</p><h2 className="mt-1 text-xl font-bold">Narrative and visual direction</h2><p className="mt-1 text-sm text-slate-400">Generate scene-by-scene narration and a directed visual plan from the reviewed image map and research.</p></div>
+                <button type="button" onClick={generateScript} disabled={generatingScript || savingScript || !analysis?.reviewed_by_admin || !job.research_bundle} className="rounded-lg bg-sky-400 px-4 py-2.5 text-sm font-bold text-slate-950 disabled:opacity-50">{generatingScript ? "Writing and directing…" : job.script ? "Regenerate draft" : "Generate script & storyboard"}</button></div>
+              {!analysis?.reviewed_by_admin && <p className="rounded-lg border border-amber-900/60 bg-amber-950/30 p-3 text-xs text-amber-100">Save the corrected image map first.</p>}
+              {!job.research_bundle && <p className="rounded-lg border border-amber-900/60 bg-amber-950/30 p-3 text-xs text-amber-100">Complete research and asset discovery first.</p>}
+              {job.script && <><div className="grid gap-3 sm:grid-cols-3"><div className="rounded-lg bg-slate-950 p-3"><p className="text-2xl font-bold">{job.script.scenes?.length || 0}</p><p className="text-xs text-slate-400">Directed scenes</p></div><div className="rounded-lg bg-slate-950 p-3"><p className="text-2xl font-bold">{Math.round(job.script.total_duration_seconds || 0)}s</p><p className="text-xs text-slate-400">Estimated runtime</p></div><div className="rounded-lg bg-slate-950 p-3"><p className="text-sm font-semibold">{job.script.review_status === "admin_reviewed" ? "Admin reviewed" : "Needs review"}</p><p className="text-xs text-slate-400">Draft status</p></div></div>
+                <div className="space-y-3">{(job.script.scenes || []).map((scene, index) => <article key={scene.id} className="rounded-xl border border-slate-800 bg-slate-950 p-4"><div className="flex flex-wrap items-center justify-between gap-2"><h3 className="font-semibold">{String(index + 1).padStart(2, "0")} · {scene.headline}</h3><span className="rounded bg-slate-800 px-2 py-1 text-xs">{scene.duration_seconds}s · {scene.visual?.treatment}</span></div>
+                  <div className="mt-3 grid gap-3 lg:grid-cols-2"><div><label className={labelClass}>Scene heading</label><input className={inputClass} value={scene.headline || ""} onChange={(e) => updateScene(index, { headline: e.target.value })} /><label className="mb-1 mt-3 block text-xs font-semibold text-slate-400">Spoken narration</label><textarea rows={5} className={inputClass} value={scene.narration || ""} onChange={(e) => updateScene(index, { narration: e.target.value })} /><label className="mb-1 mt-3 block text-xs font-semibold text-slate-400">Scene purpose</label><textarea rows={2} className={inputClass} value={scene.purpose || ""} onChange={(e) => updateScene(index, { purpose: e.target.value })} /></div>
+                  <div><label className={labelClass}>Visual direction</label><textarea rows={4} className={inputClass} value={scene.visual?.description || ""} onChange={(e) => updateScene(index, { visual: { ...scene.visual, description: e.target.value } })} /><label className="mb-1 mt-3 block text-xs font-semibold text-slate-400">Camera movement</label><input className={inputClass} value={scene.visual?.camera_move || ""} onChange={(e) => updateScene(index, { visual: { ...scene.visual, camera_move: e.target.value } })} /><label className="mb-1 mt-3 block text-xs font-semibold text-slate-400">Duration (seconds)</label><input type="number" min="2" max="45" className={inputClass} value={scene.duration_seconds || 0} onChange={(e) => updateScene(index, { duration_seconds: Number(e.target.value) })} /><p className="mt-2 text-xs text-slate-500">Linked components: {(scene.visual?.component_ids || []).join(", ") || "None"}</p><p className="mt-1 text-xs text-slate-500">On-screen text: {(scene.on_screen_text || []).join(" · ") || "None"}</p></div></div>
+                  {(scene.fact_check_notes || []).length > 0 && <p className="mt-3 rounded-lg border border-amber-900/50 bg-amber-950/20 p-3 text-xs text-amber-100">Fact-check: {scene.fact_check_notes.join(" · ")}</p>}</article>)}</div>
+                {(job.script.key_takeaways || []).length > 0 && <div className="rounded-lg bg-slate-950 p-3 text-sm">Key takeaways: {job.script.key_takeaways.join(" · ")}</div>}
+                <div className="flex flex-wrap items-center justify-between gap-3"><p className="text-xs text-slate-500">Review accuracy, pacing and visual continuity before saving.</p><button type="button" onClick={saveScript} disabled={savingScript || generatingScript} className="rounded-lg bg-emerald-400 px-5 py-2.5 text-sm font-bold text-slate-950 disabled:opacity-50">{savingScript ? "Saving…" : "Save reviewed script & storyboard"}</button></div></>}
+            </section>}
             <div className="rounded-xl border border-sky-900/60 bg-sky-950/30 p-4 text-sm text-sky-100">
-              <strong>Phase 1 scope:</strong> secure image intake, image validation, persistent project records, AI visual analysis, component coordinates, private source previews and administrator correction of the image map. Research, storyboard, narration and video rendering are separate upcoming phases.
+              <strong>Current scope:</strong> Phases 1–3 provide secure image intake, visual mapping, research discovery, and a reviewable narration script with scene-by-scene visual direction. Narration recording, timeline execution, durable rendering and final video delivery are still separate phases.
             </div>
           </section>
         </div>
