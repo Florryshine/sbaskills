@@ -58,7 +58,7 @@ function formatKnowledgeContext(context: string): string {
     '- If the source is incomplete or ambiguous, explain only what it supports; do not manufacture certainty.';
 }
 
-export function buildPlannerPrompt(topic: string, subject: Subject, knowledgeContext = ''): string {
+export function buildPlannerPrompt(topic: string, subject: Subject, knowledgeContext = '', targetDurationSeconds = 120): string {
   const recommended = suggestIllustrations(subject, keywordsFromTopic(topic));
   const recommendedBlock = recommended.length
     ? 'RECOMMENDED LOCAL ASSETS FOR THIS TOPIC (use only where they genuinely help):\n' +
@@ -72,6 +72,8 @@ export function buildPlannerPrompt(topic: string, subject: Subject, knowledgeCon
     '',
     'TOPIC: ' + topic,
     'SUBJECT: ' + subject,
+    'TARGET VIDEO DURATION: approximately ' + targetDurationSeconds + ' seconds.',
+    'Plan enough substantive narration and scenes to fill the selected duration at a natural speaking pace (about 140–155 words per minute). Do not pad or repeat. A longer duration requires deeper explanation, examples, mechanisms and useful transitions.',
     '',
     'FACTUAL FOUNDATION:',
     formatKnowledgeContext(knowledgeContext),
