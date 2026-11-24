@@ -12,7 +12,7 @@ export async function GET(req) {
   if (!id) return NextResponse.json({ error: 'Project id is required.' }, { status: 400 });
   const supabase = createAdminClient();
   const { data, error } = await supabase.from('image_explainer_jobs')
-    .select('id,title,status,stage,stage_message,vision_analysis,script,narration_manifest,timeline,timeline_reviewed_at')
+    .select('id,title,status,stage,stage_message,vision_analysis,script,narration_manifest,timeline,timeline_reviewed_at,video_url,storage_path,error_message')
     .eq('id', id).single();
   if (error || !data) return NextResponse.json({ error: 'Project not found.' }, { status: 404 });
   return NextResponse.json({ job: data });
@@ -24,13 +24,26 @@ export async function POST(req) {
   const supabase = createAdminClient();
   try {
     const body = await req.json();
-    if (!body?.id || !['generate','approve'].includes(body.action)) {
+    if (!body?.id || !['generate','approve','queue-render','retry-render'].includes(body.action)) {
       return NextResponse.json({ error: 'Project id and a valid timeline action are required.' }, { status: 400 });
     }
     const { data: current, error: readError } = await supabase.from('image_explainer_jobs')
-      .select('id,status,vision_analysis,script,narration_manifest,timeline')
+      .select('id,title,status,stage,source_images,vision_analysis,script,narration_manifest,timeline,video_url,storage_path,error_message')
       .eq('id', body.id).single();
     if (readError || !current) return NextResponse.json({ error: 'Project not found.' }, { status: 404 });
+
+    if (body.action === 'queue-render' || body.action === 'retry-render') {
+      const retry = body.action === 'retry-render';
+      if (!current.timeline || current.timeline.review_status !== 'admin_reviewed' || !validateExplainerTimeline(current.timeline, current.script?.scenes?.length || 0)) return NextResponse.json({ error: 'Approve a valid visual timeline before rendering.' }, { status: 409 });
+      if (!current.source_images?.[0]?.path || !current.narration_manifest?.clips?.length) return NextResponse.json({ error: 'The original image or narration audio is missing.' }, { status: 409 });
+      if (retry && !(current.status === 'failed' && current.stage === 'render_failed')) return NextResponse.json({ error: 'Only a failed render can be retried.' }, { status: 409 });
+      if (!retry && current.stage === 'render_queued') return NextResponse.json({ error: 'This project is already waiting in the render queue.' }, { status: 409 });
+      const { data: queued, error } = await supabase.from('image_explainer_jobs')
+        .update({ status: 'rendering', stage: 'render_queued', stage_message: 'Queued for the Remotion rendering worker. It runs automatically.', error_message: null, claim_token: null, worker_id: null, heartbeat_at: null, render_attempt_count: 0, updated_at: new Date().toISOString() })
+        .eq('id', body.id).select('id,title,status,stage,stage_message,video_url,storage_path').single();
+      if (error) throw new Error(error.message);
+      return NextResponse.json({ job: queued });
+    }
 
     if (body.action === 'generate') {
       if (!current.script || current.script.review_status !== 'admin_reviewed' || !current.vision_analysis?.reviewed_by_admin || !current.narration_manifest?.clips?.length) {
