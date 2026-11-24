@@ -23,7 +23,7 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version: 24
-      - name: Test image-region and research utilities
+      - name: Run all image-explainer unit tests
         run: node --test tests/image-explainer-*.test.mjs
       - name: Check research and script module syntax
         run: |
