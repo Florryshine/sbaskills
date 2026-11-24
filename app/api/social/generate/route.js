@@ -73,6 +73,7 @@ export async function POST(req) {
       whatsapp: 'Short, natural group-friendly message; avoid sounding like an advert.',
       instagram: 'Strong first line, readable short paragraphs, relevant hashtags and a clear CTA.',
       x: 'Concise, attention-grabbing post within 280 characters including hashtags.',
+      threads: 'Conversational, thoughtful post within 500 characters; invite replies without clickbait.',
       telegram: 'Informative, useful post with a clear CTA; suitable for a learning community.',
       linkedin: 'Professional, insight-led post for educators, parents and learners.',
     };
