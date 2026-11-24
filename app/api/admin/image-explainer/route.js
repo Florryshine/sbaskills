@@ -207,7 +207,7 @@ export async function PATCH(req) {
     if (!body?.id) return NextResponse.json({ error: 'Provide a project id.' }, { status: 400 });
     const supabase = createAdminClient();
     const { data: current, error: readError } = await supabase.from('image_explainer_jobs')
-      .select('id,title,status,vision_analysis,source_images,user_instruction,production_mode,spec,research_bundle,script,storyboard').eq('id', body.id).single();
+      .select('id,title,status,vision_analysis,source_images,user_instruction,production_mode,spec,research_bundle,script,storyboard,narration_manifest').eq('id', body.id).single();
     if (readError || !current) return NextResponse.json({ error: 'Project not found.' }, { status: 404 });
 
     if (body.action === 'research') {
@@ -330,6 +330,9 @@ export async function PATCH(req) {
       }
       if (isRetry && current.status !== 'failed') {
         return NextResponse.json({ error: 'Only failed narration jobs can be retried.' }, { status: 409 });
+      }
+      if (!isRetry && current.status !== 'analysed') {
+        return NextResponse.json({ error: 'Only a reviewed project that is not already processing narration can be queued.' }, { status: 409 });
       }
       if (!isRetry && current.narration_manifest) {
         return NextResponse.json({ error: 'Narration already exists. Use regenerate narration if you want to replace it.' }, { status: 409 });
