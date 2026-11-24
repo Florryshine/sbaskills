@@ -12,7 +12,7 @@ concurrency:
 jobs:
   narrate:
     runs-on: ubuntu-latest
-    timeout-minutes: 50
+    timeout-minutes: 90
     env:
       NEXT_PUBLIC_SUPABASE_URL: ${{ secrets.NEXT_PUBLIC_SUPABASE_URL }}
       SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
@@ -21,7 +21,8 @@ jobs:
       GEMINI_API_KEY_1: ${{ secrets.GEMINI_API_KEY_1 }}
       GEMINI_API_KEY_2: ${{ secrets.GEMINI_API_KEY_2 }}
       GEMINI_API_KEY_3: ${{ secrets.GEMINI_API_KEY_3 }}
-      IMAGE_EXPLAINER_RUN_ONCE_MAX_MS: '2400000'
+      IMAGE_EXPLAINER_RUN_ONCE_MAX_MS: '4800000'
+      IMAGE_EXPLAINER_SCENE_TIMEOUT_MS: '300000'
     steps:
       - uses: actions/checkout@v4
       - name: Check narration queue
@@ -38,7 +39,13 @@ jobs:
             --data-urlencode "order=created_at.asc" --data-urlencode "limit=10" \
             -H "apikey: $SUPABASE_SERVICE_ROLE_KEY" -H "Authorization: Bearer $SUPABASE_SERVICE_ROLE_KEY")
           echo "$body" | jq -e 'type == "array"' >/dev/null
-          if [ "$(echo "$body" | jq 'length')" -eq 0 ]; then echo "has_jobs=false" >> "$GITHUB_OUTPUT"; else echo "has_jobs=true" >> "$GITHUB_OUTPUT"; fi
+          if [ "$(echo "$body" | jq 'length')" -eq 0 ]; then
+            echo "has_jobs=false" >> "$GITHUB_OUTPUT"
+            echo "No queued narration jobs."
+          else
+            echo "has_jobs=true" >> "$GITHUB_OUTPUT"
+            echo "Queued narration jobs: $(echo "$body" | jq -r '.[].id' | paste -sd ',')"
+          fi
       - uses: oven-sh/setup-bun@v2
         if: steps.check.outputs.has_jobs == 'true'
         with:
@@ -53,6 +60,6 @@ jobs:
       - name: Install audio tools
         if: steps.check.outputs.has_jobs == 'true'
         run: sudo apt-get update && sudo apt-get install -y ffmpeg
-      - name: Generate and store narration
+      - name: Generate and store narration in resumable scene batches
         if: steps.check.outputs.has_jobs == 'true'
         run: bun local-video-renderer/image-explainer-narration-worker.js
