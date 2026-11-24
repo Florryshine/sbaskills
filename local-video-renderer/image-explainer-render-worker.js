@@ -39,19 +39,29 @@ async function download(bucket,storagePath,destination){
 const MEDIA_HOSTS=['images.pexels.com','videos.pexels.com','pixabay.com','cdn.pixabay.com','upload.wikimedia.org'];
 async function downloadApprovedMedia(asset,destination){
  if(!validateAssetForRender(asset)) throw new Error(`Asset ${asset?.id||'unknown'} is not approved or uses an untrusted host.`);
- const source=new URL(asset.media_url);
- if(!MEDIA_HOSTS.some(host=>source.hostname===host||source.hostname.endsWith('.'+host))) throw new Error('Supporting media host is not allowlisted.');
- const response=await fetch(source,{signal:AbortSignal.timeout(60000),redirect:'follow',headers:{'User-Agent':'ShineyBrainAcademy/1.0'}});
- if(!response.ok) throw new Error(`Supporting media download failed: HTTP ${response.status}`);
- const finalUrl=new URL(response.url);
- if(finalUrl.protocol!=='https:'||!MEDIA_HOSTS.some(host=>finalUrl.hostname===host||finalUrl.hostname.endsWith('.'+host))) throw new Error('Supporting media redirected to an untrusted host.');
+ const allowed=(u)=>u.protocol==='https:'&&MEDIA_HOSTS.some(host=>u.hostname===host||u.hostname.endsWith('.'+host));
+ let current=new URL(asset.media_url),response;
+ for(let redirects=0;redirects<=3;redirects++){
+  if(!allowed(current)) throw new Error('Supporting media URL or redirect host is not allowlisted.');
+  response=await fetch(current,{signal:AbortSignal.timeout(60000),redirect:'manual',headers:{'User-Agent':'ShineyBrainAcademy/1.0'}});
+  if(response.status>=300&&response.status<400){
+   const location=response.headers.get('location');
+   if(!location||redirects===3) throw new Error('Supporting media redirect limit exceeded.');
+   current=new URL(location,current);continue;
+  }
+  break;
+ }
+ if(!response?.ok) throw new Error(`Supporting media download failed: HTTP ${response?.status||'unknown'}`);
  const type=(response.headers.get('content-type')||'').split(';')[0].toLowerCase();
  const expected=asset.media_type==='video'?type.startsWith('video/'):(type.startsWith('image/')||type==='application/octet-stream');
  if(!expected) throw new Error(`Unexpected supporting media type: ${type||'unknown'}`);
- const declared=Number(response.headers.get('content-length')||0),limit=asset.media_type==='video'?120*1024*1024:30*1024*1024;
+ const limit=asset.media_type==='video'?120*1024*1024:30*1024*1024;
+ const declared=Number(response.headers.get('content-length')||0);
  if(declared>limit) throw new Error('Supporting media exceeds the download size limit.');
- const bytes=Buffer.from(await response.arrayBuffer());
- if(!bytes.length||bytes.length>limit) throw new Error('Supporting media is empty or exceeds the download size limit.');
+ const reader=response.body?.getReader();if(!reader) throw new Error('Supporting media response has no readable body.');
+ const chunks=[];let total=0;
+ try{while(true){const{done,value}=await reader.read();if(done)break;total+=value.byteLength;if(total>limit){await reader.cancel();throw new Error('Supporting media exceeds the download size limit.');}chunks.push(Buffer.from(value));}}finally{reader.releaseLock?.();}
+ const bytes=Buffer.concat(chunks);if(!bytes.length)throw new Error('Supporting media download was empty.');
  const ext=asset.media_type==='video'?'mp4':type==='image/png'?'png':type==='image/webp'?'webp':'jpg';
  await mkdir(path.dirname(destination),{recursive:true});await writeFile(destination+'.'+ext,bytes);
  return ext;
