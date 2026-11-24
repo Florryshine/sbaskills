@@ -33,7 +33,7 @@ export async function GET(request) {
     }
 
     const [{ data: projects, error }, { data: workers, error: workerError }] = await Promise.all([
-      supabase.from('cartoon_projects').select('id,title,custom_topic,orientation,status,stage,stage_message,progress,error_message,video_url,duration_seconds,spec,narration,created_at,updated_at').order('created_at', { ascending: false }).limit(50),
+      supabase.from('cartoon_projects').select('id,title,custom_topic,orientation,target_duration_seconds,status,stage,stage_message,progress,error_message,video_url,duration_seconds,spec,narration,created_at,updated_at').order('created_at', { ascending: false }).limit(50),
       supabase.from('cartoon_workers').select('worker_id,last_seen_at,current_job_id,info').order('last_seen_at', { ascending: false }).limit(10),
     ]);
     if (error) return jsonError(error.message, 500);
@@ -65,6 +65,7 @@ export async function POST(request) {
       const topic = String(body.topic || body.title || '').trim().slice(0, 180);
       const knowledgeAssetId = body.knowledgeAssetId || null;
       const orientation = ORIENTATIONS.has(body.orientation) ? body.orientation : '9:16';
+      const targetDurationSeconds = [30,60,120,180,300,480,600].includes(Number(body.targetDurationSeconds)) ? Number(body.targetDurationSeconds) : 120;
       if (!topic && !knowledgeAssetId) return jsonError('Provide a topic or select a Knowledge Asset.');
 
       if (knowledgeAssetId) {
@@ -81,6 +82,7 @@ export async function POST(request) {
           custom_topic: topic || null,
           knowledge_asset_id: knowledgeAssetId,
           orientation,
+          target_duration_seconds: targetDurationSeconds,
           subtitles: body.subtitles !== false,
           status: 'queued',
           stage: 'queued',
@@ -98,7 +100,7 @@ export async function POST(request) {
           status: 'queued',
           stage: 'queued',
           stage_message: 'Waiting for a Cartoon worker...',
-          payload: { topic, subject: String(body.subject || 'General').slice(0, 80) },
+          payload: { topic, subject: String(body.subject || 'General').slice(0, 80), targetDurationSeconds },
           created_by: user.id,
         })
         .select('*').single();
