@@ -25,6 +25,7 @@ export default function ImageExplainerStudioPage() {
   const [title, setTitle] = useState('');
   const [busy, setBusy] = useState(false);
   const [saving, setSaving] = useState(false);
+  const [researching, setResearching] = useState(false);
   const [error, setError] = useState('');
   const [notice, setNotice] = useState('');
   const [job, setJob] = useState(null);
@@ -113,6 +114,24 @@ export default function ImageExplainerStudioPage() {
       setMode(data.job.production_mode || 'educational');
       setSelectedComponent(0);
     } catch (err) { setError(err.message); }
+  }
+
+  async function runResearch() {
+    if (!job?.id) return;
+    setResearching(true); setError(''); setNotice('');
+    try {
+      const response = await fetch('/api/admin/image-explainer', {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ id: job.id, action: 'research' }),
+      });
+      const data = await response.json();
+      if (!response.ok) throw new Error(data.error || 'Research could not be completed.');
+      setJob((current) => ({ ...current, ...data.job }));
+      setNotice('Research completed. Review the source references and media licences before using any asset.');
+      await loadJobs();
+    } catch (err) { setError(err.message || 'Research failed.'); }
+    finally { setResearching(false); }
   }
 
   async function retryAnalysis() {
@@ -264,7 +283,10 @@ export default function ImageExplainerStudioPage() {
 
                 <div className="mt-5 flex flex-wrap items-center justify-between gap-3 border-t border-slate-800 pt-4">
                   <div><p className="font-semibold">{analysis?.subject || job.title}</p><p className="mt-1 text-xs text-slate-500">{analysis?.image_type || 'Image'} · {Math.round((analysis?.confidence || 0) * 100)}% overall confidence · {analysis?.provider || 'Vision analysis'}</p></div>
-                  <button type="button" onClick={saveRegions} disabled={saving || !['analysed', 'failed'].includes(job.status)} className="rounded-lg bg-sky-400 px-5 py-2.5 text-sm font-bold text-slate-950 disabled:opacity-50">{saving ? 'Saving…' : 'Save image map'}</button>
+                  <div className="flex flex-wrap gap-2">
+                    <button type="button" onClick={saveRegions} disabled={saving || !['analysed', 'failed'].includes(job.status)} className="rounded-lg border border-slate-600 px-4 py-2.5 text-sm font-semibold text-slate-200 disabled:opacity-50">{saving ? 'Saving…' : 'Save image map'}</button>
+                    <button type="button" onClick={runResearch} disabled={researching || !['analysed', 'failed'].includes(job.status) || !analysis?.subject} className="rounded-lg bg-sky-400 px-5 py-2.5 text-sm font-bold text-slate-950 disabled:opacity-50">{researching ? 'Researching sources & assets…' : job.research_bundle ? 'Refresh research' : 'Research subject & find assets'}</button>
+                  </div>
                 </div>
                 {analysis?.summary && <p className="mt-4 rounded-lg bg-slate-950 p-3 text-sm leading-6 text-slate-300">{analysis.summary}</p>}
                 {(analysis?.detected_text || []).length > 0 && <div className="mt-4 rounded-lg border border-slate-800 bg-slate-950 p-3"><p className="text-xs font-semibold text-slate-300">Text detected in image ({analysis.detected_text.length})</p><div className="mt-2 flex flex-wrap gap-2">{analysis.detected_text.map((item, index) => <span key={item.id || index} title={`Region: ${Math.round(item.region.x)}, ${Math.round(item.region.y)}`} className="rounded-md bg-slate-800 px-2 py-1 text-xs text-slate-200">{item.text}</span>)}</div></div>}
@@ -272,6 +294,35 @@ export default function ImageExplainerStudioPage() {
               </>}
             </div>
 
+            {job?.research_bundle && <section className="space-y-5 rounded-2xl border border-slate-800 bg-slate-900 p-5">
+              <div className="flex flex-wrap items-center justify-between gap-2"><div><h2 className="text-lg font-semibold">Research & asset discovery</h2><p className="mt-1 text-xs text-slate-400">Retrieved {new Date(job.research_bundle.researched_at).toLocaleString()} · {job.research_bundle.queries?.length || 0} search queries</p></div><span className="rounded-full bg-emerald-950 px-3 py-1 text-xs text-emerald-200">Research saved</span></div>
+              <div className="grid gap-3 sm:grid-cols-3">
+                <div className="rounded-lg bg-slate-950 p-3"><p className="text-2xl font-bold">{job.research_bundle.sources?.length || 0}</p><p className="text-xs text-slate-400">Reference sources</p></div>
+                <div className="rounded-lg bg-slate-950 p-3"><p className="text-2xl font-bold">{job.research_bundle.assets?.filter((a) => a.media_type === 'image').length || 0}</p><p className="text-xs text-slate-400">Image candidates</p></div>
+                <div className="rounded-lg bg-slate-950 p-3"><p className="text-2xl font-bold">{job.research_bundle.assets?.filter((a) => a.media_type === 'video').length || 0}</p><p className="text-xs text-slate-400">Video candidates</p></div>
+              </div>
+              <div><h3 className="mb-2 font-semibold">Research references</h3><div className="grid gap-3 md:grid-cols-2">
+                {(job.research_bundle.sources || []).map((source, index) => <article key={source.url || index} className="rounded-xl border border-slate-800 bg-slate-950 p-4">
+                  <div className="flex items-center justify-between gap-2"><span className="text-[10px] uppercase tracking-wide text-sky-300">{source.source} · {source.source_type}</span>{source.year && <span className="text-xs text-slate-500">{source.year}</span>}</div>
+                  <h4 className="mt-2 text-sm font-semibold">{source.title}</h4>
+                  {source.authors?.length > 0 && <p className="mt-1 text-xs text-slate-500">{source.authors.join(', ')}</p>}
+                  {source.extract && <p className="mt-2 text-xs leading-5 text-slate-300">{source.extract}</p>}
+                  {source.abstract && <p className="mt-2 text-xs leading-5 text-slate-400">{source.abstract}</p>}
+                  {source.url && <a href={source.url} target="_blank" rel="noreferrer" className="mt-3 inline-block text-xs font-semibold text-sky-300 hover:underline">Open original source ↗</a>}
+                </article>)}
+              </div></div>
+              <div><h3 className="mb-2 font-semibold">Supporting media candidates</h3><div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-3">
+                {(job.research_bundle.assets || []).map((asset, index) => <article key={asset.media_url || index} className="overflow-hidden rounded-xl border border-slate-800 bg-slate-950">
+                  {asset.preview_url && asset.media_type === 'image' && <img src={asset.preview_url} alt={asset.title} loading="lazy" className="h-36 w-full object-cover" />}
+                  <div className="p-3"><div className="flex items-center justify-between gap-2"><span className="text-[10px] uppercase text-sky-300">{asset.provider} · {asset.media_type}</span><span className="rounded bg-amber-950 px-2 py-0.5 text-[10px] text-amber-200">Review licence</span></div>
+                    <p className="mt-2 text-sm font-medium">{asset.title}</p><p className="mt-1 text-xs text-slate-500">Creator: {asset.creator}</p><p className="mt-1 text-xs text-slate-400">{asset.license}</p>
+                    {asset.source_url && <a href={asset.source_url} target="_blank" rel="noreferrer" className="mt-2 inline-block text-xs font-semibold text-sky-300 hover:underline">View source & licence ↗</a>}
+                  </div>
+                </article>)}
+                {(job.research_bundle.assets || []).length === 0 && <p className="text-sm text-slate-500">No supporting media candidates were returned by the configured providers.</p>}
+              </div></div>
+              <div className="rounded-lg border border-amber-900/60 bg-amber-950/30 p-3 text-xs leading-5 text-amber-100"><strong>Research safeguard:</strong> These are discovery results, not approved facts or assets. Check primary references before using factual claims. Open each asset's source page and verify its exact licence, attribution and commercial-use terms. Media is not automatically downloaded or inserted into a video.</div>
+            </section>}
             <div className="rounded-xl border border-sky-900/60 bg-sky-950/30 p-4 text-sm text-sky-100">
               <strong>Phase 1 scope:</strong> secure image intake, image validation, persistent project records, AI visual analysis, component coordinates, private source previews and administrator correction of the image map. Research, storyboard, narration and video rendering are separate upcoming phases.
             </div>
