@@ -59,8 +59,8 @@ const CONCEPT_HINTS: Record<VisualConcept, string> = {
 
 export function buildPrompt(ka: KALike, customTopic?: string, targetDurationSeconds = 120): string {
   const topic = customTopic || ka.keyword;
-  const sceneCount = Math.max(7, Math.min(9, Math.ceil(targetDurationSeconds / 45)));
-  const wordsPerScene = Math.max(25, Math.round(targetDurationSeconds * 2.55 / sceneCount));
+  const sceneCount = Math.max(3, Math.min(9, Math.ceil(targetDurationSeconds / 45)));
+  const wordsPerScene = Math.max(12, Math.round(targetDurationSeconds * 2.55 / sceneCount));
   let sub = "";
   try { sub = (JSON.parse(ka.subTopics || "[]") as { title: string; explanation: string }[]).slice(0, 6).map((s) => `- ${s.title}: ${s.explanation}`).join("\n"); } catch { /* ignore */ }
   let facts = "";
@@ -105,7 +105,7 @@ OUTPUT: ONLY raw JSON exactly in this shape (no markdown, no comments):
     "cast": [{ "ref": "a", "action": "wave", "expression": "excited", "x": 500, "y": 810, "scale": 1.1, "speaking": true }],
     "props": [{ "kind": "book", "x": 250, "y": 700, "scale": 0.8, "popAt": 0 }],
     "camera": "zoom-in", "transition": "fade", "onScreenText": "Hi friends!"
-  }, ... 7 scenes total]
+  }, ... ${sceneCount} scenes total]
 }
 Every cast ref MUST exist in characters. Use only the listed enum values. Every scene MUST have at least one cast member.`;
 }
