@@ -1,5 +1,5 @@
 import React from 'react';
-import {AbsoluteFill, Audio, Easing, Img, Sequence, interpolate, staticFile, useCurrentFrame, useVideoConfig} from 'remotion';
+import {AbsoluteFill, Audio, Easing, Img, Video, Sequence, interpolate, staticFile, useCurrentFrame, useVideoConfig} from 'remotion';
 
 const clamp=(v,a,b)=>Math.max(a,Math.min(b,v));
 const toCanvasPoint=(x,y,dims,width,height)=>{const iw=Number(dims?.width)||width,ih=Number(dims?.height)||height;const scale=Math.min(width/iw,height/ih);const rw=iw*scale,rh=ih*scale;return {x:((width-rw)/2+x*rw)/width,y:((height-rh)/2+y*rh)/height};};
@@ -20,6 +20,14 @@ const SceneVisual=({scene,source,sourceDimensions})=>{
    <AbsoluteFill style={{overflow:'hidden',justifyContent:'center',alignItems:'center'}}>
     <div style={{position:'absolute',inset:0,overflow:'hidden',transform:`translate(${(0.5-x)*100*scale}%,${(0.5-y)*100*scale}%) scale(${scale})`,transformOrigin:'50% 50%'}}>
      <Img src={staticFile(source)} style={{width:'100%',height:'100%',objectFit:'contain'}}/>
+     {(scene.supporting_assets||[]).map((asset,index)=>{
+      const pip=asset.placement==='picture_in_picture'||index>0;
+      const box=pip?{position:'absolute',right:'4%',bottom:'8%',width:'34%',height:'32%',border:'3px solid rgba(255,255,255,.9)',borderRadius:16,overflow:'hidden',boxShadow:'0 12px 36px rgba(0,0,0,.5)',zIndex:5}:{position:'absolute',inset:'5% 5% 10% 5%',borderRadius:18,overflow:'hidden',opacity:.82,zIndex:2};
+      return <div key={asset.id||index} style={box}>
+       {asset.media_type==='video'?<Video src={staticFile(asset.asset_file)} muted loop style={{width:'100%',height:'100%',objectFit:'cover'}}/>:<Img src={staticFile(asset.asset_file)} style={{width:'100%',height:'100%',objectFit:'cover'}}/>}
+       <div style={{position:'absolute',left:0,right:0,bottom:0,padding:'6px 10px',background:'rgba(0,0,0,.68)',color:'white',fontSize:Math.max(12,width*.012)}}>{asset.attribution_required?asset.attribution:asset.title}</div>
+      </div>;
+     })}
      {scene.focus_regions?.map(r=>{const region=toCanvasRegion(r.region,sourceDimensions,width,height);return <div key={r.component_id} style={{position:'absolute',left:`${region.x*100}%`,top:`${region.y*100}%`,width:`${region.width*100}%`,height:`${region.height*100}%`,border:'2px solid rgba(80,210,255,.9)',borderRadius:12,boxShadow:'0 0 24px rgba(40,180,255,.45)'}}/>})}
      {scene.overlays?.filter(overlayVisible).map(o=>{const anchor=toCanvasRegion(o.anchor_region,sourceDimensions,width,height);return <div key={o.id} style={{position:'absolute',left:anchor?`${clamp(anchor.x+anchor.width/2,.08,.78)*100}%`:'50%',top:anchor?`${clamp(anchor.y+anchor.height/2,.08,.72)*100}%`:'42%',transform:'translate(-50%,-50%)',padding:'12px 20px',borderRadius:12,background:'rgba(5,17,32,.88)',border:'1px solid #55d8ff',color:'white',fontSize:Math.max(24,width*.025),fontWeight:800,letterSpacing:'.02em',boxShadow:'0 8px 36px rgba(0,0,0,.35)',whiteSpace:'nowrap'}}>{o.text}</div>})}
     </div>

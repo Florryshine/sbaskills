@@ -1,4 +1,4 @@
-name: Image Explainer Phases 1–6 Tests
+name: Image Explainer Phases 1–7 Tests
 
 on:
   push:
@@ -40,6 +40,7 @@ jobs:
         run: node --test tests/image-explainer-*.test.mjs
       - name: Check research, script and narration modules
         run: |
+          node --check lib/image-explainer/assets.mjs
           node --check lib/image-explainer/research.mjs
           node --check lib/image-explainer/script.mjs
           node --check lib/image-explainer/narration-manifest.mjs
