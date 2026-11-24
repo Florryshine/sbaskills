@@ -209,13 +209,41 @@ export async function PATCH(req) {
   if (response) return response;
   try {
     const body = await req.json();
-    if (!body?.id || !Array.isArray(body?.components) || body.components.length > 100) {
-      return NextResponse.json({ error: 'Provide a project id and no more than 100 components.' }, { status: 400 });
-    }
+    if (!body?.id) return NextResponse.json({ error: 'Provide a project id.' }, { status: 400 });
     const supabase = createAdminClient();
     const { data: current, error: readError } = await supabase.from('image_explainer_jobs')
-      .select('id,status,vision_analysis,source_images').eq('id', body.id).single();
+      .select('id,title,status,vision_analysis,source_images').eq('id', body.id).single();
     if (readError || !current) return NextResponse.json({ error: 'Project not found.' }, { status: 404 });
+
+    if (body.action === 'retry-analysis') {
+      if (current.status !== 'failed' || current.vision_analysis) {
+        return NextResponse.json({ error: 'Only failed projects without a completed image analysis can be retried.' }, { status: 409 });
+      }
+      const source = current.source_images?.[0];
+      if (!source?.path || !source?.mimeType || !source?.width || !source?.height) {
+        return NextResponse.json({ error: 'The saved source image metadata is incomplete.' }, { status: 409 });
+      }
+      const { data: downloaded, error: downloadError } = await supabase.storage
+        .from('image-explainer-sources').download(source.path);
+      if (downloadError || !downloaded) throw new Error(downloadError?.message || 'Could not retrieve the saved source image.');
+      const buffer = Buffer.from(await downloaded.arrayBuffer());
+      const analysis = await analyse(buffer, source.mimeType, { width: source.width, height: source.height });
+      const { data: retriedJob, error: retryError } = await supabase.from('image_explainer_jobs')
+        .update({
+          status: 'analysed', stage: 'image_analysis_complete',
+          stage_message: `Analysis retry complete. Detected ${analysis.components.length} image components.`,
+          vision_analysis: analysis, error_message: null, updated_at: new Date().toISOString(),
+        })
+        .eq('id', body.id)
+        .select('id,title,status,stage,stage_message,production_mode,spec,source_images,vision_analysis,created_at')
+        .single();
+      if (retryError) throw new Error(retryError.message);
+      return NextResponse.json({ job: retriedJob });
+    }
+
+    if (!Array.isArray(body.components) || body.components.length > 100) {
+      return NextResponse.json({ error: 'Provide no more than 100 components.' }, { status: 400 });
+    }
     if (!['analysed', 'failed'].includes(current.status) || !current.vision_analysis) {
       return NextResponse.json({ error: 'Only analysed projects can have their detected regions edited.' }, { status: 409 });
     }
