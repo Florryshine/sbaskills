@@ -6,6 +6,7 @@ import {bundle} from '@remotion/bundler';
 import {renderMedia,selectComposition} from '@remotion/renderer';
 import {readFile,writeFile,mkdir,rm,stat} from 'node:fs/promises';
 import {existsSync} from 'node:fs';
+import {execFileSync} from 'node:child_process';
 import {tmpdir} from 'node:os';
 import path from 'node:path';
 import {fileURLToPath} from 'node:url';
@@ -23,8 +24,12 @@ const maxMs=Number(process.env.IMAGE_EXPLAINER_RENDER_MAX_MS||40*60*1000);
 const fps=30;
 
 function chromePath(){
- const candidates=[process.env.CHROME_PATH,'/usr/bin/google-chrome','/usr/bin/chromium','/usr/bin/chromium-browser',path.join(process.env.HOME||'','/.cache/puppeteer/chrome/linux-*/chrome-linux64/chrome')].filter(Boolean);
- for(const p of candidates) if(!p.includes('*')&&existsSync(p)) return p;
+ const candidates=[process.env.CHROME_PATH,'/usr/bin/google-chrome','/usr/bin/chromium','/usr/bin/chromium-browser'].filter(Boolean);
+ for(const p of candidates) if(existsSync(p)) return p;
+ for(const base of [path.join(process.env.HOME||'','/.cache/remotion'),path.join(process.env.HOME||'','/.cache/puppeteer')]) {
+  if(!existsSync(base)) continue;
+  try { const found=execFileSync('sh',['-lc',`find "${base}" -type f -name chrome-headless-shell -o -name chrome`],{encoding:'utf8',stdio:['ignore','pipe','ignore']}).trim().split('\n').find(p=>p&&existsSync(p)); if(found)return found; } catch {}
+ }
  return null;
 }
 async function update(job,patch){
