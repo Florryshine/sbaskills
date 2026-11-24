@@ -81,8 +81,8 @@ export async function POST(req) {
 Brand: Shiney Brain Academy.
 Tone: ${String(tone).slice(0, 160)}.
 Audience: ${String(audience).slice(0, 160)}.
-Topic: ${asset.keyword || asset.title || 'Learning topic'}.
-Subject: ${asset.subject || 'General'}.
+Topic: ${topic}.
+Subject: ${subject}.
 Summary: ${asset.summary || asset.description || 'No summary supplied.'}
 Key concepts: ${(asset.key_concepts || []).slice(0, 8).join('; ') || 'Not supplied'}.
 Facts: ${(asset.facts || []).slice(0, 8).join('; ') || 'Not supplied'}.
