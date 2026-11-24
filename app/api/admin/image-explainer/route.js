@@ -1,4 +1,5 @@
 import { NextResponse } from 'next/server';
+import { randomUUID } from 'node:crypto';
 import { GoogleGenerativeAI } from '@google/generative-ai';
 import { requireAdminApi } from '@/lib/require-admin-api';
 import { createAdminClient } from '@/lib/supabase-admin';
@@ -7,45 +8,99 @@ export const runtime = 'nodejs';
 export const maxDuration = 60;
 
 const MAX_BYTES = 10 * 1024 * 1024;
-const MIME = new Set(['image/jpeg', 'image/png', 'image/webp']);
-const MODES = new Set(['educational','product_ad','product_demo','scientific','technical','documentary','general']);
+const MAX_PIXELS = 40_000_000;
+const MIME_FORMATS = { 'image/jpeg': 'jpeg', 'image/png': 'png', 'image/webp': 'webp' };
+const MODES = new Set(['educational', 'product_ad', 'product_demo', 'scientific', 'technical', 'documentary', 'general']);
+
+function safeText(value, max = 500) {
+  return typeof value === 'string' ? value.trim().slice(0, max) : '';
+}
 
 function cleanRegion(region, width, height) {
   if (!region || typeof region !== 'object') return null;
-  const x = Math.max(0, Math.min(width, Number(region.x) || 0));
-  const y = Math.max(0, Math.min(height, Number(region.y) || 0));
-  const right = Math.max(x, Math.min(width, Number(region.x) + Number(region.width)));
-  const bottom = Math.max(y, Math.min(height, Number(region.y) + Number(region.height)));
+  const values = ['x', 'y', 'width', 'height'].map((key) => Number(region[key]));
+  if (!values.every(Number.isFinite)) return null;
+  const [rawX, rawY, rawWidth, rawHeight] = values;
+  const x = Math.max(0, Math.min(width, rawX));
+  const y = Math.max(0, Math.min(height, rawY));
+  const right = Math.max(x, Math.min(width, rawX + rawWidth));
+  const bottom = Math.max(y, Math.min(height, rawY + rawHeight));
   if (right - x < 2 || bottom - y < 2) return null;
-  return { x, y, width: right - x, height: bottom - y,
-    normalized: { x: x / width, y: y / height, width: (right-x)/width, height: (bottom-y)/height } };
+  return {
+    x: Math.round(x), y: Math.round(y),
+    width: Math.round(right - x), height: Math.round(bottom - y),
+    normalized: {
+      x: x / width, y: y / height,
+      width: (right - x) / width, height: (bottom - y) / height,
+    },
+  };
+}
+
+function normalizeAnalysis(parsed, dimensions, provider) {
+  const { width, height } = dimensions;
+  const components = (Array.isArray(parsed.components) ? parsed.components : [])
+    .slice(0, 100)
+    .map((component, index) => {
+      const region = cleanRegion(component?.region, width, height);
+      if (!region) return null;
+      return {
+        id: safeText(component.id, 80) || `component-${index + 1}`,
+        name: safeText(component.name, 120) || `Component ${index + 1}`,
+        label_text: safeText(component.label_text, 160) || null,
+        description: safeText(component.description, 500),
+        function: safeText(component.function, 500),
+        region,
+        confidence: Math.max(0, Math.min(1, Number(component.confidence) || 0)),
+        needs_verification: component.needs_verification !== false,
+      };
+    }).filter(Boolean);
+
+  return {
+    image_type: safeText(parsed.image_type, 60) || 'other',
+    subject: safeText(parsed.subject, 180),
+    summary: safeText(parsed.summary, 2000),
+    confidence: Math.max(0, Math.min(1, Number(parsed.confidence) || 0)),
+    components,
+    spatial_relationships: Array.isArray(parsed.spatial_relationships)
+      ? parsed.spatial_relationships.slice(0, 100).map((v) => safeText(String(v), 300)).filter(Boolean) : [],
+    uncertainties: Array.isArray(parsed.uncertainties)
+      ? parsed.uncertainties.slice(0, 50).map((v) => safeText(String(v), 300)).filter(Boolean) : [],
+    image_dimensions: dimensions,
+    provider,
+    analysed_at: new Date().toISOString(),
+  };
 }
 
 async function analyse(buffer, mimeType, dimensions) {
-  const keys = [process.env.GEMINI_API_KEY_1,process.env.GEMINI_API_KEY_2,process.env.GEMINI_API_KEY].filter(Boolean);
-  if (!keys.length) throw new Error('Image analysis is not configured: add GEMINI_API_KEY to the worker/app environment.');
+  const keys = [
+    process.env.GEMINI_API_KEY_1, process.env.GEMINI_API_KEY_2,
+    process.env.GEMINI_API_KEY_3, process.env.GEMINI_API_KEY,
+  ].filter(Boolean);
+  if (!keys.length) throw new Error('Image analysis is not configured. Add a Gemini API key to the app environment.');
   const prompt = `Inspect this uploaded image for an Image-to-Explainer video project.
-Return strict JSON only with this schema:
-{"image_type":"diagram|illustration|photograph|chart|technical_drawing|product|other","subject":"concise subject","summary":"what is visibly shown","confidence":0.0,"components":[{"name":"component name","label_text":"exact visible label or null","description":"visually grounded description","function":"function only when reliably known; otherwise say needs research","region":{"x":0,"y":0,"width":0,"height":0},"confidence":0.0,"needs_verification":false}],"spatial_relationships":[],"uncertainties":[]}
-Original image dimensions: ${dimensions.width}x${dimensions.height} pixels. Coordinates must be pixel coordinates relative to this original image, origin at top-left. Do not invent labels or claim a region if uncertain. Keep each region inside the image. Return an empty components array if no components can be reliably located.`;
+Return strict JSON only:
+{"image_type":"diagram|illustration|photograph|chart|technical_drawing|product|other","subject":"concise subject","summary":"what is visibly shown","confidence":0.0,"components":[{"name":"component name","label_text":"exact visible label or null","description":"visually grounded description","function":"only state a function if reliably known; otherwise say needs research","region":{"x":0,"y":0,"width":0,"height":0},"confidence":0.0,"needs_verification":true}],"spatial_relationships":["relationships visible in the image"],"uncertainties":["things that cannot be determined from pixels alone"]}
+Original image dimensions: ${dimensions.width}x${dimensions.height} pixels. Coordinates are pixel coordinates relative to the original image, origin at top-left. Every region must be inside the image. Do not invent labels, functions, or regions. Distinguish visible observations from inferred function. Return at most 100 components.`;
+
   let lastError;
   for (const key of keys) {
     const client = new GoogleGenerativeAI(key);
-    for (const modelName of ['gemini-2.5-flash','gemini-2.0-flash']) {
+    for (const modelName of ['gemini-2.5-flash', 'gemini-2.0-flash']) {
       try {
-        const model = client.getGenerativeModel({model:modelName});
+        const model = client.getGenerativeModel({ model: modelName });
         const result = await model.generateContent({
-          contents:[{role:'user',parts:[{inlineData:{mimeType,data:buffer.toString('base64')}},{text:prompt}]}],
-          generationConfig:{responseMimeType:'application/json',temperature:0.15,maxOutputTokens:4096}
+          contents: [{ role: 'user', parts: [
+            { inlineData: { mimeType, data: buffer.toString('base64') } },
+            { text: prompt },
+          ] }],
+          generationConfig: { responseMimeType: 'application/json', temperature: 0.15, maxOutputTokens: 4096 },
         });
-        const parsed = JSON.parse(result.response.text().replace(/^```(?:json)?/i,'').replace(/```$/,'').trim());
-        const width=dimensions.width, height=dimensions.height;
-        const components=(Array.isArray(parsed.components)?parsed.components:[]).map(c=>({
-          ...c, region:cleanRegion(c.region,width,height),
-          confidence:Math.max(0,Math.min(1,Number(c.confidence)||0))
-        })).filter(c=>c.region);
-        return {...parsed,components, image_dimensions:dimensions, provider:`Gemini ${modelName}`};
-      } catch(e) { lastError=e; }
+        const parsed = JSON.parse(result.response.text().replace(/^```(?:json)?/i, '').replace(/```$/, '').trim());
+        return normalizeAnalysis(parsed, dimensions, `Gemini ${modelName}`);
+      } catch (error) {
+        lastError = error;
+        if (/SAFETY|blocked/i.test(error?.message || '')) throw new Error('The vision provider declined this image. Try another image.');
+      }
     }
   }
   throw new Error(lastError?.message || 'All configured vision models failed.');
@@ -54,52 +109,163 @@ Original image dimensions: ${dimensions.width}x${dimensions.height} pixels. Coor
 export async function POST(req) {
   const { user, response } = await requireAdminApi();
   if (response) return response;
+
+  let supabase;
+  let jobId;
+  let storagePath;
   try {
     const form = await req.formData();
     const file = form.get('image');
-    if (!file || typeof file.arrayBuffer !== 'function') return NextResponse.json({error:'Upload one image to analyse.'},{status:400});
-    if (!MIME.has(file.type)) return NextResponse.json({error:'Supported formats: JPG, PNG and WEBP.'},{status:415});
-    if (file.size <= 0 || file.size > MAX_BYTES) return NextResponse.json({error:'Image must be between 1 byte and 10 MB.'},{status:413});
-    const mode = MODES.has(form.get('productionMode')) ? form.get('productionMode') : 'educational';
-    const instruction = String(form.get('instruction') || '').slice(0,2000);
-    const title = String(form.get('title') || file.name || 'Image explainer project').slice(0,160);
+    if (!file || typeof file.arrayBuffer !== 'function') {
+      return NextResponse.json({ error: 'Upload one image to analyse.' }, { status: 400 });
+    }
+    if (!Object.hasOwn(MIME_FORMATS, file.type)) {
+      return NextResponse.json({ error: 'Supported formats: JPG, PNG and WEBP.' }, { status: 415 });
+    }
+    if (file.size <= 0 || file.size > MAX_BYTES) {
+      return NextResponse.json({ error: 'Image must be between 1 byte and 10 MB.' }, { status: 413 });
+    }
+
     const buffer = Buffer.from(await file.arrayBuffer());
     const sharp = (await import('sharp')).default;
-    const metadata = await sharp(buffer).metadata();
-    if (!metadata.width || !metadata.height) return NextResponse.json({error:'Could not read image dimensions.'},{status:400});
-    const supabase = createAdminClient();
-    const id = crypto.randomUUID();
-    const ext = file.type === 'image/jpeg' ? 'jpg' : file.type.split('/')[1];
-    const storagePath = `${user.id}/${id}/source.${ext}`;
-    const {error:uploadError}=await supabase.storage.from('image-explainer-sources').upload(storagePath,buffer,{contentType:file.type,upsert:false});
-    if (uploadError) throw new Error(`Source upload failed: ${uploadError.message}. Apply the image explainer migration first.`);
-    const analysis = await analyse(buffer,file.type,{width:metadata.width,height:metadata.height});
-    const {data:job,error:insertError}=await supabase.from('image_explainer_jobs').insert({
-      id,created_by:user.id,title,status:'analysed',stage:'image_analysis_complete',
-      stage_message:'Image analysed. Review detected components before continuing.',
-      production_mode:mode,user_instruction:instruction,
-      spec:{aspect:String(form.get('aspect')||'16:9'),targetSeconds:Number(form.get('duration')||90),language:String(form.get('language')||'English')},
-      source_images:[{path:storagePath,name:file.name,mimeType:file.type,width:metadata.width,height:metadata.height,size:file.size}],
-      vision_analysis:analysis
-    }).select('id,title,status,stage,stage_message,production_mode,source_images,vision_analysis,created_at').single();
+    const metadata = await sharp(buffer, { limitInputPixels: MAX_PIXELS }).metadata();
+    if (metadata.format !== MIME_FORMATS[file.type]) {
+      return NextResponse.json({ error: 'The file contents do not match the selected image format.' }, { status: 415 });
+    }
+    if (!metadata.width || !metadata.height || metadata.width * metadata.height > MAX_PIXELS) {
+      return NextResponse.json({ error: 'Image dimensions are invalid or exceed the 40-megapixel safety limit.' }, { status: 413 });
+    }
+
+    const modeValue = form.get('productionMode');
+    const mode = MODES.has(modeValue) ? modeValue : 'educational';
+    const instruction = safeText(form.get('instruction'), 2000);
+    const title = safeText(form.get('title'), 160) || safeText(file.name, 160) || 'Image explainer project';
+    const aspectValue = safeText(form.get('aspect'), 10);
+    const aspect = ['16:9', '9:16', '1:1'].includes(aspectValue) ? aspectValue : '16:9';
+    const durationValue = Number(form.get('duration') || 90);
+    const targetSeconds = Number.isFinite(durationValue) ? Math.max(20, Math.min(900, durationValue)) : 90;
+    const language = safeText(form.get('language'), 40) || 'English';
+
+    supabase = createAdminClient();
+    jobId = randomUUID();
+    const ext = MIME_FORMATS[file.type] === 'jpeg' ? 'jpg' : MIME_FORMATS[file.type];
+    storagePath = `${user.id}/${jobId}/source.${ext}`;
+
+    const { error: uploadError } = await supabase.storage
+      .from('image-explainer-sources')
+      .upload(storagePath, buffer, { contentType: file.type, upsert: false });
+    if (uploadError) throw new Error(`Source upload failed: ${uploadError.message}. Apply the image-explainer migration first.`);
+
+    const sourceImage = {
+      path: storagePath, name: safeText(file.name, 180) || `source.${ext}`,
+      mimeType: file.type, width: metadata.width, height: metadata.height, size: file.size,
+    };
+    const { error: insertError } = await supabase.from('image_explainer_jobs').insert({
+      id: jobId, created_by: user.id, title, status: 'analysing', stage: 'image_analysis',
+      stage_message: 'Image securely uploaded. AI is identifying visible components.',
+      production_mode: mode, user_instruction: instruction,
+      spec: { aspect, targetSeconds, language },
+      source_images: [sourceImage],
+    });
     if (insertError) {
       await supabase.storage.from('image-explainer-sources').remove([storagePath]);
+      storagePath = null;
       throw new Error(insertError.message);
     }
-    return NextResponse.json({job},{status:201});
-  } catch(error) {
-    console.error('[image-explainer] analysis failed',error);
-    return NextResponse.json({error:error.message||'Image analysis failed.'},{status:500});
+
+    const analysis = await analyse(buffer, file.type, { width: metadata.width, height: metadata.height });
+    const { data: job, error: updateError } = await supabase.from('image_explainer_jobs')
+      .update({
+        status: 'analysed', stage: 'image_analysis_complete',
+        stage_message: `Detected ${analysis.components.length} image components. Review and correct the regions.`,
+        vision_analysis: analysis, error_message: null, updated_at: new Date().toISOString(),
+      })
+      .eq('id', jobId)
+      .select('id,title,status,stage,stage_message,production_mode,spec,source_images,vision_analysis,created_at')
+      .single();
+    if (updateError) throw new Error(updateError.message);
+    return NextResponse.json({ job }, { status: 201 });
+  } catch (error) {
+    console.error('[image-explainer] upload/analysis failed', error);
+    if (supabase && jobId) {
+      await supabase.from('image_explainer_jobs').update({
+        status: 'failed', stage: 'image_analysis_failed',
+        stage_message: 'Image analysis failed. The saved source can be retried.',
+        error_message: safeText(error?.message || 'Image analysis failed.', 1000),
+        updated_at: new Date().toISOString(),
+      }).eq('id', jobId);
+    } else if (supabase && storagePath) {
+      await supabase.storage.from('image-explainer-sources').remove([storagePath]);
+    }
+    return NextResponse.json({
+      error: error?.message || 'Image analysis failed.',
+      jobId: jobId || null,
+    }, { status: 500 });
+  }
+}
+
+export async function PATCH(req) {
+  const { response } = await requireAdminApi();
+  if (response) return response;
+  try {
+    const body = await req.json();
+    if (!body?.id || !Array.isArray(body?.components) || body.components.length > 100) {
+      return NextResponse.json({ error: 'Provide a project id and no more than 100 components.' }, { status: 400 });
+    }
+    const supabase = createAdminClient();
+    const { data: current, error: readError } = await supabase.from('image_explainer_jobs')
+      .select('id,status,vision_analysis,source_images').eq('id', body.id).single();
+    if (readError || !current) return NextResponse.json({ error: 'Project not found.' }, { status: 404 });
+    if (!['analysed', 'failed'].includes(current.status) || !current.vision_analysis) {
+      return NextResponse.json({ error: 'Only analysed projects can have their detected regions edited.' }, { status: 409 });
+    }
+    const dimensions = current.vision_analysis.image_dimensions || current.source_images?.[0];
+    const width = Number(dimensions?.width), height = Number(dimensions?.height);
+    if (!width || !height) return NextResponse.json({ error: 'Source image dimensions are missing.' }, { status: 409 });
+
+    const components = body.components.map((component, index) => {
+      const region = cleanRegion(component?.region, width, height);
+      if (!region) throw new Error(`Component ${index + 1} has an invalid or empty region.`);
+      return {
+        id: safeText(component.id, 80) || `component-${index + 1}`,
+        name: safeText(component.name, 120) || `Component ${index + 1}`,
+        label_text: safeText(component.label_text, 160) || null,
+        description: safeText(component.description, 500),
+        function: safeText(component.function, 500),
+        region,
+        confidence: Math.max(0, Math.min(1, Number(component.confidence) || 0)),
+        needs_verification: Boolean(component.needs_verification),
+      };
+    });
+    const visionAnalysis = {
+      ...current.vision_analysis,
+      components,
+      reviewed_at: new Date().toISOString(),
+      reviewed_by_admin: true,
+    };
+    const { data: job, error: updateError } = await supabase.from('image_explainer_jobs')
+      .update({
+        vision_analysis: visionAnalysis,
+        stage_message: 'Detected components and image regions reviewed by an administrator.',
+        updated_at: new Date().toISOString(),
+      })
+      .eq('id', body.id)
+      .select('id,title,status,stage,stage_message,vision_analysis')
+      .single();
+    if (updateError) throw new Error(updateError.message);
+    return NextResponse.json({ job });
+  } catch (error) {
+    return NextResponse.json({ error: error?.message || 'Could not save image regions.' }, { status: 400 });
   }
 }
 
 export async function GET() {
   const { response } = await requireAdminApi();
   if (response) return response;
-  const supabase=createAdminClient();
-  const {data,error}=await supabase.from('image_explainer_jobs')
+  const supabase = createAdminClient();
+  const { data, error } = await supabase.from('image_explainer_jobs')
     .select('id,title,status,stage,stage_message,production_mode,video_url,error_message,created_at,vision_analysis')
-    .order('created_at',{ascending:false}).limit(25);
-  if(error) return NextResponse.json({error:error.message},{status:500});
-  return NextResponse.json({jobs:data||[]});
+    .order('created_at', { ascending: false }).limit(25);
+  if (error) return NextResponse.json({ error: error.message }, { status: 500 });
+  return NextResponse.json({ jobs: data || [] });
 }
