@@ -32,3 +32,13 @@ test('validator catches gaps and invalid subtitle boundaries',()=>{
  assert.equal(validateExplainerTimeline(t,2),true);
  t.scenes[1].start_seconds=4.5;assert.equal(validateExplainerTimeline(t,2),false);
 });
+
+test('only explicitly approved and licence-verified assets enter the scene timeline',()=>{
+ const asset={id:'asset-1',title:'Heart anatomy footage',query:'heart anatomy',media_type:'video',media_url:'https://videos.pexels.com/video-files/123/123.mp4',source_url:'https://www.pexels.com/video/123/',provider:'pexels',license:'Pexels licence checked',creator:'Creator',review_status:'approved',license_verified:true};
+ const directed={...script,scenes:[{...script.scenes[0],visual:{...script.scenes[0].visual,asset_search:['heart anatomy']}},script.scenes[1]]};
+ const t=buildExplainerTimeline({script:directed,narrationManifest:manifest,imageDimensions:{width:1000,height:800},components,approvedAssets:[asset]});
+ assert.equal(t.scenes[0].supporting_assets.length,1);
+ assert.equal(t.scenes[0].supporting_assets[0].media_type,'video');
+ const blocked=buildExplainerTimeline({script:directed,narrationManifest:manifest,imageDimensions:{width:1000,height:800},components,approvedAssets:[{...asset,license_verified:false}]});
+ assert.equal(blocked.scenes[0].supporting_assets.length,0);
+});
