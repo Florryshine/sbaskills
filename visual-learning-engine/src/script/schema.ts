@@ -127,14 +127,13 @@ export function validateScript(
         if (items.length < 2) throw new ScriptValidationError(`scene ${i} (list): needs at least 2 valid items`);
         return { type: 'list', ...base, title: cleanText(sc.title, 80) || job.title.slice(0, 80), items };
       }
-      case 'stat':
-        return {
-          type: 'stat',
-          ...base,
-          number: cleanText(sc.number, 12) || '10x',
-          headline: cleanText(sc.headline, 110),
-          image_prompt: cleanImagePrompt(sc.image_prompt) || undefined,
-        };
+      case 'stat': {
+        const source = cleanText(sc.source, 240);
+        if (!source) throw new ScriptValidationError(`scene ${i} (stat): factual statistics require a traceable source; remove the stat if no source is available`);
+        const number = cleanText(sc.number, 12);
+        if (!number) throw new ScriptValidationError(`scene ${i} (stat): number is required`);
+        return { type: 'stat', ...base, number, headline: cleanText(sc.headline, 110), source, image_prompt: cleanImagePrompt(sc.image_prompt) || undefined };
+      }
       case 'process': {
         const stepsRaw = Array.isArray(sc.steps) ? sc.steps : [];
         const steps = stepsRaw.slice(0, 4).flatMap((it) => {
@@ -171,6 +170,20 @@ export function validateScript(
         throw new ScriptValidationError(`scene ${i}: unreachable`);
     }
   });
+
+  // A valid episode must teach, not merely introduce a topic and tell a story.
+  const teachingScenes = scenes.filter((scene) =>
+    ['statement', 'compare', 'list', 'stat', 'process'].includes(scene.type),
+  );
+  if (teachingScenes.length < 2) {
+    throw new ScriptValidationError('episode needs at least two substantive teaching scenes (concept explanation, meaningful comparison, useful list, sourced evidence, or real process)');
+  }
+  const shortTeachingScene = teachingScenes.find((scene) =>
+    scene.narration.trim().split(/\\s+/).filter(Boolean).length < 12,
+  );
+  if (shortTeachingScene) {
+    throw new ScriptValidationError('each teaching scene needs an explanation, not just a headline: provide at least 12 spoken words of useful teaching narration');
+  }
 
   const meta = {
     title: cleanText(metaRaw.title, 120) || job.title.slice(0, 120),
