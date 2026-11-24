@@ -11,6 +11,7 @@ export default function CartoonStudioPage() {
   const [topic, setTopic] = useState('');
   const [subject, setSubject] = useState('Biology');
   const [orientation, setOrientation] = useState('9:16');
+  const [targetDuration, setTargetDuration] = useState(120);
   const [loading, setLoading] = useState(true);
   const [creating, setCreating] = useState(false);
   const [busyId, setBusyId] = useState('');
@@ -47,7 +48,7 @@ export default function CartoonStudioPage() {
       const response = await fetch('/api/admin/cartoon-studio', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ action: 'create', topic: topic.trim(), title: topic.trim(), subject, orientation, subtitles: true }),
+        body: JSON.stringify({ action: 'create', topic: topic.trim(), title: topic.trim(), subject, orientation, targetDurationSeconds: targetDuration, subtitles: true }),
       });
       const data = await response.json();
       if (!response.ok) throw new Error(data.error || 'Could not queue the cartoon.');
@@ -111,6 +112,11 @@ export default function CartoonStudioPage() {
                   <option value="9:16">Vertical · 9:16</option>
                   <option value="16:9">Landscape · 16:9</option>
                   <option value="1:1">Square · 1:1</option>
+                </select>
+              </label>
+              <label className="text-sm text-slate-300">Video duration
+                <select value={targetDuration} onChange={e => setTargetDuration(Number(e.target.value))} className="mt-2 w-full rounded-xl border border-slate-700 bg-slate-950 px-3 py-3 text-white">
+                  <option value={30}>30 seconds</option><option value={60}>1 minute</option><option value={120}>2 minutes</option><option value={180}>3 minutes</option><option value={300}>5 minutes</option><option value={480}>8 minutes</option><option value={600}>10 minutes</option>
                 </select>
               </label>
             </div>
