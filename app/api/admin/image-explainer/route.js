@@ -5,6 +5,7 @@ import { requireAdminApi } from '@/lib/require-admin-api';
 import { createAdminClient } from '@/lib/supabase-admin';
 import { cleanImageRegion } from '@/lib/image-explainer/regions.mjs';
 import { researchImageExplainer } from '@/lib/image-explainer/research.mjs';
+import { generateExplainerPlan } from '@/lib/image-explainer/script.mjs';
 
 export const runtime = 'nodejs';
 export const maxDuration = 60;
@@ -206,7 +207,7 @@ export async function PATCH(req) {
     if (!body?.id) return NextResponse.json({ error: 'Provide a project id.' }, { status: 400 });
     const supabase = createAdminClient();
     const { data: current, error: readError } = await supabase.from('image_explainer_jobs')
-      .select('id,title,status,vision_analysis,source_images,user_instruction').eq('id', body.id).single();
+      .select('id,title,status,vision_analysis,source_images,user_instruction,production_mode,spec,research_bundle,script,storyboard').eq('id', body.id).single();
     if (readError || !current) return NextResponse.json({ error: 'Project not found.' }, { status: 404 });
 
     if (body.action === 'research') {
@@ -245,6 +246,77 @@ export async function PATCH(req) {
         }).eq('id', body.id);
         throw researchError;
       }
+    }
+
+    if (body.action === 'generate-script') {
+      if (!current.vision_analysis?.subject) {
+        return NextResponse.json({ error: 'Complete image analysis before generating a script.' }, { status: 409 });
+      }
+      if (!current.vision_analysis?.reviewed_by_admin) {
+        return NextResponse.json({ error: 'Review and save the image regions before generating the script.' }, { status: 409 });
+      }
+      if (!current.research_bundle) {
+        return NextResponse.json({ error: 'Run research and asset discovery before generating the script.' }, { status: 409 });
+      }
+      const { error: stageError } = await supabase.from('image_explainer_jobs')
+        .update({
+          status: 'scripting', stage: 'script_storyboard_generation',
+          stage_message: 'Writing narration and directing the visual storyboard.',
+          error_message: null, updated_at: new Date().toISOString(),
+        }).eq('id', body.id);
+      if (stageError) throw new Error(stageError.message);
+      try {
+        const generated = await generateExplainerPlan({
+          job: current,
+          analysis: current.vision_analysis,
+          research: current.research_bundle,
+          instruction: current.user_instruction || '',
+        });
+        const { data: plannedJob, error: saveError } = await supabase.from('image_explainer_jobs')
+          .update({
+            status: 'analysed', stage: 'script_storyboard_ready',
+            stage_message: `Draft script and storyboard ready: ${generated.plan.scenes.length} directed scenes. Human review required.`,
+            script: generated.plan, storyboard: generated.plan.scenes,
+            error_message: null, updated_at: new Date().toISOString(),
+          })
+          .eq('id', body.id)
+          .select('id,title,status,stage,stage_message,script,storyboard')
+          .single();
+        if (saveError) throw new Error(saveError.message);
+        return NextResponse.json({ job: { ...plannedJob, script_provider: generated.provider } });
+      } catch (generationError) {
+        await supabase.from('image_explainer_jobs').update({
+          status: 'analysed', stage: 'script_generation_failed',
+          stage_message: 'Script generation failed. Your image analysis and research are preserved; retry when ready.',
+          error_message: safeText(generationError?.message || 'Script generation failed.', 1000),
+          updated_at: new Date().toISOString(),
+        }).eq('id', body.id);
+        throw generationError;
+      }
+    }
+
+    if (body.action === 'save-script') {
+      if (!current.vision_analysis?.reviewed_by_admin || !current.research_bundle) {
+        return NextResponse.json({ error: 'The reviewed image map and research bundle are required.' }, { status: 409 });
+      }
+      const { normalizeExplainerPlan } = await import('@/lib/image-explainer/script.mjs');
+      const targetSeconds = Math.max(20, Math.min(900, Number(current.spec?.targetSeconds) || 90));
+      const plan = normalizeExplainerPlan(body.script, { targetSeconds, aspect: current.spec?.aspect || '16:9' });
+      const componentIds = new Set((current.vision_analysis.components || []).map((item) => item.id));
+      for (const scene of plan.scenes) {
+        scene.visual.component_ids = scene.visual.component_ids.filter((id) => componentIds.has(id));
+      }
+      const { data: savedJob, error: saveError } = await supabase.from('image_explainer_jobs')
+        .update({
+          script: { ...plan, review_status: 'admin_reviewed', reviewed_at: new Date().toISOString() },
+          storyboard: plan.scenes,
+          status: 'analysed', stage: 'script_storyboard_reviewed',
+          stage_message: 'Script and storyboard saved after administrator review.',
+          error_message: null, updated_at: new Date().toISOString(),
+        }).eq('id', body.id)
+        .select('id,title,status,stage,stage_message,script,storyboard').single();
+      if (saveError) throw new Error(saveError.message);
+      return NextResponse.json({ job: savedJob });
     }
 
     if (body.action === 'retry-analysis') {
@@ -326,7 +398,7 @@ export async function GET(req) {
   const id = new URL(req.url).searchParams.get('id');
   if (id) {
     const { data: job, error } = await supabase.from('image_explainer_jobs')
-      .select('id,title,status,stage,stage_message,production_mode,spec,source_images,vision_analysis,research_bundle,error_message,created_at')
+      .select('id,title,status,stage,stage_message,production_mode,spec,source_images,vision_analysis,research_bundle,script,storyboard,error_message,created_at')
       .eq('id', id).single();
     if (error || !job) return NextResponse.json({ error: 'Project not found.' }, { status: 404 });
     const sourcePath = job.source_images?.[0]?.path;
@@ -339,7 +411,7 @@ export async function GET(req) {
     return NextResponse.json({ job, sourceUrl });
   }
   const { data, error } = await supabase.from('image_explainer_jobs')
-    .select('id,title,status,stage,stage_message,production_mode,video_url,error_message,created_at,vision_analysis,research_bundle')
+    .select('id,title,status,stage,stage_message,production_mode,video_url,error_message,created_at,vision_analysis,research_bundle,script,storyboard')
     .order('created_at', { ascending: false }).limit(25);
   if (error) return NextResponse.json({ error: error.message }, { status: 500 });
   return NextResponse.json({ jobs: data || [] });
