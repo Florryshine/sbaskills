@@ -58,7 +58,7 @@ function estimateSceneSeconds(narration: string, sceneType: string): number {
 /** How many shots a scene needs so no image lasts longer than maxSeconds. */
 function shotCountFor(narration: string, sceneType: string, maxSeconds: number): number {
   const est = estimateSceneSeconds(narration, sceneType);
-  return Math.max(1, Math.min(8, Math.ceil(est / Math.max(1, maxSeconds))));
+  return Math.max(1, Math.min(20, Math.ceil(est / Math.max(1, maxSeconds))));
 }
 
 /** Narration for every scene (resumable per scene). */
@@ -179,6 +179,7 @@ export async function prepareImages(
   });
   const concurrency = Math.max(1, Math.min(6, opts.imageConcurrency ?? 3));
   const assets: ImageManifest['assets'] = [];
+  const usedStockUrls = new Set<string>();
 
   let cursor = 0;
   const workers = Array.from({ length: concurrency }, async () => {
@@ -195,6 +196,7 @@ export async function prepareImages(
         preferred: opts.imageProvider,
         count: job.count,
         slot: job.slot,
+        usedStockUrls,
       });
       assets.push(...resolved);
     }

@@ -35,6 +35,7 @@ export interface ImageRequest {
   count?: number;
   /** 'a' | 'b' for the two compare sides (single shot each, no carousel) */
   slot?: 'a' | 'b';
+  usedStockUrls?: Set<string>;
 }
 
 function targetSize(aspect: '16:9' | '9:16' | '1:1'): { width: number; height: number; aspectHint: 'wide' | 'square' | 'tall' } {
@@ -125,6 +126,21 @@ async function generateZai(prompt: string, outPath: string, width: number, heigh
 interface StockHit {
   url: string;
   source: ImageProviderName;
+  title?: string;
+}
+
+function relevanceScore(hit: StockHit, query: string): number {
+  const terms = query.toLowerCase().split(/\s+/).filter(Boolean);
+  const haystack = (hit.title || '').toLowerCase().replace(/[^a-z0-9]+/g, ' ');
+  if (!haystack) return 0;
+  return terms.filter((term) => haystack.includes(term)).length / Math.max(1, terms.length);
+}
+
+function chooseRelevantHit(hits: StockHit[], query: string, usedUrls: Set<string>): StockHit | null {
+  return hits.filter((hit) => hit.url && !usedUrls.has(hit.url))
+    .map((hit) => ({ hit, score: relevanceScore(hit, query) }))
+    .filter(({ score }) => score >= 0.34)
+    .sort((a, b) => b.score - a.score)[0]?.hit ?? null;
 }
 
 export async function searchPexels(query: string, count: number, orientation: 'landscape' | 'portrait' | 'square'): Promise<StockHit[]> {
@@ -134,8 +150,8 @@ export async function searchPexels(query: string, count: number, orientation: 'l
   if (orientation !== 'square') params.set('orientation', orientation);
   const r = await fetchWithTimeout(`https://api.pexels.com/v1/search?${params}`, STOCK_TIMEOUT_MS, { Authorization: key });
   if (!r || !r.ok) return [];
-  const data = (await r.json().catch(() => null)) as { photos?: { src?: Record<string, string> }[] } | null;
-  return (data?.photos || []).slice(0, count).map((p): StockHit => ({ url: p.src?.large2x || p.src?.large || p.src?.original || '', source: 'pexels' })).filter((h) => Boolean(h.url));
+  const data = (await r.json().catch(() => null)) as { photos?: { alt?: string; src?: Record<string, string> }[] } | null;
+  return (data?.photos || []).slice(0, count).map((p): StockHit => ({ url: p.src?.large2x || p.src?.large || p.src?.original || '', source: 'pexels', title: p.alt || '' })).filter((h) => Boolean(h.url));
 }
 
 export async function searchPixabay(query: string, count: number, orientation: 'landscape' | 'portrait' | 'square', illustration: boolean): Promise<StockHit[]> {
@@ -152,8 +168,8 @@ export async function searchPixabay(query: string, count: number, orientation: '
   if (orientation === 'portrait') params.set('orientation', 'vertical');
   const r = await fetchWithTimeout(`https://pixabay.com/api/?${params}`, STOCK_TIMEOUT_MS);
   if (!r || !r.ok) return [];
-  const data = (await r.json().catch(() => null)) as { hits?: { largeImageURL?: string; webformatURL?: string }[] } | null;
-  return (data?.hits || []).slice(0, count).map((h): StockHit => ({ url: h.largeImageURL || h.webformatURL || '', source: 'pixabay' })).filter((h) => Boolean(h.url));
+  const data = (await r.json().catch(() => null)) as { hits?: { largeImageURL?: string; webformatURL?: string; tags?: string }[] } | null;
+  return (data?.hits || []).slice(0, count).map((h): StockHit => ({ url: h.largeImageURL || h.webformatURL || '', source: 'pixabay', title: h.tags || '' })).filter((h) => Boolean(h.url));
 }
 
 export async function searchWikimedia(query: string, count: number): Promise<StockHit[]> {
@@ -172,15 +188,15 @@ export async function searchWikimedia(query: string, count: number): Promise<Sto
     'User-Agent': STOCK_UA,
   });
   if (!r || !r.ok) return [];
-  const data = (await r.json().catch(() => null)) as { query?: { pages?: Record<string, { imageinfo?: { url: string; thumburl?: string; mime?: string; width?: number; height?: number }[] }> } } | null;
+  const data = (await r.json().catch(() => null)) as { query?: { pages?: Record<string, { title?: string; imageinfo?: { url: string; thumburl?: string; mime?: string; width?: number; height?: number }[] }> } } | null;
   const pages = data?.query?.pages ? Object.values(data.query.pages) : [];
   return pages
-    .map((p) => p.imageinfo?.[0])
-    .filter((info): info is NonNullable<typeof info> => Boolean(info))
-    .filter((info) => /jpeg|png|webp|svg/i.test(info.mime || ''))
-    .filter((info) => (info.width || 0) >= 500 && (info.height || 0) >= 400)
+    .map((p) => ({ info: p.imageinfo?.[0], title: p.title || '' }))
+    .filter((entry) => Boolean(entry.info))
+    .filter((entry) => /jpeg|png|webp|svg/i.test(entry.info?.mime || ''))
+    .filter((entry) => (entry.info?.width || 0) >= 500 && (entry.info?.height || 0) >= 400)
     .slice(0, count)
-    .map((info) => ({ url: info.thumburl || info.url, source: 'wikimedia' as const }));
+    .map((entry) => ({ url: entry.info!.thumburl || entry.info!.url, source: 'wikimedia' as const, title: entry.title }));
 }
 
 /** Openverse — key-less CC search (best-effort; anonymous rate limits apply). */
@@ -190,10 +206,10 @@ export async function searchOpenverse(query: string, count: number): Promise<Sto
     'User-Agent': STOCK_UA,
   });
   if (!r || !r.ok) return [];
-  const data = (await r.json().catch(() => null)) as { results?: { url?: string; thumbnail?: string }[] } | null;
+  const data = (await r.json().catch(() => null)) as { results?: { url?: string; thumbnail?: string; title?: string; name?: string }[] } | null;
   return (data?.results || [])
     .slice(0, count)
-    .map((h): StockHit => ({ url: h.url || h.thumbnail || '', source: 'openverse' }))
+    .map((h): StockHit => ({ url: h.url || h.thumbnail || '', source: 'openverse', title: h.title || h.name || '' }))
     .filter((h) => Boolean(h.url));
 }
 
@@ -302,7 +318,7 @@ function providerChain(style: StylePreset, preferred?: ImageProviderName): Image
 export async function resolveSceneImages(req: ImageRequest): Promise<ImageAsset[]> {
   const { width, height, aspectHint } = targetSize(req.aspect);
   const slot = req.slot;
-  const count = slot ? 1 : Math.max(1, Math.min(8, req.count ?? 1));
+  const count = slot ? 1 : Math.max(1, Math.min(20, req.count ?? 1));
   await mkdir(join(req.publicDir, 'images'), { recursive: true });
 
   // Stock search per (provider, shot-query): SHORT keyword queries (long
@@ -334,7 +350,9 @@ export async function resolveSceneImages(req: ImageRequest): Promise<ImageAsset[
       }
       stockCache.set(cacheKey, hits);
     }
-    return hits[Math.floor(Math.random() * Math.max(1, hits.length))] ?? null;
+    const selected = chooseRelevantHit(hits, query, req.usedStockUrls ?? new Set<string>());
+    if (selected) req.usedStockUrls?.add(selected.url);
+    return selected;
   };
 
   const assets: ImageAsset[] = [];
