@@ -2,6 +2,7 @@ import { NextResponse } from 'next/server';
 import { requireAdminApi } from '@/lib/require-admin-api';
 import { createAdminClient } from '@/lib/supabase-admin';
 import { buildExplainerTimeline, validateExplainerTimeline } from '@/lib/image-explainer/timeline.mjs';
+import { reviewAssetCandidates, approvedAssetsFromBundle } from '@/lib/image-explainer/assets.mjs';
 
 export const runtime = 'nodejs';
 
@@ -12,7 +13,7 @@ export async function GET(req) {
   if (!id) return NextResponse.json({ error: 'Project id is required.' }, { status: 400 });
   const supabase = createAdminClient();
   const { data, error } = await supabase.from('image_explainer_jobs')
-    .select('id,title,status,stage,stage_message,vision_analysis,script,narration_manifest,timeline,timeline_reviewed_at,video_url,storage_path,error_message')
+    .select('id,title,status,stage,stage_message,vision_analysis,script,narration_manifest,research_bundle,timeline,timeline_reviewed_at,video_url,storage_path,error_message')
     .eq('id', id).single();
   if (error || !data) return NextResponse.json({ error: 'Project not found.' }, { status: 404 });
   return NextResponse.json({ job: data });
@@ -24,15 +25,15 @@ export async function POST(req) {
   const supabase = createAdminClient();
   try {
     const body = await req.json();
-    if (!body?.id || !['generate','approve','queue-render','retry-render'].includes(body.action)) {
+    if (!body?.id || !['generate','approve','queue-render','retry-render','review-assets'].includes(body.action)) {
       return NextResponse.json({ error: 'Project id and a valid timeline action are required.' }, { status: 400 });
     }
     const { data: current, error: readError } = await supabase.from('image_explainer_jobs')
-      .select('id,title,status,stage,source_images,vision_analysis,script,narration_manifest,timeline,video_url,storage_path,error_message')
+      .select('id,title,status,stage,source_images,vision_analysis,script,narration_manifest,research_bundle,timeline,video_url,storage_path,error_message')
       .eq('id', body.id).single();
     if (readError || !current) return NextResponse.json({ error: 'Project not found.' }, { status: 404 });
 
-    if (body.action === 'queue-render' || body.action === 'retry-render') {
+    if (body.action === 'review-assets') {\n      const researchBundle = reviewAssetCandidates(current.research_bundle || {}, body.updates || []);\n      const { data: saved, error } = await supabase.from('image_explainer_jobs').update({ research_bundle: researchBundle, timeline: null, timeline_reviewed_at: null, stage: 'assets_reviewed', stage_message: 'Supporting media review saved. Regenerate the timeline to apply approved assets.', updated_at: new Date().toISOString() }).eq('id', body.id).select('id,title,status,stage,stage_message,research_bundle').single();\n      if (error) throw new Error(error.message);\n      return NextResponse.json({ job: saved });\n    }\n\n    if (body.action === 'queue-render' || body.action === 'retry-render') {
       const retry = body.action === 'retry-render';
       if (!current.timeline || current.timeline.review_status !== 'admin_reviewed' || !validateExplainerTimeline(current.timeline, current.script?.scenes?.length || 0)) return NextResponse.json({ error: 'Approve a valid visual timeline before rendering.' }, { status: 409 });
       if (!current.source_images?.[0]?.path || !current.narration_manifest?.clips?.length) return NextResponse.json({ error: 'The original image or narration audio is missing.' }, { status: 409 });
@@ -54,7 +55,7 @@ export async function POST(req) {
         narrationManifest: current.narration_manifest,
         imageDimensions: current.vision_analysis.image_dimensions || current.vision_analysis,
         components: current.vision_analysis.components || [],
-        approvedAssets: body.approvedAssets || [],
+        approvedAssets: approvedAssetsFromBundle(current.research_bundle),
       });
       if (!validateExplainerTimeline(timeline, current.script.scenes.length)) throw new Error('Generated timeline failed structural validation.');
       const { data: saved, error } = await supabase.from('image_explainer_jobs')
