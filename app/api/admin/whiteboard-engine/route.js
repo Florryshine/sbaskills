@@ -158,6 +158,7 @@ async function createJob(req, user) {
   const topic = (body.topic || '').trim();
   const useAI = Boolean(body.useAI);
   const scriptText = (body.script || '').trim();
+  const targetDurationSeconds = [30,60,120,180,300,480,600].includes(Number(body.targetDurationSeconds)) ? Number(body.targetDurationSeconds) : 120;
 
   if (!useAI && !scriptText) {
     return NextResponse.json({ error: 'Provide a script or set useAI=true with a topic.' }, { status: 400 });
@@ -172,7 +173,7 @@ async function createJob(req, user) {
     const supabaseAI = createAdminClient();
     const created = await supabaseAI
       .from('whiteboard_jobs')
-      .insert({ title: topic.slice(0, 200), topic, subject, status: 'narrating', script_text: '', created_by: user.id })
+      .insert({ title: topic.slice(0, 200), topic, subject, target_duration_seconds: targetDurationSeconds, status: 'narrating', script_text: '', created_by: user.id })
       .select('id')
       .single();
     if (created.error) {
@@ -254,6 +255,7 @@ async function createJob(req, user) {
     .insert({
       title: spec.title,
       subject: resolvedSubject,
+      target_duration_seconds: targetDurationSeconds,
       knowledge_asset_id: knowledgeAssetId,
       status: 'narrating',
       script_text: finalScript,
