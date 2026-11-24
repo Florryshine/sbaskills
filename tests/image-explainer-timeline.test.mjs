@@ -20,7 +20,7 @@ test('builds sequential scene timing from measured narration, not script estimat
 test('creates readable word-synchronised subtitle cues and camera keyframes',()=>{
  const t=buildExplainerTimeline({script,narrationManifest:manifest,imageDimensions:{width:1000,height:800},components});
  assert.equal(t.scenes[0].subtitle_cues[0].text,'The heart pumps blood around the');
- assert.equal(t.scenes[0].camera.keyframes.length,2);assert.equal(t.scenes[0].overlays[0].start_seconds,undefined);
+ assert.equal(t.scenes[0].camera.keyframes.length,2);assert.equal(Number.isFinite(t.scenes[0].overlays[0].start),true);
 });
 test('rejects unreviewed scripts, missing audio and mismatched scene order',()=>{
  assert.throws(()=>buildExplainerTimeline({script:{...script,review_status:'needs_admin_review'},narrationManifest:manifest,imageDimensions:{width:1,height:1}}),/administrator-approved/);
