@@ -267,6 +267,7 @@ export default function ImageExplainerStudioPage() {
                   <button type="button" onClick={saveRegions} disabled={saving || !['analysed', 'failed'].includes(job.status)} className="rounded-lg bg-sky-400 px-5 py-2.5 text-sm font-bold text-slate-950 disabled:opacity-50">{saving ? 'Saving…' : 'Save image map'}</button>
                 </div>
                 {analysis?.summary && <p className="mt-4 rounded-lg bg-slate-950 p-3 text-sm leading-6 text-slate-300">{analysis.summary}</p>}
+                {(analysis?.detected_text || []).length > 0 && <div className="mt-4 rounded-lg border border-slate-800 bg-slate-950 p-3"><p className="text-xs font-semibold text-slate-300">Text detected in image ({analysis.detected_text.length})</p><div className="mt-2 flex flex-wrap gap-2">{analysis.detected_text.map((item, index) => <span key={item.id || index} title={`Region: ${Math.round(item.region.x)}, ${Math.round(item.region.y)}`} className="rounded-md bg-slate-800 px-2 py-1 text-xs text-slate-200">{item.text}</span>)}</div></div>}
                 {(analysis?.uncertainties || []).length > 0 && <div className="mt-3 rounded-lg border border-amber-900/60 bg-amber-950/30 p-3"><p className="text-xs font-semibold text-amber-200">Needs further investigation</p><ul className="mt-2 list-inside list-disc space-y-1 text-xs text-amber-100">{analysis.uncertainties.map((item, index) => <li key={index}>{item}</li>)}</ul></div>}
               </>}
             </div>
