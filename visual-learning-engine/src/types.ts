@@ -119,6 +119,8 @@ export interface StatScene extends SceneBase {
   /** numeric portion rendered giant and counted up, e.g. "40", "2x", "90%" */
   number: string;
   headline: string;
+  /** Traceable evidence source; required by validation for factual statistics. */
+  source?: string;
   image_prompt?: string;
 }
 
