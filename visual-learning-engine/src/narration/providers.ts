@@ -15,7 +15,7 @@
 // with ffprobe so the timeline is always built from real durations.
 
 import type { NarrationProviderName, WordTiming } from '../types';
-import { synthesizeLine, getAudioExtension } from '../../../lib/podcastTTS.js';
+import { synthesizeGeminiLine, getAudioExtension } from '../../../lib/podcastTTS.js';
 import { proportionalWords } from './align';
 import { spawn, spawnSync } from 'node:child_process';
 import { mkdtemp, readFile, writeFile } from 'node:fs/promises';
@@ -38,7 +38,7 @@ export function probeDurationSeconds(file: string): number | null {
     encoding: 'utf8',
     timeout: 20000,
   });
-  if (res.status !== 0) return null;
+  if (res.error || res.status !== 0) {\n    console.warn(`[visual-learning] ffprobe failed for ${file}:`, res.error?.message || res.stderr?.trim() || `exit ${res.status}`);\n    return null;\n  }
   const v = parseFloat(res.stdout.trim());
   return isFinite(v) && v > 0 ? v : null;
 }
@@ -81,7 +81,7 @@ async function synthesizeGemini(req: NarrationRequest): Promise<NarrationResult 
   try {
     const malePresets = new Set(['warm_male', 'calm_male', 'nigerian_male', 'uk_male']);
     const speaker = malePresets.has(req.preset) ? 'host_b' : 'host_a';
-    const audio = await synthesizeLine(req.text, speaker, 'neutral');
+    const audio = await synthesizeGeminiLine(req.text, speaker, 'neutral');
     const ext = getAudioExtension(audio) as 'wav' | 'mp3';
     const file = await writeFileTemp(Buffer.from(audio), ext);
     const duration = probeDurationSeconds(file);
@@ -209,7 +209,7 @@ export async function synthesizeNarration(req: NarrationRequest, opts: { proxyEn
   if (opts.allowSilent === true) chain.push('silent');
 
   for (const provider of [...new Set(chain)]) {
-    if (provider === 'edge') {
+    if (provider === 'gemini') {\n      const r = await synthesizeGemini(req);\n      if (r) return r;\n    } else if (provider === 'edge') {
       const r = await synthesizeEdge(req);
       if (r) return r;
     } else if (provider === 'proxy') {
