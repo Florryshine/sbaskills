@@ -105,7 +105,7 @@ const calculateMotionMetadata = ({props}) => {
   };
 };
 
-const calculateImageExplainerMetadata = ({props}) => ({ width: props.aspect === '9:16' ? 1080 : 1920, height: props.aspect === '9:16' ? 1920 : props.aspect === '1:1' ? 1080 : 1080, fps: FPS, durationInFrames: Math.max(1, Number(props.durationInFrames) || 60) });
+const calculateImageExplainerMetadata = ({props}) => ({ width: props.aspect === '16:9' ? 1920 : 1080, height: props.aspect === '9:16' ? 1920 : 1080, fps: FPS, durationInFrames: Math.max(1, Number(props.durationInFrames) || 60) });
 
 export const Root = () => (
   <>
