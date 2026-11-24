@@ -179,7 +179,7 @@ export function validateScript(
     throw new ScriptValidationError('episode needs at least two substantive teaching scenes (concept explanation, meaningful comparison, useful list, sourced evidence, or real process)');
   }
   const shortTeachingScene = teachingScenes.find((scene) =>
-    scene.narration.trim().split(/\\s+/).filter(Boolean).length < 12,
+    scene.narration.trim().split(/\s+/).filter(Boolean).length < 12,
   );
   if (shortTeachingScene) {
     throw new ScriptValidationError('each teaching scene needs an explanation, not just a headline: provide at least 12 spoken words of useful teaching narration');
