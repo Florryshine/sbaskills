@@ -445,7 +445,14 @@ export async function GET(req) {
         .from('image-explainer-sources').createSignedUrl(sourcePath, 15 * 60);
       if (!signedError) sourceUrl = signed?.signedUrl || null;
     }
-    return NextResponse.json({ job, sourceUrl });
+    const narrationAudioUrls = {};
+    for (const clip of job.narration_manifest?.clips || []) {
+      if (!clip.storage_path) continue;
+      const { data: signedAudio } = await supabase.storage.from('image-explainer-audio')
+        .createSignedUrl(clip.storage_path, 15 * 60);
+      if (signedAudio?.signedUrl) narrationAudioUrls[clip.scene_index] = signedAudio.signedUrl;
+    }
+    return NextResponse.json({ job, sourceUrl, narrationAudioUrls });
   }
   const { data, error } = await supabase.from('image_explainer_jobs')
     .select('id,title,status,stage,stage_message,production_mode,video_url,error_message,created_at,vision_analysis,research_bundle,script,storyboard,narration_manifest')
