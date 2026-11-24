@@ -1,0 +1,25 @@
+name: Image Explainer Phase 1 Tests
+
+on:
+  push:
+    branches: ['feat/image-to-explainer-studio']
+    paths:
+      - 'lib/image-explainer/**'
+      - 'tests/image-explainer-*.test.mjs'
+      - '.github/workflows/image-explainer-phase1.yml'
+  pull_request:
+    paths:
+      - 'lib/image-explainer/**'
+      - 'tests/image-explainer-*.test.mjs'
+      - '.github/workflows/image-explainer-phase1.yml'
+
+jobs:
+  image-region-tests:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+      - name: Test image-region validation
+        run: node --test tests/image-explainer-regions.test.mjs
