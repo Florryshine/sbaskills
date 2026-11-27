@@ -1,0 +1,8 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="900" height="1200" viewBox="0 0 900 1200">
+  <rect width="900" height="1200" rx="36" fill="#e8f2fa"/>
+  <circle cx="450" cy="420" r="250" fill="#ffffff" stroke="#2563a6" stroke-width="18"/>
+  <path d="M450 650 C250 510 270 300 410 320 C470 220 650 280 640 430 C630 530 540 600 450 650Z" fill="#d94b58" stroke="#8b2635" stroke-width="14"/>
+  <path d="M450 650 C420 530 420 420 470 340 M450 650 C510 530 560 450 620 400" fill="none" stroke="#ffffff" stroke-width="16" stroke-linecap="round"/>
+  <text x="450" y="850" text-anchor="middle" font-family="Arial,sans-serif" font-size="54" font-weight="700" fill="#173b5e">EDUCATIONAL VISUAL</text>
+  <text x="450" y="920" text-anchor="middle" font-family="Arial,sans-serif" font-size="32" fill="#365a78">Local render fixture</text>
+</svg>

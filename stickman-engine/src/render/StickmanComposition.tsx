@@ -38,7 +38,7 @@ function shakeAt(timeline: Timeline, frame: number): [number, number] {
   return [dx, dy];
 }
 
-type ImagePresenterRenderData = { imageEvents?: Array<{ frameStart: number; frameEnd: number; mediaUrl: string; region: { x: number; y: number; width: number; height: number }; label?: string; attribution?: string; order?: number }>; annotationEvents?: Array<{ frameStart: number; frameEnd: number; label: string; region: { x: number; y: number; width: number; height: number } }> };
+type ImagePresenterRenderData = { imageEvents?: Array<{ frameStart: number; frameEnd: number; mediaUrl: string; localFile?: string; region: { x: number; y: number; width: number; height: number }; label?: string; attribution?: string; order?: number }>; annotationEvents?: Array<{ frameStart: number; frameEnd: number; label: string; region: { x: number; y: number; width: number; height: number } }> };
 
 export const StickmanComposition: React.FC<{
   imagePresenter?: ImagePresenterRenderData;
@@ -115,7 +115,7 @@ export const StickmanComposition: React.FC<{
           const width = event.region.width * W, height = event.region.height * H;
           return <g key={'presenter-image-' + index}>
             <rect x={x - 3} y={y - 3} width={width + 6} height={height + 6} rx={16} fill="#ffffff" stroke="#d5dee7" strokeWidth={3} />
-            <image href={event.mediaUrl} x={x} y={y} width={width} height={height} preserveAspectRatio="xMidYMid meet" />
+            <image href={event.localFile ? staticFile(event.localFile) : event.mediaUrl} x={x} y={y} width={width} height={height} preserveAspectRatio="xMidYMid meet" />
             {event.label && <text x={x + 12} y={y + 24} fill="#102a43" fontSize={18} fontWeight={700}>{event.label.slice(0, 48)}</text>}
           </g>;
         })}
