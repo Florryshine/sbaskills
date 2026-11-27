@@ -301,8 +301,8 @@ export default function TegakiStudioPage() {
             <div className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
               <div className="mb-4"><h2 className="text-lg font-black text-slate-900">Full lesson preview</h2><p className="text-sm text-slate-500">{activeTitle} · {activeScenes.length} sequential scenes · {totalDuration}s</p></div>
               <div className="mx-auto overflow-hidden rounded-xl bg-slate-200 shadow-inner" style={{ maxWidth: aspectRatio === '16:9' ? 640 : 360 }}>
-                <Player key={`${composed?.knowledgeAssetId || 'manual'}-${duration}-${activeScenes.length}`} component={StudioComposition}
-                  inputProps={{ title: activeTitle, scenes: activeScenes, template: 'tegaki', brand, accent: '#f4c542', narrationVolume, aspectRatio }}
+                <Player key={`${composed?.knowledgeAssetId || 'manual'}-${duration}-${activeScenes.length}-${aspectRatio}-${style}`} component={StudioComposition}
+                  inputProps={{ title: activeTitle, scenes: activeScenes, template: 'tegaki', brand, accent: '#f4c542', narrationVolume, aspectRatio, styleId: style }}
                   durationInFrames={durationInFrames} compositionWidth={aspectRatio === '16:9' ? 1920 : 1080} compositionHeight={aspectRatio === '1:1' ? 1080 : aspectRatio === '16:9' ? 1080 : 1920} fps={30} controls loop style={{ width: '100%', aspectRatio: aspectRatio.replace(':', ' / ') }} />
               </div>
               <p className="mt-3 text-xs text-slate-500">The preview combines sequential handwriting, SBA illustration cues and scene-level narration. Change the format in Export settings to preview the selected frame shape.</p>
