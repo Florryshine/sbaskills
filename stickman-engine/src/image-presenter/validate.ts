@@ -27,11 +27,15 @@ function collectSceneImages(scene: ImagePresenterScene): PresenterImageAsset[] {
   switch (scene.type) {
     case 'single-image':
     case 'diagram-explanation':
-      return [scene.image];
+      return scene.image ? [scene.image] : [];
     case 'two-image-comparison':
-      return [scene.left.image, scene.right.image];
+      return [scene.left?.image, scene.right?.image].filter(Boolean) as PresenterImageAsset[];
     case 'multi-image-sequence':
-      return scene.items.map((item) => item.image);
+      return Array.isArray(scene.items)
+        ? scene.items.map((item) => item?.image).filter(Boolean) as PresenterImageAsset[]
+        : [];
+    default:
+      return [];
   }
 }
 
@@ -71,6 +75,13 @@ export function validateImagePresenterProject(
       return;
     }
     const scene = rawScene as ImagePresenterScene;
+    if (!['single-image', 'two-image-comparison', 'multi-image-sequence', 'diagram-explanation'].includes(String(scene.type))) {
+      add(`${path}.type`, 'invalid-value', 'Unknown Image Presenter scene type.');
+      return;
+    }
+    if (scene.type !== project.mode) {
+      add(`${path}.type`, 'invalid-value', 'Scene type must match the selected production mode.');
+    }
     if (!isNonEmpty(scene.id)) add(`${path}.id`, 'required', 'Scene id is required.');
     if (!isNonEmpty(scene.title)) add(`${path}.title`, 'required', 'Scene title is required.');
     if (!isNonEmpty(scene.narration)) add(`${path}.narration`, 'required', 'Scene narration is required.');
@@ -80,7 +91,8 @@ export function validateImagePresenterProject(
       add(`${path}.presenter.gesture`, 'invalid-value', 'Unsupported presenter gesture.');
     }
 
-    if (scene.caption?.highlight && !scene.caption.text.includes(scene.caption.highlight)) {
+    if (scene.caption?.highlight &&
+      (!isNonEmpty(scene.caption.text) || !scene.caption.text.includes(scene.caption.highlight))) {
       add(`${path}.caption.highlight`, 'invalid-highlight', 'Caption highlight must be part of the caption text.');
     }
 
@@ -95,13 +107,21 @@ export function validateImagePresenterProject(
       }
     }
 
-    if (scene.type === 'multi-image-sequence' && (!Array.isArray(scene.items) || scene.items.length === 0)) {
-      add(`${path}.items`, 'empty-sequence', 'A multi-image scene must contain at least one image item.');
+    if (scene.type === 'multi-image-sequence') {
+      if (!Array.isArray(scene.items) || scene.items.length === 0) {
+        add(`${path}.items`, 'empty-sequence', 'A multi-image scene must contain at least one image item.');
+      } else {
+        scene.items.forEach((item, itemIndex) => {
+          if (!item || !isNonEmpty(item.id) || !isNonEmpty(item.narration) || !item.image) {
+            add(`${path}.items[${itemIndex}]`, 'required', 'Each sequence item needs an id, narration and image.');
+          }
+        });
+      }
     }
 
     if (scene.type === 'diagram-explanation') {
       (scene.annotations ?? []).forEach((annotation, annotationIndex) => {
-        const r = annotation.region;
+        const r = annotation?.region;
         if (!r || [r.x, r.y, r.width, r.height].some((n) => !Number.isFinite(n)) ||
           r.x < 0 || r.y < 0 || r.width <= 0 || r.height <= 0 ||
           r.x + r.width > 1 || r.y + r.height > 1) {
