@@ -194,6 +194,18 @@ export default function TegakiStudioPage() {
               <ol className="space-y-2">{composed.scenes.map((item,i) => <li key={item.id} className="rounded-lg bg-white/80 p-3"><p className="text-sm font-bold text-slate-900">{i+1}. {item.heading}</p><p className="mt-1 text-xs text-slate-600">{item.narration}</p><p className="mt-1 text-[11px] font-semibold text-blue-700">Illustration: {item.illustrationCues?.[0]?.illustration || 'No cue'}</p></li>)}</ol>
             </div>}
 
+            <div className="rounded-xl border border-blue-200 bg-blue-50 p-4 space-y-3">
+              <div><h3 className="font-black text-blue-950">Teacher narration</h3><p className="text-xs text-blue-800">Generate Nigerian-English voice audio for every storyboard scene. Reusable Knowledge Asset narration is cached.</p></div>
+              <div className="grid gap-3 sm:grid-cols-2">
+                <label className="text-xs font-semibold text-slate-700">Voice<select value={voice} onChange={e => { setVoice(e.target.value); setAudioReady(false); }} className="mt-1 w-full rounded-lg border border-slate-300 bg-white p-2"><option value="host_a">Female · Ezinne / Kore</option><option value="host_b">Male · Abeo / Charon</option></select></label>
+                <label className="text-xs font-semibold text-slate-700">Delivery style<select value={emotion} onChange={e => { setEmotion(e.target.value); setAudioReady(false); }} className="mt-1 w-full rounded-lg border border-slate-300 bg-white p-2">{['neutral','excited','curious','serious','calm','playful','dramatic','emphatic'].map(item => <option key={item} value={item}>{item[0].toUpperCase()+item.slice(1)}</option>)}</select></label>
+              </div>
+              <label className="block text-xs font-semibold text-slate-700">Narration volume · {Math.round(narrationVolume*100)}%<input type="range" min="0" max="1" step="0.05" value={narrationVolume} onChange={e => setNarrationVolume(Number(e.target.value))} className="mt-2 w-full" /></label>
+              <button type="button" onClick={generateNarration} disabled={!composed || audioLoading} className="w-full rounded-lg bg-blue-700 px-3 py-2.5 text-sm font-bold text-white disabled:opacity-50">{audioLoading ? 'Generating scene narration…' : audioReady ? 'Regenerate narration' : 'Generate narration audio'}</button>
+              {audioReady && <p className="text-xs font-semibold text-emerald-800">Narration attached to all scenes. {composed.audioReusedCount || 0} cached audio file(s) reused.</p>}
+              {audioError && <p role="alert" className="text-xs text-red-700">{audioError}</p>}
+            </div>
+
             <div>
               <h3 className="text-sm font-bold text-slate-800">Visual style</h3>
               <div className="mt-2 grid gap-2 sm:grid-cols-2">
