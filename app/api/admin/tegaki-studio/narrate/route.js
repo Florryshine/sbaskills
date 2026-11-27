@@ -31,7 +31,7 @@ export async function POST(request) {
     const audio = [];
     // Deliberately sequential: the shared Edge TTS endpoint is rate-sensitive.
     for (const [index, scene] of body.scenes.entries()) {
-      const narration = String(scene?.narration || scene?.text || '').replace(/[\\u0000-\\u001f]/g, ' ').trim().slice(0, 2400);
+      const narration = String(scene?.narration || scene?.text || '').replace(/[\u0000-\u001f]/g, ' ').trim().slice(0, 2400);
       if (!narration) return NextResponse.json({ error: 'Scene ' + (index + 1) + ' has no narration.' }, { status: 400 });
 
       let audioSrc, reused = false, mimeType;
