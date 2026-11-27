@@ -128,11 +128,14 @@ export async function acquireImagePresenterAssets(plan: ImagePresenterScenePlan,
   } catch { /* no valid cache yet */ }
   const assets: ImagePresenterAcquisitionResult['assets'] = {}, warnings: string[] = [], occupied = new Set<string>();
   const needs = plan.scenes.flatMap(scene => scene.imageNeeds);
+  const distinctNeedIds = new Set(needs.filter(need => need.distinctFrom || need.role === 'step').map(need => need.id));
   for (const need of needs) {
     const cacheKey = keyFor(need.searchQuery, aspect), cached = cache.entries[cacheKey];
-    if (cached && existsSync(join(options.publicDir, cached.localFile)) && !occupied.has(cached.contentHash)) {
+    const avoidDuplicate = distinctNeedIds.has(need.id);
+    if (cached && existsSync(join(options.publicDir, cached.localFile)) && (!avoidDuplicate || !occupied.has(cached.contentHash))) {
       assets[need.id] = { ...cached, id: need.id, subject: need.subject, alt: need.subject };
-      occupied.add(cached.contentHash); continue;
+      if (avoidDuplicate) occupied.add(cached.contentHash);
+      continue;
     }
     let acquired: ImagePresenterAcquisitionResult['assets'][string] | null = null;
     for (const provider of providers) {
@@ -140,7 +143,7 @@ export async function acquireImagePresenterAssets(plan: ImagePresenterScenePlan,
       for (const candidate of candidates) {
         if (!candidate.licenseVerified) continue;
         const asset = await materialize(candidate, need.id, need.subject, options.publicDir, aspect);
-        if (!asset || occupied.has(asset.contentHash)) continue;
+        if (!asset || (avoidDuplicate && occupied.has(asset.contentHash))) continue;
         acquired = asset; break;
       }
       if (acquired) break;
@@ -149,7 +152,9 @@ export async function acquireImagePresenterAssets(plan: ImagePresenterScenePlan,
       warnings.push('No distinct, downloadable, traceable image found for "' + need.subject + '". The need remains unresolved; no placeholder or duplicate was substituted.');
       continue;
     }
-    assets[need.id] = acquired; occupied.add(acquired.contentHash); cache.entries[cacheKey] = acquired;
+    assets[need.id] = acquired;
+    if (avoidDuplicate) occupied.add(acquired.contentHash);
+    cache.entries[cacheKey] = acquired;
   }
   for (const need of needs) {
     if (!need.distinctFrom) continue;
