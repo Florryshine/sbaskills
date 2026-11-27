@@ -35,7 +35,7 @@ export default function StickmanImagePresenterPage() {
     try {
       const response = await fetch('/api/admin/stickman-image-presenter', {
         method: 'POST', headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ action, topic, script, mode, aspectRatio }),
+        body: JSON.stringify({ action, topic, script, mode, aspectRatio, ...(action === 'acquire' && plan ? { plan } : {}) }),
       });
       const data = await readJson(response);
       if (!response.ok || !data.success) throw new Error(data.error || 'Request failed.');

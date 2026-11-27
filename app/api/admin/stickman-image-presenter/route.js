@@ -20,7 +20,7 @@ export async function POST(req) {
 
   try {
     const action = body?.action || 'plan';
-    const plan = planImagePresenter({
+    const planned = planImagePresenter({
       topic: String(body?.topic || '').slice(0, 300),
       script: String(body?.script || '').slice(0, 12000),
       mode: body?.mode || 'auto',
@@ -28,7 +28,8 @@ export async function POST(req) {
       presenterId: 'prof',
       maxScenes: Math.max(1, Math.min(12, Number(body?.maxScenes) || 6)),
     });
-    if (action === 'plan') return NextResponse.json({ success: true, plan });
+    const plan = action === 'acquire' && body?.plan && Array.isArray(body.plan.scenes) ? body.plan : planned;
+    if (action === 'plan') return NextResponse.json({ success: true, plan: planned });
 
     if (action !== 'acquire') return NextResponse.json({ error: 'Unknown action.' }, { status: 400 });
     const workDir = await mkdtemp(join(tmpdir(), 'sba-image-presenter-'));
