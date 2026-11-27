@@ -27,8 +27,23 @@
 - Admin authorization is enforced on Tegaki assets, composition, preview and narration APIs.
 - Diagram cues continue to fade between their configured scene-relative cue points; optional music mixing and final export remain for Phase 5 after the audio workflow is validated.
 
-## Phase 5: Export and publishing
-Add reliable preview/export presets for 9:16, 16:9 and 1:1, MP4 rendering, draft persistence, asset reuse and Social Engine handoff.
+## Phase 5: Export and publishing (implemented on this branch)
+- Three MP4 export presets: 9:16 portrait, 16:9 landscape and 1:1 square. The Remotion composition selects real output dimensions from the chosen ratio and keeps the notebook artwork proportional inside the frame.
+- The selected Tegaki page theme is passed into the Remotion composition, including Premium Notes, Exam Revision, Colourful Classroom, Dark Chalkboard and Digital Study Pad.
+- Background music upload (MP3, WAV, M4A or OGG, up to 20 MB) with a separate mix-volume control; narration volume remains independently adjustable.
+- Export is queued into `tegaki_jobs`; rendering runs in `local-video-renderer/tegaki-worker.js` through the scheduled / repository-dispatch GitHub Actions workflow. Remotion is not run inside the Vercel request.
+- Worker claims jobs atomically, heartbeats during render, records failure, retries up to three leases and uploads the final MP4 to the existing `lesson-videos` bucket.
+- Completed MP4s are attached to a `content_assets` draft and `media_files` row using the existing Social Engine contract. The worker is idempotent on retry and does not auto-publish.
+- Tegaki Studio shows export progress/history, offers retry for failed exports and links completed files to the Social Engine draft list.
+- Added `npm run test:tegaki-export` structural regression checks.
+
+### Phase 5 activation requirements
+1. Apply `supabase/migrations/20261127050000_tegaki_export_jobs.sql` to the SBA Supabase project.
+2. Ensure GitHub Actions repository secrets include `NEXT_PUBLIC_SUPABASE_URL` and `SUPABASE_SERVICE_ROLE_KEY`.
+3. The migration dispatches through the existing Supabase Vault secret named `github_dispatch_token`; without it, the five-minute workflow schedule still acts as a fallback queue poll, but immediate dispatch will not work.
+4. Run the Tegaki workflow once manually after migration, then confirm a test export reaches `ready` and appears in Social Engine as a draft.
+
+**Validation caveat:** code and regression checks are committed, but no local test, Supabase migration, GitHub Actions render or real MP4 export has been executed/verified in this session.
 
 ## Migration safety
 1. Do not delete or rename legacy Video Studio files during extraction.
