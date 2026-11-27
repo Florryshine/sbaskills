@@ -23,6 +23,16 @@ A pure deterministic planner accepts a topic/script and emits bounded scene beat
 - Comparison sides are checked against actual normalized bytes. If no distinct result is available, the need remains unresolved with a warning; no generic placeholder or duplicate is substituted.
 - This phase does not yet convert acquired files into render-ready scenes. Phase 4/5 handles composition and timeline mapping.
 
+## Phase 4 — Presenter and visual composition
+- Added a pure deterministic layout planner for all four scene modes and all three output ratios.
+- Single-image scenes use image-dominant hero layouts; comparison scenes use stacked portrait or side-by-side landscape/square layouts with persistent labels.
+- Sequence scenes preserve item order in vertical or horizontal card grids; long sequences emit a split-scene warning.
+- Diagram scenes map normalized annotation rectangles into exact frame-space rectangles, preserving their relationship to the acquired image.
+- Presenter placement reserves a collision-aware region and derives point-left/right/up/down targets from the image bounds. Explicit normalized targets take precedence.
+- Single-image zoom intent is clamped to safe bounds and expressed as camera focal/scale metadata for Phase 5's timeline adapter.
+- Composition output is renderer-agnostic and uses normalized geometry. The existing character rig and renderer remain untouched; no second skeleton or legacy renderer fork is introduced.
+- The module deliberately returns geometry and cue metadata, not an MP4 or a render-ready Remotion composition. Phase 5 will map these placements into the established timeline/render contract.
+
 ## Existing infrastructure
 - The adapter uses the existing Pexels/Pixabay environment credentials and the same provider services as `visual-learning-engine/src/imagery/providers.ts`.
 - Character rig and point/present actions: `src/rig/character.ts`.

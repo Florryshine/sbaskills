@@ -1,6 +1,6 @@
 # Stickman 2 — Image Presenter Roadmap
 
-**Status:** Phase 3 acquisition adapter implemented; awaiting CI verification  
+**Status:** Phase 4 composition planner implemented; awaiting CI verification  
 **Feature branch:** feature/stickman-image-presenter
 
 ## Scope
@@ -10,7 +10,7 @@ Add a separate Image Presenter production mode under the existing Stickman Studi
 1. Foundation and architecture — versioned contracts, mode definitions, validation and reuse boundaries.
 2. Intelligent scene planner — classify the four modes and emit structured scene plans.
 3. Image acquisition — provider retrieval, provenance, licensing, byte-level deduplication and caching.
-4. Presenter and composition — reuse existing character rig and deterministic point/present actions; implement layouts for all four modes.
+4. Presenter and composition — implemented deterministic layout geometry, presenter anchors/targets, image framing, diagram annotation mapping and zoom metadata for all four modes. Phase 5 will connect this output to the render timeline.
 5. Narration and timeline — map narration, captions, gestures and images to the existing timeline and render contract.
 6. Studio interface — add a separate Image Presenter mode and editing affordances without changing the original production form.
 7. Production testing — generate and inspect sample scenarios, run regression checks and prepare the final pull request.
