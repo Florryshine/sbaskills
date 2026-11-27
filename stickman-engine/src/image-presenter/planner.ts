@@ -53,7 +53,7 @@ function comparisonSubjects(text: string, topic: string): [string, string] {
   if (between) return [clean(between[1]), clean(between[2])];
   return [topic + ' first example', topic + ' contrasting example'];
 }
-function makeScene(mode: ImagePresenterMode, index: number, narration: string, topic: string): PlannedImagePresenterScene {
+function makeScene(mode: ImagePresenterMode, index: number, narration: string, topic: string, sequenceParts: string[] = []): PlannedImagePresenterScene {
   const id = 'image-scene-' + String(index + 1).padStart(3, '0');
   const title = titleCase((narration.split(/[.!?:]/)[0] || topic).slice(0, 64));
   let imageNeeds: PlannedImageNeed[] = [];
@@ -70,7 +70,7 @@ function makeScene(mode: ImagePresenterMode, index: number, narration: string, t
     layout = 'split'; gesture = 'point-left';
     rationale.push('Comparison intent detected; retrieve left and right assets independently.', 'Use a split layout with persistent labels.');
   } else if (mode === 'multi-image-sequence') {
-    const parts = splitBeats(narration);
+    const parts = sequenceParts.length ? sequenceParts : splitBeats(narration);
     imageNeeds = (parts.length > 1 ? parts : [narration]).slice(0, 8).map((part, step) => ({
       id: id + '-step-' + (step + 1), subject: part.slice(0, 100), searchQuery: part.slice(0, 100), role: 'step',
     }));
@@ -96,7 +96,7 @@ export function planImagePresenter(input: ImagePresenterPlannerInput): ImagePres
   const mode = inferMode(input, topic + '\n' + script);
   const rawBeats = splitBeats(script);
   const maxScenes = Math.max(1, Math.min(12, Math.floor(input.maxScenes ?? 6)));
-  const beats = (rawBeats.length ? rawBeats : [topic]).slice(0, maxScenes);
+  const beats = mode === 'multi-image-sequence'\n    ? [rawBeats.length ? rawBeats.join(' ') : topic]\n    : (rawBeats.length ? rawBeats : [topic]).slice(0, maxScenes);
   const warnings: string[] = [];
   if (mode === 'two-image-comparison' && !/\b(vs\.?|versus|compared with|compared to|difference between)\b/i.test(topic + ' ' + script))
     warnings.push('Comparison mode selected, but two explicit subjects were not found. Review both image subjects before retrieval.');
@@ -108,7 +108,7 @@ export function planImagePresenter(input: ImagePresenterPlannerInput): ImagePres
   return {
     version: 1, title: topic, subject: topic, mode,
     aspectRatio: input.aspectRatio ?? '9:16', presenterId: input.presenterId ?? 'prof',
-    scenes: beats.map((beat, index) => makeScene(mode, index, beat, topic)), warnings,
+    scenes: beats.map((beat, index) => makeScene(mode, index, beat, topic, mode === 'multi-image-sequence' ? rawBeats.slice(0, 8) : [])), warnings,
   };
 }
 export function isImagePresenterMode(value: unknown): value is ImagePresenterMode {
