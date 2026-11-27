@@ -216,7 +216,7 @@ export default function TegakiStudioPage() {
           <p className="text-xs font-bold uppercase tracking-[.25em] text-sky-200">Shiney Brain Academy · Independent Video Engine</p>
           <h1 className="mt-2 text-3xl font-black md:text-4xl">{TEGAKI_ENGINE.name}</h1>
           <p className="mt-2 max-w-3xl text-sm text-blue-100">Turn a trusted Knowledge Asset into an illustrated handwritten lesson with generated Nigerian-English narration.</p>
-          <span className="mt-4 inline-flex rounded-full bg-white/15 px-3 py-1 text-xs font-bold">Phase 4 · Animation and audio</span>
+          <span className="mt-4 inline-flex rounded-full bg-white/15 px-3 py-1 text-xs font-bold">Phase 5 · Export and publishing</span>
         </header>
 
         <div className="grid gap-6 xl:grid-cols-[.85fr_1.15fr]">
@@ -305,7 +305,7 @@ export default function TegakiStudioPage() {
                   inputProps={{ title: activeTitle, scenes: activeScenes, template: 'tegaki', brand, accent: '#f4c542', narrationVolume, aspectRatio, styleId: style }}
                   durationInFrames={durationInFrames} compositionWidth={aspectRatio === '16:9' ? 1920 : 1080} compositionHeight={aspectRatio === '1:1' ? 1080 : aspectRatio === '16:9' ? 1080 : 1920} fps={30} controls loop style={{ width: '100%', aspectRatio: aspectRatio.replace(':', ' / ') }} />
               </div>
-              <p className="mt-3 text-xs text-slate-500">The preview combines sequential handwriting, SBA illustration cues and scene-level narration. Change the format in Export settings to preview the selected frame shape.</p>
+              <p className="mt-3 text-xs text-slate-500">The preview combines sequential handwriting, SBA illustration cues and scene-level narration. Export creates an MP4 and saves it as a Social Engine draft.</p>
             </div>
           </section>
         </div>
