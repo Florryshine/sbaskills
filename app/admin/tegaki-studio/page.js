@@ -166,12 +166,12 @@ export default function TegakiStudioPage() {
               <p className="mt-1 text-sm text-slate-500">Select a subject and an existing Knowledge Asset. The composer uses that source instead of inventing lesson facts.</p>
             </div>
             <label className="block text-sm font-semibold text-slate-700">Subject
-              <select value={subject} onChange={e => { setSubject(e.target.value); setComposed(null); }} className="mt-1 w-full rounded-xl border border-slate-300 bg-white px-3 py-3">
+              <select value={subject} onChange={e => { setSubject(e.target.value); setComposed(null); setAudioReady(false); }} className="mt-1 w-full rounded-xl border border-slate-300 bg-white px-3 py-3">
                 {SUBJECTS.map(item => <option key={item}>{item}</option>)}
               </select>
             </label>
             <label className="block text-sm font-semibold text-slate-700">Knowledge Asset topic
-              <select value={assetId} onChange={e => { setAssetId(e.target.value); setComposed(null); }} disabled={assetLoading || !assets.length} className="mt-1 w-full rounded-xl border border-slate-300 bg-white px-3 py-3 disabled:bg-slate-100">
+              <select value={assetId} onChange={e => { setAssetId(e.target.value); setComposed(null); setAudioReady(false); }} disabled={assetLoading || !assets.length} className="mt-1 w-full rounded-xl border border-slate-300 bg-white px-3 py-3 disabled:bg-slate-100">
                 {assets.length ? assets.map(asset => <option key={asset.id} value={asset.id}>{asset.keyword}</option>) : <option>{assetLoading ? 'Loading topics…' : 'No topics found'}</option>}
               </select>
               {selectedAsset?.summary && <span className="mt-2 block text-xs leading-5 text-slate-500">{selectedAsset.summary.slice(0, 240)}{selectedAsset.summary.length > 240 ? '…' : ''}</span>}
