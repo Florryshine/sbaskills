@@ -67,7 +67,7 @@ export default function StickmanImagePresenterPage() {
         if (scene.type === 'single-image') return { ...base, type: scene.type, image: assetFor(scene.imageNeeds[0]) };
         if (scene.type === 'two-image-comparison') { const left = scene.imageNeeds.find(n => n.role === 'left'); const right = scene.imageNeeds.find(n => n.role === 'right'); return { ...base, type: scene.type, left: { label: left.subject, image: assetFor(left) }, right: { label: right.subject, image: assetFor(right) }, activeSide: 'both' }; }
         if (scene.type === 'multi-image-sequence') return { ...base, type: scene.type, items: scene.imageNeeds.map((need, index) => ({ id: need.id, narration: need.subject, caption: { text: String(index + 1) + '. ' + need.subject }, image: assetFor(need), durationSeconds: 3 })) };
-        return { ...base, type: 'diagram-explanation', image: assetFor(scene.imageNeeds[0]), annotations: [] };
+        return { ...base, type: 'diagram-explanation', image: assetFor(scene.imageNeeds[0]), annotations: scene.annotations || [] };
       }) };
       const response = await fetch('/api/admin/stickman-image-presenter', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ action: 'enqueue', topic, subject: 'general', project, autoPublish: false }) });
       const data = await readJson(response);
@@ -147,6 +147,16 @@ export default function StickmanImagePresenterPage() {
             <div className="flex items-center justify-between gap-2"><span className="text-xs font-semibold uppercase tracking-wide text-gray-500">Scene {index + 1} · {scene.layout}</span><span className="text-xs text-gray-500">{scene.type}</span></div>
             <input aria-label="Scene title" value={scene.title} onChange={e => setPlan(current => ({ ...current, scenes: current.scenes.map(s => s.id === scene.id ? { ...s, title: e.target.value } : s) }))} className="w-full rounded border px-2 py-1 font-semibold" />
             <textarea aria-label="Scene narration" value={scene.narration} onChange={e => setPlan(current => ({ ...current, scenes: current.scenes.map(s => s.id === scene.id ? { ...s, narration: e.target.value, caption: e.target.value } : s) }))} rows={3} className="w-full rounded border px-2 py-2 text-sm" />
+            {scene.type === 'diagram-explanation' && <div className="space-y-2 rounded-lg border border-amber-200 bg-amber-50 p-3">
+              <div className="flex items-center justify-between gap-2"><h3 className="text-sm font-semibold">Diagram labels and focus regions</h3><button type="button" onClick={() => setPlan(current => ({ ...current, scenes: current.scenes.map(s => s.id === scene.id ? { ...s, annotations: [...(s.annotations || []), { id: scene.id + '-label-' + ((s.annotations || []).length + 1), label: 'New label', narration: '', region: { x: 0.3, y: 0.3, width: 0.2, height: 0.12 } }] } : s) }))} className="rounded border bg-white px-2 py-1 text-xs font-semibold">+ Add label</button></div>
+              {(scene.annotations || []).map((annotation, ai) => <div key={annotation.id} className="space-y-2 rounded border bg-white p-2">
+                <input aria-label="Diagram annotation label" value={annotation.label} onChange={e => setPlan(current => ({ ...current, scenes: current.scenes.map(s => s.id === scene.id ? { ...s, annotations: s.annotations.map((a, i) => i === ai ? { ...a, label: e.target.value } : a) } : s) }))} className="w-full rounded border px-2 py-1 text-sm" />
+                <input aria-label="Diagram annotation narration" value={annotation.narration || ''} onChange={e => setPlan(current => ({ ...current, scenes: current.scenes.map(s => s.id === scene.id ? { ...s, annotations: s.annotations.map((a, i) => i === ai ? { ...a, narration: e.target.value } : a) } : s) }))} placeholder="Optional spoken explanation for this label" className="w-full rounded border px-2 py-1 text-xs" />
+                <div className="grid grid-cols-4 gap-2">{['x', 'y', 'width', 'height'].map(key => <label key={key} className="text-[10px] font-semibold uppercase text-gray-500">{key}<input type="number" min="0" max="1" step="0.01" value={annotation.region[key]} onChange={e => setPlan(current => ({ ...current, scenes: current.scenes.map(s => s.id === scene.id ? { ...s, annotations: s.annotations.map((a, i) => i === ai ? { ...a, region: { ...a.region, [key]: Number(e.target.value) } } : a) } : s) }))} className="mt-1 w-full rounded border px-1 py-1 text-xs font-normal" /></label>)}</div>
+                <button type="button" onClick={() => setPlan(current => ({ ...current, scenes: current.scenes.map(s => s.id === scene.id ? { ...s, annotations: s.annotations.filter((a, i) => i !== ai) } : s) }))} className="text-xs text-red-600 underline">Remove label</button>
+              </div>)}
+              <p className="text-[11px] text-gray-600">Coordinates are normalized from 0 to 1. Place the focus rectangle over the relevant part of the source diagram.</p>
+            </div>}
             <div className="space-y-2">
               {scene.imageNeeds.map(need => {
                 const asset = assets[need.id];
