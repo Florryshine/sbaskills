@@ -32,7 +32,8 @@ function clean(value: string): string {
   return value.replace(/^\s*(?:[-*•]|\d+[.)])\s*/, '').replace(/\s+/g, ' ').trim();
 }
 function splitBeats(script: string): string[] {
-  const lines = script.replace(/\r/g, '').split(/\n+/).map(clean).filter(Boolean);
+  const lines = script.replace(/\r/g, '').split(/
++/).map(clean).filter(Boolean);
   if (lines.length > 1) return lines;
   return (lines[0] ?? '').match(/[^.!?]+[.!?]?/g)?.map(s => s.trim()).filter(Boolean) ?? [];
 }
@@ -93,10 +94,13 @@ export function planImagePresenter(input: ImagePresenterPlannerInput): ImagePres
   const topic = clean(input.topic || '');
   if (!topic) throw new Error('A topic is required to plan an Image Presenter video.');
   const script = (input.script ?? '').trim();
-  const mode = inferMode(input, topic + '\n' + script);
+  const mode = inferMode(input, topic + '
+' + script);
   const rawBeats = splitBeats(script);
   const maxScenes = Math.max(1, Math.min(12, Math.floor(input.maxScenes ?? 6)));
-  const beats = mode === 'multi-image-sequence'\n    ? [rawBeats.length ? rawBeats.join(' ') : topic]\n    : (rawBeats.length ? rawBeats : [topic]).slice(0, maxScenes);
+  const beats = mode === 'multi-image-sequence'
+    ? [rawBeats.length ? rawBeats.join(' ') : topic]
+    : (rawBeats.length ? rawBeats : [topic]).slice(0, maxScenes);
   const warnings: string[] = [];
   if (mode === 'two-image-comparison' && !/\b(vs\.?|versus|compared with|compared to|difference between)\b/i.test(topic + ' ' + script))
     warnings.push('Comparison mode selected, but two explicit subjects were not found. Review both image subjects before retrieval.');
