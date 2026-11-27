@@ -31,6 +31,14 @@ export default function TegakiStudioPage() {
   const [audioLoading, setAudioLoading] = useState(false);
   const [audioError, setAudioError] = useState('');
   const [audioReady, setAudioReady] = useState(false);
+  const [aspectRatio, setAspectRatio] = useState('9:16');
+  const [musicSrc, setMusicSrc] = useState('');
+  const [musicName, setMusicName] = useState('');
+  const [musicVolume, setMusicVolume] = useState(0.12);
+  const [musicLoading, setMusicLoading] = useState(false);
+  const [exportLoading, setExportLoading] = useState(false);
+  const [exportError, setExportError] = useState('');
+  const [exportJobs, setExportJobs] = useState([]);
   const [stylePreview, setStylePreview] = useState('');
   const [previewLoading, setPreviewLoading] = useState(false);
   const [previewError, setPreviewError] = useState('');
@@ -123,6 +131,44 @@ export default function TegakiStudioPage() {
     finally { setAudioLoading(false); }
   }
 
+  async function uploadMusic(file) {
+    if (!file) return;
+    setMusicLoading(true); setExportError('');
+    try {
+      const form = new FormData(); form.append('file', file);
+      const response = await fetch('/api/admin/tegaki-studio/music', { method: 'POST', body: form });
+      const data = await response.json();
+      if (!response.ok) throw new Error(data.error || 'Music upload failed.');
+      setMusicSrc(data.music.url); setMusicName(data.music.name);
+    } catch (error) { setExportError(error.message); }
+    finally { setMusicLoading(false); }
+  }
+
+  async function queueExport() {
+    if (!composed?.scenes?.length) { setExportError('Generate a structured lesson first.'); return; }
+    if (!audioReady || composed.scenes.some(scene => !scene.audioSrc)) { setExportError('Generate narration for every scene before exporting.'); return; }
+    setExportLoading(true); setExportError('');
+    try {
+      const response = await fetch('/api/admin/tegaki-studio/export', {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ title: composed.title, knowledgeAssetId: composed.knowledgeAssetId, scenes: composed.scenes, aspectRatio, styleId: style, brand, narrationVolume, musicSrc: musicSrc || null, musicVolume }),
+      });
+      const data = await response.json();
+      if (!response.ok) throw new Error(data.error || 'Could not queue MP4 export.');
+      setExportJobs(current => [data.job, ...current.filter(item => item.id !== data.job.id)]);
+    } catch (error) { setExportError(error.message); }
+    finally { setExportLoading(false); }
+  }
+
+  async function retryExport(id) {
+    try {
+      const response = await fetch('/api/admin/tegaki-studio/export', { method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ id, action: 'retry' }) });
+      const data = await response.json();
+      if (!response.ok) throw new Error(data.error || 'Retry failed.');
+      setExportJobs(current => current.map(item => item.id === id ? { ...item, status: 'queued', stage: 'queued', error_message: null } : item));
+    } catch (error) { setExportError(error.message); }
+  }
+
   async function composeLesson() {
     if (!assetId) { setComposeError('Select a Knowledge Asset topic first.'); return; }
     setComposeLoading(true);
@@ -148,6 +194,20 @@ export default function TegakiStudioPage() {
 
   const selectedStyle = TEGAKI_VISUAL_STYLES.find(item => item.id === style);
   const selectedAsset = assets.find(item => item.id === assetId);
+
+  useEffect(() => {
+    let active = true;
+    const loadExports = async () => {
+      try {
+        const response = await fetch('/api/admin/tegaki-studio/export');
+        const data = await response.json();
+        if (response.ok && active) setExportJobs(data.jobs || []);
+      } catch { /* export history is non-blocking for lesson composition */ }
+    };
+    loadExports();
+    const timer = setInterval(loadExports, 5000);
+    return () => { active = false; clearInterval(timer); };
+  }, []);
 
   return (
     <main className="min-h-screen bg-slate-50 p-4 md:p-8">
@@ -206,6 +266,16 @@ export default function TegakiStudioPage() {
               {audioError && <p role="alert" className="text-xs text-red-700">{audioError}</p>}
             </div>
 
+            <div className="rounded-xl border border-violet-200 bg-violet-50 p-4 space-y-3">
+              <h3 className="font-black text-violet-950">Export settings</h3>
+              <label className="block text-xs font-semibold text-slate-700">Video format<select value={aspectRatio} onChange={e => setAspectRatio(e.target.value)} className="mt-1 w-full rounded-lg border border-slate-300 bg-white p-2"><option value="9:16">9:16 · Reels / Shorts / TikTok</option><option value="16:9">16:9 · YouTube landscape</option><option value="1:1">1:1 · Square social video</option></select></label>
+              <div><label className="block text-xs font-semibold text-slate-700">Background music · optional</label><input type="file" accept="audio/mpeg,audio/wav,audio/x-wav,audio/mp4,audio/ogg,.mp3,.wav,.m4a,.ogg" onChange={e => uploadMusic(e.target.files?.[0])} className="mt-1 block w-full text-xs" />{musicLoading && <p className="mt-1 text-xs text-violet-800">Uploading music…</p>}{musicName && <p className="mt-1 text-xs font-semibold text-emerald-800">Attached: {musicName} <button type="button" onClick={() => { setMusicSrc(''); setMusicName(''); }} className="ml-2 underline">Remove</button></p>}</div>
+              <label className="block text-xs font-semibold text-slate-700">Music volume · {Math.round(musicVolume*100)}%<input type="range" min="0" max="0.4" step="0.01" value={musicVolume} onChange={e => setMusicVolume(Number(e.target.value))} className="mt-2 w-full" /></label>
+              <button type="button" onClick={queueExport} disabled={!composed || !audioReady || exportLoading || musicLoading} className="w-full rounded-lg bg-violet-700 px-3 py-3 text-sm font-black text-white disabled:opacity-50">{exportLoading ? 'Queueing MP4…' : 'Render and save MP4'}</button>
+              <p className="text-[11px] text-violet-900">Exports run on the dedicated Remotion worker, not inside the website request. Completed videos are saved as drafts in Social Engine.</p>
+              {exportError && <p role="alert" className="text-xs text-red-700">{exportError}</p>}
+            </div>
+
             <div>
               <h3 className="text-sm font-bold text-slate-800">Visual style</h3>
               <div className="mt-2 grid gap-2 sm:grid-cols-2">
@@ -230,15 +300,20 @@ export default function TegakiStudioPage() {
 
             <div className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
               <div className="mb-4"><h2 className="text-lg font-black text-slate-900">Full lesson preview</h2><p className="text-sm text-slate-500">{activeTitle} · {activeScenes.length} sequential scenes · {totalDuration}s</p></div>
-              <div className="mx-auto overflow-hidden rounded-xl bg-slate-200 shadow-inner" style={{ maxWidth: 360 }}>
+              <div className="mx-auto overflow-hidden rounded-xl bg-slate-200 shadow-inner" style={{ maxWidth: aspectRatio === '16:9' ? 640 : 360 }}>
                 <Player key={`${composed?.knowledgeAssetId || 'manual'}-${duration}-${activeScenes.length}`} component={StudioComposition}
-                  inputProps={{ title: activeTitle, scenes: activeScenes, template: 'tegaki', brand, accent: '#f4c542', narrationVolume }}
-                  durationInFrames={durationInFrames} compositionWidth={1080} compositionHeight={1920} fps={30} controls loop style={{ width: '100%', aspectRatio: '9 / 16' }} />
+                  inputProps={{ title: activeTitle, scenes: activeScenes, template: 'tegaki', brand, accent: '#f4c542', narrationVolume, aspectRatio }}
+                  durationInFrames={durationInFrames} compositionWidth={aspectRatio === '16:9' ? 1920 : 1080} compositionHeight={aspectRatio === '1:1' ? 1080 : aspectRatio === '16:9' ? 1080 : 1920} fps={30} controls loop style={{ width: '100%', aspectRatio: aspectRatio.replace(':', ' / ') }} />
               </div>
-              <p className="mt-3 text-xs text-slate-500">The preview combines sequential handwriting, SBA illustration cues and scene-level narration. MP4 export is Phase 5.</p>
+              <p className="mt-3 text-xs text-slate-500">The preview combines sequential handwriting, SBA illustration cues and scene-level narration. Change the format in Export settings to preview the selected frame shape.</p>
             </div>
           </section>
         </div>
+
+        <section className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
+          <div className="mb-3 flex flex-wrap items-center justify-between gap-2"><div><h2 className="text-lg font-black text-slate-900">Export history</h2><p className="text-sm text-slate-500">Saved videos remain drafts until you review and approve them in Social Engine.</p></div><span className="text-xs text-slate-500">Auto-refreshes every 5 seconds</span></div>
+          {!exportJobs.length ? <p className="rounded-lg bg-slate-50 p-4 text-sm text-slate-500">No Tegaki exports yet.</p> : <div className="space-y-2">{exportJobs.map(job => <div key={job.id} className="flex flex-wrap items-center justify-between gap-3 rounded-xl border border-slate-200 p-3"><div className="min-w-0"><p className="truncate text-sm font-bold text-slate-900">{job.title}</p><p className="text-xs text-slate-500">{job.aspect_ratio} · {job.duration_seconds || '—'}s · {job.stage_message || job.status}</p>{job.error_message && <p className="mt-1 text-xs text-red-700">{job.error_message}</p>}</div><div className="flex flex-wrap items-center gap-2">{job.status === 'ready' && job.video_url && <a href={job.video_url} target="_blank" rel="noreferrer" className="rounded-lg bg-emerald-100 px-3 py-2 text-xs font-bold text-emerald-800">Open MP4</a>}{job.status === 'ready' && <a href="/admin/social-engine" className="rounded-lg bg-blue-100 px-3 py-2 text-xs font-bold text-blue-800">Open Social Drafts</a>}{job.status === 'failed' && <button type="button" onClick={() => retryExport(job.id)} className="rounded-lg bg-amber-100 px-3 py-2 text-xs font-bold text-amber-800">Retry</button>}<span className={`rounded-full px-3 py-1 text-xs font-bold ${job.status === 'ready' ? 'bg-emerald-100 text-emerald-800' : job.status === 'failed' ? 'bg-red-100 text-red-800' : 'bg-blue-100 text-blue-800'}`}>{job.status}</span></div></div>)}</div>}
+        </section>
       </div>
     </main>
   );
