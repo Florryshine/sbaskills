@@ -28,9 +28,9 @@
 - Diagram cues continue to fade between their configured scene-relative cue points; optional music mixing and final export remain for Phase 5 after the audio workflow is validated.
 
 ## Phase 5: Export and publishing (implemented on this branch)
-- Three MP4 export presets: 9:16 portrait, 16:9 landscape and 1:1 square. The Remotion composition selects real output dimensions from the chosen ratio and keeps the notebook artwork proportional inside the frame.
+- Three MP4 export presets: 9:16 portrait, 16:9 landscape and 1:1 square. The Remotion composition selects real output dimensions and dedicated landscape/square layouts rather than stretching the portrait page.
 - The selected Tegaki page theme is passed into the Remotion composition, including Premium Notes, Exam Revision, Colourful Classroom, Dark Chalkboard and Digital Study Pad.
-- Background music upload (MP3, WAV, M4A or OGG, up to 20 MB) with a separate mix-volume control; narration volume remains independently adjustable.
+- Scene narration is stored in the dedicated public `tegaki-assets` bucket before export (including cached Knowledge Asset audio), avoiding oversized base64 export requests. Background music upload (MP3, WAV, M4A or OGG, up to 20 MB) uses the same bucket with a separate mix-volume control; narration volume remains independently adjustable.
 - Export is queued into `tegaki_jobs`; rendering runs in `local-video-renderer/tegaki-worker.js` through the scheduled / repository-dispatch GitHub Actions workflow. Remotion is not run inside the Vercel request.
 - Worker claims jobs atomically, heartbeats during render, records failure, retries up to three leases and uploads the final MP4 to the existing `lesson-videos` bucket.
 - Completed MP4s are attached to a `content_assets` draft and `media_files` row using the existing Social Engine contract. The worker is idempotent on retry and does not auto-publish.
