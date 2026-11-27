@@ -38,14 +38,14 @@ function shakeAt(timeline: Timeline, frame: number): [number, number] {
   return [dx, dy];
 }
 
-export const StickmanComposition: React.FC<{
+type ImagePresenterRenderData = { imageEvents?: Array<{ frameStart: number; frameEnd: number; mediaUrl: string; region: { x: number; y: number; width: number; height: number }; label?: string; attribution?: string; order?: number }>; annotationEvents?: Array<{ frameStart: number; frameEnd: number; label: string; region: { x: number; y: number; width: number; height: number } }> };\n\nexport const StickmanComposition: React.FC<{\n  imagePresenter?: ImagePresenterRenderData;
   timeline: Timeline;
   /** Optional narration URL overrides (file -> public URL) so browser
    * previews (@remotion/player) can stream audio from Storage instead of
    * the bundler's static public dir. The CLI render omits it and uses
    * staticFile(). */
   audioUrls?: Record<string, string>;
-}> = ({ timeline, audioUrls }) => {
+}> = ({ timeline, audioUrls, imagePresenter }) => {
   const frame = useCurrentFrame();
   const { width: W, height: H } = timeline;
   const cam = timeline.camera[Math.min(frame, timeline.camera.length - 1)] ?? { cx: 0, cy: -160, scale: 1.8, rot: 0 };
@@ -63,7 +63,7 @@ export const StickmanComposition: React.FC<{
     return visemeAtFrame(caption.words, frame);
   };
   const wipe = timeline.transitions.find((t) => t.type === 'wipe' && frame >= t.frame && frame < t.frame + t.dur);
-  const activeOverlays = timeline.overlays.filter((o) => frame >= o.frame && frame < o.frame + o.dur);
+  const activeOverlays = timeline.overlays.filter((o) => frame >= o.frame && frame < o.frame + o.dur);\n  const activeImages = (imagePresenter?.imageEvents ?? []).filter((event) => frame >= event.frameStart && frame < event.frameEnd).sort((a, b) => (a.order ?? 0) - (b.order ?? 0));\n  const activeAnnotations = (imagePresenter?.annotationEvents ?? []).filter((event) => frame >= event.frameStart && frame < event.frameEnd);
 
   // layer everything by z
   const drawables: { z: number; el: React.ReactElement }[] = [];
@@ -105,8 +105,25 @@ export const StickmanComposition: React.FC<{
           if (o.type === 'title') return <TitleCard key={`t${i}`} text={o.text} sub={o.sub} appear={frame - o.frame} />;
           return null;
         })}
+        {activeImages.map((event, index) => {
+          const x = event.region.x * W, y = event.region.y * H;
+          const width = event.region.width * W, height = event.region.height * H;
+          return <g key={'presenter-image-' + index}>
+            <rect x={x - 3} y={y - 3} width={width + 6} height={height + 6} rx={16} fill="#ffffff" stroke="#d5dee7" strokeWidth={3} />
+            <image href={event.mediaUrl} x={x} y={y} width={width} height={height} preserveAspectRatio="xMidYMid meet" />
+            {event.label && <text x={x + 12} y={y + 24} fill="#102a43" fontSize={18} fontWeight={700}>{event.label.slice(0, 48)}</text>}
+          </g>;
+        })}
+        {activeAnnotations.map((event, index) => {
+          const x = event.region.x * W, y = event.region.y * H;
+          const width = event.region.width * W, height = event.region.height * H;
+          return <g key={'presenter-annotation-' + index}>
+            <rect x={x} y={y} width={width} height={height} fill="#facc15" fillOpacity={0.10} stroke="#dc2626" strokeWidth={4} strokeDasharray="10 6" rx={8} />
+            <text x={x + 8} y={y + 22} fill="#991b1b" fontSize={16} fontWeight={700}>{event.label.slice(0, 42)}</text>
+          </g>;
+        })}
         {caption && <Captions caption={caption} frameNo={frame} speakerColor={SPEAKER_COLORS[caption.who] ?? '#8fa4b5'} />}
-        {wipe && <Wipe progress={(frame - wipe.frame) / wipe.dur} />}
+        {activeImages.some(event => event.attribution) && <text x={W - 18} y={H - 18} textAnchor="end" fill="#475569" fontSize={12}>Image credits: {[...new Set(activeImages.map(event => event.attribution).filter(Boolean))].join(', ').slice(0, 100)}</text>}\n        {wipe && <Wipe progress={(frame - wipe.frame) / wipe.dur} />}
       </svg>
       {/* Each clip starts at the frame the compiler assigned to its dialogue
           line. Without the Sequence wrapper every clip plays from frame 0 and
