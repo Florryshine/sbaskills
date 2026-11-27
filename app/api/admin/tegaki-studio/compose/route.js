@@ -20,7 +20,7 @@ function validComposition(value) {
     Array.isArray(scene.sections) && scene.sections.length >= 2 && scene.sections.length <= 7 &&
     scene.sections.every(section => section && ALLOWED_TYPES.has(section.type) && typeof section.text === 'string' && section.text.trim()) &&
     typeof scene.narration === 'string' && scene.narration.trim() &&
-    typeof scene.illustration === 'string'
+    typeof scene.illustration === 'string' && TEGAKI_ILLUSTRATION_IDS.includes(scene.illustration)
   );
 }
 function buildPrompt(asset, duration) {
@@ -94,7 +94,7 @@ export async function POST(request) {
         : Math.max(4, Math.round(totalSeconds * sceneWeights[index] / weightTotal));
       allocated += sceneDuration;
       const suggested = suggestTegakiIllustration(asset.keyword, asset.subject);
-      const requestedIllustration = TEGAKI_ILLUSTRATION_IDS.includes(scene.illustration) ? scene.illustration : suggested;
+      const requestedIllustration = suggested && TEGAKI_ILLUSTRATION_IDS.includes(suggested) ? suggested : scene.illustration;
       const sections = scene.sections.map(section => ({ type: section.type, text: clean(section.text, 180) }));
       const text = sections.map(section => section.type === 'bullet' ? '- ' + section.text : section.text).join('\n');
       return createTegakiLessonScene({
