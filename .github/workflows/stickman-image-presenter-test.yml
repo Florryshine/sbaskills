@@ -1,0 +1,29 @@
+name: Stickman Image Presenter tests
+
+on:
+  pull_request:
+    paths:
+      - "stickman-engine/**"
+      - "local-video-renderer/stickman-worker.js"
+      - "local-video-renderer/tests/**"
+      - "app/api/admin/stickman-image-presenter/**"
+      - ".github/workflows/stickman-image-presenter-test.yml"
+  workflow_dispatch:
+
+jobs:
+  worker-regression:
+    runs-on: ubuntu-latest
+    timeout-minutes: 35
+    steps:
+      - uses: actions/checkout@v4
+      - uses: oven-sh/setup-bun@v2
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+      - name: Install root worker dependencies
+        run: npm ci
+      - name: Install Stickman engine dependencies
+        working-directory: stickman-engine
+        run: bun install
+      - name: Run worker regression suite including Image Presenter
+        run: bash local-video-renderer/tests/run-stickman.sh
