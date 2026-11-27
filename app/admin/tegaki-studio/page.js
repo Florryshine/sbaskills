@@ -15,15 +15,16 @@ export default function TegakiStudioPage() {
   const [text, setText] = useState(SAMPLE.text);
   const [duration, setDuration] = useState(40);
   const [style, setStyle] = useState('classic-notebook');
-  const [aspect, setAspect] = useState('vertical');
   const [brand, setBrand] = useState('SHINEY BRAIN ACADEMY');
 
   const scene = useMemo(() => createTegakiLessonScene({
     heading, text, durationSeconds: duration,
     illustrationCues: [{ at: 0, illustration: 'animal-cell', label: 'The cell' }],
   }), [heading, text, duration]);
-  const width = aspect === 'vertical' ? 1080 : aspect === 'horizontal' ? 1920 : 1080;
-  const height = aspect === 'vertical' ? 1920 : aspect === 'horizontal' ? 1080 : 1080;
+  // The existing Tegaki composition is authored for portrait 9:16. Other ratios
+  // remain disabled until their layouts are implemented and visually tested.
+  const width = 1080;
+  const height = 1920;
   const durationInFrames = Math.max(60, Math.round(duration * 30));
 
   return (
@@ -48,18 +49,11 @@ export default function TegakiStudioPage() {
             <label className="block text-sm font-semibold text-slate-700">Handwritten lesson / narration
               <textarea value={text} onChange={e => setText(e.target.value)} rows={9} className="mt-1 w-full rounded-xl border border-slate-300 px-3 py-3 leading-6" />
             </label>
-            <div className="grid gap-3 sm:grid-cols-2">
-              <label className="text-sm font-semibold text-slate-700">Duration
-                <select value={duration} onChange={e => setDuration(Number(e.target.value))} className="mt-1 w-full rounded-xl border border-slate-300 bg-white px-3 py-3">
-                  <option value={20}>20 seconds</option><option value={30}>30 seconds</option><option value={40}>40 seconds</option><option value={60}>60 seconds</option>
-                </select>
-              </label>
-              <label className="text-sm font-semibold text-slate-700">Aspect ratio
-                <select value={aspect} onChange={e => setAspect(e.target.value)} className="mt-1 w-full rounded-xl border border-slate-300 bg-white px-3 py-3">
-                  <option value="vertical">Vertical · 9:16</option><option value="horizontal">Landscape · 16:9</option><option value="square">Square · 1:1</option>
-                </select>
-              </label>
-            </div>
+            <label className="block text-sm font-semibold text-slate-700">Duration
+              <select value={duration} onChange={e => setDuration(Number(e.target.value))} className="mt-1 w-full rounded-xl border border-slate-300 bg-white px-3 py-3">
+                <option value={20}>20 seconds</option><option value={30}>30 seconds</option><option value={40}>40 seconds</option><option value={60}>60 seconds</option>
+              </select>
+            </label>
             <label className="block text-sm font-semibold text-slate-700">Brand label
               <input value={brand} onChange={e => setBrand(e.target.value)} className="mt-1 w-full rounded-xl border border-slate-300 px-3 py-3" />
             </label>
@@ -82,9 +76,9 @@ export default function TegakiStudioPage() {
               <div><h2 className="text-lg font-black text-slate-900">Live Tegaki preview</h2><p className="text-sm text-slate-500">Existing Remotion Tegaki composition · continuous page</p></div>
               <span className="rounded-full bg-emerald-50 px-3 py-1 text-xs font-bold text-emerald-700">Preview only</span>
             </div>
-            <div className="mx-auto overflow-hidden rounded-xl bg-slate-200 shadow-inner" style={{ maxWidth: aspect === 'horizontal' ? 760 : 430 }}>
+            <div className="mx-auto overflow-hidden rounded-xl bg-slate-200 shadow-inner" style={{ maxWidth: 430 }}>
               <Player
-                key={aspect + duration + style}
+                key={duration + style}
                 component={StudioComposition}
                 inputProps={{ title: heading, scenes: [scene], template: 'tegaki', brand, accent: '#f4c542', narrationVolume: 1 }}
                 durationInFrames={durationInFrames}
@@ -93,7 +87,7 @@ export default function TegakiStudioPage() {
                 fps={30}
                 controls
                 loop
-                style={{ width: '100%', aspectRatio: `${width} / ${height}` }}
+                style={{ width: '100%', aspectRatio: '9 / 16' }}
               />
             </div>
             <p className="mt-4 text-xs leading-5 text-slate-500">The preview currently uses the existing classic notebook treatment. The new independent renderer, style-specific layouts, AI composition, narration generation and MP4 export will be added in subsequent phases.</p>
