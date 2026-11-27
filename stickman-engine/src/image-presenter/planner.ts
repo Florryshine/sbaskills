@@ -93,8 +93,8 @@ export function planImagePresenter(input: ImagePresenterPlannerInput): ImagePres
   const topic = clean(input.topic || '');
   if (!topic) throw new Error('A topic is required to plan an Image Presenter video.');
   const script = (input.script ?? '').trim();
-  const mode = inferMode(input, topic + '
   const mode = inferMode(input, topic + '\n' + script);
+  const rawBeats = splitBeats(script);
   const maxScenes = Math.max(1, Math.min(12, Math.floor(input.maxScenes ?? 6)));
   const beats = mode === 'multi-image-sequence'
     ? [rawBeats.length ? rawBeats.join(' ') : topic]
