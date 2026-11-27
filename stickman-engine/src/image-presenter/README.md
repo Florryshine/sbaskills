@@ -2,35 +2,32 @@
 
 An additive production mode inside the existing Stickman Studio. It does not replace the original Stickman engine or change its renderer, jobs, routes, or queue.
 
-## Production modes
-- single-image: one prominent image with a presenter cue and optional camera zoom.
-- two-image-comparison: two independently retrieved and labelled assets.
-- multi-image-sequence: an ordered series of image/narration beats.
+## Four modes
+- single-image: one dominant visual and presenter cue.
+- two-image-comparison: two independently acquired and labelled assets.
+- multi-image-sequence: ordered image/narration beats.
 - diagram-explanation: one diagram with normalized annotation regions.
 
 ## Phase 1 — Foundation
-- types.ts defines versioned project, scene, asset, caption, presenter and validation contracts.
-- validate.ts performs structural checks, validates image URLs and diagram regions, and enforces distinct assets for comparison scenes.
+Versioned project/scene contracts, presenter gestures, captions, transitions, image provenance and deterministic validation. Comparison validation rejects identical IDs or media URLs.
 
 ## Phase 2 — Intelligent planner
-- planner.ts converts a topic and optional script into an editable deterministic scene plan.
-- Auto-classifies comparison, diagram, sequence/process and single-image intent; explicit mode overrides classification.
-- Produces bounded scene counts, narration/caption beats, layout intent, presenter gesture hints and image retrieval briefs.
-- Comparison plans create two separate image needs with reciprocal distinctFrom constraints.
-- The planner intentionally makes no AI or provider calls. This keeps planning reproducible and free, while allowing a future model to propose content without owning validation or layout decisions.
-- It emits an intermediate plan, not fake media URLs or render-ready assets. Phase 3 resolves image needs and maps the plan to Phase 1 contracts.
+A pure deterministic planner accepts a topic/script and emits bounded scene beats, layout intent, presenter gesture hints and image retrieval briefs. Comparison sides are separate image needs with reciprocal distinctFrom constraints.
 
-## Existing infrastructure to reuse
-- Character skeleton and style presets: src/rig/character.ts.
-- Point/present actions: SceneAction in src/rig/character.ts.
-- Timeline, captions, audio, camera, overlays and transitions: src/scene/compiler.ts.
-- Image retrieval and comparison slots: visual-learning-engine/src/imagery/providers.ts and visual-learning-engine/src/prepare.ts.
-- Existing Remotion composition and rendering: src/render/cli.ts.
+## Phase 3 — Image acquisition
+- `acquisition.ts` is a Node-only adapter for the same free/keyless provider ecosystem used by Visual Learning: Pexels and Pixabay (existing platform keys), Wikimedia Commons and Openverse (keyless).
+- Provider-specific metadata is retained: landing/source URL, creator/attribution, license label and attribution requirement where the provider supplies them.
+- Candidates without a traceable license signal are skipped rather than treated as reusable.
+- Images are downloaded, normalized, SHA-256 hashed and stored under the job public directory.
+- A persistent cache is keyed by search query and aspect ratio. Cached files are reused only when they still exist.
+- Comparison sides are checked against actual normalized bytes. If no distinct result is available, the need remains unresolved with a warning; no generic placeholder or duplicate is substituted.
+- This phase does not yet convert acquired files into render-ready scenes. Phase 4/5 handles composition and timeline mapping.
+
+## Existing infrastructure
+- The adapter uses the existing Pexels/Pixabay environment credentials and the same provider services as `visual-learning-engine/src/imagery/providers.ts`.
+- Character rig and point/present actions: `src/rig/character.ts`.
+- Timeline/audio/camera/overlay compiler: `src/scene/compiler.ts`.
+- Remotion entry point: `src/render/cli.ts`.
 
 ## Constraints
-1. Keep new code under stickman-engine/src/image-presenter/ until an integration point is proven necessary.
-2. Do not import Node-only provider modules into browser-facing components.
-3. Preserve source, license and attribution metadata.
-4. Never silently substitute one comparison side's image for the other.
-5. Models may propose lesson structure; deterministic code owns validation, layout, gestures, timing and rendering.
-6. Preserve original Stickman Studio functionality.
+Keep acquisition server-side; never bundle Node APIs into browser code. Preserve provenance. Never silently reuse one image for both comparison sides. Do not alter the original Stickman pipeline.
