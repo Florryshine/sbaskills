@@ -38,7 +38,10 @@ function shakeAt(timeline: Timeline, frame: number): [number, number] {
   return [dx, dy];
 }
 
-type ImagePresenterRenderData = { imageEvents?: Array<{ frameStart: number; frameEnd: number; mediaUrl: string; region: { x: number; y: number; width: number; height: number }; label?: string; attribution?: string; order?: number }>; annotationEvents?: Array<{ frameStart: number; frameEnd: number; label: string; region: { x: number; y: number; width: number; height: number } }> };\n\nexport const StickmanComposition: React.FC<{\n  imagePresenter?: ImagePresenterRenderData;
+type ImagePresenterRenderData = { imageEvents?: Array<{ frameStart: number; frameEnd: number; mediaUrl: string; region: { x: number; y: number; width: number; height: number }; label?: string; attribution?: string; order?: number }>; annotationEvents?: Array<{ frameStart: number; frameEnd: number; label: string; region: { x: number; y: number; width: number; height: number } }> };
+
+export const StickmanComposition: React.FC<{
+  imagePresenter?: ImagePresenterRenderData;
   timeline: Timeline;
   /** Optional narration URL overrides (file -> public URL) so browser
    * previews (@remotion/player) can stream audio from Storage instead of
@@ -63,7 +66,9 @@ type ImagePresenterRenderData = { imageEvents?: Array<{ frameStart: number; fram
     return visemeAtFrame(caption.words, frame);
   };
   const wipe = timeline.transitions.find((t) => t.type === 'wipe' && frame >= t.frame && frame < t.frame + t.dur);
-  const activeOverlays = timeline.overlays.filter((o) => frame >= o.frame && frame < o.frame + o.dur);\n  const activeImages = (imagePresenter?.imageEvents ?? []).filter((event) => frame >= event.frameStart && frame < event.frameEnd).sort((a, b) => (a.order ?? 0) - (b.order ?? 0));\n  const activeAnnotations = (imagePresenter?.annotationEvents ?? []).filter((event) => frame >= event.frameStart && frame < event.frameEnd);
+  const activeOverlays = timeline.overlays.filter((o) => frame >= o.frame && frame < o.frame + o.dur);
+  const activeImages = (imagePresenter?.imageEvents ?? []).filter((event) => frame >= event.frameStart && frame < event.frameEnd).sort((a, b) => (a.order ?? 0) - (b.order ?? 0));
+  const activeAnnotations = (imagePresenter?.annotationEvents ?? []).filter((event) => frame >= event.frameStart && frame < event.frameEnd);
 
   // layer everything by z
   const drawables: { z: number; el: React.ReactElement }[] = [];
@@ -123,7 +128,8 @@ type ImagePresenterRenderData = { imageEvents?: Array<{ frameStart: number; fram
           </g>;
         })}
         {caption && <Captions caption={caption} frameNo={frame} speakerColor={SPEAKER_COLORS[caption.who] ?? '#8fa4b5'} />}
-        {activeImages.some(event => event.attribution) && <text x={W - 18} y={H - 18} textAnchor="end" fill="#475569" fontSize={12}>Image credits: {[...new Set(activeImages.map(event => event.attribution).filter(Boolean))].join(', ').slice(0, 100)}</text>}\n        {wipe && <Wipe progress={(frame - wipe.frame) / wipe.dur} />}
+        {activeImages.some(event => event.attribution) && <text x={W - 18} y={H - 18} textAnchor="end" fill="#475569" fontSize={12}>Image credits: {[...new Set(activeImages.map(event => event.attribution).filter(Boolean))].join(', ').slice(0, 100)}</text>}
+        {wipe && <Wipe progress={(frame - wipe.frame) / wipe.dur} />}
       </svg>
       {/* Each clip starts at the frame the compiler assigned to its dialogue
           line. Without the Sequence wrapper every clip plays from frame 0 and
