@@ -33,6 +33,15 @@ A pure deterministic planner accepts a topic/script and emits bounded scene beat
 - Composition output is renderer-agnostic and uses normalized geometry. The existing character rig and renderer remain untouched; no second skeleton or legacy renderer fork is introduced.
 - The module deliberately returns geometry and cue metadata, not an MP4 or a render-ready Remotion composition. Phase 5 will map these placements into the established timeline/render contract.
 
+## Phase 5 — Narration and timeline synchronization
+- Added `compileImagePresenterTimeline`, an adapter that turns project scenes into the existing `SceneScript` and invokes the existing deterministic compiler.
+- Uses the established compiler for frame allocation, narrator audio placement, word-level caption timing, character streams and camera keyframes.
+- Sequence items become ordered narration beats. Diagram annotations with narration become separately timed beats; their normalized regions are emitted as frame-accurate annotation events.
+- Emits image events with exact scene frame spans, composition regions, local acquired file paths, attribution and license metadata.
+- Emits presenter cue events aligned to each narration beat and maps pointing/explaining/surprise/thinking cues to existing rig actions.
+- Narration map keys retain the existing `sceneIndex:lineIndex` convention. Supplied measured audio durations drive compiler timing; text-duration estimates are only fallbacks.
+- The adapter returns a synchronized timeline plus image/annotation/presenter event tracks. The current Remotion renderer does not yet draw those image events; Phase 6/7 will wire the composition and controls into the studio/render path.
+
 ## Existing infrastructure
 - The adapter uses the existing Pexels/Pixabay environment credentials and the same provider services as `visual-learning-engine/src/imagery/providers.ts`.
 - Character rig and point/present actions: `src/rig/character.ts`.
