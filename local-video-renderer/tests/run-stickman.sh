@@ -20,6 +20,9 @@ check() { # scenario jq-ish python expr
   if python3 -c "import json,sys; r=json.loads(sys.argv[1]); sys.exit(0 if ($2) else 1)" "$out"; then echo "PASS $1"; else echo "FAIL $1: $out"; fail=1; fi
 }
 check image_presenter "r['status']=='ready' and r['video_url'] and r['image_presenter_image_events']==1 and r['timeline_audio']==1 and r['asset_links_knowledge']"
+check image_presenter_comparison "r['status']=='ready' and r['image_presenter_image_events']==2 and r['timeline_audio']==3 and r['asset_links_knowledge']"
+check image_presenter_sequence "r['status']=='ready' and r['image_presenter_image_events']==3 and r['timeline_audio']==3 and r['asset_links_knowledge']"
+check image_presenter_diagram "r['status']=='ready' and r['image_presenter_image_events']==1 and r['image_presenter_annotation_events']==1 and r['timeline_audio']==2 and r['asset_links_knowledge']"
 check happy        "r['status']=='ready' and r['content_assets']==1 and r['media_files']==1 and r['publish_jobs']==2 and r['ka_rows']==1 and r['asset_links_knowledge'] and r['narration_entries']==13 and r['narration_have_urls'] and r['timeline_audio']==13 and r['audio_starts_increasing'] and r['audio_is_riff'] and 'narrating' in r['stages'] and 'uploading' in r['stages']"
 check rerun        "r['status']=='ready' and r['content_assets']==1 and r['media_files']==1 and r['publish_jobs']==2"
 check ai_ok        "r['status']=='ready' and r['has_script'] and r['title']=='Ben and the Stubborn Box - A Friction Story' and r['ka_rows']==1 and 'scripting' in r['stages'] and r['asset_links_knowledge']"
