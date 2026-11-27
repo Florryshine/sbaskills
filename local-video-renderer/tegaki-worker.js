@@ -75,11 +75,17 @@ async function render(job) {
   await mkdir(outDir, { recursive: true });
   const outPath = path.join(outDir, 'lesson.mp4');
   await setStage(job, 'rendering', 'Rendering ' + ratio + ' MP4 with Remotion');
+  let lastProgressMark = -1;
   await renderMedia({
     composition, serveUrl, codec: 'h264', outputLocation: outPath, inputProps,
     pixelFormat: 'yuv420p', crf: 18, concurrency: 2,
     onProgress: ({ progress }) => {
-      if (Number.isFinite(progress)) setStage(job, 'rendering', 'Rendering video · ' + Math.round(progress * 100) + '%').catch(() => {});
+      if (!Number.isFinite(progress)) return;
+      const mark = Math.floor(progress * 20) * 5;
+      if (mark > lastProgressMark) {
+        lastProgressMark = mark;
+        setStage(job, 'rendering', 'Rendering video · ' + mark + '%').catch(() => {});
+      }
     },
   });
   const buffer = await readFile(outPath);
