@@ -104,11 +104,12 @@ export function planImagePresenter(input: ImagePresenterPlannerInput): ImagePres
   const warnings: string[] = [];
   if (mode === 'two-image-comparison' && !/\b(vs\.?|versus|compared with|compared to|difference between)\b/i.test(topic + ' ' + script))
     warnings.push('Comparison mode selected, but two explicit subjects were not found. Review both image subjects before retrieval.');
-  if (mode === 'multi-image-sequence' && beats.length === 1)
+  if (mode === 'multi-image-sequence' && rawBeats.length <= 1)
     warnings.push('Only one script beat was supplied. Add numbered steps or separate lines for a meaningful sequence.');
   if (mode === 'diagram-explanation' && !/\b(diagram|labelled|labeled|anatomy|parts of|structure of|cross[- ]section)\b/i.test(topic + ' ' + script))
     warnings.push('Diagram mode selected without a clear diagram keyword. Confirm the intended source diagram.');
-  if (rawBeats.length > maxScenes) warnings.push('Script was capped at ' + maxScenes + ' scenes; remaining beats were omitted.');
+  if (mode === 'multi-image-sequence' && rawBeats.length > 8) warnings.push('Sequence was capped at eight image steps; split longer processes into separate videos.');
+  else if (mode !== 'multi-image-sequence' && rawBeats.length > maxScenes) warnings.push('Script was capped at ' + maxScenes + ' scenes; remaining beats were omitted.');
   return {
     version: 1, title: topic, subject: topic, mode,
     aspectRatio: input.aspectRatio ?? '9:16', presenterId: input.presenterId ?? 'prof',
