@@ -1,4 +1,5 @@
 -- Tegaki Studio Phase 5: durable Remotion export queue and Social Engine draft handoff.
+create extension if not exists pg_net;
 create table if not exists public.tegaki_jobs (
   id uuid primary key default gen_random_uuid(),
   title text not null,
