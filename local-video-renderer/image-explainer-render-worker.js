@@ -90,15 +90,23 @@ async function processJob(job){
    const audioFile=`audio/scene-${String(i+1).padStart(3,'0')}.${audioExt}`;
    await download('image-explainer-audio',clip.storage_path,path.join(publicDir,audioFile));
    const supportingAssets=[];
+   let skippedSupportingAssets=0;
    for(let assetIndex=0;assetIndex<(scene.supporting_assets||[]).length;assetIndex++){
     const asset=scene.supporting_assets[assetIndex];
-    if(!validateAssetForRender(asset)) throw new Error(`Scene ${i+1} contains an unapproved supporting asset.`);
+    // Supporting visuals are optional. Never fail the whole explainer because an
+    // optional asset is unapproved; keep the uploaded source image as the visual.
+    if(!validateAssetForRender(asset)){
+     skippedSupportingAssets++;
+     console.warn(`[image-explainer-render] skipping unapproved supporting asset in scene ${i+1}: ${asset?.id||asset?.title||'unknown'}`);
+     continue;
+    }
     const base=`assets/scene-${String(i+1).padStart(3,'0')}-${String(assetIndex+1).padStart(2,'0')}`;
     const ext=await downloadApprovedMedia(asset,path.join(publicDir,base));
     supportingAssets.push({...asset,asset_file:`${base}.${ext}`});
    }
    renderScenes.push({...scene,audio_file:audioFile,supporting_assets:supportingAssets});
-   await update(job,{stage_message:`Prepared narration and ${supportingAssets.length} approved media asset(s) for scene ${i+1} of ${job.timeline.scenes.length}.`});
+   const fallbackNote=skippedSupportingAssets? `; skipped ${skippedSupportingAssets} unapproved optional asset(s), using the original source image instead`:'';
+   await update(job,{stage_message:`Prepared narration and ${supportingAssets.length} approved media asset(s) for scene ${i+1} of ${job.timeline.scenes.length}${fallbackNote}.`});
   }
   const vertical=job.timeline.aspect==='9:16',square=job.timeline.aspect==='1:1';
   const dimensions=square?{width:1080,height:1080}:vertical?{width:1080,height:1920}:{width:1920,height:1080};
