@@ -131,6 +131,30 @@ function sceneBeats(scene: ImagePresenterScene): Array<{
   ];
 }
 
+/** Build the narration-only SceneScript consumed by the existing TTS worker. */
+export function createImagePresenterNarrationScript(project: ImagePresenterProject): SceneScript {
+  if (!project.scenes.length) throw new Error('Image Presenter project must contain at least one scene.');
+  const fps = project.fps && project.fps >= 12 && project.fps <= 60 ? project.fps : 30;
+  const width = project.aspectRatio === '9:16' ? 720 : project.aspectRatio === '1:1' ? 1080 : 1280;
+  const height = project.aspectRatio === '9:16' ? 1280 : project.aspectRatio === '1:1' ? 1080 : 720;
+  const scriptScenes: SceneScript['scenes'] = project.scenes.map((scene) => {
+    const beats = sceneBeats(scene);
+    const dialogue = beats.map((beat, lineIndex) => ({ who: 'narr', text: beat.text, duration: beat.duration, t0: beats.slice(0, lineIndex).reduce((sum, b) => sum + b.duration + 0.16, 0) + 0.25 }));
+    const actions: SceneAction[] = [];
+    beats.forEach((beat, lineIndex) => {
+      const start = dialogue[lineIndex].t0 ?? 0;
+      const cue = lineIndex === 0 ? scene.presenter : { characterId: scene.presenter.characterId, gesture: beat.gesture, position: scene.presenter.position, ...(beat.target ? { target: beat.target } : {}) };
+      const doAction = gestureAction(cue.gesture, [0, 0]);
+      if (!doAction) return;
+      if (doAction === 'point' || doAction === 'present') actions.push({ char: project.presenterId, do: doAction, at: worldPoint(beat.target ?? cue.target, width, height), t0: start + 0.12, dur: Math.min(1.8, beat.duration * 0.7) });
+      else if (doAction === 'reactSurprise') actions.push({ char: project.presenterId, do: 'reactSurprise', t0: start + 0.12 });
+      else if (doAction === 'face') actions.push({ char: project.presenterId, do: 'expression', emotion: 'focused', t0: start + 0.12, dur: beat.duration * 0.7 });
+    });
+    const x = presenterX(scene.presenter.position, width);
+    return { id: scene.id, duration: Math.max(4.2, dialogue.reduce((sum, line) => sum + (line.duration ?? 0) + 0.6, 0) + 0.8), dialogue, actions, cast: { [project.presenterId]: { x, facing: x < 0 ? 1 as const : -1 as const } }, camera: [{ do: 'establish' as const, at: 0, scale: project.aspectRatio === '9:16' ? 1.75 : 1.2, dur: 0.3 }], ...(scene.transitionIn === 'fade' ? { enter: { type: 'wipe' as const, dur: 0.35 } } : {}) };
+  });
+  return { title: project.title, fps, width, height, environment: { type: 'abstract', seed: 17, accent: '#2285b7' }, cast: { [project.presenterId]: { style: 'prof' } }, scenes: scriptScenes };
+}
 /**
  * Compile a project into the established character/audio/caption timeline and
  * frame-accurate image/annotation/cue tracks. narration keys use "sceneIndex:lineIndex".
