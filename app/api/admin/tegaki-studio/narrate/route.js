@@ -1,8 +1,8 @@
 import { NextResponse } from 'next/server';
 import { requireAdminApi } from '@/lib/require-admin-api';
-import { createAdminClient } from '@/lib/supabase-admin';
+import { getKnowledgeAsset, getOrCreateNarration } from '@/lib/ka-package/video-adapters';
 import { synthesizeLine, estimateDurationSeconds, getAudioMimeType } from '@/lib/podcastTTS';
-import { getOrCreateNarration } from '@/lib/ka-package/video-adapters';
+
 
 export const runtime = 'nodejs';
 export const maxDuration = 180;
@@ -24,10 +24,8 @@ export async function POST(request) {
     const knowledgeAssetId = typeof body.knowledgeAssetId === 'string' ? body.knowledgeAssetId.slice(0, 100) : '';
     let asset = null;
     if (knowledgeAssetId) {
-      const supabase = createAdminClient();
-      const { data, error } = await supabase.from('knowledge_assets').select('id').eq('id', knowledgeAssetId).single();
-      if (error || !data) return NextResponse.json({ error: 'Knowledge Asset not found for narration caching.' }, { status: 404 });
-      asset = data;
+      try { asset = await getKnowledgeAsset(knowledgeAssetId); }
+      catch { return NextResponse.json({ error: 'Knowledge Asset not found for narration caching.' }, { status: 404 }); }
     }
 
     const audio = [];
