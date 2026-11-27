@@ -149,23 +149,33 @@ export function composeImagePresenterScene(
     }
   } else if (scene.type === 'multi-image-sequence') {
     const sequence = scene.items;
+    const visible = sequence.slice(0, 8);
     if (aspectRatio === '9:16') {
       layout = 'sequence-vertical';
-      const gap = 0.025, top = 0.06, available = 0.78;
-      const cardH = Math.min(0.22, (available - gap * Math.max(0, sequence.length - 1)) / Math.max(1, sequence.length));
-      sequence.forEach((item, index) => {
-        const y = top + index * (cardH + gap);
-        images.push(imagePlacement(item.id, item.image.id, rect(0.1, y, 0.8, cardH), 'sequence', item.caption?.text || String(index + 1), index));
+      const columns = visible.length > 4 ? 2 : 1;
+      const rows = Math.ceil(visible.length / columns);
+      const gapX = 0.035, gapY = 0.025;
+      const cardW = columns === 1 ? 0.82 : 0.405;
+      const cardH = Math.min(0.22, (0.76 - gapY * Math.max(0, rows - 1)) / Math.max(1, rows));
+      visible.forEach((item, index) => {
+        const col = index % columns, row = Math.floor(index / columns);
+        const x = columns === 1 ? 0.09 : 0.08 + col * (cardW + gapX);
+        const y = 0.06 + row * (cardH + gapY);
+        images.push(imagePlacement(item.id, item.image.id, rect(x, y, cardW, cardH), 'sequence', item.caption?.text || String(index + 1), index));
       });
       primaryImage = images[0]?.frame ?? primaryImage;
       presenterBounds = rect(0.72, 0.85, 0.24, 0.13);
     } else {
       layout = 'sequence-horizontal';
-      const gap = 0.025, left = 0.04, available = 0.92;
-      const cardW = Math.min(0.28, (available - gap * Math.max(0, sequence.length - 1)) / Math.max(1, sequence.length));
-      sequence.forEach((item, index) => {
-        const x = left + index * (cardW + gap);
-        images.push(imagePlacement(item.id, item.image.id, rect(x, 0.12, cardW, 0.66), 'sequence', item.caption?.text || String(index + 1), index));
+      const columns = Math.min(4, visible.length), rows = Math.ceil(visible.length / 4);
+      const gapX = 0.025, gapY = 0.04;
+      const cardW = (0.92 - gapX * Math.max(0, columns - 1)) / Math.max(1, columns);
+      const cardH = rows === 1 ? 0.66 : 0.32;
+      visible.forEach((item, index) => {
+        const col = index % 4, row = Math.floor(index / 4);
+        const x = 0.04 + col * (cardW + gapX);
+        const y = rows === 1 ? 0.12 : 0.12 + row * (cardH + gapY);
+        images.push(imagePlacement(item.id, item.image.id, rect(x, y, cardW, cardH), 'sequence', item.caption?.text || String(index + 1), index));
       });
       primaryImage = images[0]?.frame ?? primaryImage;
       presenterBounds = rect(0.42, 0.79, 0.16, 0.19);
