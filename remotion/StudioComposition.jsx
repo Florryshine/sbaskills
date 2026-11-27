@@ -216,9 +216,10 @@ function TegakiScene({scene,brand,accent,index}) {
  </AbsoluteFill>;
 }
 function Scene({scene,index,template,brand,accent,narrationVolume}) {
+ const {width,height}=useVideoConfig();
  let visual;
  if(template==='whiteboard') visual=<WhiteboardScene scene={scene} brand={brand} accent={accent} index={index}/>;
- else if(template==='tegaki') visual=<TegakiScene scene={scene} index={index} brand={brand} accent={accent}/>;
+ else if(template==='tegaki') { const scale=Math.min(width/1080,height/1920); visual=<AbsoluteFill style={{background:'#dbe4ec',overflow:'hidden'}}><div style={{position:'absolute',width:1080,height:1920,left:'50%',top:'50%',transform:`translate(-50%,-50%) scale(${scale})`,transformOrigin:'center'}}><TegakiScene scene={scene} index={index} brand={brand} accent={accent}/></div></AbsoluteFill>; }
  else if(template==='question') visual=<QuestionScene scene={scene} brand={brand} accent={accent} index={index}/>;
  else if(template==='story') visual=<StoryScene scene={scene} brand={brand} accent={accent} index={index}/>;
  else visual=<ExplainerScene scene={scene} brand={brand} accent={accent} index={index}/>;
