@@ -11,7 +11,8 @@
     "db:generate": "prisma generate",
     "db:migrate": "prisma migrate dev",
     "db:reset": "prisma migrate reset",
-    "test:tegaki-styles": "node scripts/test-tegaki-styles.mjs"
+    "test:tegaki-styles": "node scripts/test-tegaki-styles.mjs",
+    "test:tegaki-composition": "node scripts/test-tegaki-composition.mjs"
   },
   "dependencies": {
     "@dnd-kit/core": "^6.3.1",
