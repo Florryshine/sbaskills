@@ -12,7 +12,8 @@
     "db:migrate": "prisma migrate dev",
     "db:reset": "prisma migrate reset",
     "test:tegaki-styles": "node scripts/test-tegaki-styles.mjs",
-    "test:tegaki-composition": "node scripts/test-tegaki-composition.mjs"
+    "test:tegaki-composition": "node scripts/test-tegaki-composition.mjs",
+    "test:tegaki-audio": "node scripts/test-tegaki-audio.mjs"
   },
   "dependencies": {
     "@dnd-kit/core": "^6.3.1",
