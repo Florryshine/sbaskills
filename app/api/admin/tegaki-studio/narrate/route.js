@@ -1,4 +1,6 @@
 import { NextResponse } from 'next/server';
+import { randomUUID } from 'node:crypto';
+import { createAdminClient } from '@/lib/supabase-admin';
 import { requireAdminApi } from '@/lib/require-admin-api';
 import { getKnowledgeAsset, getOrCreateNarration } from '@/lib/ka-package/video-adapters';
 import { synthesizeLine, estimateDurationSeconds, getAudioMimeType } from '@/lib/podcastTTS';
@@ -34,17 +36,23 @@ export async function POST(request) {
       const narration = String(scene?.narration || scene?.text || '').replace(/[\u0000-\u001f]/g, ' ').trim().slice(0, 2400);
       if (!narration) return NextResponse.json({ error: 'Scene ' + (index + 1) + ' has no narration.' }, { status: 400 });
 
-      let audioSrc, reused = false, mimeType;
+      let audioSrc, reused = false, mimeType, audioBuffer;
       if (asset) {
         const cached = await getOrCreateNarration(asset, narration, { voice, emotion });
-        audioSrc = 'data:' + (cached.mimeType || 'audio/mpeg') + ';base64,' + cached.audioBase64;
+        audioBuffer = Buffer.from(cached.audioBase64, 'base64');
         reused = cached.reused;
-        mimeType = cached.mimeType;
+        mimeType = cached.mimeType || 'audio/mpeg';
       } else {
-        const buffer = await synthesizeLine(narration, voice, emotion);
-        mimeType = getAudioMimeType(buffer);
-        audioSrc = 'data:' + mimeType + ';base64,' + buffer.toString('base64');
+        audioBuffer = await synthesizeLine(narration, voice, emotion);
+        mimeType = getAudioMimeType(audioBuffer);
       }
+      if (!audioBuffer?.length) throw new Error('Narration audio was empty for scene ' + (index + 1) + '.');
+      const extension = mimeType === 'audio/wav' || mimeType === 'audio/x-wav' ? 'wav' : mimeType === 'audio/ogg' ? 'ogg' : mimeType === 'audio/mp4' ? 'm4a' : 'mp3';
+      const storagePath = 'narration/' + (knowledgeAssetId || 'manual') + '/' + randomUUID() + '.' + extension;
+      const supabase = createAdminClient();
+      const { error: uploadError } = await supabase.storage.from('tegaki-assets').upload(storagePath, audioBuffer, { contentType: mimeType, upsert: false });
+      if (uploadError) throw new Error('Could not store narration audio: ' + uploadError.message);
+      audioSrc = supabase.storage.from('tegaki-assets').getPublicUrl(storagePath).data.publicUrl;
 
       const estimatedSpeechSeconds = Math.max(2, estimateDurationSeconds(narration));
       audio.push({
