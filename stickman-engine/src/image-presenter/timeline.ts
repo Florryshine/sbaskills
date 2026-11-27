@@ -147,9 +147,13 @@ export function compileImagePresenterTimeline(
   const warnings: string[] = [];
   const scriptScenes: SceneScript['scenes'] = [];
   const beatLists = project.scenes.map(sceneBeats);
+  const resolvedBeatLists = beatLists.map((beats, sceneIndex) => beats.map((beat, lineIndex) => ({
+    ...beat,
+    duration: seconds(narration[`${sceneIndex}:${lineIndex}`]?.dur, beat.duration),
+  })));
 
   project.scenes.forEach((scene, sceneIndex) => {
-    const beats = beatLists[sceneIndex];
+    const beats = resolvedBeatLists[sceneIndex];
     const dialogue = beats.map((beat, lineIndex) => ({
       who: 'narr', text: beat.text, duration: beat.duration,
       t0: beats.slice(0, lineIndex).reduce((sum, b) => sum + b.duration + 0.16, 0) + 0.25,
@@ -196,13 +200,12 @@ export function compileImagePresenterTimeline(
   const annotationEvents: ImagePresenterAnnotationEvent[] = [];
   const presenterEvents: ImagePresenterCueEvent[] = [];
 
-  let frameCursor = 0;
   project.scenes.forEach((scene, sceneIndex) => {
     const composition = composeImagePresenterScene(scene, project.aspectRatio);
-    const beats = beatLists[sceneIndex];
-    const sceneDuration = scriptScenes[sceneIndex].duration ?? 4.2;
-    const frameStart = frameCursor;
-    const frameEnd = Math.min(timeline.durationFrames, frameStart + Math.round(sceneDuration * fps));
+    const beats = resolvedBeatLists[sceneIndex];
+    const compiledSpan = timeline.sceneSpans.find(span => span.id === scene.id);
+    const frameStart = compiledSpan?.start ?? 0;
+    const frameEnd = compiledSpan?.end ?? frameStart;
     sceneTimings.push({ sceneId: scene.id, index: sceneIndex, frameStart, frameEnd,
       durationFrames: frameEnd - frameStart, composition });
     composition.warnings.forEach(w => warnings.push(`${scene.id}: ${w}`));
@@ -252,10 +255,7 @@ export function compileImagePresenterTimeline(
         ...(beat.imageId ? { imageId: beat.imageId } : {}),
       });
     });
-    frameCursor = frameEnd;
   });
-
-  if (timeline.durationFrames < frameCursor) warnings.push('Compiled timeline ended before all visual events; verify scene duration and narration duration inputs.');
   return { timeline, sceneTimings, imageEvents, annotationEvents, presenterEvents, warnings };
 }
 
