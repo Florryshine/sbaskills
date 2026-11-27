@@ -1,12 +1,7 @@
 /** @type {import('next').NextConfig} */
-const withPWA = require('next-pwa')({
-  dest: 'public',
-  register: true,
-  skipWaiting: true,
-  disable: process.env.NODE_ENV === 'development',
-  runtimeCaching: [],
-})
-const nextConfig = withPWA({
+const { withPWA } = require('@swavoti/next-pwa')
+
+const nextConfig = {
   async redirects() {
     return [
       {
@@ -22,7 +17,6 @@ const nextConfig = withPWA({
     ];
   },
   reactStrictMode: true,
-  swcMinify: true,
   images: {
     // Images are already hosted on Cloudinary/Supabase. Disable Vercel's
     // Image Optimization to prevent Image Optimization Transformations usage.
@@ -57,5 +51,6 @@ const nextConfig = withPWA({
     }
     return config
   },
-})
-module.exports = nextConfig
+}
+
+module.exports = withPWA(nextConfig)
