@@ -1,3 +1,4 @@
+import { requireAdminApi } from '@/lib/require-admin-api';
 import { NextResponse } from 'next/server';
 import { renderTegakiStyleImage } from '@/lib/tegaki-engine/render';
 
@@ -10,6 +11,8 @@ const ALLOWED_STYLES = new Set([
 ]);
 
 export async function POST(request) {
+  const auth = await requireAdminApi();
+  if (auth.response) return auth.response;
   try {
     const body = await request.json();
     const title = String(body.title || '').trim().slice(0, 100);
