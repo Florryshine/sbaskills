@@ -222,18 +222,52 @@ function TegakiScene({scene,brand,accent,index,styleId='classic-notebook'}) {
   </div>
  </AbsoluteFill>;
 }
-function Scene({scene,index,template,brand,accent,narrationVolume,styleId}) {
+function TegakiWideScene({scene,brand,accent,index,styleId,layout='landscape'}) {
+ const frame=useCurrentFrame(), {fps}=useVideoConfig();
+ const duration=Math.max(2,Number(scene.durationSeconds)||40), total=Math.max(1,Math.round(duration*fps));
+ const headingProgress=interpolate(frame,[0,Math.max(1,total*.16)],[0,1],clamp);
+ const bodyProgress=interpolate(frame,[Math.max(1,total*.12),Math.max(2,total*.92)],[0,1],clamp);
+ const theme=({
+  'premium-notes':{outer:'#edf2f7',paper:'#fff',line:'#dce7f2',ink:'#24364b',heading:'#173f68',muted:'#8493a5'},
+  'exam-revision':{outer:'#e9e4d8',paper:'#fffef2',line:'#e7dfc1',ink:'#1e293b',heading:'#12385f',muted:'#7c8795'},
+  'colourful-classroom':{outer:'#f3e8dd',paper:'#fff9e9',line:'#e8c6da',ink:'#35415c',heading:'#68449a',muted:'#8b789b'},
+  'dark-chalkboard':{outer:'#10251f',paper:'#18372f',line:'#527e70',ink:'#f7f1dc',heading:'#fff7d8',muted:'#b6d2c4'},
+  'digital-study-pad':{outer:'#e6ebf7',paper:'#f4f7ff',line:'#d1dcf1',ink:'#263f70',heading:'#263f70',muted:'#8295ba'},
+ }[styleId]||{outer:'#e9e2d8',paper:'#fffdf6',line:'#b9d5e4',ink:C.ink,heading:C.navy,muted:'#8794a1'});
+ const cues=(scene.illustrationCues||[]).length?scene.illustrationCues:[{at:0,illustration:scene.illustration||'animal-cell',label:'Key concept'}];
+ const activeCue=cues.slice().sort((a,b)=>(Number(a.at)||0)-(Number(b.at)||0)).reduce((chosen,cue)=>frame>=total*Math.max(0,Math.min(99,Number(cue.at)||0))/100?cue:chosen,cues[0]);
+ const asset=findSBAIllustration(activeCue?.illustration||'animal-cell');
+ const square=layout==='square';
+ const bodyStyle=square
+  ? {position:'absolute',left:'7%',right:'7%',top:'25%',height:'31%',fontSize:34,lineHeight:1.14,overflow:'hidden',color:theme.ink}
+  : {position:'absolute',left:'5%',width:'43%',top:'30%',bottom:'10%',fontSize:39,lineHeight:1.16,overflow:'hidden',color:theme.ink};
+ const artStyle=square
+  ? {position:'absolute',left:'8%',right:'8%',top:'60%',height:'34%',borderTop:'3px dashed '+theme.line,paddingTop:10,display:'flex',alignItems:'center',justifyContent:'center'}
+  : {position:'absolute',left:'53%',right:'5%',top:'30%',bottom:'10%',borderLeft:'3px dashed '+theme.line,paddingLeft:26,display:'flex',flexDirection:'column',alignItems:'center',justifyContent:'center'};
+ return <AbsoluteFill style={{background:theme.outer,fontFamily:'Arial,sans-serif',overflow:'hidden'}}>
+  <div style={{position:'absolute',inset:'2.5%',borderRadius:22,background:theme.paper,overflow:'hidden',boxShadow:'0 12px 40px rgba(30,45,60,.18)'}}>
+   <div style={{position:'absolute',inset:0,backgroundImage:'repeating-linear-gradient(to bottom, transparent 0, transparent 47px, '+theme.line+' 48px)',opacity:.42,pointerEvents:'none'}}/>
+   <div style={{position:'absolute',left:'5%',right:'5%',top:'4%',display:'flex',justifyContent:'space-between',fontSize:21,fontWeight:900,letterSpacing:2,color:theme.heading}}><span>{brand.toUpperCase()}</span><span style={{fontSize:16,color:theme.muted}}>TEGAKI STUDY NOTES</span></div>
+   <div style={{position:'absolute',left:'5%',right:'5%',top:square?'12%':'13%',height:square?'11%':'13%',fontSize:square?48:62,fontWeight:800,color:theme.heading,lineHeight:1.08}}><TegakiRenderer font={caveat} text={scene.heading||'Your lesson title'} time={{mode:'controlled',value:headingProgress,unit:'progress'}} style={{fontSize:square?54:68,fontWeight:700,color:theme.heading,lineHeight:1.1}}/></div>
+   <div style={bodyStyle}><TegakiRenderer font={caveat} text={scene.text||scene.narration||''} time={{mode:'controlled',value:bodyProgress,unit:'progress'}} style={{fontSize:square?37:43,fontWeight:600,color:theme.ink,lineHeight:1.18}}/></div>
+   <div style={artStyle}>{asset?<SBAIllustration type={asset.id} accent={accent} animated={false} showLabel={true} style={{width:square?'100%':'92%',height:'100%'}}/>:<span style={{color:theme.heading,fontSize:24}}>Illustration</span>}</div>
+   <div style={{position:'absolute',bottom:'2.5%',left:'5%',right:'5%',display:'flex',justifyContent:'space-between',fontSize:15,fontWeight:800,color:theme.muted}}><span>SHINEY BRAIN ACADEMY</span><span>SCENE {String(index+1).padStart(2,'0')}</span></div>
+  </div>
+ </AbsoluteFill>;
+}
+
+function Scene({scene,index,template,brand,accent,narrationVolume,styleId,aspectRatio}) {
  const {width,height}=useVideoConfig();
  let visual;
  if(template==='whiteboard') visual=<WhiteboardScene scene={scene} brand={brand} accent={accent} index={index}/>;
- else if(template==='tegaki') { const scale=Math.min(width/1080,height/1920); visual=<AbsoluteFill style={{background:'#dbe4ec',overflow:'hidden'}}><div style={{position:'absolute',width:1080,height:1920,left:'50%',top:'50%',transform:`translate(-50%,-50%) scale(${scale})`,transformOrigin:'center'}}><TegakiScene scene={scene} index={index} brand={brand} accent={accent} styleId={styleId}/></div></AbsoluteFill>; }
+ else if(template==='tegaki') { visual=aspectRatio==='9:16' || !aspectRatio ? <TegakiScene scene={scene} index={index} brand={brand} accent={accent} styleId={styleId}/> : <TegakiWideScene scene={scene} index={index} brand={brand} accent={accent} styleId={styleId} layout={aspectRatio==='1:1'?'square':'landscape'}/>; }
  else if(template==='question') visual=<QuestionScene scene={scene} brand={brand} accent={accent} index={index}/>;
  else if(template==='story') visual=<StoryScene scene={scene} brand={brand} accent={accent} index={index}/>;
  else visual=<ExplainerScene scene={scene} brand={brand} accent={accent} index={index}/>;
  return <>{visual}{scene.audioSrc?<Audio src={scene.audioSrc} volume={narrationVolume}/>:null}</>;
 }
 
-export function StudioComposition({title='Shiney Brain Video',scenes=[],template='explainer',brand='SHINEY BRAIN ACADEMY',accent='#f4c542',musicSrc=null,musicVolume=0.12,narrationVolume=1,styleId='classic-notebook'}) {
+export function StudioComposition({title='Shiney Brain Video',scenes=[],template='explainer',brand='SHINEY BRAIN ACADEMY',accent='#f4c542',musicSrc=null,musicVolume=0.12,narrationVolume=1,styleId='classic-notebook',aspectRatio='9:16'}) {
  let from=0;
- return <AbsoluteFill>{scenes.map((scene,index)=>{const duration=Math.max(60,Math.round((Number(scene.durationSeconds)||5)*30));const start=from;from+=duration;return <Sequence key={scene.id||index} from={start} durationInFrames={duration}><Scene scene={scene} index={index} template={template} brand={brand} accent={accent} narrationVolume={narrationVolume} styleId={styleId}/></Sequence>;})}{musicSrc?<Audio src={musicSrc} volume={musicVolume} loop/>:null}</AbsoluteFill>;
+ return <AbsoluteFill>{scenes.map((scene,index)=>{const duration=Math.max(60,Math.round((Number(scene.durationSeconds)||5)*30));const start=from;from+=duration;return <Sequence key={scene.id||index} from={start} durationInFrames={duration}><Scene scene={scene} index={index} template={template} brand={brand} accent={accent} narrationVolume={narrationVolume} styleId={styleId} aspectRatio={aspectRatio}/></Sequence>;})}{musicSrc?<Audio src={musicSrc} volume={musicVolume} loop/>:null}</AbsoluteFill>;
 }
