@@ -46,6 +46,11 @@ if (name === 'ai_lesson') {
   db.knowledge_assets.push({ id: 'ka-existing', keyword: 'Friction', subject: 'physics', summary: 'Force that opposes motion', raw_content: 'Friction opposes sliding. f = mu x N.', key_concepts: [] });
   process.env.SCRIPT_MODE = 'ok';
 }
+if (name === 'image_presenter') {
+  const image = { id: 'img-heart', subject: 'human heart', title: 'Human heart diagram', alt: 'Human heart', mediaUrl: 'https://fake.supabase.co/storage/v1/object/public/lesson-videos/heart.jpg', sourceUrl: 'https://commons.wikimedia.org/wiki/File:Heart.jpg', provider: 'wikimedia', mimeType: 'image/jpeg', license: 'CC BY-SA', attribution: 'Example creator', attributionRequired: true, licenseVerified: true };
+  Object.assign(db.stickman_jobs[0], { title: 'Heart anatomy', topic: 'Heart anatomy', script_text: '', knowledge_asset_id: 'ka-image-presenter', image_presenter_project: { version: 1, id: 'test-project', title: 'Heart anatomy', subject: 'biology', aspectRatio: '9:16', mode: 'single-image', presenterId: 'prof', fps: 30, scenes: [{ id: 'heart-scene', type: 'single-image', title: 'The human heart', narration: 'The heart pumps blood around the body.', image, presenter: { characterId: 'prof', gesture: 'point-right', position: 'bottom-right', target: { x: 0.7, y: 0.45 } }, caption: { text: 'The human heart' } }] } });
+  db.knowledge_assets.push({ id: 'ka-image-presenter', keyword: 'Heart anatomy', subject: 'biology', summary: 'Human heart', raw_content: 'Human heart lesson', key_concepts: ['heart'] });
+}
 if (name === 'no_publish') db.stickman_jobs[0].auto_publish = false;
 if (name === 'once') {
   process.env.STICKMAN_RUN_ONCE = '1';
@@ -129,6 +134,8 @@ console.log('RESULT ' + JSON.stringify({
   narration_have_urls: audioEntries.every((a) => !!a.publicUrl),
   timeline_audio: j.timeline?.audio?.length ?? null,
   has_timeline: !!j.timeline,
+  image_presenter_image_events: j.image_presenter_tracks?.imageEvents?.length ?? 0,
+  image_presenter_annotation_events: j.image_presenter_tracks?.annotationEvents?.length ?? 0,
   // The audio-timing contract: every clip carries the compiler-assigned
   // frameStart (what the composition's <Sequence from> must honor).
   audio_starts_increasing: Array.isArray(j.timeline?.audio)
