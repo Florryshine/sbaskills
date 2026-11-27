@@ -25,6 +25,12 @@ export default function TegakiStudioPage() {
   const [composed, setComposed] = useState(null);
   const [composeLoading, setComposeLoading] = useState(false);
   const [composeError, setComposeError] = useState('');
+  const [voice, setVoice] = useState('host_a');
+  const [emotion, setEmotion] = useState('neutral');
+  const [narrationVolume, setNarrationVolume] = useState(1);
+  const [audioLoading, setAudioLoading] = useState(false);
+  const [audioError, setAudioError] = useState('');
+  const [audioReady, setAudioReady] = useState(false);
   const [stylePreview, setStylePreview] = useState('');
   const [previewLoading, setPreviewLoading] = useState(false);
   const [previewError, setPreviewError] = useState('');
@@ -96,6 +102,27 @@ export default function TegakiStudioPage() {
     if (stylePreview) URL.revokeObjectURL(stylePreview);
   }, [stylePreview]);
 
+  async function generateNarration() {
+    if (!composed?.scenes?.length) { setAudioError('Generate a structured lesson before creating its narration.'); return; }
+    setAudioLoading(true); setAudioError('');
+    try {
+      const response = await fetch('/api/admin/tegaki-studio/narrate', {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ knowledgeAssetId: composed.knowledgeAssetId, scenes: composed.scenes, voice, emotion }),
+      });
+      const data = await response.json();
+      if (!response.ok) throw new Error(data.error || 'Narration generation failed.');
+      const audioById = new Map((data.audio || []).map(item => [item.sceneId, item]));
+      const scenes = composed.scenes.map(scene => {
+        const audio = audioById.get(scene.id);
+        return audio ? { ...scene, audioSrc: audio.audioSrc, durationSeconds: audio.durationSeconds, speechDurationSeconds: audio.speechDurationSeconds } : scene;
+      });
+      setComposed({ ...composed, scenes, durationSeconds: scenes.reduce((sum, scene) => sum + scene.durationSeconds, 0), audioProvider: data.voice, audioReusedCount: data.reusedCount });
+      setAudioReady(true);
+    } catch (error) { setAudioError(error.message); }
+    finally { setAudioLoading(false); }
+  }
+
   async function composeLesson() {
     if (!assetId) { setComposeError('Select a Knowledge Asset topic first.'); return; }
     setComposeLoading(true);
@@ -109,6 +136,7 @@ export default function TegakiStudioPage() {
       const data = await response.json();
       if (!response.ok) throw new Error(data.error || 'Lesson composition failed.');
       setComposed(data);
+      setAudioReady(false); setAudioError('');
       setHeading(data.scenes[0]?.heading || data.title);
       setText(data.scenes[0]?.text || '');
     } catch (error) {
@@ -192,10 +220,10 @@ export default function TegakiStudioPage() {
               <div className="mb-4"><h2 className="text-lg font-black text-slate-900">Full lesson preview</h2><p className="text-sm text-slate-500">{activeTitle} · {activeScenes.length} sequential scenes · {totalDuration}s</p></div>
               <div className="mx-auto overflow-hidden rounded-xl bg-slate-200 shadow-inner" style={{ maxWidth: 360 }}>
                 <Player key={`${composed?.knowledgeAssetId || 'manual'}-${duration}-${activeScenes.length}`} component={StudioComposition}
-                  inputProps={{ title: activeTitle, scenes: activeScenes, template: 'tegaki', brand, accent: '#f4c542', narrationVolume: 1 }}
+                  inputProps={{ title: activeTitle, scenes: activeScenes, template: 'tegaki', brand, accent: '#f4c542', narrationVolume }}
                   durationInFrames={durationInFrames} compositionWidth={1080} compositionHeight={1920} fps={30} controls loop style={{ width: '100%', aspectRatio: '9 / 16' }} />
               </div>
-              <p className="mt-3 text-xs text-slate-500">The preview uses sequential handwritten scenes and the SBA illustration library. Voice generation and final MP4 export are Phase 4–5.</p>
+              <p className="mt-3 text-xs text-slate-500">The preview uses sequential handwritten scenes and the SBA illustration library. Audio is attached scene-by-scene when generated. MP4 export is Phase 5.</p>
             </div>
           </section>
         </div>
