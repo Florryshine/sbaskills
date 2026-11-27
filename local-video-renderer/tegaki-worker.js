@@ -62,7 +62,7 @@ async function heartbeat(job) {
 async function render(job) {
   const ratio = job.aspect_ratio || '9:16';
   const inputProps = {
-    title: job.title, scenes: job.scenes, template: 'tegaki',
+    title: job.title, scenes: job.scenes, template: 'tegaki', styleId: job.style_id || 'classic-notebook',
     brand: job.brand || 'SHINEY BRAIN ACADEMY', accent: '#f4c542',
     narrationVolume: Number(job.narration_volume ?? 1),
     musicSrc: job.music_src || null, musicVolume: Number(job.music_volume ?? 0.12),
