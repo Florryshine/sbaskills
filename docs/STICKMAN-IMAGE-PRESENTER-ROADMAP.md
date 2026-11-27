@@ -1,6 +1,6 @@
 # Stickman 2 — Image Presenter Roadmap
 
-**Status:** Phase 4 composition planner implemented; awaiting CI verification  
+**Status:** Phase 6 Studio interface and server-side acquisition flow implemented; Phase 7 rendering/production tests remain  
 **Feature branch:** feature/stickman-image-presenter
 
 ## Scope
@@ -29,3 +29,13 @@ Stickman retains its own deterministic compiler, character rig and Remotion rend
 
 ## Cost and reliability
 No new paid API or new key. Reuse existing credentials and keyless sources. Cache normalized files, preserve attribution and fail transparently when no licensed/distinct result is available.
+
+
+## Phase 6 — Studio interface and editing
+- Added a separate Image Presenter page linked from the existing Stickman Studio. Legacy job creation, polling, script library and playback remain unchanged.
+- Added topic/script, mode and aspect-ratio controls; the existing deterministic planner powers scene-plan generation with no model/API credit usage.
+- Added editable scene titles and narration, plus scene-by-scene image-need review.
+- Added a protected Node API route for planning and acquisition. Provider keys and filesystem operations remain server-side.
+- Acquired normalized images are uploaded to the existing public `lesson-videos` Supabase bucket; the temporary serverless working directory is removed after upload. Source URL, provider, creator, licence and attribution metadata are returned for review.
+- The UI shows image previews, acquisition coverage, provenance and unresolved-image warnings.
+- This page is an authoring/acquisition workspace, not yet a render/export UI. The acquired storage paths are not yet consumed by the Stickman worker; Phase 7 must implement and verify that bridge and draw the image event track in Remotion.

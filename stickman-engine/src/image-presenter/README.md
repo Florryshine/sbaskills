@@ -50,3 +50,7 @@ A pure deterministic planner accepts a topic/script and emits bounded scene beat
 
 ## Constraints
 Keep acquisition server-side; never bundle Node APIs into browser code. Preserve provenance. Never silently reuse one image for both comparison sides. Do not alter the original Stickman pipeline.
+
+
+## Phase 6 — Studio authoring interface
+The separate `/admin/stickman-engine/image-presenter` page provides topic/script input, mode/aspect selection, editable scene titles and narration, image-need review, image previews, acquisition coverage and source/licence/creator attribution. Its protected Node API keeps provider credentials and Sharp/filesystem work off the client. Successful normalized files are persisted to the existing `lesson-videos` Supabase bucket rather than relying on ephemeral serverless disk. This remains an authoring/acquisition workspace; final worker consumption and Remotion image-track drawing are Phase 7.

@@ -299,7 +299,12 @@ export default function StickmanEnginePage() {
   return (
     <div className="p-6 max-w-6xl mx-auto pb-24">
       <header className="mb-6">
-        <h1 className="text-2xl font-bold">Stickman Animation Studio</h1>
+        <div className="flex flex-wrap items-center justify-between gap-3">
+          <h1 className="text-2xl font-bold">Stickman Animation Studio</h1>
+          <Link href="/admin/stickman-engine/image-presenter" className="inline-flex items-center rounded-lg bg-blue-600 px-4 py-2 text-sm font-semibold text-white hover:bg-blue-700">
+            Open Stickman 2 · Image Presenter
+          </Link>
+        </div>
         <p className="text-sm text-gray-500 mt-1">
           Skeletal stickman lessons — pick a topic or a lesson, the AI writes an original SceneScript
           (two characters, actions, camera, formulas), the worker narrates it with free TTS and renders the MP4.
