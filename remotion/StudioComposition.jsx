@@ -257,7 +257,6 @@ function TegakiWideScene({scene,brand,accent,index,styleId,layout='landscape'}) 
 }
 
 function Scene({scene,index,template,brand,accent,narrationVolume,styleId,aspectRatio}) {
- const {width,height}=useVideoConfig();
  let visual;
  if(template==='whiteboard') visual=<WhiteboardScene scene={scene} brand={brand} accent={accent} index={index}/>;
  else if(template==='tegaki') { visual=aspectRatio==='9:16' || !aspectRatio ? <TegakiScene scene={scene} index={index} brand={brand} accent={accent} styleId={styleId}/> : <TegakiWideScene scene={scene} index={index} brand={brand} accent={accent} styleId={styleId} layout={aspectRatio==='1:1'?'square':'landscape'}/>; }
