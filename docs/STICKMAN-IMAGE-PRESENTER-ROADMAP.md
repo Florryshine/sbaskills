@@ -39,3 +39,14 @@ No new paid API or new key. Reuse existing credentials and keyless sources. Cach
 - Acquired normalized images are uploaded to the existing public `lesson-videos` Supabase bucket; the temporary serverless working directory is removed after upload. Source URL, provider, creator, licence and attribution metadata are returned for review.
 - The UI shows image previews, acquisition coverage, provenance and unresolved-image warnings.
 - This page is an authoring/acquisition workspace, not yet a render/export UI. The acquired storage paths are not yet consumed by the Stickman worker; Phase 7 must implement and verify that bridge and draw the image event track in Remotion.
+
+
+## Phase 7 — Render integration and production-path verification
+- The Remotion composition now draws frame-active image events, labels, diagram annotation regions and image-credit text as a screen-space visual layer. It resolves worker-local asset paths through Remotion's `staticFile` and otherwise uses the persisted public image URL.
+- The render CLI forwards optional Image Presenter tracks without changing the legacy `{ timeline }` input contract.
+- Added `image_presenter_project` and `image_presenter_tracks` JSONB columns through migration `20261127000000_stickman_image_presenter.sql`.
+- The protected Image Presenter API can queue a validated project into the existing `stickman_jobs` queue and links it to a Knowledge Asset. Social auto-publishing is disabled by default for this route.
+- The existing Bun worker detects Image Presenter jobs, uses the existing TTS pipeline, compiles frame-accurate tracks, persists timeline/tracks, invokes the existing Remotion CLI, and saves the final MP4 through the existing content_assets/media_files pipeline. Legacy SceneScript jobs continue through the original path.
+- Retry/resume reuses saved narration; image tracks are deterministically rebuilt from the stored project.
+- Added regression scenarios for all four modes and a real Chromium/Remotion smoke-render script that writes one MP4 per mode using a local SVG fixture.
+- Before enabling the feature in the deployed app, apply the new Supabase migration. The current draft PR is not merged, so these changes are branch-only until reviewed and merged.

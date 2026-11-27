@@ -54,3 +54,9 @@ Keep acquisition server-side; never bundle Node APIs into browser code. Preserve
 
 ## Phase 6 — Studio authoring interface
 The separate `/admin/stickman-engine/image-presenter` page provides topic/script input, mode/aspect selection, editable scene titles and narration, image-need review, image previews, acquisition coverage and source/licence/creator attribution. Its protected Node API keeps provider credentials and Sharp/filesystem work off the client. Successful normalized files are persisted to the existing `lesson-videos` Supabase bucket rather than relying on ephemeral serverless disk. This remains an authoring/acquisition workspace; final worker consumption and Remotion image-track drawing are Phase 7.
+
+
+## Phase 7 — Render integration
+The Remotion composition consumes optional `imagePresenter.imageEvents` and `annotationEvents`, drawing images, labels, annotation boxes and image credits in sync with frame spans. The render CLI forwards these optional props while preserving legacy rendering. The existing worker now has a separate Image Presenter job path: it uses the existing TTS pipeline, compiles the project with `compileImagePresenterTimeline`, persists visual tracks, renders through the existing Remotion CLI and saves through the existing content/media pipeline. A migration adds project and compiled-track JSONB columns to `stickman_jobs`.
+
+A real-render smoke script covers single-image, comparison, sequence and diagram modes with a bundled local SVG fixture. Worker regression scenarios cover the same four project modes. Apply `supabase/migrations/20261127000000_stickman_image_presenter.sql` before queuing Image Presenter jobs in a deployed environment. No new video or image generation API is introduced.
