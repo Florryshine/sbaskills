@@ -1,9 +1,12 @@
+import { requireAdminApi } from '@/lib/require-admin-api';
 import { NextResponse } from 'next/server';
 import { createAdminClient } from '@/lib/supabase-admin';
 
 export const dynamic = 'force-dynamic';
 
 export async function GET(request) {
+  const auth = await requireAdminApi();
+  if (auth.response) return auth.response;
   try {
     const { searchParams } = new URL(request.url);
     const subject = String(searchParams.get('subject') || '').trim().slice(0, 50);
