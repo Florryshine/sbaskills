@@ -246,7 +246,7 @@ export function compileImagePresenterTimeline(
         ...(placement.label ? { label: placement.label } : {}),
         order: placement.order ?? 0, region: placement.frame, fit: placement.fit,
       });
-      if (!local) warnings.push(`${scene.id}: asset "${placement.assetId}" has no acquired local file; rendering must resolve it before export.`);
+      if (!local && !asset?.mediaUrl) warnings.push(`${scene.id}: asset "${placement.assetId}" has neither a local file nor a remote media URL; rendering cannot resolve it.`);
     });
     composition.annotations.forEach((annotation) => {
       const beatIndex = beats.findIndex(b => b.id === annotation.id);
