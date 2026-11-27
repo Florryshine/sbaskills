@@ -61,7 +61,7 @@ export async function POST(request) {
       const text = String(scene?.text || '').trim().slice(0, 5000);
       const narration = String(scene?.narration || '').trim().slice(0, 2400);
       if (!heading || !text || !narration) throw new Error('Scene ' + (index+1) + ' is missing its heading, lesson text or narration.');
-      return { ...scene, heading, text, narration, durationSeconds: Math.max(4, Math.min(240, Number(scene.durationSeconds) || 8)) };
+      return { ...scene, heading, text, narration, durationSeconds: Math.max(4, Math.min(240, Number.isFinite(Number(scene.durationSeconds)) ? Number(scene.durationSeconds) : 8)) };
     });
     const supabase = createAdminClient();
     const { data: asset, error: assetError } = await supabase.from('knowledge_assets').select('id,keyword,subject').eq('id', body.knowledgeAssetId).single();
