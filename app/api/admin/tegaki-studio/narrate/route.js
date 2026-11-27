@@ -37,7 +37,7 @@ export async function POST(request) {
       let audioSrc, reused = false, mimeType;
       if (asset) {
         const cached = await getOrCreateNarration(asset, narration, { voice, emotion });
-        audioSrc = cached.audioSrc;
+        audioSrc = 'data:' + (cached.mimeType || 'audio/mpeg') + ';base64,' + cached.audioBase64;
         reused = cached.reused;
         mimeType = cached.mimeType;
       } else {
