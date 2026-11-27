@@ -14,7 +14,7 @@ function trustedStorageUrl(value, baseUrl) {
   try {
     const url = new URL(value);
     const base = new URL(baseUrl);
-    return url.protocol === 'https:' && url.origin === base.origin && url.pathname.includes('/storage/v1/object/public/');
+    return url.protocol === 'https:' && url.origin === base.origin && url.pathname.includes('/storage/v1/object/public/tegaki-assets/');
   } catch { return false; }
 }
 
