@@ -155,8 +155,8 @@ export default function TegakiStudioPage() {
         <header className="rounded-3xl bg-gradient-to-r from-blue-950 via-blue-800 to-sky-600 p-7 text-white shadow-lg">
           <p className="text-xs font-bold uppercase tracking-[.25em] text-sky-200">Shiney Brain Academy · Independent Video Engine</p>
           <h1 className="mt-2 text-3xl font-black md:text-4xl">{TEGAKI_ENGINE.name}</h1>
-          <p className="mt-2 max-w-3xl text-sm text-blue-100">Turn a trusted Knowledge Asset into a structured, illustrated handwritten lesson.</p>
-          <span className="mt-4 inline-flex rounded-full bg-white/15 px-3 py-1 text-xs font-bold">Phase 3 · Intelligent lesson composition</span>
+          <p className="mt-2 max-w-3xl text-sm text-blue-100">Turn a trusted Knowledge Asset into an illustrated handwritten lesson with generated Nigerian-English narration.</p>
+          <span className="mt-4 inline-flex rounded-full bg-white/15 px-3 py-1 text-xs font-bold">Phase 4 · Animation and audio</span>
         </header>
 
         <div className="grid gap-6 xl:grid-cols-[.85fr_1.15fr]">
@@ -235,7 +235,7 @@ export default function TegakiStudioPage() {
                   inputProps={{ title: activeTitle, scenes: activeScenes, template: 'tegaki', brand, accent: '#f4c542', narrationVolume }}
                   durationInFrames={durationInFrames} compositionWidth={1080} compositionHeight={1920} fps={30} controls loop style={{ width: '100%', aspectRatio: '9 / 16' }} />
               </div>
-              <p className="mt-3 text-xs text-slate-500">The preview uses sequential handwritten scenes and the SBA illustration library. Audio is attached scene-by-scene when generated. MP4 export is Phase 5.</p>
+              <p className="mt-3 text-xs text-slate-500">The preview combines sequential handwriting, SBA illustration cues and scene-level narration. MP4 export is Phase 5.</p>
             </div>
           </section>
         </div>
