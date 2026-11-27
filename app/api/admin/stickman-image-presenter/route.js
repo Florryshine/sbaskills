@@ -12,7 +12,7 @@ export const maxDuration = 60;
 const BUCKET = 'lesson-videos';
 
 export async function POST(req) {
-  const { response } = await requireAdminApi();
+  const { user, response } = await requireAdminApi();
   if (response) return response;
   let body;
   try { body = await req.json(); }
@@ -50,7 +50,7 @@ export async function POST(req) {
         knowledge_asset_id: knowledgeAssetId, auto_publish: body?.autoPublish !== false,
         image_presenter_project: project, script_text: '', status: 'queued', stage: 'queued',
         stage_message: 'Waiting for Stickman worker to narrate and render Image Presenter project',
-        stage_updated_at: new Date().toISOString(), created_by: null,
+        stage_updated_at: new Date().toISOString(), created_by: user?.id ?? null,
       }).select('id, title, status, stage').single();
       if (jobError) {
         if (/image_presenter_project|column/i.test(jobError.message)) throw new Error('Image Presenter database migration is not applied yet. Apply the new Phase 7 migration in Supabase.');
