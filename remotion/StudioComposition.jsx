@@ -197,7 +197,7 @@ function TegakiScene({scene,brand,accent,index}) {
  const frame=useCurrentFrame(), {fps}=useVideoConfig();
  const duration=Math.max(2,Number(scene.durationSeconds)||40), total=Math.max(1,Math.round(duration*fps));
  const headingProgress=interpolate(frame,[0,Math.max(1,total*.16)],[0,1],clamp);
- const bodyProgress=interpolate(frame,[Math.max(1,total*.12),Math.max(2,total*.78)],[0,1],clamp);
+ const bodyProgress=interpolate(frame,[Math.max(1,total*.12),Math.max(2,total*.92)],[0,1],clamp);
  const illustrationCues=(Array.isArray(scene.illustrationCues)&&scene.illustrationCues.length?scene.illustrationCues:[{at:0,illustration:scene.illustration||scene.illustrationAsset||scene.assetId||'animal-cell',label:'ILLUSTRATION'}]).slice().sort((a,b)=>(Number(a.at)||0)-(Number(b.at)||0));
  const body=scene.text||scene.narration||'Write your complete lesson here.';
  const bodySize=Math.max(25,Math.min(42,Math.round(27000/Math.max(650,body.length))));
