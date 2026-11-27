@@ -1,3 +1,4 @@
+import { requireAdminApi } from '@/lib/require-admin-api';
 import { NextResponse } from 'next/server';
 import { createAdminClient } from '@/lib/supabase-admin';
 import { generateWithFallback } from '@/lib/llmFallbackChain';
@@ -62,6 +63,8 @@ Return ONLY JSON:
 }
 
 export async function POST(request) {
+  const auth = await requireAdminApi();
+  if (auth.response) return auth.response;
   try {
     const body = await request.json();
     const knowledgeAssetId = clean(body.knowledgeAssetId, 100);
