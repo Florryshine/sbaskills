@@ -46,6 +46,17 @@ if (name === 'ai_lesson') {
   db.knowledge_assets.push({ id: 'ka-existing', keyword: 'Friction', subject: 'physics', summary: 'Force that opposes motion', raw_content: 'Friction opposes sliding. f = mu x N.', key_concepts: [] });
   process.env.SCRIPT_MODE = 'ok';
 }
+if (name.startsWith('image_presenter')) {
+  const makeImage = (id, subject) => ({ id, subject, title: subject, alt: subject, mediaUrl: `https://fake.supabase.co/storage/v1/object/public/lesson-videos/${id}.jpg`, sourceUrl: `https://commons.wikimedia.org/wiki/File:${id}.jpg`, provider: 'wikimedia', mimeType: 'image/jpeg', license: 'CC BY-SA', attribution: 'Example creator', attributionRequired: true, licenseVerified: true });
+  const common = { version: 1, id: 'test-project', title: 'Image Presenter test', subject: 'biology', aspectRatio: '9:16', presenterId: 'prof', fps: 30 };
+  let project;
+  if (name === 'image_presenter_comparison') project = { ...common, mode: 'two-image-comparison', scenes: [{ id: 'comparison-scene', type: 'two-image-comparison', title: 'Left versus right', narration: 'Compare the two examples.', left: { label: 'Left', image: makeImage('left-example', 'Left example'), explanation: 'The left example has this feature.' }, right: { label: 'Right', image: makeImage('right-example', 'Right example'), explanation: 'The right example differs.' }, presenter: { characterId: 'prof', gesture: 'point-left', position: 'bottom-right' } }] };
+  else if (name === 'image_presenter_sequence') project = { ...common, mode: 'multi-image-sequence', scenes: [{ id: 'sequence-scene', type: 'multi-image-sequence', title: 'Three stages', narration: 'Three ordered stages.', items: ['First stage', 'Second stage', 'Third stage'].map((text, i) => ({ id: 'step-' + i, narration: text, image: makeImage('step-' + i, text), durationSeconds: 2.8 })), presenter: { characterId: 'prof', gesture: 'point-right', position: 'bottom-right' } }] };
+  else if (name === 'image_presenter_diagram') project = { ...common, mode: 'diagram-explanation', scenes: [{ id: 'diagram-scene', type: 'diagram-explanation', title: 'Heart diagram', narration: 'This is the heart.', image: makeImage('heart-diagram', 'Human heart'), annotations: [{ id: 'left-ventricle', label: 'Left ventricle', region: { x: 0.3, y: 0.55, width: 0.2, height: 0.16 }, narration: 'The left ventricle pumps oxygenated blood.' }], presenter: { characterId: 'prof', gesture: 'point-up', position: 'bottom-right' } }] };
+  else project = { ...common, mode: 'single-image', scenes: [{ id: 'heart-scene', type: 'single-image', title: 'The human heart', narration: 'The heart pumps blood around the body.', image: makeImage('img-heart', 'Human heart'), presenter: { characterId: 'prof', gesture: 'point-right', position: 'bottom-right', target: { x: 0.7, y: 0.45 } }, caption: { text: 'The human heart' } }] };
+  Object.assign(db.stickman_jobs[0], { title: project.title, topic: project.title, script_text: '', knowledge_asset_id: 'ka-image-presenter', image_presenter_project: project });
+  db.knowledge_assets.push({ id: 'ka-image-presenter', keyword: project.title, subject: 'biology', summary: 'Image Presenter lesson', raw_content: 'Image Presenter test', key_concepts: ['image'] });
+}
 if (name === 'no_publish') db.stickman_jobs[0].auto_publish = false;
 if (name === 'once') {
   process.env.STICKMAN_RUN_ONCE = '1';
@@ -129,6 +140,8 @@ console.log('RESULT ' + JSON.stringify({
   narration_have_urls: audioEntries.every((a) => !!a.publicUrl),
   timeline_audio: j.timeline?.audio?.length ?? null,
   has_timeline: !!j.timeline,
+  image_presenter_image_events: j.image_presenter_tracks?.imageEvents?.length ?? 0,
+  image_presenter_annotation_events: j.image_presenter_tracks?.annotationEvents?.length ?? 0,
   // The audio-timing contract: every clip carries the compiler-assigned
   // frameStart (what the composition's <Sequence from> must honor).
   audio_starts_increasing: Array.isArray(j.timeline?.audio)

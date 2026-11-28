@@ -302,7 +302,7 @@ export function compile(script: SceneScript, narration: NarrationMap): Timeline 
         }
         case 'jump':
         case 'land': {
-          const opts = { style: st.style, startFrame: a0, frames: Math.min(sfN-a0, Math.round((act.dur ?? 1.15)*fps)), fps, x: st.x, facing: st.facing, height: act.height };
+          const opts = { style: st.style, startFrame: a0, frames: Math.min(sfN-a0, Math.round((act.dur ?? 1.15)*fps)), fps, x: st.x, facing: st.facing, height: 'height' in act ? act.height : undefined };
           const res = act.do === 'jump' ? jumpStream(opts) : landStream(opts);
           blendInto(streams[act.char], res.frames, a0-sf0, 7); events[act.char].push(...res.events); break;
         }
@@ -616,7 +616,7 @@ function buildCamera(
   },
 ) {
   const { sf0, sfN, fps, W, H } = ctx;
-  const intents = (sc.camera && sc.camera.length > 0) ? sc.camera : autoDirector(sc, cast, sc.actions ?? []);
+  const intents = (sc.camera && sc.camera.length > 0) ? sc.camera : autoDirector(sc, ctx.cast, sc.actions ?? []);
   type Seg = { f0: number; f1: number; kind: string; p: any };
   const segs: Seg[] = [];
   intents.forEach((it, idx) => {

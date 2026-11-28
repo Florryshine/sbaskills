@@ -397,7 +397,7 @@ async function compileTimeline(job, script, entries, leaseJob) {
   return timeline;
 }
 
-async function renderVideo(job, script, entries, workDir) {
+async function renderVideo(job, script, entries, workDir, imagePresenter = null) {
   const jobFile = path.join(workDir, 'job.json');
   const narration = {};
   for (const e of entries) narration[e.key] = { file: e.file, dur: e.dur };
@@ -407,6 +407,7 @@ async function renderVideo(job, script, entries, workDir) {
     out: path.join(workDir, 'out.mp4'),
     publicDir: path.join(workDir, 'public'),
     browserExecutable: process.env.CHROME_PATH || undefined,
+    ...(imagePresenter ? { imagePresenter } : {}),
   }));
   const cli = path.join(ENGINE_DIR, 'src', 'render', 'cli.ts');
   const args = [cli, '--job', jobFile];
@@ -462,7 +463,7 @@ async function saveToInfrastructure(job, outPath, entries, timeline) {
     video_storage_path: storagePath,
     durationSeconds,
     rendered_at: new Date().toISOString(),
-    engine: 'stickman-v1',
+    engine: job.image_presenter_project ? 'stickman-image-presenter-v2' : 'stickman-v1',
   };
 
   // metadata.stickman_job_id is the recovery key if the worker dies after
@@ -623,6 +624,33 @@ async function saveToInfrastructure(job, outPath, entries, timeline) {
 
 // ---------------- pipeline ----------------
 
+async function processImagePresenterJob(job, workDir) {
+  const adapter = await import(path.join(ENGINE_DIR, 'src', 'image-presenter', 'timeline.ts'));
+  const project = job.image_presenter_project;
+  if (!project || !Array.isArray(project.scenes) || !project.scenes.length) throw new Error('Image Presenter job has no valid project scenes.');
+  const script = adapter.createImagePresenterNarrationScript(project);
+  let entries;
+  const expectedLines = script.scenes.reduce((n, scene) => n + (scene.dialogue || []).length, 0);
+  if (job.timeline && Array.isArray(job.audio_files) && job.audio_files.length === expectedLines && expectedLines > 0) {
+    await setStage(job, 'rendering', 'Resuming Image Presenter with saved narration');
+    entries = await restoreNarration(job, script, workDir);
+  } else {
+    await setStage(job, 'narrating', 'Narrating Image Presenter scenes');
+    entries = await narrateScript(job, script, workDir);
+    const { error } = await supabase.from('stickman_jobs').update({ audio_files: entries, status: 'rendering', updated_at: new Date().toISOString() }).eq('id', job.id).eq('claim_token', job.claim_token);
+    if (error) throw new Error('Could not save Image Presenter narration: ' + error.message);
+  }
+  const narration = Object.fromEntries(entries.map(entry => [entry.key, { file: entry.file, dur: entry.dur }]));
+  await setStage(job, 'rendering', 'Compiling synchronized Image Presenter image, annotation and presenter tracks');
+  const compiled = adapter.compileImagePresenterTimeline(project, narration, {});
+  const tracks = { imageEvents: compiled.imageEvents, annotationEvents: compiled.annotationEvents, presenterEvents: compiled.presenterEvents, sceneTimings: compiled.sceneTimings, warnings: compiled.warnings };
+  const { error: timelineError } = await supabase.from('stickman_jobs').update({ timeline: compiled.timeline, image_presenter_tracks: tracks, duration_seconds: compiled.timeline.durationFrames / compiled.timeline.fps, warnings: compiled.warnings, updated_at: new Date().toISOString() }).eq('id', job.id).eq('claim_token', job.claim_token);
+  if (timelineError) throw new Error('Could not persist Image Presenter timeline: ' + timelineError.message);
+  assertLease(job);
+  const outPath = await renderVideo(job, script, entries, workDir, { imageEvents: tracks.imageEvents, annotationEvents: tracks.annotationEvents });
+  assertLease(job);
+  await saveToInfrastructure(job, outPath, entries, compiled.timeline);
+}
 async function processJob(job) {
   currentJobId = job.id;
   job.leaseLost = false;
@@ -637,6 +665,10 @@ async function processJob(job) {
 
   const workDir = path.join(ENGINE_DIR, '.job-' + job.id);
   try {
+    if (job.image_presenter_project) {
+      await processImagePresenterJob(job, workDir);
+      return;
+    }
     let prepared = job;
     // AI jobs arrive without a script: the web route only stores the topic so
     // the slow multi-provider LLM call never runs inside a serverless function.

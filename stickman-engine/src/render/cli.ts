@@ -44,7 +44,7 @@ async function main() {
   });
   if (process.stdout.isTTY) process.stdout.write('\n');
 
-  const inputProps = { timeline };
+  const inputProps = { timeline, ...(job.imagePresenter ? { imagePresenter: job.imagePresenter } : {}) };
   const composition = await selectComposition({
     serveUrl, id: 'StickmanVideo', inputProps,
   });
