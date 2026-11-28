@@ -1,0 +1,47 @@
+name: Tegaki validation
+
+on:
+  pull_request:
+    paths:
+      - "app/admin/tegaki-studio/**"
+      - "app/api/admin/tegaki-studio/**"
+      - "lib/tegaki-engine/**"
+      - "remotion/**"
+      - "local-video-renderer/tegaki-worker.js"
+      - "scripts/test-tegaki-*.mjs"
+      - "package.json"
+      - "package-lock.json"
+      - ".github/workflows/tegaki-validation.yml"
+  push:
+    branches:
+      - feat/tegaki-engine-phase-1
+    paths:
+      - "app/admin/tegaki-studio/**"
+      - "app/api/admin/tegaki-studio/**"
+      - "lib/tegaki-engine/**"
+      - "remotion/**"
+      - "local-video-renderer/tegaki-worker.js"
+      - "scripts/test-tegaki-*.mjs"
+      - "package.json"
+      - "package-lock.json"
+      - ".github/workflows/tegaki-validation.yml"
+
+jobs:
+  structural-tests:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: npm
+      - name: Install locked dependencies
+        run: npm ci
+      - name: Validate Tegaki visual styles
+        run: npm run test:tegaki-styles
+      - name: Validate lesson composition
+        run: npm run test:tegaki-composition
+      - name: Validate narration workflow
+        run: npm run test:tegaki-audio
+      - name: Validate export pipeline
+        run: npm run test:tegaki-export
