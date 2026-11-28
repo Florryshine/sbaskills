@@ -70,7 +70,7 @@ export function CampaignPlanner({ plannerUpdatedTrigger, onPostRescheduled }: Ca
   const daysInMonth = 31;
   const startOffset = 3; // July 1, 2026 is Wednesday, so Sunday=0, Mon=1, Tue=2, Wed=3.
 
-  const calendarDays = [];
+  const calendarDays: Array<number | null> = [];
   // Empty offset days
   for (let i = 0; i < startOffset; i++) {
     calendarDays.push(null);
