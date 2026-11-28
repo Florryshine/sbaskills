@@ -37,6 +37,10 @@ jobs:
           cache: npm
       - name: Install locked dependencies
         run: npm ci
+      - name: Verify single aligned Remotion version
+        run: |
+          npm ls remotion @remotion/cli @remotion/player @remotion/renderer @remotion/bundler --all
+          node -e "const p=require('./package-lock.json'); const v=Object.entries(p.packages).filter(([k])=>k==='node_modules/remotion'||k.endsWith('/node_modules/remotion')).map(([,x])=>x.version); console.log('Remotion versions:', [...new Set(v)]); if(new Set(v).size!==1) process.exit(1)"
       - name: Validate Tegaki visual styles
         run: npm run test:tegaki-styles
       - name: Validate lesson composition
