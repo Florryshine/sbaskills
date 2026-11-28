@@ -193,39 +193,80 @@ function StoryScene({scene,index,brand,accent}) {
   <div style={{position:'absolute',left:width*.075,right:width*.075,bottom:height*.045,display:'flex',justifyContent:'space-between',alignItems:'center',fontSize:Math.max(14,width*.016),fontWeight:900,letterSpacing:2,color:p.muted}}><span>SHINEY BRAIN • STORY REEL</span><span style={{color:p.hot}}>{index===4?'START TODAY':'KEEP GOING'}</span></div>
  </AbsoluteFill>;
 }
-function TegakiScene({scene,brand,accent,index}) {
+function TegakiScene({scene,brand,accent,index,styleId='classic-notebook'}) {
  const frame=useCurrentFrame(), {fps}=useVideoConfig();
  const duration=Math.max(2,Number(scene.durationSeconds)||40), total=Math.max(1,Math.round(duration*fps));
  const headingProgress=interpolate(frame,[0,Math.max(1,total*.16)],[0,1],clamp);
- const bodyProgress=interpolate(frame,[Math.max(1,total*.12),Math.max(2,total*.78)],[0,1],clamp);
+ const bodyProgress=interpolate(frame,[Math.max(1,total*.12),Math.max(2,total*.92)],[0,1],clamp);
  const illustrationCues=(Array.isArray(scene.illustrationCues)&&scene.illustrationCues.length?scene.illustrationCues:[{at:0,illustration:scene.illustration||scene.illustrationAsset||scene.assetId||'animal-cell',label:'ILLUSTRATION'}]).slice().sort((a,b)=>(Number(a.at)||0)-(Number(b.at)||0));
  const body=scene.text||scene.narration||'Write your complete lesson here.';
  const bodySize=Math.max(25,Math.min(42,Math.round(27000/Math.max(650,body.length))));
- return <AbsoluteFill style={{background:'#e9e2d8',fontFamily:'Arial,sans-serif',overflow:'hidden'}}>
-  <div style={{position:'absolute',inset:'2.2%',borderRadius:24,background:'#fffdf6',boxShadow:'0 18px 55px rgba(55,42,28,.22)',overflow:'hidden'}}>
+ const theme = ({
+  'premium-notes': {outer:'#edf2f7',paper:'#ffffff',line:'#dce7f2',margin:'#ffffff',ink:'#24364b',heading:'#173f68',muted:'#8493a5'},
+  'exam-revision': {outer:'#e9e4d8',paper:'#fffef2',line:'#e7dfc1',margin:'#e6a2a0',ink:'#1e293b',heading:'#12385f',muted:'#7c8795'},
+  'colourful-classroom': {outer:'#f3e8dd',paper:'#fff9e9',line:'#e8c6da',margin:'#e6a0a0',ink:'#35415c',heading:'#68449a',muted:'#8b789b'},
+  'dark-chalkboard': {outer:'#10251f',paper:'#18372f',line:'#527e70',margin:'#80a997',ink:'#f7f1dc',heading:'#fff7d8',muted:'#b6d2c4'},
+  'digital-study-pad': {outer:'#e6ebf7',paper:'#f4f7ff',line:'#d1dcf1',margin:'#9bb5e8',ink:'#263f70',heading:'#263f70',muted:'#8295ba'},
+ }[styleId] || {outer:'#e9e2d8',paper:'#fffdf6',line:'#b9d5e4',margin:'#e7a5a0',ink:C.ink,heading:C.navy,muted:'#8794a1'});
+ return <AbsoluteFill style={{background:theme.outer,fontFamily:'Arial,sans-serif',overflow:'hidden'}}>
+  <div style={{position:'absolute',inset:'2.2%',borderRadius:24,background:theme.paper,boxShadow:'0 18px 55px rgba(55,42,28,.22)',overflow:'hidden'}}>
    <svg width="100%" height="100%" viewBox="0 0 1080 1920" preserveAspectRatio="none" style={{position:'absolute',inset:0}}>
-    <defs><pattern id="tegakiRules" width="1080" height="58" patternUnits="userSpaceOnUse"><path d="M0 57 H1080" stroke="#b9d5e4" strokeWidth="2" opacity=".62"/></pattern><pattern id="tegakiGrain" width="29" height="29" patternUnits="userSpaceOnUse"><circle cx="4" cy="5" r="1" fill="#b6a98f" opacity=".16"/></pattern></defs>
-    <rect width="1080" height="1920" fill="#fffdf6"/><rect width="1080" height="1920" fill="url(#tegakiRules)"/><rect width="1080" height="1920" fill="url(#tegakiGrain)"/><path d="M115 0 V1920" stroke="#e7a5a0" strokeWidth="3" opacity=".75"/><path d="M0 190 H1080" stroke="#d8e3e6" strokeWidth="3"/>
+    <defs><pattern id="tegakiRules" width="1080" height="58" patternUnits="userSpaceOnUse"><path d="M0 57 H1080" stroke={theme.line} strokeWidth="2" opacity=".62"/></pattern><pattern id="tegakiGrain" width="29" height="29" patternUnits="userSpaceOnUse"><circle cx="4" cy="5" r="1" fill="#b6a98f" opacity=".16"/></pattern></defs>
+    <rect width="1080" height="1920" fill={theme.paper}/><rect width="1080" height="1920" fill="url(#tegakiRules)"/><rect width="1080" height="1920" fill="url(#tegakiGrain)"/><path d="M115 0 V1920" stroke={theme.margin} strokeWidth="3" opacity=".75"/><path d="M0 190 H1080" stroke={theme.line} strokeWidth="3"/>
    </svg>
-   <div style={{position:'absolute',top:48,left:150,right:115,display:'flex',justifyContent:'space-between',alignItems:'center',fontSize:22,fontWeight:900,letterSpacing:2,color:C.blue}}><span>{brand.toUpperCase()}</span><span style={{fontSize:17,color:'#8997a1'}}>STUDY NOTES</span></div>
-   <div style={{position:'absolute',top:145,left:150,right:115,fontSize:56,fontWeight:800,color:C.navy,lineHeight:1.1}}><TegakiRenderer font={caveat} text={scene.heading||'Your lesson title'} time={{mode:'controlled',value:headingProgress,unit:'progress'}} style={{fontSize:72,fontWeight:700,color:C.navy,lineHeight:1.12}}/></div>
-   <div style={{position:'absolute',top:290,left:150,right:115,height:700,overflow:'hidden',fontSize:bodySize,lineHeight:1.12,color:C.ink}}><TegakiRenderer font={caveat} text={body} time={{mode:'controlled',value:bodyProgress,unit:'progress'}} style={{fontSize:bodySize+2,fontWeight:600,color:C.ink,lineHeight:1.12}}/></div>
-   <div style={{position:'absolute',left:150,right:115,top:1030,height:700,borderTop:'3px dashed #c5d8df',paddingTop:18,overflow:'hidden'}}><div style={{fontSize:22,fontWeight:900,letterSpacing:3,color:accent,marginBottom:12}}>ILLUSTRATION</div>{illustrationCues.map((cue,i)=>{const start=Math.round(total*Math.max(0,Math.min(99,Number(cue.at)||0))/100);const next=illustrationCues[i+1];const finish=next?Math.round(total*Math.max(0,Math.min(100,Number(next.at)||0))/100):total;const fade=Math.min(14,Math.max(1,Math.floor((finish-start)/3)));const enter=interpolate(frame,[start,start+fade],[0,1],clamp);const leave=next?interpolate(frame,[Math.max(start,finish-fade),finish],[1,0],clamp):1;const asset=findSBAIllustration(cue.illustration||'animal-cell');return <div key={i} style={{position:'absolute',left:0,right:0,top:52,height:620,opacity:enter*leave,display:'flex',flexDirection:'column',alignItems:'center'}}><div style={{fontSize:24,fontWeight:800,color:C.navy,marginBottom:8}}>{cue.label||'Key concept'}</div>{asset?<SBAIllustration type={asset.id} accent={accent} animated={false} showLabel={true} style={{width:'100%',height:570}}/>:<div style={{fontSize:28,color:C.navy}}>Choose a matching SBA illustration in the editor.</div>}</div>;})}</div>   <div style={{position:'absolute',bottom:30,left:150,right:115,display:'flex',justifyContent:'space-between',fontSize:18,fontWeight:800,color:'#8794a1'}}><span>TEGAKI • ONE-PAGE LESSON</span><span>SHINEY BRAIN ACADEMY</span></div>
+   <div style={{position:'absolute',top:48,left:150,right:115,display:'flex',justifyContent:'space-between',alignItems:'center',fontSize:22,fontWeight:900,letterSpacing:2,color:theme.heading}}><span>{brand.toUpperCase()}</span><span style={{fontSize:17,color:theme.muted}}>STUDY NOTES</span></div>
+   <div style={{position:'absolute',top:145,left:150,right:115,fontSize:56,fontWeight:800,color:theme.heading,lineHeight:1.1}}><TegakiRenderer font={caveat} text={scene.heading||'Your lesson title'} time={{mode:'controlled',value:headingProgress,unit:'progress'}} style={{fontSize:72,fontWeight:700,color:theme.heading,lineHeight:1.12}}/></div>
+   <div style={{position:'absolute',top:290,left:150,right:115,height:700,overflow:'hidden',fontSize:bodySize,lineHeight:1.12,color:theme.ink}}><TegakiRenderer font={caveat} text={body} time={{mode:'controlled',value:bodyProgress,unit:'progress'}} style={{fontSize:bodySize+2,fontWeight:600,color:theme.ink,lineHeight:1.12}}/></div>
+   <div style={{position:'absolute',left:150,right:115,top:1030,height:700,borderTop:'3px dashed '+theme.line,paddingTop:18,overflow:'hidden'}}><div style={{fontSize:22,fontWeight:900,letterSpacing:3,color:accent,marginBottom:12}}>ILLUSTRATION</div>{illustrationCues.map((cue,i)=>{const start=Math.round(total*Math.max(0,Math.min(99,Number(cue.at)||0))/100);const next=illustrationCues[i+1];const finish=next?Math.round(total*Math.max(0,Math.min(100,Number(next.at)||0))/100):total;const fade=Math.min(14,Math.max(1,Math.floor((finish-start)/3)));const enter=interpolate(frame,[start,start+fade],[0,1],clamp);const leave=next?interpolate(frame,[Math.max(start,finish-fade),finish],[1,0],clamp):1;const asset=findSBAIllustration(cue.illustration||'animal-cell');return <div key={i} style={{position:'absolute',left:0,right:0,top:52,height:620,opacity:enter*leave,display:'flex',flexDirection:'column',alignItems:'center'}}><div style={{fontSize:24,fontWeight:800,color:theme.heading,marginBottom:8}}>{cue.label||'Key concept'}</div>{asset?<SBAIllustration type={asset.id} accent={accent} animated={false} showLabel={true} style={{width:'100%',height:570}}/>:<div style={{fontSize:28,color:theme.heading}}>Choose a matching SBA illustration in the editor.</div>}</div>;})}</div>   <div style={{position:'absolute',bottom:30,left:150,right:115,display:'flex',justifyContent:'space-between',fontSize:18,fontWeight:800,color:theme.muted}}><span>TEGAKI • ONE-PAGE LESSON</span><span>SHINEY BRAIN ACADEMY</span></div>
    <div style={{position:'absolute',top:0,right:24,bottom:0,width:52,display:'flex',flexDirection:'column',justifyContent:'space-evenly',alignItems:'center',pointerEvents:'none'}}>{Array.from({length:17},(_,i)=><div key={i} style={{width:42,height:42,borderRadius:'50%',border:'9px solid #e6a0bb',background:'#f7dbe5',boxShadow:'inset 0 2px 4px #fff,0 2px 3px #9b7180'}}/>)}</div>
   </div>
  </AbsoluteFill>;
 }
-function Scene({scene,index,template,brand,accent,narrationVolume}) {
+function TegakiWideScene({scene,brand,accent,index,styleId,layout='landscape'}) {
+ const frame=useCurrentFrame(), {fps}=useVideoConfig();
+ const duration=Math.max(2,Number(scene.durationSeconds)||40), total=Math.max(1,Math.round(duration*fps));
+ const headingProgress=interpolate(frame,[0,Math.max(1,total*.16)],[0,1],clamp);
+ const bodyProgress=interpolate(frame,[Math.max(1,total*.12),Math.max(2,total*.92)],[0,1],clamp);
+ const theme=({
+  'premium-notes':{outer:'#edf2f7',paper:'#fff',line:'#dce7f2',ink:'#24364b',heading:'#173f68',muted:'#8493a5'},
+  'exam-revision':{outer:'#e9e4d8',paper:'#fffef2',line:'#e7dfc1',ink:'#1e293b',heading:'#12385f',muted:'#7c8795'},
+  'colourful-classroom':{outer:'#f3e8dd',paper:'#fff9e9',line:'#e8c6da',ink:'#35415c',heading:'#68449a',muted:'#8b789b'},
+  'dark-chalkboard':{outer:'#10251f',paper:'#18372f',line:'#527e70',ink:'#f7f1dc',heading:'#fff7d8',muted:'#b6d2c4'},
+  'digital-study-pad':{outer:'#e6ebf7',paper:'#f4f7ff',line:'#d1dcf1',ink:'#263f70',heading:'#263f70',muted:'#8295ba'},
+ }[styleId]||{outer:'#e9e2d8',paper:'#fffdf6',line:'#b9d5e4',ink:C.ink,heading:C.navy,muted:'#8794a1'});
+ const cues=(scene.illustrationCues||[]).length?scene.illustrationCues:[{at:0,illustration:scene.illustration||'animal-cell',label:'Key concept'}];
+ const activeCue=cues.slice().sort((a,b)=>(Number(a.at)||0)-(Number(b.at)||0)).reduce((chosen,cue)=>frame>=total*Math.max(0,Math.min(99,Number(cue.at)||0))/100?cue:chosen,cues[0]);
+ const asset=findSBAIllustration(activeCue?.illustration||'animal-cell');
+ const square=layout==='square';
+ const bodyStyle=square
+  ? {position:'absolute',left:'7%',right:'7%',top:'25%',height:'31%',fontSize:34,lineHeight:1.14,overflow:'hidden',color:theme.ink}
+  : {position:'absolute',left:'5%',width:'43%',top:'30%',bottom:'10%',fontSize:39,lineHeight:1.16,overflow:'hidden',color:theme.ink};
+ const artStyle=square
+  ? {position:'absolute',left:'8%',right:'8%',top:'60%',height:'34%',borderTop:'3px dashed '+theme.line,paddingTop:10,display:'flex',alignItems:'center',justifyContent:'center'}
+  : {position:'absolute',left:'53%',right:'5%',top:'30%',bottom:'10%',borderLeft:'3px dashed '+theme.line,paddingLeft:26,display:'flex',flexDirection:'column',alignItems:'center',justifyContent:'center'};
+ return <AbsoluteFill style={{background:theme.outer,fontFamily:'Arial,sans-serif',overflow:'hidden'}}>
+  <div style={{position:'absolute',inset:'2.5%',borderRadius:22,background:theme.paper,overflow:'hidden',boxShadow:'0 12px 40px rgba(30,45,60,.18)'}}>
+   <div style={{position:'absolute',inset:0,backgroundImage:'repeating-linear-gradient(to bottom, transparent 0, transparent 47px, '+theme.line+' 48px)',opacity:.42,pointerEvents:'none'}}/>
+   <div style={{position:'absolute',left:'5%',right:'5%',top:'4%',display:'flex',justifyContent:'space-between',fontSize:21,fontWeight:900,letterSpacing:2,color:theme.heading}}><span>{brand.toUpperCase()}</span><span style={{fontSize:16,color:theme.muted}}>TEGAKI STUDY NOTES</span></div>
+   <div style={{position:'absolute',left:'5%',right:'5%',top:square?'12%':'13%',height:square?'11%':'13%',fontSize:square?48:62,fontWeight:800,color:theme.heading,lineHeight:1.08}}><TegakiRenderer font={caveat} text={scene.heading||'Your lesson title'} time={{mode:'controlled',value:headingProgress,unit:'progress'}} style={{fontSize:square?54:68,fontWeight:700,color:theme.heading,lineHeight:1.1}}/></div>
+   <div style={bodyStyle}><TegakiRenderer font={caveat} text={scene.text||scene.narration||''} time={{mode:'controlled',value:bodyProgress,unit:'progress'}} style={{fontSize:square?37:43,fontWeight:600,color:theme.ink,lineHeight:1.18}}/></div>
+   <div style={artStyle}>{asset?<SBAIllustration type={asset.id} accent={accent} animated={false} showLabel={true} style={{width:square?'100%':'92%',height:'100%'}}/>:<span style={{color:theme.heading,fontSize:24}}>Illustration</span>}</div>
+   <div style={{position:'absolute',bottom:'2.5%',left:'5%',right:'5%',display:'flex',justifyContent:'space-between',fontSize:15,fontWeight:800,color:theme.muted}}><span>SHINEY BRAIN ACADEMY</span><span>SCENE {String(index+1).padStart(2,'0')}</span></div>
+  </div>
+ </AbsoluteFill>;
+}
+
+function Scene({scene,index,template,brand,accent,narrationVolume,styleId,aspectRatio}) {
  let visual;
  if(template==='whiteboard') visual=<WhiteboardScene scene={scene} brand={brand} accent={accent} index={index}/>;
- else if(template==='tegaki') visual=<TegakiScene scene={scene} index={index} brand={brand} accent={accent}/>;
+ else if(template==='tegaki') { visual=aspectRatio==='9:16' || !aspectRatio ? <TegakiScene scene={scene} index={index} brand={brand} accent={accent} styleId={styleId}/> : <TegakiWideScene scene={scene} index={index} brand={brand} accent={accent} styleId={styleId} layout={aspectRatio==='1:1'?'square':'landscape'}/>; }
  else if(template==='question') visual=<QuestionScene scene={scene} brand={brand} accent={accent} index={index}/>;
  else if(template==='story') visual=<StoryScene scene={scene} brand={brand} accent={accent} index={index}/>;
  else visual=<ExplainerScene scene={scene} brand={brand} accent={accent} index={index}/>;
  return <>{visual}{scene.audioSrc?<Audio src={scene.audioSrc} volume={narrationVolume}/>:null}</>;
 }
 
-export function StudioComposition({title='Shiney Brain Video',scenes=[],template='explainer',brand='SHINEY BRAIN ACADEMY',accent='#f4c542',musicSrc=null,musicVolume=0.12,narrationVolume=1}) {
+export function StudioComposition({title='Shiney Brain Video',scenes=[],template='explainer',brand='SHINEY BRAIN ACADEMY',accent='#f4c542',musicSrc=null,musicVolume=0.12,narrationVolume=1,styleId='classic-notebook',aspectRatio='9:16'}) {
  let from=0;
- return <AbsoluteFill>{scenes.map((scene,index)=>{const duration=Math.max(60,Math.round((Number(scene.durationSeconds)||5)*30));const start=from;from+=duration;return <Sequence key={scene.id||index} from={start} durationInFrames={duration}><Scene scene={scene} index={index} template={template} brand={brand} accent={accent} narrationVolume={narrationVolume}/></Sequence>;})}{musicSrc?<Audio src={musicSrc} volume={musicVolume} loop/>:null}</AbsoluteFill>;
+ return <AbsoluteFill>{scenes.map((scene,index)=>{const duration=Math.max(60,Math.round((Number(scene.durationSeconds)||5)*30));const start=from;from+=duration;return <Sequence key={scene.id||index} from={start} durationInFrames={duration}><Scene scene={scene} index={index} template={template} brand={brand} accent={accent} narrationVolume={narrationVolume} styleId={styleId} aspectRatio={aspectRatio}/></Sequence>;})}{musicSrc?<Audio src={musicSrc} volume={musicVolume} loop/>:null}</AbsoluteFill>;
 }

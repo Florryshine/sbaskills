@@ -12,13 +12,13 @@ interface CampaignPlannerProps {
 }
 
 export function CampaignPlanner({ plannerUpdatedTrigger, onPostRescheduled }: CampaignPlannerProps) {
-  const [posts, setPosts] = useState([]);
+  const [posts, setPosts] = useState<SocialPost[]>([]);
   const [loading, setLoading] = useState(true);
   const [currentYear, setCurrentYear] = useState(2026);
   const [currentMonth, setCurrentMonth] = useState(6); // 0-indexed, so 6 is July
 
   // Dialog state for rescheduling
-  const [activeReschedulePost, setActiveReschedulePost] = useState(null);
+  const [activeReschedulePost, setActiveReschedulePost] = useState<SocialPost | null>(null);
   const [newDate, setNewDate] = useState("");
 
   const monthNames = [
@@ -70,7 +70,7 @@ export function CampaignPlanner({ plannerUpdatedTrigger, onPostRescheduled }: Ca
   const daysInMonth = 31;
   const startOffset = 3; // July 1, 2026 is Wednesday, so Sunday=0, Mon=1, Tue=2, Wed=3.
 
-  const calendarDays = [];
+  const calendarDays: Array<number | null> = [];
   // Empty offset days
   for (let i = 0; i < startOffset; i++) {
     calendarDays.push(null);

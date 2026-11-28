@@ -284,7 +284,7 @@ export function Environment({ env, cx, frameNo }: { env: EnvironmentSpec; cx: nu
 
 function StreetScene({ cx, frameNo, seed }: { cx: number; frameNo: number; seed: number }) {
   const r = rng(seed);
-  const buildings = [];
+  const buildings: React.ReactNode[] = [];
   let bx = -900;
   while (bx < 900) {
     const w = 90 + r() * 130;

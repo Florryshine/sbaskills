@@ -3,18 +3,17 @@ import { createServerClient } from '@/lib/supabase-server';
 import { notFound } from 'next/navigation';
 import Navbar from '@/components/Navbar';
 import Footer from '@/components/Footer';
-import nextDynamic from 'next/dynamic';
 import Link from 'next/link';
 import Image from 'next/image';
 import { marked } from 'marked';
 import { BASE_URL, generateBlogPostMetadata } from '@/lib/seo';
-
-// ─── Dynamically load interactive components (client-only) ────────────
-const ShareButtons = nextDynamic(() => import('@/components/ShareButtons'), { ssr: false });
-const MarkDoneButton = nextDynamic(() => import('@/components/MarkDoneButton'), { ssr: false });
-const Comments = nextDynamic(() => import('@/components/Comments'), { ssr: false });
-const PodcastPlayer = nextDynamic(() => import('@/components/PodcastPlayer'), { ssr: false });
-const RatingWidget = nextDynamic(() => import('@/components/RatingWidget'), { ssr: false });
+import {
+  BlogShareButtons as ShareButtons,
+  BlogMarkDoneButton as MarkDoneButton,
+  BlogComments as Comments,
+  BlogPodcastPlayer as PodcastPlayer,
+  BlogRatingWidget as RatingWidget,
+} from '@/components/blog/BlogClientWidgets';
 
 export const dynamic = 'force-dynamic';
 

@@ -1,12 +1,8 @@
 /** @type {import('next').NextConfig} */
-const withPWA = require('next-pwa')({
-  dest: 'public',
-  register: true,
-  skipWaiting: true,
-  disable: process.env.NODE_ENV === 'development',
-  runtimeCaching: [],
-})
-const nextConfig = withPWA({
+const { withPWA } = require('@swavoti/next-pwa')
+
+const nextConfig = {
+  output: 'standalone',
   async redirects() {
     return [
       {
@@ -19,10 +15,9 @@ const nextConfig = withPWA({
         destination: '/icon.svg',
         permanent: true,
       },
-    ];
+    ]
   },
   reactStrictMode: true,
-  swcMinify: true,
   images: {
     // Images are already hosted on Cloudinary/Supabase. Disable Vercel's
     // Image Optimization to prevent Image Optimization Transformations usage.
@@ -32,21 +27,19 @@ const nextConfig = withPWA({
       { protocol: 'https', hostname: '*.supabase.co' },
     ],
   },
-  experimental: {
-    serverComponentsExternalPackages: [
-      '@napi-rs/canvas',
-      'pdf-parse',
-      'pdfjs-dist',
+  serverExternalPackages: [
+    '@napi-rs/canvas',
+    'pdf-parse',
+    'pdfjs-dist',
+  ],
+  outputFileTracingIncludes: {
+    '/api/**/*': [
+      './public/fonts/**',
+      './node_modules/pdfjs-dist/legacy/build/**',
     ],
-    outputFileTracingIncludes: {
-      '/api/**/*': [
-        './public/fonts/**',
-        './node_modules/pdfjs-dist/legacy/build/**',
-      ],
-    },
   },
   webpack: (config, { isServer }) => {
-    // Fix for external HTTPS imports (e.g., jszip from CDN)
+    // Fix for external HTTPS imports (e.g. jszip from CDN).
     if (!isServer) {
       config.plugins.push(
         new (require('webpack').NormalModuleReplacementPlugin)(
@@ -57,5 +50,6 @@ const nextConfig = withPWA({
     }
     return config
   },
-})
-module.exports = nextConfig
+}
+
+module.exports = withPWA(nextConfig)

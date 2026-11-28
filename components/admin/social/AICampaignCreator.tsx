@@ -49,7 +49,7 @@ export function AICampaignCreator({ onCampaignGenerated }: AICampaignCreatorProp
   const [audience, setAudience] = useState(TargetAudience.JAMB_CANDIDATES);
   
   const [generating, setGenerating] = useState(false);
-  const [generatedResult, setGeneratedResult] = useState(null);
+  const [generatedResult, setGeneratedResult] = useState<any>(null);
   const [currentPlatformPreview, setCurrentPlatformPreview] = useState(SocialPlatform.X);
   const [loadingStep, setLoadingStep] = useState("");
 

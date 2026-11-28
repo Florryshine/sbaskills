@@ -2,10 +2,10 @@ import { NextRequest, NextResponse } from 'next/server';
 import { requireAdminApi } from '@/lib/require-admin-api';
 import { createAdminClient } from '@/lib/supabase-admin';
 
-export async function POST(_req: NextRequest, { params }: { params: { id: string } }) {
+export async function POST(_req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
   const auth = await requireAdminApi();
   if (auth.response) return auth.response;
-  const id = params.id;
+  const { id } = await params;
   if (!/^[0-9a-f]{8}-[0-9a-f-]{27}$/i.test(id)) {
     return NextResponse.json({ error: 'Invalid render job ID.' }, { status: 400 });
   }
