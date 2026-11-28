@@ -11,7 +11,7 @@ export const dynamic = 'force-dynamic';
 
 export default async function TopicGamesPage({ params }) {
   const { id } = params;
-  const supabase = createServerClient();
+  const supabase = await createServerClient();
 
   const { data: topic, error: topicError } = await supabase
     .from('game_topics')

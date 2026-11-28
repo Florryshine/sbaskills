@@ -6,7 +6,7 @@ export const runtime = 'nodejs';
 
 export async function POST(request) {
   try {
-    const supabase = createRouteHandlerClient();
+    const supabase = await createRouteHandlerClient();
     const {
       data: { user }
     } = await supabase.auth.getUser();

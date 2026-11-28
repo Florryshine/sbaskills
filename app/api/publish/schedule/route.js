@@ -9,7 +9,7 @@ export async function POST(request) {
   // of the app's auth (login, middleware) actually uses — auth.getUser()
   // could never see a real session here, so every call 401'd regardless of
   // login state.
-  const routeSupabase = createRouteHandlerClient();
+  const routeSupabase = await createRouteHandlerClient();
   const { data: { user } } = await routeSupabase.auth.getUser();
   if (!user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
 

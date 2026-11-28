@@ -148,7 +148,7 @@ function extractValidQuestions(parsed) {
 export async function POST(request) {
   try {
     // This endpoint spends external AI quota and writes generated questions; admin only.
-    const sessionClient = createRouteHandlerClient();
+    const sessionClient = await createRouteHandlerClient();
     const { data: { user }, error: authError } = await sessionClient.auth.getUser();
     if (authError || !user) {
       return NextResponse.json({ error: 'Sign in as an admin to generate quiz questions.' }, { status: 401 });

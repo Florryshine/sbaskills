@@ -8,7 +8,7 @@ import Link from 'next/link';
 export const dynamic = 'force-dynamic';
 
 export default async function GamesIndexPage() {
-  const supabase = createServerClient();
+  const supabase = await createServerClient();
 
   // game_topics / game_sequence_steps are RLS-locked to `authenticated`
   // only. If the session cookie doesn't resolve (logged-out visitor,

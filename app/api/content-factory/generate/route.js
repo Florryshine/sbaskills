@@ -6,7 +6,7 @@ import { runContentFactory } from '@/lib/content-factory';
 export async function POST(request) {
   // This route uses privileged server-side generation, so require a real
   // signed-in admin instead of relying on page middleware (which excludes /api).
-  const authClient = createRouteHandlerClient();
+  const authClient = await createRouteHandlerClient();
   const { data: { user }, error: authError } = await authClient.auth.getUser();
   if (authError || !user) {
     return NextResponse.json({ error: 'Authentication required' }, { status: 401 });

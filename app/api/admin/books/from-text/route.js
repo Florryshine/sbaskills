@@ -48,7 +48,7 @@ export async function POST(request) {
     }
 
     // This endpoint uses the service-role client, so require an authenticated admin.
-    const sessionClient = createRouteHandlerClient();
+    const sessionClient = await createRouteHandlerClient();
     const { data: { user }, error: authError } = await sessionClient.auth.getUser();
     if (authError || !user) {
       return NextResponse.json({ error: 'Sign in as an admin to generate library books.' }, { status: 401 });

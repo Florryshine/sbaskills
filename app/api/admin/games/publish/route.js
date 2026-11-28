@@ -7,7 +7,7 @@ import { NextResponse } from 'next/server';
 // state of the knowledge_asset, so editing an asset and re-publishing is
 // how you push updates live.
 export async function POST(request) {
-  const supabase = createServerClient();
+  const supabase = await createServerClient();
 
   const {
     data: { user },

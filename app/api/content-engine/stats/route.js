@@ -3,7 +3,7 @@ import { createRouteHandlerClient } from '@/lib/supabase-server';
 
 export async function GET() {
   try {
-    const supabase = createRouteHandlerClient();
+    const supabase = await createRouteHandlerClient();
 
     const [
       { count: queued },

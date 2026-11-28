@@ -6,7 +6,7 @@ export const dynamic = 'force-dynamic';
 export async function GET(request) {
   const reference = new URL(request.url).searchParams.get('reference');
   if (!reference) return NextResponse.json({ error: 'Missing reference.' }, { status: 400 });
-  const supabase = createRouteHandlerClient();
+  const supabase = await createRouteHandlerClient();
   const { data: { user } } = await supabase.auth.getUser();
   if (!user) return NextResponse.json({ error: 'Not signed in.' }, { status: 401 });
   const { data: payment, error } = await supabase

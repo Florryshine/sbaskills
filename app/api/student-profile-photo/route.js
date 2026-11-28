@@ -16,7 +16,7 @@ function hasValidImageSignature(buffer, mimeType) {
 
 export async function POST(request) {
   try {
-    const supabase = createRouteHandlerClient();
+    const supabase = await createRouteHandlerClient();
     const { data: { user }, error: authError } = await supabase.auth.getUser();
     if (authError || !user) {
       return NextResponse.json({ error: 'Please sign in before uploading a profile photo.' }, { status: 401 });

@@ -6,7 +6,7 @@ export const dynamic = 'force-dynamic';
 export async function GET(request) {
   const slug = new URL(request.url).searchParams.get('school');
   if (!slug) return NextResponse.json({ error: 'Missing school.' }, { status: 400 });
-  const supabase = createRouteHandlerClient();
+  const supabase = await createRouteHandlerClient();
   const { data: { user } } = await supabase.auth.getUser();
   if (!user) return NextResponse.json({ error: 'Not signed in.' }, { status: 401 });
   const { data: school } = await supabase.from('schools').select('id, slug, name').eq('slug', slug).single();

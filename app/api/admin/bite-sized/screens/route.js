@@ -4,7 +4,7 @@ import { generateInteractiveLesson } from '@/lib/bite-sized/screens';
 import { validateLessonContent } from '@/lib/bite-sized/validator';
 
 async function getAdminContext() {
-  const supabase = createRouteHandlerClient();
+  const supabase = await createRouteHandlerClient();
   const {
     data: { user },
   } = await supabase.auth.getUser();

@@ -83,7 +83,7 @@ const howItWorks = [
 ];
 
 export default async function HomePage() {
-  const supabase = createServerClient();
+  const supabase = await createServerClient();
 
   const { data: courses } = await supabase
     .from('courses')

@@ -11,7 +11,7 @@ export const metadata = {
 };
 
 export default async function JAMBStudyPage() {
-  const supabase = createServerClient();
+  const supabase = await createServerClient();
   const { data: rows, error } = await supabase
     .from('past_questions')
     .select('subject, topic')

@@ -11,7 +11,7 @@ export async function POST(request) {
     return NextResponse.json({ error: 'school, student_id, and fee_structure_id are required.' }, { status: 400 });
   }
 
-  const supabase = createRouteHandlerClient();
+  const supabase = await createRouteHandlerClient();
   const { data: { user } } = await supabase.auth.getUser();
   if (!user) return NextResponse.json({ error: 'Not signed in.' }, { status: 401 });
 

@@ -9,7 +9,7 @@ export async function POST(request) {
   // of the app's auth (login, middleware) actually uses. That mismatch meant
   // auth.getUser() here could never see a real, logged-in admin session —
   // every request came back 401 Unauthorized regardless of login state.
-  const supabase = createRouteHandlerClient();
+  const supabase = await createRouteHandlerClient();
   const { data: { user } } = await supabase.auth.getUser();
   if (!user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
 

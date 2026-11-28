@@ -49,7 +49,7 @@ function safeJsonParse(value, fallback = []) {
 
 export default async function BlogPostPage({ params }) {
   try {
-    const supabase = createServerClient();
+    const supabase = await createServerClient();
 
     const { data: post, error } = await supabase
       .from('content_drafts')

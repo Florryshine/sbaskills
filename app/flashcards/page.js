@@ -21,7 +21,7 @@ export default async function FlashcardsPage() {
   // or onboarding hasn't run yet, so nothing looks broken either way.
   let targetExams = [];
   try {
-    const authedSupabase = createServerClient();
+    const authedSupabase = await createServerClient();
     const {
       data: { user },
     } = await authedSupabase.auth.getUser();

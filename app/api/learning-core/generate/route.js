@@ -125,7 +125,7 @@ export async function POST(request) {
       return NextResponse.json({ error: 'Keyword is required' }, { status: 400 });
     }
 
-    const supabase = createRouteHandlerClient();
+    const supabase = await createRouteHandlerClient();
 
     // 1. Check if a knowledge asset already exists for this keyword
     const { data: existing } = await supabase

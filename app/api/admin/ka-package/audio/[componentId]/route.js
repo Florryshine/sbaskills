@@ -6,7 +6,7 @@ export const runtime = 'nodejs';
 
 export async function GET(_request, context) {
   const params = await context.params;
-  const authClient = createServerClient();
+  const authClient = await createServerClient();
   const { data: { user }, error: authError } = await authClient.auth.getUser();
   if (authError || !user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
 

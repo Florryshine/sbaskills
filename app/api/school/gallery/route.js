@@ -10,7 +10,7 @@ export async function GET(request) {
   const schoolSlug = searchParams.get('school');
   if (!schoolSlug) return NextResponse.json({ error: 'Missing school.' }, { status: 400 });
 
-  const supabase = createRouteHandlerClient();
+  const supabase = await createRouteHandlerClient();
   const { data: school } = await supabase.from('schools').select('id').eq('slug', schoolSlug).single();
   if (!school) return NextResponse.json({ error: 'School not found.' }, { status: 404 });
 
