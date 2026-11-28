@@ -1,110 +1,97 @@
 import { NextResponse } from 'next/server';
 import { createAdminClient } from '@/lib/supabase-admin';
-import { GoogleGenerativeAI } from '@google/generative-ai';
-import Groq from 'groq-sdk';
+import { generateWithFallback } from '@/lib/llmFallbackChain';
 import { parseJsonFromText } from '@/lib/robustJsonParse';
 
-// ── Keys ──────────────────────────────────────────────────────────────
-const GEMINI_KEYS = [
-  process.env.GEMINI_API_KEY_1,
-  process.env.GEMINI_API_KEY_2,
-  process.env.GEMINI_API_KEY,
-].filter(Boolean);
+const SOCIAL_PLATFORMS = ['facebook', 'whatsapp', 'instagram', 'x', 'telegram', 'linkedin'];
+const CAPTION_LIMITS = { facebook: 63206, whatsapp: 4096, instagram: 2200, x: 280, telegram: 4096, linkedin: 3000 };
 
-const GROQ_KEYS = [
-  process.env.GROQ_API_KEY_1,
-  process.env.GROQ_API_KEY_2,
-  process.env.GROQ_API_KEY,
-].filter(Boolean);
-
-const OPENROUTER_API_KEY = process.env.OPENROUTER_API_KEY;
-const HUGGINGFACE_API_KEY = process.env.HUGGINGFACE_API_KEY;
-
-import { GEMINI_MODELS, GROQ_MODEL, OPENROUTER_MODEL } from '@/lib/aiModels';
-
-// ── Helpers ──────────────────────────────────────────────────────────
-
-async function tryOpenRouter(prompt) {
-  if (!OPENROUTER_API_KEY) return null;
-  const res = await fetch('https://openrouter.ai/api/v1/chat/completions', {
-    method: 'POST',
-    headers: {
-      Authorization: `Bearer ${OPENROUTER_API_KEY}`,
-      'Content-Type': 'application/json',
-    },
-    body: JSON.stringify({
-      model: OPENROUTER_MODEL,
-      messages: [{ role: 'user', content: prompt }],
-      max_tokens: 4096,
-      temperature: 0.8,
-    }),
-  });
-  if (!res.ok) return null;
-  const data = await res.json();
-  return data.choices?.[0]?.message?.content?.trim() || null;
-}
-
-async function tryHuggingFace(prompt) {
-  if (!HUGGINGFACE_API_KEY) return null;
-  const res = await fetch(
-    'https://api-inference.huggingface.co/models/meta-llama/Llama-3.1-8B-Instruct',
-    {
-      method: 'POST',
-      headers: {
-        Authorization: `Bearer ${HUGGINGFACE_API_KEY}`,
-        'Content-Type': 'application/json',
-      },
-      body: JSON.stringify({
-        inputs: prompt,
-        parameters: { max_new_tokens: 4096, temperature: 0.8, return_full_text: false },
-      }),
-    }
-  );
-  if (!res.ok) return null;
-  const data = await res.json();
-  return data?.[0]?.generated_text?.trim() || null;
-}
-
-// ── Social Posts prompt (includes LinkedIn) ──────────────────────────
 function buildSocialPrompt(asset) {
   const keyword = asset.keyword || 'this topic';
   const summary = asset.summary || 'No summary available.';
-  const keyConcepts = (asset.key_concepts && asset.key_concepts.length > 0)
-    ? asset.key_concepts.slice(0, 3).join(', ')
+  const keyConcepts = Array.isArray(asset.key_concepts) && asset.key_concepts.length
+    ? asset.key_concepts.slice(0, 5).join(', ')
     : 'key concepts not provided';
-  const examples = (asset.examples && asset.examples.length > 0)
-    ? asset.examples.slice(0, 2).join('; ')
+  const examples = Array.isArray(asset.examples) && asset.examples.length
+    ? asset.examples.slice(0, 3).join('; ')
     : 'No examples provided.';
+  const facts = Array.isArray(asset.facts) && asset.facts.length
+    ? asset.facts.slice(0, 6).join('; ')
+    : 'No verified facts supplied.';
 
-  return `You are a social media marketer for Shiney Brain Academy. Create engaging social media posts to promote the topic: "${keyword}".
+  return `You are the social media content strategist for Shiney Brain Academy.
+Create exactly one ready-to-publish post for EACH of these platforms: ${SOCIAL_PLATFORMS.join(', ')}.
 
+Topic: ${keyword}
+Subject: ${asset.subject || 'General'}
 Summary: ${summary}
-Key Concepts: ${keyConcepts}
+Key concepts: ${keyConcepts}
 Examples: ${examples}
+Facts: ${facts}
 
-Create posts for the following platforms:
+Platform requirements:
+- Facebook: useful, community-oriented, conversational; up to 63206 characters.
+- WhatsApp: short, natural, friendly group message; up to 4096 characters.
+- Instagram: strong opening, visually evocative language, relevant hashtags; up to 2200 characters.
+- X: concise, attention-grabbing and complete within 280 characters.
+- Telegram: informative and practical for a learning community; up to 4096 characters.
+- LinkedIn: professional, insight-led and useful to educators, parents or learners; up to 3000 characters.
 
-1. **Facebook** (longer, educational, community‑oriented, friendly tone)
-2. **WhatsApp** (short, conversational, for groups, emojis)
-3. **Instagram** (short, visual, with emojis and hashtags, inspiring)
-4. **X (Twitter)** (very short, under 280 chars, attention‑grabbing, hashtags)
-5. **Telegram** (educational, engaging, with emojis, clear call‑to‑action)
-6. **LinkedIn** (professional, educational, formal tone, suitable for educators and students, with a clear value proposition)
+Rules:
+- Ground claims in the supplied facts. Never invent scores, statistics, guarantees, dates or links.
+- Make each platform's post distinct and adapted to its audience; do not copy the same caption six times.
+- Mention Shiney Brain Academy naturally where appropriate.
+- Each caption must contain a clear, natural next step.
+- Return exactly six posts, one for each requested platform, no duplicates and no extras.
 
-Each post should:
-- Be engaging and encourage clicks/engagement.
-- Include relevant emojis.
-- End with a call‑to‑action (e.g., "📚 Read the full article at Shiney Brain Academy" or "🧠 Test yourself with our quiz!").
-- Mention Shiney Brain Academy naturally.
-
-Return ONLY a JSON object with a "posts" array containing 6 objects, each with:
-- "platform": one of ["facebook", "whatsapp", "instagram", "x", "telegram", "linkedin"]
-- "caption": the post text
-
-No markdown, no extra text.`;
+Return ONLY JSON:
+{"posts":[
+  {"platform":"facebook","caption":"..."},
+  {"platform":"whatsapp","caption":"..."},
+  {"platform":"instagram","caption":"..."},
+  {"platform":"x","caption":"..."},
+  {"platform":"telegram","caption":"..."},
+  {"platform":"linkedin","caption":"..."}
+]}`;
 }
 
-// ── Main POST ──────────────────────────────────────────────────────
+function validatePosts(parsed) {
+  if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed) || !Array.isArray(parsed.posts)) return false;
+  if (parsed.posts.length !== SOCIAL_PLATFORMS.length) return false;
+  const seen = new Map();
+  for (const post of parsed.posts) {
+    if (!post || !SOCIAL_PLATFORMS.includes(post.platform)) return false;
+    if (seen.has(post.platform)) return false;
+    if (typeof post.caption !== 'string' || !post.caption.trim()) return false;
+    if (post.caption.trim().length > CAPTION_LIMITS[post.platform]) return false;
+    seen.set(post.platform, post);
+  }
+  return SOCIAL_PLATFORMS.every((platform) => seen.has(platform));
+}
+
+validatePosts.describe = (parsed) => {
+  if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) return 'expected a JSON object with a posts array';
+  if (!Array.isArray(parsed.posts)) return 'posts is missing or is not an array';
+  const seen = new Set();
+  const issues = [];
+  for (const post of parsed.posts) {
+    if (!post || !SOCIAL_PLATFORMS.includes(post.platform)) {
+      issues.push('a post has a missing or unsupported platform');
+      continue;
+    }
+    if (seen.has(post.platform)) issues.push('duplicate post for ' + post.platform);
+    seen.add(post.platform);
+    if (typeof post.caption !== 'string' || !post.caption.trim()) issues.push(post.platform + '.caption is missing');
+    else if (post.caption.trim().length > CAPTION_LIMITS[post.platform]) {
+      issues.push(post.platform + '.caption exceeds ' + CAPTION_LIMITS[post.platform] + ' characters');
+    }
+  }
+  const missing = SOCIAL_PLATFORMS.filter((platform) => !seen.has(platform));
+  if (missing.length) issues.push('missing platforms: ' + missing.join(', '));
+  if (parsed.posts.length !== SOCIAL_PLATFORMS.length) issues.push('expected exactly six posts');
+  return issues.join('; ') || 'social post validation failed';
+};
+
 export async function POST(request) {
   try {
     const { knowledgeAssetId } = await request.json();
@@ -113,7 +100,6 @@ export async function POST(request) {
     }
 
     const supabase = createAdminClient();
-
     const { data: asset, error: assetError } = await supabase
       .from('knowledge_assets')
       .select('*')
@@ -124,160 +110,48 @@ export async function POST(request) {
       return NextResponse.json({ error: 'Knowledge asset not found' }, { status: 404 });
     }
 
-    const prompt = buildSocialPrompt(asset);
-
-    // Validate prompt
-    if (!prompt || typeof prompt !== 'string' || prompt.trim().length === 0) {
-      console.error('❌ Social posts prompt is empty or invalid:', { prompt });
-      return NextResponse.json({ error: 'Failed to generate prompt from asset' }, { status: 500 });
-    }
-
-    console.log(`📝 Social posts prompt length: ${prompt.length}`);
-    console.log(`📝 First 200 chars: ${prompt.substring(0, 200)}...`);
-
-    let result = null;
-    let usedProvider = '';
-    const errors = [];
-
-    // ── Gemini ──────────────────────────────────────────────────────
-    for (const geminiKey of GEMINI_KEYS) {
-      if (result) break;
-      const client = new GoogleGenerativeAI(geminiKey);
-      for (const modelName of GEMINI_MODELS) {
-        if (result) break;
-        try {
-          const model = client.getGenerativeModel({ model: modelName });
-          const genResult = await model.generateContent({
-            contents: [{ role: 'user', parts: [{ text: prompt }] }],
-            generationConfig: {
-              maxOutputTokens: 8192,
-              temperature: 0.8,
-              // Gemini 3.x is a thinking model: without this it wraps JSON
-              // in prose/markdown fences and validation drops everything.
-              responseMimeType: 'application/json',
-            },
-          });
-          const text = genResult.response.text();
-          const parsed = parseJsonFromText(text);
-          if (parsed && Array.isArray(parsed.posts) && parsed.posts.length >= 4) {
-            result = parsed;
-            usedProvider = `Gemini (${modelName})`;
-          } else {
-            errors.push(`Gemini ${modelName}: insufficient posts`);
-          }
-        } catch (e) {
-          errors.push(`Gemini ${modelName}: ${e.message}`);
-        }
-      }
-    }
-
-    // ── Groq ────────────────────────────────────────────────────────
-    if (!result) {
-      for (const groqKey of GROQ_KEYS) {
-        if (result) break;
-        try {
-          const groq = new Groq({ apiKey: groqKey });
-          const groqResponse = await groq.chat.completions.create({
-            messages: [{ role: 'user', content: prompt }],
-            model: GROQ_MODEL,
-            max_tokens: 4096,
-            temperature: 0.8,
-          });
-          const text = groqResponse.choices[0].message.content.trim();
-          const parsed = parseJsonFromText(text);
-          if (parsed && Array.isArray(parsed.posts) && parsed.posts.length >= 4) {
-            result = parsed;
-            usedProvider = `Groq (${GROQ_KEYS.indexOf(groqKey) + 1})`;
-          } else {
-            errors.push('Groq: insufficient posts');
-          }
-        } catch (e) {
-          errors.push(`Groq: ${e.message}`);
-        }
-      }
-    }
-
-    // ── OpenRouter ─────────────────────────────────────────────────
-    if (!result) {
-      try {
-        const text = await tryOpenRouter(prompt);
-        if (text) {
-          const parsed = parseJsonFromText(text);
-          if (parsed && Array.isArray(parsed.posts) && parsed.posts.length >= 4) {
-            result = parsed;
-            usedProvider = 'OpenRouter';
-          } else {
-            errors.push('OpenRouter: insufficient posts');
-          }
-        }
-      } catch (e) {
-        errors.push(`OpenRouter: ${e.message}`);
-      }
-    }
-
-    // ── HuggingFace ────────────────────────────────────────────────
-    if (!result) {
-      try {
-        const text = await tryHuggingFace(prompt);
-        if (text) {
-          const parsed = parseJsonFromText(text);
-          if (parsed && Array.isArray(parsed.posts) && parsed.posts.length >= 4) {
-            result = parsed;
-            usedProvider = 'HuggingFace';
-          } else {
-            errors.push('HuggingFace: insufficient posts');
-          }
-        }
-      } catch (e) {
-        errors.push(`HuggingFace: ${e.message}`);
-      }
-    }
+    const { result, usedProvider, errors } = await generateWithFallback(
+      buildSocialPrompt(asset),
+      (text) => parseJsonFromText(text, 'object'),
+      validatePosts,
+      4096
+    );
 
     if (!result) {
-      return NextResponse.json(
-        { error: `All providers failed: ${errors.join('; ')}` },
-        { status: 500 }
-      );
+      return NextResponse.json({
+        error: 'Social post generation failed validation across all providers.',
+        details: errors || [],
+      }, { status: 502 });
     }
 
-    // ── Insert each post as a separate row ─────────────────────────
-    const posts = result.posts.slice(0, 6);
-    const inserted = [];
+    const rows = result.posts.map((post) => ({
+      knowledge_asset_id: asset.id,
+      keyword: asset.keyword,
+      platform: post.platform,
+      caption: post.caption.trim(),
+      status: 'draft',
+      generated_from: 'knowledge_asset',
+      version: 1,
+    }));
 
-    for (const post of posts) {
-      const { data: draft, error: draftError } = await supabase
-        .from('social_post_drafts')
-        .insert({
-          knowledge_asset_id: asset.id,
-          keyword: asset.keyword,
-          platform: post.platform,
-          caption: post.caption,
-          status: 'draft',
-          generated_from: 'knowledge_asset',
-          version: 1,
-        })
-        .select()
-        .single();
+    const { data: inserted, error: insertError } = await supabase
+      .from('social_post_drafts')
+      .insert(rows)
+      .select();
 
-      if (draftError) {
-        console.error(`Failed to insert ${post.platform}:`, draftError);
-      } else {
-        inserted.push(draft);
-      }
-    }
-
-    if (inserted.length === 0) {
-      return NextResponse.json({ error: 'Failed to save any posts' }, { status: 500 });
+    if (insertError) {
+      console.error('Failed to save social drafts:', insertError);
+      return NextResponse.json({ error: 'Generated posts could not be saved: ' + insertError.message }, { status: 500 });
     }
 
     return NextResponse.json({
       success: true,
-      postCount: inserted.length,
-      postIds: inserted.map(p => p.id),
+      postCount: inserted?.length || 0,
+      postIds: (inserted || []).map((post) => post.id),
       usedProvider,
     });
   } catch (error) {
-    console.error('❌ Social posts generation error:', error);
-    return NextResponse.json({ error: error.message }, { status: 500 });
+    console.error('Social posts generation error:', error);
+    return NextResponse.json({ error: error.message || 'Social generation failed' }, { status: 500 });
   }
 }

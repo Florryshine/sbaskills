@@ -1,46 +1,20 @@
 'use client';
-import React, { useState } from "react";
+import React, { useEffect, useState } from "react";
 import { 
   Sparkles, BookOpen, Layers, MessageSquare, Send, Calendar, CheckCircle, 
   HelpCircle, ThumbsUp, Trash2, Globe, Eye, Code, RefreshCw
 } from "lucide-react";
-import { TargetAudience, PostTone, SocialPlatform } from "../types";
+import { TargetAudience, PostTone } from "../types";
 import { PostPreviewer } from "./PostPreviewer";
-
-// Quick mock Knowledge Assets to make selection super interactive and education-aligned
-const PRESET_ASSETS = [
-  {
-    id: "ka-1",
-    title: "Mastering Projectile Motion for JAMB 2026",
-    subject: "Physics",
-    description: "Formulas and multi-angle vector calculations for projectile flight, maximum heights, and gravity flight periods."
-  },
-  {
-    id: "ka-2",
-    title: "WAEC 2026 Core Mathematics: Quadratic Functions & Graphs",
-    subject: "Mathematics",
-    description: "Syllabus mapping for quadratic equations, finding vertex curves, parabolas, and solving roots visually."
-  },
-  {
-    id: "ka-3",
-    title: "Memorization Hack: The Memory Palace for Organic Chemistry Formulas",
-    subject: "Chemistry",
-    description: "A complete step-by-step cognitive guide to memorizing alkane structures, alkanol reactions, and benzene rings easily."
-  },
-  {
-    id: "ka-4",
-    title: "Shiney Brain Ultimate Exam Time Management Framework",
-    subject: "General Study",
-    description: "Study schedules, pomodoro ratios, high-stress management, and breakfast-day strategies for university level candidates."
-  }
-];
 
 interface AICampaignCreatorProps {
   onCampaignGenerated: () => void;
 }
 
 export function AICampaignCreator({ onCampaignGenerated }: AICampaignCreatorProps) {
-  const [selectedAsset, setSelectedAsset] = useState(PRESET_ASSETS[0]);
+  const [availableAssets, setAvailableAssets] = useState<any[]>([]);
+  const [selectedAsset, setSelectedAsset] = useState<any>(null);
+  const [assetLoadError, setAssetLoadError] = useState("");
   const [customTopic, setCustomTopic] = useState("");
   const [useCustom, setUseCustom] = useState(false);
   
@@ -50,8 +24,26 @@ export function AICampaignCreator({ onCampaignGenerated }: AICampaignCreatorProp
   
   const [generating, setGenerating] = useState(false);
   const [generatedResult, setGeneratedResult] = useState(null);
-  const [currentPlatformPreview, setCurrentPlatformPreview] = useState(SocialPlatform.X);
+  const [currentPlatformPreview, setCurrentPlatformPreview] = useState("x");
   const [loadingStep, setLoadingStep] = useState("");
+
+  useEffect(() => {
+    let active = true;
+    fetch("/api/social/generate")
+      .then(async (response) => {
+        const data = await response.json();
+        if (!response.ok) throw new Error(data.error || "Could not load knowledge assets");
+        if (active) {
+          setAvailableAssets(data.assets || []);
+          if (data.assets?.length) {
+            setSelectedAsset(data.assets[0]);
+            setSubject(data.assets[0].subject || "General");
+          }
+        }
+      })
+      .catch((error) => { if (active) setAssetLoadError(error.message); });
+    return () => { active = false; };
+  }, []);
 
   const triggerGeneration = async () => {
     setGenerating(true);
@@ -77,20 +69,18 @@ export function AICampaignCreator({ onCampaignGenerated }: AICampaignCreatorProp
     }, 1200);
 
     try {
-      const topicText = useCustom ? customTopic : selectedAsset.title;
-      const descriptionText = useCustom ? "" : selectedAsset.description;
+      const topicText = useCustom ? customTopic.trim() : (selectedAsset?.keyword || "");
 
       const response = await fetch("/api/social/generate", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
+          knowledgeAssetId: selectedAsset?.id,
+          platforms: ["facebook", "threads", "x", "instagram", "telegram", "linkedin"],
           topic: topicText,
           subject,
           tone,
           audience,
-          sourceType: "blog",
-          sourceId: selectedAsset.id,
-          sourceTitle: topicText + " " + descriptionText,
         }),
       });
 
@@ -179,6 +169,8 @@ export function AICampaignCreator({ onCampaignGenerated }: AICampaignCreatorProp
         <div className="p-6 space-y-6">
           {/* Asset picker selector */}
           <div className="space-y-2">
+            {assetLoadError && <p className="text-xs text-rose-400">{assetLoadError}</p>}
+            {!availableAssets.length && !assetLoadError && <p className="text-xs text-slate-400">Loading your knowledge assets…</p>}
             <div className="flex justify-between items-center">
               <label className="text-xs text-slate-300 font-mono flex items-center gap-2">
                 <BookOpen size={13} className="text-indigo-400" />
@@ -210,15 +202,15 @@ export function AICampaignCreator({ onCampaignGenerated }: AICampaignCreatorProp
 
             {!useCustom ? (
               <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-                {PRESET_ASSETS.map((asset) => (
+                {availableAssets.map((asset) => (
                   <div
                     key={asset.id}
                     onClick={() => {
                       setSelectedAsset(asset);
-                      setSubject(asset.subject);
+                      setSubject(asset.subject || "General");
                     }}
                     className={`p-4 rounded-xl border text-left cursor-pointer transition-all ${
-                      selectedAsset.id === asset.id
+                      selectedAsset?.id === asset.id
                         ? "bg-slate-950 border-indigo-500 ring-1 ring-indigo-500/30"
                         : "bg-slate-950/40 border-slate-850 hover:border-slate-800"
                     }`}
@@ -226,8 +218,8 @@ export function AICampaignCreator({ onCampaignGenerated }: AICampaignCreatorProp
                     <span className="text-[10px] font-bold font-mono text-indigo-400 bg-slate-900 px-2 py-0.5 rounded border border-slate-850">
                       {asset.subject}
                     </span>
-                    <h4 className="text-xs font-bold text-slate-200 mt-2 truncate">{asset.title}</h4>
-                    <p className="text-[10px] text-slate-400 mt-1 line-clamp-2">{asset.description}</p>
+                    <h4 className="text-xs font-bold text-slate-200 mt-2 truncate">{asset.keyword}</h4>
+                    <p className="text-[10px] text-slate-400 mt-1 line-clamp-2">{asset.summary || "Knowledge asset"}</p>
                   </div>
                 ))}
               </div>
@@ -290,7 +282,7 @@ export function AICampaignCreator({ onCampaignGenerated }: AICampaignCreatorProp
             {!generating ? (
               <button
                 onClick={triggerGeneration}
-                disabled={useCustom && !customTopic}
+                disabled={generating || !selectedAsset || (useCustom && !customTopic.trim())}
                 className="w-full bg-gradient-to-r from-violet-600 to-indigo-600 hover:from-violet-500 hover:to-indigo-500 text-white font-medium text-xs py-3.5 px-4 rounded-xl flex items-center justify-center gap-2 transition-all shadow-lg shadow-indigo-600/20 disabled:opacity-50 disabled:cursor-not-allowed font-mono uppercase tracking-wider"
               >
                 <Sparkles size={16} />
@@ -420,7 +412,7 @@ export function AICampaignCreator({ onCampaignGenerated }: AICampaignCreatorProp
                   <div>
                     <span className="text-[10px] text-slate-400 font-mono block mb-1">Hashtags</span>
                     <div className="flex flex-wrap gap-1">
-                      {getPostByPlatform(currentPlatformPreview)?.hashtags.map((h: string) => (
+                      {(getPostByPlatform(currentPlatformPreview)?.hashtags || []).map((h: string) => (
                         <span key={h} className="text-[10px] bg-indigo-950/30 text-indigo-400 border border-indigo-900 px-2 py-0.5 rounded font-mono">
                           #{h}
                         </span>
