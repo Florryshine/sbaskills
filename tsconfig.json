@@ -27,20 +27,25 @@
       "@/*": [
         "./*"
       ]
-    },
-    "baseUrl": "."
+    }
   },
   "include": [
     "next-env.d.ts",
-    "**/*.ts",
-    "**/*.tsx",
+    "app/**/*.ts",
+    "app/**/*.tsx",
+    "components/**/*.ts",
+    "components/**/*.tsx",
+    "lib/**/*.ts",
+    "lib/**/*.tsx",
     ".next/types/**/*.ts",
     ".next/dev/types/**/*.ts"
   ],
   "exclude": [
     "node_modules",
-    "src",
-    "whiteboard-engine",
-    "stickman-engine"
+    "src/**/*",
+    "whiteboard-engine/**/*",
+    "stickman-engine/**/*",
+    "examples/**/*",
+    "scripts/**/*"
   ]
 }

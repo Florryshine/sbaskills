@@ -12,7 +12,7 @@ interface QueueManagerProps {
 }
 
 export function QueueManager({ queueUpdatedTrigger, onQueueChanged }: QueueManagerProps) {
-  const [queue, setQueue] = useState([]);
+  const [queue, setQueue] = useState<QueueItem[]>([]);
   const [loading, setLoading] = useState(true);
   const [filter, setFilter] = useState("ALL");
   const [search, setSearch] = useState("");

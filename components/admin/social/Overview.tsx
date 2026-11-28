@@ -11,7 +11,7 @@ import {
 import { SocialPlatform } from "../types";
 
 export function Overview() {
-  const [stats, setStats] = useState(null);
+  const [stats, setStats] = useState<SocialAnalyticsStats | null>(null);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
