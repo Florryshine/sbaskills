@@ -20,7 +20,7 @@ function getLevel(points) {
 const MEDAL = ['🥇', '🥈', '🥉'];
 
 export default async function LeaderboardPage() {
-  const supabase = createServerClient();
+  const supabase = await createServerClient();
 
   // Fetch user points (streak_days no longer read from here — see below)
   const { data: leaders } = await supabase

@@ -24,7 +24,7 @@ export async function GET(_request, { params }) {
       .from('books').select('cover_url, is_published').eq('id', params.id).maybeSingle();
     if (error || !book?.cover_url) return NextResponse.json({ error: 'Cover not found.' }, { status: 404 });
     if (!book.is_published) {
-      const sessionClient = createRouteHandlerClient();
+      const sessionClient = await createRouteHandlerClient();
       const { data: { user }, error: authError } = await sessionClient.auth.getUser();
       if (authError || !user) return NextResponse.json({ error: 'Cover not found.' }, { status: 404 });
       const { data: profile } = await sessionClient.from('profiles').select('role').eq('id', user.id).maybeSingle();

@@ -9,7 +9,7 @@ export const dynamic = 'force-dynamic';
 // daily observations. Relies entirely on RLS (is_parent_of helper) so it
 // only ever returns the caller's own linked children's data.
 export async function GET() {
-  const supabase = createRouteHandlerClient();
+  const supabase = await createRouteHandlerClient();
   const { data: { user } } = await supabase.auth.getUser();
   if (!user) return NextResponse.json({ error: 'Not signed in.' }, { status: 401 });
 

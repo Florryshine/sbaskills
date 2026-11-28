@@ -76,7 +76,7 @@ function getReadingTime(content) {
 
 // ─── Page Component ────────────────────────────────────────
 export default async function BlogPage({ searchParams }) {
-  const supabase = createServerClient();
+  const supabase = await createServerClient();
 
   // Get filter params
   const categorySlug = searchParams?.category || 'all';

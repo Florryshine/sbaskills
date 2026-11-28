@@ -11,7 +11,7 @@ export async function GET(request) {
   const { searchParams } = new URL(request.url);
   const schoolSlug = searchParams.get('school');
 
-  const supabase = createRouteHandlerClient();
+  const supabase = await createRouteHandlerClient();
   const { data: { user } } = await supabase.auth.getUser();
   if (!user) return NextResponse.json({ profile: null }, { status: 200 });
 

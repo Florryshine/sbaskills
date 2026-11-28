@@ -43,7 +43,7 @@ function parseMultiValue(raw) {
 
 export async function GET(request) {
   try {
-    const supabase = createRouteHandlerClient();
+    const supabase = await createRouteHandlerClient();
     const { searchParams } = new URL(request.url);
     const status = searchParams.get('status') || 'all';
     const limit = parseInt(searchParams.get('limit')) || 50;
@@ -130,7 +130,7 @@ export async function POST(request) {
       return NextResponse.json({ error: 'No valid rows found' }, { status: 400 });
     }
 
-    const supabase = createRouteHandlerClient();
+    const supabase = await createRouteHandlerClient();
 
     // Find which keywords already exist in the queue
     const incomingKeywords = items.map(item => item.keyword);

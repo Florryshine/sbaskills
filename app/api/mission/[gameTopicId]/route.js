@@ -17,7 +17,7 @@ export async function GET(request, { params }) {
     return NextResponse.json({ error: 'gameTopicId is required' }, { status: 400 });
   }
 
-  const supabase = createRouteHandlerClient();
+  const supabase = await createRouteHandlerClient();
 
   const {
     data: { user },

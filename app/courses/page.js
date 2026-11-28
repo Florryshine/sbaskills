@@ -20,7 +20,7 @@ const categories = [
 ];
 
 export default async function CoursesPage() {
-  const supabase = createServerClient();
+  const supabase = await createServerClient();
   const { data: courses } = await supabase
     .from('courses')
     .select('*')

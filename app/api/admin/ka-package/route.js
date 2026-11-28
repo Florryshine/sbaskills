@@ -7,7 +7,7 @@ export const runtime = 'nodejs';
 const ALLOWED = ['master_script','short_script','carousel_slides','caption_base','seo_meta','mcq_set','visual_instructions'];
 
 async function requireAdmin() {
-  const authClient = createServerClient();
+  const authClient = await createServerClient();
   const { data: { user }, error: authError } = await authClient.auth.getUser();
   if (authError || !user) return { response: NextResponse.json({ error: 'Unauthorized' }, { status: 401 }) };
   const { data: profile, error } = await authClient.from('profiles').select('role').eq('id', user.id).single();

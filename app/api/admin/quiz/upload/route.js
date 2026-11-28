@@ -34,7 +34,7 @@ export async function POST(request) {
       return NextResponse.json({ error: 'No complete questions found in the file.', skipped }, { status: 400 });
     }
 
-    const supabase = createRouteHandlerClient();
+    const supabase = await createRouteHandlerClient();
     const { data: existing } = await supabase
       .from('quiz_questions')
       .select('order_index')

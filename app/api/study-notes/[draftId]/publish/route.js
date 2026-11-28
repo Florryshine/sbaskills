@@ -23,7 +23,7 @@ export async function POST(request, { params }) {
   try {
     // This route uses the service-role client to publish content, so the caller
     // must be an authenticated admin. Never trust the draft UUID as authorization.
-    const sessionClient = createRouteHandlerClient();
+    const sessionClient = await createRouteHandlerClient();
     const { data: { user }, error: authError } = await sessionClient.auth.getUser();
     if (authError || !user) {
       return NextResponse.json({ error: 'Sign in as an admin to publish study notes.' }, { status: 401 });

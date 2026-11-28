@@ -5,7 +5,7 @@ export const dynamic = 'force-dynamic';
 export async function GET(request) {
   const { searchParams } = new URL(request.url); const slug = searchParams.get('school'); const classLevel = searchParams.get('class_level');
   if (!slug) return NextResponse.json({ error: 'Missing school.' }, { status: 400 });
-  const supabase = createRouteHandlerClient();
+  const supabase = await createRouteHandlerClient();
   const { data: school } = await supabase.from('schools').select('id, slug, name').eq('slug', slug).single();
   if (!school) return NextResponse.json({ error: 'School not found.' }, { status: 404 });
   let query = supabase.from('timetable_slots').select('id, school_id, class_level, day_of_week, period_number, start_time, end_time, subject, teacher_id, is_published, teacher:teacher_id(full_name)').eq('school_id', school.id).order('day_of_week').order('period_number');

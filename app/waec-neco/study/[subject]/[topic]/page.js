@@ -6,7 +6,7 @@ import { createServerClient } from '@/lib/supabase-server';
 export const dynamic = 'force-dynamic';
 
 export default async function WAECNECOTopicPage({ params }) {
-  const supabase = createServerClient();
+  const supabase = await createServerClient();
   const subject = decodeURIComponent(params.subject || '').trim();
   const topic = decodeURIComponent(params.topic || '').trim();
 

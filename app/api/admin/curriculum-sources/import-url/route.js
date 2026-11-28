@@ -26,7 +26,7 @@ function safeFilePart(value) {
 
 export async function POST(request) {
   try {
-    const auth = createServerClient();
+    const auth = await createServerClient();
     const { data: { user } } = await auth.auth.getUser();
     if (!user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
     const { data: profile } = await auth.from('profiles').select('role').eq('id', user.id).maybeSingle();
