@@ -1,7 +1,7 @@
 name: Whiteboard worker
 
 # Guards the Render worker image: its Dockerfile runs `npm ci`, which hard-fails when
-# package-lock.json drifts from package.json.
+# package-lock.json drifts from package.json (that silently prevented the worker from ever deploying).
 on:
   pull_request:
     paths:
@@ -21,36 +21,17 @@ on:
       - local-video-renderer/**
       - whiteboard-engine/**
 
-permissions:
-  contents: write
-
 jobs:
   worker:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-        with:
-          ref: ${{ github.event.pull_request.head.ref || github.ref_name }}
-          persist-credentials: true
       - uses: actions/setup-node@v4
         with:
           node-version: 24
       - uses: oven-sh/setup-bun@v2
-      - name: Regenerate lockfile and verify the worker install
-        run: |
-          npm install --package-lock-only --ignore-scripts --no-audit --no-fund
-          npm ci --omit=dev
-      - name: Commit repaired lockfile
-        run: |
-          if git diff --quiet -- package-lock.json; then
-            echo "Lockfile already matches package.json"
-          else
-            git config user.name "github-actions[bot]"
-            git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-            git add package-lock.json
-            git commit -m "fix(deps): regenerate lockfile for current app manifest"
-            git push origin HEAD:${{ github.event.pull_request.head.ref || github.ref_name }}
-          fi
+      - name: Lockfile in sync (same command as local-video-renderer/Dockerfile)
+        run: npm ci --omit=dev
       - name: Engine deps (same as Dockerfile)
         working-directory: whiteboard-engine
         run: bun install --frozen-lockfile --production
