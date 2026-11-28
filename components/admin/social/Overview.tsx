@@ -10,6 +10,28 @@ import {
 } from "lucide-react";
 import { SocialPlatform } from "../types";
 
+type SocialAnalyticsStats = {
+  summary: {
+    published: number;
+    scheduled: number;
+    failed: number;
+    totalClicks: number;
+    averageEngagement: number;
+  };
+  platformMetrics: Array<{
+    platform: string;
+    clicks: number;
+    engagementRate: number;
+  }>;
+  topPosts?: Array<{
+    id: string;
+    platform: string;
+    content: string;
+    clicks: number;
+    engagement: number;
+  }>;
+};
+
 export function Overview() {
   const [stats, setStats] = useState<SocialAnalyticsStats | null>(null);
   const [loading, setLoading] = useState(true);

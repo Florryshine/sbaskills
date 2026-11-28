@@ -12,7 +12,7 @@ interface ChannelManagerProps {
 }
 
 export function ChannelManager({ channelsUpdatedTrigger, onChannelsChanged }: ChannelManagerProps) {
-  const [channels, setChannels] = useState([]);
+  const [channels, setChannels] = useState<SocialChannel[]>([]);
   const [loading, setLoading] = useState(true);
   
   // Connect Form State
