@@ -2,7 +2,15 @@
 
 import { useCallback, useEffect, useRef, useState } from 'react';
 import Link from 'next/link';
-import { WhiteboardEngineComposition } from './WhiteboardEngineComposition';
+import dynamic from 'next/dynamic';
+
+const WhiteboardEngineComposition = dynamic(
+  () => import('./WhiteboardEngineComposition').then(module => module.WhiteboardEngineComposition),
+  {
+    ssr: false,
+    loading: () => <div className="rounded-xl border p-6 text-sm text-gray-500">Loading whiteboard preview…</div>,
+  }
+);
 
 const SUBJECTS = ['biology', 'chemistry', 'physics', 'mathematics', 'general'];
 
