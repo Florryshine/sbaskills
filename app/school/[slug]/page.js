@@ -5,7 +5,7 @@ import Link from 'next/link';
 export const dynamic = 'force-dynamic';
 
 async function getSchool(slug) {
-  const supabase = createServerClient();
+  const supabase = await createServerClient();
   const { data } = await supabase
     .from('schools')
     .select('id, slug, name, logo_url, about, contact_phone, contact_email, address, is_published, principal_name, welcome_message, admission_info')
@@ -16,7 +16,7 @@ async function getSchool(slug) {
 }
 
 async function getStudentCount(schoolId) {
-  const supabase = createServerClient();
+  const supabase = await createServerClient();
   const { count } = await supabase
     .from('profiles')
     .select('id', { count: 'exact', head: true })
@@ -26,7 +26,7 @@ async function getStudentCount(schoolId) {
 }
 
 async function getTeacherCount(schoolId) {
-  const supabase = createServerClient();
+  const supabase = await createServerClient();
   const { count } = await supabase
     .from('profiles')
     .select('id', { count: 'exact', head: true })
@@ -36,7 +36,7 @@ async function getTeacherCount(schoolId) {
 }
 
 async function getGallery(schoolId) {
-  const supabase = createServerClient();
+  const supabase = await createServerClient();
   const { data } = await supabase
     .from('school_gallery')
     .select('id, image_url, caption')
@@ -47,7 +47,7 @@ async function getGallery(schoolId) {
 }
 
 async function getAnnouncements(schoolId) {
-  const supabase = createServerClient();
+  const supabase = await createServerClient();
   const { data } = await supabase
     .from('school_announcements')
     .select('id, title, message, created_at')

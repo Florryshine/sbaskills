@@ -5,7 +5,7 @@ export const runtime='nodejs';
 const BUCKET='curriculum-sources', EXTENSIONS=new Set(['pdf','txt','docx','csv','xlsx','xls']), MAX=15*1024*1024;
 export async function POST(request){
  try{
-  const auth=createServerClient(),{data:{user}}=await auth.auth.getUser();
+  const auth=await createServerClient(),{data:{user}}=await auth.auth.getUser();
   if(!user)return NextResponse.json({error:'Unauthorized'},{status:401});
   const {data:profile}=await auth.from('profiles').select('role').eq('id',user.id).maybeSingle();
   if(profile?.role!=='admin')return NextResponse.json({error:'Forbidden'},{status:403});

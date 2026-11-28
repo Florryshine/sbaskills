@@ -4,7 +4,7 @@ import Link from 'next/link';
 export const dynamic = 'force-dynamic';
 
 export default async function JambSyllabusMasteryPage() {
-  const supabase = createServerClient();
+  const supabase = await createServerClient();
   const { data: { user } } = await supabase.auth.getUser();
   let curriculum = null;
   if (user) {

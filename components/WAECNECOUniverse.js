@@ -41,7 +41,7 @@ const sections = [
 ];
 
 export default async function WAECNECOUniverse() {
-  const supabase = createServerClient();
+  const supabase = await createServerClient();
 
   const [
     { data: courses },

@@ -5,7 +5,7 @@ import { createServerClient } from '@/lib/supabase-server';
 export const dynamic = 'force-dynamic';
 
 export default async function MusicStudioPage() {
-  const supabase = createServerClient();
+  const supabase = await createServerClient();
   const { data: { user }, error } = await supabase.auth.getUser();
   if (error || !user) redirect('/login');
 

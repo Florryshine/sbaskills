@@ -42,7 +42,7 @@ const sections = [
 ];
 
 export default async function JAMBUniverse() {
-  const supabase = createServerClient();
+  const supabase = await createServerClient();
 
   const [{ data: courses }, { count: questionCount }] = await Promise.all([
     supabase

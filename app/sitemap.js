@@ -3,7 +3,7 @@ import { BASE_URL } from '@/lib/seo';
 
 export default async function sitemap() {
   const baseUrl = BASE_URL;
-  const supabase = createServerClient();
+  const supabase = await createServerClient();
 
   const { data: posts } = await supabase
     .from('content_drafts')

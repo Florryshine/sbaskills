@@ -12,7 +12,7 @@ export const metadata = {
 };
 
 export default async function LibraryPage() {
-  const supabase = createServerClient();
+  const supabase = await createServerClient();
   const { data: books } = await supabase
     .from('books')
     .select('id, title, author, description, price, cover_url, created_at, is_published')

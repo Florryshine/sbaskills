@@ -19,7 +19,7 @@ export const dynamic = 'force-dynamic';
 
 // ─── Single, deduped post fetch ─────────────────────────────────────────
 const getPost = cache(async (slug) => {
-  const supabase = createServerClient();
+  const supabase = await createServerClient();
   const { data: post, error } = await supabase
     .from('content_drafts')
     .select('*')
@@ -72,7 +72,7 @@ export async function generateMetadata({ params }) {
 
 export default async function BlogPostPage({ params }) {
   try {
-    const supabase = createServerClient();
+    const supabase = await createServerClient();
     const post = await getPost(params.slug);
     if (!post) notFound();
 

@@ -6,7 +6,7 @@ import { createServerClient } from '@/lib/supabase-server';
 export const dynamic = 'force-dynamic';
 
 export default async function TheoryHubPage() {
-  const supabase = createServerClient();
+  const supabase = await createServerClient();
   const { data } = await supabase
     .from('theory_questions')
     .select('subject, topic, exam_type')

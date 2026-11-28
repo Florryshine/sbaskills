@@ -3,7 +3,7 @@ import { createServerClient } from '@/lib/supabase-server';
 export const dynamic = 'force-dynamic';
 
 export default async function QuizzesPage() {
-  const supabase = createServerClient();
+  const supabase = await createServerClient();
   const { data: quizzes, error } = await supabase
     .from('quizzes')
     .select('id, title, description, points_reward, created_at, quiz_questions(count)')

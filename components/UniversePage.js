@@ -47,7 +47,7 @@ export default async function UniversePage({ slug }) {
   const universe = getUniverse(slug);
   if (!universe) return null;
 
-  const supabase = createServerClient();
+  const supabase = await createServerClient();
 
   const [{ data: courses }, { data: assets }] = await Promise.all([
     supabase
