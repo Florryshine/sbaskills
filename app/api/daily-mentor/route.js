@@ -9,7 +9,7 @@ export async function GET(request) {
   if (authError) return authError;
 
   try {
-    const supabase = createRouteHandlerClient();
+    const supabase = await createRouteHandlerClient();
     const today = new Date().toISOString().split('T')[0];
 
     // Check if today's message already exists

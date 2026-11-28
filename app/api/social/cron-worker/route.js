@@ -1,5 +1,4 @@
-import { createRouteHandlerClient } from '@supabase/auth-helpers-nextjs';
-import { cookies } from 'next/headers';
+import { createRouteHandlerClient } from '@/lib/supabase-server';
 import { NextResponse } from 'next/server';
 import { publishToPlatform } from '@/lib/services/social-publisher';
 
@@ -7,7 +6,7 @@ import { publishToPlatform } from '@/lib/services/social-publisher';
 export const dynamic = 'force-dynamic';
 
 export async function GET() {
-  const supabase = createRouteHandlerClient({ cookies });
+  const supabase = await createRouteHandlerClient();
   const now = new Date().toISOString();
 
   const { data: posts, error } = await supabase

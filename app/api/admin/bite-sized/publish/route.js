@@ -3,7 +3,7 @@ import { createRouteHandlerClient } from '@/lib/supabase-server';
 import { validateLessonContent } from '@/lib/bite-sized/validator';
 
 export async function POST(request) {
-  const supabase = createRouteHandlerClient();
+  const supabase = await createRouteHandlerClient();
   const {
     data: { user },
   } = await supabase.auth.getUser();

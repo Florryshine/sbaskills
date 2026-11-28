@@ -36,7 +36,7 @@ export async function POST(request) {
       console.log('🔑 Using service role client');
     } else {
       // Fallback to authenticated client (relies on RLS)
-      supabase = createRouteHandlerClient();
+      supabase = await createRouteHandlerClient();
       console.log('🔑 Using authenticated client (RLS)');
     }
 

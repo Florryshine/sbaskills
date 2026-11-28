@@ -19,7 +19,7 @@ export async function GET(_request, { params }) {
   const { bookId } = params;
   if (!bookId) return NextResponse.json({ error: 'bookId is required' }, { status: 400 });
 
-  const sessionClient = createRouteHandlerClient();
+  const sessionClient = await createRouteHandlerClient();
   const { data: { user }, error: authError } = await sessionClient.auth.getUser();
   if (authError || !user) return NextResponse.json({ error: 'Sign in as an admin.' }, { status: 401 });
   const { data: profile } = await sessionClient.from('profiles').select('role').eq('id', user.id).maybeSingle();

@@ -27,7 +27,7 @@ export async function GET(request) {
       return NextResponse.json({ success: false, message: 'postId is required' }, { status: 400 });
     }
 
-    const supabase = createRouteHandlerClient();
+    const supabase = await createRouteHandlerClient();
     const aggregate = await getAggregate(supabase, postId);
 
     return NextResponse.json({ success: true, ...aggregate });
@@ -53,7 +53,7 @@ export async function POST(request) {
       );
     }
 
-    const supabase = createRouteHandlerClient();
+    const supabase = await createRouteHandlerClient();
     const {
       data: { user },
     } = await supabase.auth.getUser();

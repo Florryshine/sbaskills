@@ -22,7 +22,7 @@ function getBookStoragePath(rawUrl, supabaseUrl) {
 
 export async function GET(_request, { params }) {
   try {
-    const sessionClient = createRouteHandlerClient();
+    const sessionClient = await createRouteHandlerClient();
     const { data: { user }, error: authError } = await sessionClient.auth.getUser();
     const admin = createAdminClient();
     const { data: book, error: bookError } = await admin

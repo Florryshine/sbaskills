@@ -3,7 +3,7 @@ import { createRouteHandlerClient } from '@/lib/supabase-server';
 import { generateLearningBlueprint } from '@/lib/bite-sized/blueprint';
 
 async function getAdminContext() {
-  const supabase = createRouteHandlerClient();
+  const supabase = await createRouteHandlerClient();
   const {
     data: { user },
   } = await supabase.auth.getUser();

@@ -1,12 +1,11 @@
 import { NextResponse } from 'next/server';
 import { generateWithFallback } from '@/lib/llmFallbackChain';
 import { parseJsonFromText } from '@/lib/robustJsonParse';
-import { createRouteHandlerClient } from '@supabase/auth-helpers-nextjs';
-import { cookies } from 'next/headers';
+import { createRouteHandlerClient } from '@/lib/supabase-server';
 
 export async function POST(req) {
   try {
-    const supabase = createRouteHandlerClient({ cookies });
+    const supabase = await createRouteHandlerClient();
     const { data: { user } } = await supabase.auth.getUser();
     if (!user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
 

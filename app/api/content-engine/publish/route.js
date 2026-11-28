@@ -8,7 +8,7 @@ export async function POST(request) {
       return NextResponse.json({ error: 'draftId required' }, { status: 400 });
     }
 
-    const supabase = createRouteHandlerClient();
+    const supabase = await createRouteHandlerClient();
 
     // 1. Fetch the draft
     const { data: draft, error: fetchError } = await supabase

@@ -11,7 +11,7 @@ import {
 const BUCKET = 'lesson-screen-images';
 
 async function requireAdmin() {
-  const supabase = createRouteHandlerClient();
+  const supabase = await createRouteHandlerClient();
   const {
     data: { user },
   } = await supabase.auth.getUser();

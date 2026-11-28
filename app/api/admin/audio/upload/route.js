@@ -8,7 +8,7 @@ export async function POST(request) {
     // subject to RLS. Storage/table writes here need to bypass RLS, so we
     // use the real service-role client for the writes, and the cookie
     // client only to identify who's uploading (for created_by).
-    const authClient = createRouteHandlerClient();
+    const authClient = await createRouteHandlerClient();
     const supabase = createAdminClient();
 
     const formData = await request.formData();

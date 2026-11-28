@@ -100,7 +100,7 @@ Return ONLY this JSON object — no markdown fences, no extra text:
 export async function POST(request) {
   try {
     const { queueItemId } = await request.json();
-    const supabase = createRouteHandlerClient();
+    const supabase = await createRouteHandlerClient();
 
     // 1. Fetch queue item
     const { data: item, error: itemError } = await supabase

@@ -11,7 +11,7 @@ export const dynamic = 'force-dynamic';
 // staff for that school, or to the student it belongs to.
 export async function GET(request, { params }) {
   const { id } = params;
-  const supabase = createRouteHandlerClient();
+  const supabase = await createRouteHandlerClient();
 
   const { data: { user } } = await supabase.auth.getUser();
   if (!user) {

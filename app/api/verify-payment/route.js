@@ -4,7 +4,7 @@ import { createRouteHandlerClient } from '@/lib/supabase-server';
 export async function POST(request) {
   try {
     const { courseId, reference } = await request.json();
-    const supabase = createRouteHandlerClient();
+    const supabase = await createRouteHandlerClient();
     const { data: { user }, error: authError } = await supabase.auth.getUser();
     if (authError || !user) return NextResponse.json({ success: false, message: 'You must be logged in to enroll.' }, { status: 401 });
     if (!courseId) return NextResponse.json({ success: false, message: 'Missing course.' }, { status: 400 });

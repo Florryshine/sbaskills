@@ -4,7 +4,7 @@ import { createRouteHandlerClient } from '@/lib/supabase-server';
 export async function POST(request) {
   try {
     const { reference, book_id } = await request.json();
-    const supabase = createRouteHandlerClient();
+    const supabase = await createRouteHandlerClient();
     const { data: { user }, error: authError } = await supabase.auth.getUser();
     if (authError || !user) return NextResponse.json({ success: false, message: 'Please sign in before purchasing a book.' }, { status: 401 });
     if (typeof reference !== 'string' || !reference.trim() || !book_id) return NextResponse.json({ success: false, message: 'Missing payment reference or book.' }, { status: 400 });

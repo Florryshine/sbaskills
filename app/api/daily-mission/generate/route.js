@@ -5,7 +5,7 @@ import { generateDailyMissionForStudent, createDailyMissionNotification } from '
 
 export async function POST() {
   try {
-    const sessionClient = createRouteHandlerClient();
+    const sessionClient = await createRouteHandlerClient();
     const { data: auth, error: authError } = await sessionClient.auth.getUser();
     if (authError || !auth?.user) {
       return NextResponse.json({ error: 'Please sign in to prepare your mission.' }, { status: 401 });

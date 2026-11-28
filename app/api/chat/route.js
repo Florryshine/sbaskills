@@ -28,7 +28,7 @@ function checkRateLimit(userId) {
 
 export async function POST(request) {
   try {
-    const supabase = createRouteHandlerClient();
+    const supabase = await createRouteHandlerClient();
     const { data: { user }, error: authError } = await supabase.auth.getUser();
 
     // This is a paid-provider proxy: never allow anonymous visitors to spend our API quota.

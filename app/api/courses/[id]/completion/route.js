@@ -7,7 +7,7 @@ function generateCertificateNumber() {
 }
 
 export async function POST(request, { params }) {
-  const supabase = createRouteHandlerClient();
+  const supabase = await createRouteHandlerClient();
   const {
     data: { user },
   } = await supabase.auth.getUser();
