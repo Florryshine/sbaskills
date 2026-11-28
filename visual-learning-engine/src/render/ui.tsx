@@ -1,7 +1,7 @@
 // src/render/ui.tsx — shared visual building blocks for every scene.
 
 import React from 'react';
-import { AbsoluteFill, Img, interpolate, spring, staticFile, useCurrentFrame, useVideoConfig, Easing } from 'remotion';
+import { AbsoluteFill, Img, Loop, OffthreadVideo, interpolate, spring, staticFile, useCurrentFrame, useVideoConfig, Easing } from 'remotion';
 import { FONT_BODY, FONT_HEADLINE } from './fonts';
 import { THEME, type Layout } from './theme';
 
@@ -133,17 +133,10 @@ const ShotImage: React.FC<{
   layout: Layout;
   shotProgress: number;
   kb: { fromScale: number; toScale: number; fromX: number; toX: number; fromY: number; toY: number };
-}> = ({ src, layout, shotProgress, kb }) => (
-  <Img
-    src={src}
-    style={{
-      width: '100%',
-      height: '100%',
-      objectFit: 'cover',
-      transform: kenBurnsTransform(shotProgress, kb, layout),
-    }}
-  />
-);
+}> = ({ src, layout, shotProgress, kb }) => {
+  const style = { width: '100%', height: '100%', objectFit: 'cover' as const, transform: kenBurnsTransform(shotProgress, kb, layout) };
+  return /\.mp4(?:$|[?#])/i.test(src) ? <Loop durationInFrames={90}><OffthreadVideo src={src} muted style={style} /></Loop> : <Img src={src} style={style} />;
+};
 
 /**
  * Shot carousel: cycles through the scene's images so no single image is on
