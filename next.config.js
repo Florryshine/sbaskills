@@ -2,6 +2,7 @@
 const { withPWA } = require('@swavoti/next-pwa')
 
 const nextConfig = {
+  output: 'standalone',
   async redirects() {
     return [
       {
@@ -14,7 +15,7 @@ const nextConfig = {
         destination: '/icon.svg',
         permanent: true,
       },
-    ];
+    ]
   },
   reactStrictMode: true,
   images: {
@@ -26,21 +27,19 @@ const nextConfig = {
       { protocol: 'https', hostname: '*.supabase.co' },
     ],
   },
-  experimental: {
-    serverComponentsExternalPackages: [
-      '@napi-rs/canvas',
-      'pdf-parse',
-      'pdfjs-dist',
+  serverExternalPackages: [
+    '@napi-rs/canvas',
+    'pdf-parse',
+    'pdfjs-dist',
+  ],
+  outputFileTracingIncludes: {
+    '/api/**/*': [
+      './public/fonts/**',
+      './node_modules/pdfjs-dist/legacy/build/**',
     ],
-    outputFileTracingIncludes: {
-      '/api/**/*': [
-        './public/fonts/**',
-        './node_modules/pdfjs-dist/legacy/build/**',
-      ],
-    },
   },
   webpack: (config, { isServer }) => {
-    // Fix for external HTTPS imports (e.g., jszip from CDN)
+    // Fix for external HTTPS imports (e.g. jszip from CDN).
     if (!isServer) {
       config.plugins.push(
         new (require('webpack').NormalModuleReplacementPlugin)(
